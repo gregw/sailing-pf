@@ -10,10 +10,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Club;
 import org.mortbay.sailing.hpf.data.Design;
@@ -40,11 +42,9 @@ import org.slf4j.LoggerFactory;
 public class DataStore
 {
     private static final Logger LOG = LoggerFactory.getLogger(DataStore.class);
-    private static final JsonMapper MAPPER = JsonMapper.builder()
-        .addModule(new JavaTimeModule())
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-        .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
-        .build();
+    private static final JaroWinklerSimilarity JARO_WINKLER = new JaroWinklerSimilarity();
+    private static final double FUZZY_THRESHOLD = 0.90;
+    private static final JsonMapper MAPPER = JsonMapper.builder().addModule(new JavaTimeModule()).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS).build();
 
     private final Path root;
     private final Path racesDir;
@@ -57,10 +57,10 @@ public class DataStore
     private Map<String, Race> races;
     private Map<String, Boat> boats;
     private Map<String, Design> designs;
-    private Map<String, Club> clubs;
+    private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
+    private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
     private List<Maker> makers;
     private boolean makersDirty;
-    private Map<String, List<String>> boatsBySail; // derived index, maintained by putBoat()
 
     public DataStore(Path root)
     {
@@ -72,17 +72,50 @@ public class DataStore
         this.catalogueDir = root.resolve("catalogue");
     }
 
-    private static boolean nameMatches(Boat candidate, String incomingName, String normIncoming)
+    private static boolean boatNameMatches(Boat candidate, String incomingName, String normIncoming)
     {
         if (IdGenerator.normaliseName(candidate.name()).equals(normIncoming))
             return true;
         if (candidate.aliases().stream().anyMatch(a -> a.equalsIgnoreCase(incomingName)))
             return true;
-        return candidate.aliases().stream()
-            .anyMatch(a -> IdGenerator.normaliseName(a).equals(normIncoming));
+        if (candidate.aliases().stream().anyMatch(a -> IdGenerator.normaliseName(a).equals(normIncoming)))
+            return true;
+
+        if (JARO_WINKLER.apply(IdGenerator.normaliseName(candidate.name()), normIncoming) >= FUZZY_THRESHOLD)
+            return true;
+        return candidate.aliases().stream().anyMatch(a -> JARO_WINKLER.apply(IdGenerator.normaliseName(a), normIncoming) >= FUZZY_THRESHOLD);
+    }
+
+    private static boolean designNameMatches(Design candidate, String normIncoming)
+    {
+        if (IdGenerator.normaliseDesignName(candidate.canonicalName()).equals(normIncoming))
+            return true;
+        if (candidate.aliases().stream().anyMatch(a -> IdGenerator.normaliseDesignName(a).equals(normIncoming)))
+            return true;
+
+        // Fuzzy matching — only for names long enough to avoid short-string false positives.
+        // Digits must match exactly so that "sydney38" never conflates with "sydney39".
+        if (normIncoming.length() >= 6)
+        {
+            String incomingDigits = extractDigits(normIncoming);
+            String candidateNorm = IdGenerator.normaliseDesignName(candidate.canonicalName());
+            if (extractDigits(candidateNorm).equals(incomingDigits) && JARO_WINKLER.apply(candidateNorm, normIncoming) >= FUZZY_THRESHOLD)
+                return true;
+            return candidate.aliases().stream().anyMatch(a ->
+            {
+                String aNorm = IdGenerator.normaliseDesignName(a);
+                return extractDigits(aNorm).equals(incomingDigits) && JARO_WINKLER.apply(aNorm, normIncoming) >= FUZZY_THRESHOLD;
+            });
+        }
+        return false;
     }
 
     // --- Lifecycle ---
+
+    private static String extractDigits(String s)
+    {
+        return s.replaceAll("[^0-9]", "");
+    }
 
     /**
      * Resolves the data root directory using the standard lookup chain:
@@ -109,19 +142,13 @@ public class DataStore
         return Path.of(System.getProperty("user.home"), ".hpf-data");
     }
 
+    // --- Read accessors (require started) ---
+
     public Map<String, Boat> boats()
     {
         requireStarted();
         return Collections.unmodifiableMap(boats);
     }
-
-    public Map<String, List<String>> boatsBySail()
-    {
-        requireStarted();
-        return Collections.unmodifiableMap(boatsBySail);
-    }
-
-    // --- Read accessors (require started) ---
 
     public Map<String, Club> clubs()
     {
@@ -137,36 +164,37 @@ public class DataStore
 
     public Boat findOrCreateBoat(String sailNo, String name, Design design)
     {
-        String normSail = IdGenerator.normaliseSailNumber(sailNo);
-        String normName = IdGenerator.normaliseName(name);
-        String base = normSail + "-" + normName;
-        String boatId = design == null ? base : base + "-" + design.id();
+        String boatId = IdGenerator.generateBoatId(sailNo, name, design);
 
         Boat boat = boats.get(boatId);
         if (boat != null)
             return boat;
 
-        List<String> candidates = List.copyOf(boatsBySail.getOrDefault(normSail, List.of()));
-        for (String candidateId : candidates)
+        String normSail = IdGenerator.normaliseSailNumber(sailNo);
+        String normName = IdGenerator.normaliseName(name);
+
+        for (Boat candidate : boats.values())
         {
-            Boat candidate = boats.get(candidateId);
-            if (candidate == null || !nameMatches(candidate, name, normName))
+            if (!candidate.sailNumber().equals(normSail))
+                continue;
+            if (design != null && candidate.designId() != null && !candidate.designId().equals(design.id()))
                 continue;
 
-            if (candidate.designId() == null && design != null)
+            if (boatNameMatches(candidate, name, normName))
             {
-                removeBoat(candidate.id());
-                Boat upgraded = new Boat(boatId, normSail, name, design.id(),
-                    candidate.clubId(), candidate.aliases(), candidate.certificates(), null);
-                putBoat(upgraded);
-                LOG.info("Upgraded boat {} → {}", candidate.id(), boatId);
-                return upgraded;
+                if (candidate.designId() == null && design != null)
+                {
+                    removeBoat(candidate.id());
+                    Boat upgraded = new Boat(boatId, normSail, name, design.id(), candidate.clubId(), candidate.aliases(), candidate.certificates(), null);
+                    putBoat(upgraded);
+                    LOG.info("Upgraded boat {} → {}", candidate.id(), boatId);
+                    return upgraded;
+                }
+                return candidate;
             }
-            return candidate;
         }
 
-        Boat newBoat = new Boat(boatId, normSail, name,
-            design == null ? null : design.id(), null, List.of(), List.of(), null);
+        Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), null);
         putBoat(newBoat);
         LOG.info("Created new boat {}", newBoat);
         return newBoat;
@@ -176,18 +204,49 @@ public class DataStore
     {
         if (className == null || className.isBlank())
             return null;
-        String designId = IdGenerator.normaliseName(className);
+        String designId = IdGenerator.normaliseDesignName(className);
         Design design = designs.get(designId);
         if (design != null)
             return design;
         for (Design d : designs.values())
         {
-            if (d.aliases().stream().anyMatch(a -> IdGenerator.normaliseName(a).equals(designId)))
+            if (designNameMatches(d, designId))
                 return d;
         }
         design = new Design(designId, className.trim(), List.of(), List.of(), null);
         putDesign(design);
         return design;
+    }
+
+    /**
+     * Finds a club by its short name and state code (e.g. "MYC", "NSW").
+     * Returns null and logs an error if no match is found or if the match is ambiguous.
+     * State matching is exact (case-insensitive); a blank state matches only clubs
+     * whose state is also blank or null.
+     */
+    public Club findClubByShortName(String shortName, String state)
+    {
+        requireStarted();
+        boolean blankState = state == null || state.isBlank();
+        // Search persisted clubs first; fall back to seed stubs
+        List<Club> matches = Stream.concat(clubs.values().stream(), clubSeed.values().stream())
+            .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
+            .filter(c -> blankState
+                ? (c.state() == null || c.state().isBlank())
+                : state.equalsIgnoreCase(c.state()))
+            .distinct()
+            .toList();
+        if (matches.isEmpty())
+        {
+            LOG.error("Unknown club shortName={} state={}", shortName, state);
+            return null;
+        }
+        if (matches.size() > 1)
+        {
+            LOG.error("Ambiguous club shortName={} state={} — {} matches", shortName, state, matches.size());
+            return null;
+        }
+        return matches.getFirst();
     }
 
     public List<Maker> makers()
@@ -196,23 +255,13 @@ public class DataStore
         return Collections.unmodifiableList(makers);
     }
 
+    // --- Write mutators (require started; loadedAt = null → always written by save()) ---
+
     public void putBoat(Boat boat)
     {
         requireStarted();
-        Boat existing = boats.get(boat.id());
-        if (existing != null)
-        {
-            List<String> ids = boatsBySail.get(existing.sailNumber());
-            if (ids != null)
-                ids.remove(boat.id());
-        }
         boats.put(boat.id(), boat);
-        List<String> ids = boatsBySail.computeIfAbsent(boat.sailNumber(), k -> new ArrayList<>());
-        if (!ids.contains(boat.id()))
-            ids.add(boat.id());
     }
-
-    // --- Write mutators (require started; loadedAt = null → always written by save()) ---
 
     public void putClub(Club club)
     {
@@ -251,9 +300,6 @@ public class DataStore
         Boat existing = boats.remove(id);
         if (existing != null)
         {
-            List<String> ids = boatsBySail.get(existing.sailNumber());
-            if (ids != null)
-                ids.remove(id);
             try
             {
                 Files.deleteIfExists(boatsDir.resolve(id + ".json"));
@@ -293,18 +339,16 @@ public class DataStore
         loadDir(boatsDir, Boat.class).forEach(b -> boats.put(b.id(), b));
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
+        clubSeed = ClubSeedLoader.load();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
         races = new LinkedHashMap<>();
         loadDir(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
         makers = new ArrayList<>(loadList(catalogueDir.resolve("makers.json"), Maker.class));
         makersDirty = false;
-        boatsBySail = new LinkedHashMap<>();
-        for (Boat b : boats.values())
-        {
-            boatsBySail.computeIfAbsent(b.sailNumber(), k -> new ArrayList<>()).add(b.id());
-        }
     }
+
+    // --- Internal helpers ---
 
     /**
      * save() then clear in-memory maps.
@@ -316,12 +360,10 @@ public class DataStore
         boats = null;
         designs = null;
         clubs = null;
+        clubSeed = null;
         makers = null;
-        boatsBySail = null;
         makersDirty = false;
     }
-
-    // --- Internal helpers ---
 
     private <T> List<T> loadDir(Path dir, Class<T> type)
     {
@@ -332,28 +374,24 @@ public class DataStore
         {
             try (var stream = Files.list(dir))
             {
-                loaded = stream
-                    .filter(p -> p.toString().endsWith(".json"))
-                    .map(p ->
+                loaded = stream.filter(p -> p.toString().endsWith(".json")).map(p ->
+                {
+                    try
                     {
-                        try
+                        T entity = MAPPER.readValue(p.toFile(), type);
+                        if (entity instanceof Loadable<?>)
                         {
-                            T entity = MAPPER.readValue(p.toFile(), type);
-                            if (entity instanceof Loadable<?>)
-                            {
-                                Instant modified = Files.getLastModifiedTime(p).toInstant();
-                                @SuppressWarnings("unchecked")
-                                T stamped = (T)((Loadable<T>)entity).withLoadedAt(modified);
-                                entity = stamped;
-                            }
-                            return entity;
+                            Instant modified = Files.getLastModifiedTime(p).toInstant();
+                            @SuppressWarnings("unchecked") T stamped = (T)((Loadable<T>)entity).withLoadedAt(modified);
+                            entity = stamped;
                         }
-                        catch (IOException e)
-                        {
-                            throw new UncheckedIOException(e);
-                        }
-                    })
-                    .toList();
+                        return entity;
+                    }
+                    catch (IOException e)
+                    {
+                        throw new UncheckedIOException(e);
+                    }
+                }).toList();
             }
             catch (IOException e)
             {
@@ -371,8 +409,7 @@ public class DataStore
             return Collections.emptyList();
         try
         {
-            return MAPPER.readValue(path.toFile(),
-                MAPPER.getTypeFactory().constructCollectionType(List.class, type));
+            return MAPPER.readValue(path.toFile(), MAPPER.getTypeFactory().constructCollectionType(List.class, type));
         }
         catch (IOException e)
         {
@@ -393,8 +430,7 @@ public class DataStore
         {
             try
             {
-                if (Files.exists(path) &&
-                    Files.getLastModifiedTime(path).toInstant().equals(l.loadedAt()))
+                if (Files.exists(path) && Files.getLastModifiedTime(path).toInstant().equals(l.loadedAt()))
                 {
                     LOG.debug("Skipping unchanged {}", path.getFileName());
                     return;

@@ -8,7 +8,6 @@ import org.mortbay.sailing.hpf.data.Club;
 import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
-import org.mortbay.sailing.hpf.data.HandicapSystem;
 import org.mortbay.sailing.hpf.data.Race;
 import org.mortbay.sailing.hpf.data.Season;
 import org.mortbay.sailing.hpf.data.Series;
@@ -37,7 +36,7 @@ class DataStoreTest {
 
         assertEquals("myc.com.au", race.clubId());
         assertEquals(LocalDate.of(2020, 9, 13), race.date());
-        assertEquals(HandicapSystem.PHS, race.handicapSystem());
+        assertEquals("PHS", race.handicapSystem());
         assertEquals(2, race.divisions().size());
 
         Division div1 = race.divisions().getFirst();
@@ -89,7 +88,7 @@ class DataStoreTest {
         assertNotNull(mondo);
         assertEquals(1, mondo.certificates().size());
         Certificate cert = mondo.certificates().getFirst();
-        assertEquals(HandicapSystem.ORC, cert.system());
+        assertEquals("ORC", cert.system());
         assertEquals(588.4, cert.value());
         assertEquals(LocalDate.of(2021, 6, 30), cert.expiryDate());
     }
@@ -132,7 +131,7 @@ class DataStoreTest {
         Series series = new Series("myc.com.au/2020-21/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001"));
         Season season = new Season("2020-21", List.of(series));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", List.of(), List.of(season), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(season), null);
         store2.putClub(club);
         store2.stop();
 
@@ -154,7 +153,7 @@ class DataStoreTest {
         Race race1 = buildRace();
         Race race2 = new Race("myc.com.au-2020-09-20-0002", "myc.com.au",
                 List.of("myc.com.au/2020-21/club-championship"),
-                LocalDate.of(2020, 9, 20), 2, null, HandicapSystem.PHS, false,
+                LocalDate.of(2020, 9, 20), 2, null, "PHS", false,
                 List.of(new Division("Division 1", List.of(
                         new Finisher("MYC7-tensixty-radford1060", Duration.ofMinutes(72).plusSeconds(5), false)
                 ))), null);
@@ -196,8 +195,7 @@ class DataStoreTest {
     @Test
     void boatWithCertificatesRoundTrip(@TempDir Path tempDir) {
         Certificate cert = new Certificate(
-                "5656-mondo-sydney38-orc-2020", "5656-mondo-sydney38",
-                HandicapSystem.ORC, 2020, 588.4, false, "AUS-2020-1234",
+                "ORC", 2020, 588.4, false, false, "AUS-2020-1234",
                 LocalDate.of(2021, 6, 30));
         Boat boat = new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", "myc.com.au",
                 List.of(), List.of(cert), null);
@@ -221,7 +219,7 @@ class DataStoreTest {
         Series series = new Series("myc.com.au/2020-21/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"));
         Season season = new Season("2020-21", List.of(series));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", List.of(), List.of(season), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(season), null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -333,6 +331,79 @@ class DataStoreTest {
         assertEquals(1, store.designs().size());
     }
 
+    @Test
+    void findOrCreateDesignFuzzyMatchesTypoInName(@TempDir Path tempDir) {
+        // "Sydney 38" → "sydney38"; "Sydeny 38" (transposed n/e) → "sydeny38" — same digits,
+        // JW score ~0.97, above threshold.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design existing = new Design("sydney38", "Sydney 38", List.of(), List.of(), null);
+        store.putDesign(existing);
+
+        Design found = store.findOrCreateDesign("Sydeny 38");
+
+        assertEquals("sydney38", found.id());
+        assertEquals(1, store.designs().size());
+    }
+
+    @Test
+    void findOrCreateDesignDoesNotFuzzyMatchAdjacentModelNumber(@TempDir Path tempDir) {
+        // "Sydney 38" → "sydney38" and "Sydney 39" → "sydney39": digits differ so must not match
+        // even though the JW score is high.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design existing = new Design("sydney38", "Sydney 38", List.of(), List.of(), null);
+        store.putDesign(existing);
+
+        Design found = store.findOrCreateDesign("Sydney 39");
+
+        assertEquals("sydney39", found.id());
+        assertEquals(2, store.designs().size());
+    }
+
+    @Test
+    void findOrCreateDesignFuzzyMatchesTransposedName(@TempDir Path tempDir) {
+        // "Radford 1060" → "radford1060"; "Radfrod 1060" (transposed r/o) → "radfrod1060" —
+        // same digits, JW score ~0.98, above threshold.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design existing = new Design("radford1060", "Radford 1060", List.of(), List.of(), null);
+        store.putDesign(existing);
+
+        Design found = store.findOrCreateDesign("Radfrod 1060");
+
+        assertEquals("radford1060", found.id());
+        assertEquals(1, store.designs().size());
+    }
+
+    @Test
+    void findOrCreateBoatFuzzyMatchesSimilarAlias(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat existing = new Boat("AUS1234-shear_magic", "AUS1234", "Shear Magic",
+                null, null, List.of("ShearMagic"), List.of(), null);
+        store.putBoat(existing);
+
+        Boat found = store.findOrCreateBoat("AUS1234", "SheerMagic", null);
+
+        assertEquals("AUS1234-shear_magic", found.id());
+        assertEquals(1, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateBoatFuzzyMatchesSimilarName(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat existing = new Boat("AUS1234-shear_magic", "AUS1234", "Shear Magic",
+                null, null, List.of(), List.of(), null);
+        store.putBoat(existing);
+
+        Boat found = store.findOrCreateBoat("AUS1234", "Sheer Magic", null);
+
+        assertEquals("AUS1234-shear_magic", found.id());
+        assertEquals(1, store.boats().size());
+    }
+
     // --- Helpers ---
 
     private DataStore testDataStore() throws URISyntaxException {
@@ -348,7 +419,7 @@ class DataStoreTest {
                 LocalDate.of(2020, 9, 13),
                 1,
                 null,
-                HandicapSystem.PHS,
+                "PHS",
                 false,
                 List.of(
                         new Division("Division 1", List.of(

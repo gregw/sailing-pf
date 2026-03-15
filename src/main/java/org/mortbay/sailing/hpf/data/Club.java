@@ -18,6 +18,7 @@ public record Club(
     String id,           // website domain, e.g. "myc.com.au"
     String shortName,    // e.g. "MYC"
     String longName,     // e.g. "Manly Yacht Club"
+    String state,        // Australian state code, e.g. "NSW", "VIC"; null if unknown
     List<String> aliases, // alternate short names or former domains
     List<Season> seasons, // seasons run by this club, each containing series
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
@@ -27,7 +28,7 @@ public record Club(
     @Override
     public Club withLoadedAt(Instant t)
     {
-        return new Club(id, shortName, longName, aliases, seasons, t);
+        return new Club(id, shortName, longName, state, aliases, seasons, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -39,13 +40,13 @@ public record Club(
         if (!(o instanceof Club c))
             return false;
         return Objects.equals(id, c.id) && Objects.equals(shortName, c.shortName)
-            && Objects.equals(longName, c.longName) && Objects.equals(aliases, c.aliases)
-            && Objects.equals(seasons, c.seasons);
+            && Objects.equals(longName, c.longName) && Objects.equals(state, c.state)
+            && Objects.equals(aliases, c.aliases) && Objects.equals(seasons, c.seasons);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, shortName, longName, aliases, seasons);
+        return Objects.hash(id, shortName, longName, state, aliases, seasons);
     }
 }

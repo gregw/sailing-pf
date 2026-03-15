@@ -15,7 +15,6 @@ import org.eclipse.jetty.client.HttpClient;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Design;
-import org.mortbay.sailing.hpf.data.HandicapSystem;
 import org.mortbay.sailing.hpf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -217,8 +216,8 @@ public class OrcImporter
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.removeIf(c -> finalDxtId.equals(c.certificateNumber()));
 
-        Certificate cert = new Certificate(finalDxtId, boat.id(), HandicapSystem.ORC,
-            year, gph, nonSpinnaker, dxtId, expiry);
+        Certificate cert = new Certificate("ORC",
+            year, gph, nonSpinnaker, false, dxtId, expiry);
         updatedCerts.add(cert);
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 

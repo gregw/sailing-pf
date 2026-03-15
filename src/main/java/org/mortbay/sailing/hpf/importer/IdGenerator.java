@@ -12,14 +12,25 @@ public class IdGenerator
 {
 
     /**
-     * Lowercase, strip all non-alphanumeric characters.
-     * "J/24" → "j24", "Farr 40" → "farr40"
+     * Lowercase, strip non-alphanumeric except spaces (replaced with underscore).
+     * "Raging Bull" → "raging_bull"
      */
     public static String normaliseName(String raw)
     {
         if (raw == null)
             return "";
         return raw.toLowerCase().replaceAll("[^a-z0-9 ]", "").replaceAll(" ", "_");
+    }
+
+    /**
+     * Lowercase, strip ALL non-[a-z0-9] characters (including spaces and punctuation).
+     * Collapses common variants: "J/24", "J 24", "J24" all → "j24".
+     */
+    public static String normaliseDesignName(String raw)
+    {
+        if (raw == null)
+            return "";
+        return raw.toLowerCase(Locale.ENGLISH).replaceAll("[^a-z0-9]", "");
     }
 
     /**
