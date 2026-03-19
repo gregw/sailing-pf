@@ -10,7 +10,7 @@ import java.time.LocalDate;
  * <p>
  * Value semantics by system:
  * IRC — TCC (time correction factor), e.g. 0.987
- * ORC — GPH (general purpose handicap, seconds/mile), e.g. 588.4; convert to TCF via 600/GPH
+ * ORC — TCF (time correction factor), e.g. 1.020; stored as 600/GPH, never raw GPH
  * AMS — TCF (time correction factor), same scale as IRC TCC
  * <p>
  * twoHanded is only set for AMS two-handed certificates; false for all IRC/ORC certs.
@@ -21,7 +21,7 @@ import java.time.LocalDate;
 public record Certificate(
     String system,           // "IRC", "ORC", or "AMS"
     int year,                // certificate year
-    double value,            // TCC for IRC/AMS, GPH for ORC
+    double value,            // TCF for all systems (IRC TCC; ORC 600/GPH; AMS TCF)
     boolean nonSpinnaker,    // true if this is a non-spinnaker certificate
     boolean twoHanded,       // true for AMS two-handed certificates; false for all IRC/ORC certs
     String certificateNumber, // dxtID for ORC; cert number for AMS

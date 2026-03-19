@@ -30,10 +30,10 @@ import org.slf4j.LoggerFactory;
  * Reads and writes the data store.
  * <p>
  * Layout:
- * {root}/races/{raceId}.json       — one file per Race
+ * {root}/races/{clubId}/{seriesSlug}/{raceId}.json  — one file per Race, in subdirectories
  * {root}/boats/{boatId}.json       — one file per Boat (embeds certificates)
  * {root}/designs/{designId}.json   — one file per Design
- * {root}/clubs/{clubId}.json       — one file per Club (embeds seasons and series)
+ * {root}/clubs/{clubId}.json       — one file per Club (embeds series)
  * {root}/catalogue/makers.json     — all Makers (small stable collection)
  * <p>
  * Call {@link #start()} to load all data into memory, {@link #save()} to flush dirty
@@ -59,6 +59,7 @@ public class DataStore
     private Map<String, Design> designs;
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
+    private AliasSeedLoader.AliasSeed aliasSeed; // lookup-only alias data from aliases.yaml; never written to disk
     private List<Maker> makers;
     private boolean makersDirty;
 
@@ -194,6 +195,45 @@ public class DataStore
             }
         }
 
+        // Check the alias seed: if the incoming name matches a known alias for this sail number,
+        // redirect to the canonical name — both for finding an existing boat and for creation.
+        List<org.mortbay.sailing.hpf.data.TimedAlias> seedAliases = aliasSeed.boatAliases(normSail);
+        String seedCanonicalName = aliasSeed.boatCanonicalName(normSail);
+        boolean nameMatchesSeedAlias = !seedAliases.isEmpty() && seedAliases.stream()
+            .anyMatch(a -> IdGenerator.normaliseName(a.name()).equals(normName)
+                || a.name().equalsIgnoreCase(name));
+        if (nameMatchesSeedAlias && seedCanonicalName != null)
+        {
+            String normCanonical = IdGenerator.normaliseName(seedCanonicalName);
+            for (Boat candidate : boats.values())
+            {
+                if (!candidate.sailNumber().equals(normSail))
+                    continue;
+                if (design != null && candidate.designId() != null && !candidate.designId().equals(design.id()))
+                    continue;
+                if (boatNameMatches(candidate, seedCanonicalName, normCanonical))
+                {
+                    if (candidate.designId() == null && design != null)
+                    {
+                        String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
+                        removeBoat(candidate.id());
+                        Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.certificates(), null);
+                        putBoat(upgraded);
+                        LOG.info("Upgraded boat (via alias seed) {} → {}", candidate.id(), canonicalBoatId);
+                        return upgraded;
+                    }
+                    return candidate;
+                }
+            }
+            // No existing boat found — create with the canonical name, recording the incoming name as an alias
+            String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
+            List<String> aliases = normName.equals(normCanonical) ? List.of() : List.of(name);
+            Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), null);
+            putBoat(newBoat);
+            LOG.info("Created new boat (via alias seed) {}", newBoat);
+            return newBoat;
+        }
+
         Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), null);
         putBoat(newBoat);
         LOG.info("Created new boat {}", newBoat);
@@ -213,9 +253,63 @@ public class DataStore
             if (designNameMatches(d, designId))
                 return d;
         }
+
+        // Check the alias seed for a known equivalence
+        String canonicalId = aliasSeed.resolveDesignAlias(designId);
+        if (canonicalId != null)
+        {
+            Design existing = designs.get(canonicalId);
+            if (existing != null)
+                return existing;
+            // Canonical design not yet in store — create it using the seed's canonical name
+            String seedName = aliasSeed.designCanonicalName(canonicalId);
+            design = new Design(canonicalId, seedName != null ? seedName : className.trim(), List.of(), List.of(), null);
+            putDesign(design);
+            return design;
+        }
+
         design = new Design(designId, className.trim(), List.of(), List.of(), null);
         putDesign(design);
         return design;
+    }
+
+    /**
+     * Finds a club by short name alone, ignoring state.
+     * If {@code longName} is provided and the short name is ambiguous, narrows to clubs
+     * whose long name matches (case-insensitive) as a tiebreaker.
+     * Returns the club if there is exactly one match; null with a log if none or still ambiguous.
+     */
+    public Club findUniqueClubByShortName(String shortName, String longName)
+    {
+        requireStarted();
+        List<Club> matches = Stream.concat(
+                clubs.values().stream(),
+                clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+            .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
+            .toList();
+        if (matches.isEmpty())
+        {
+            LOG.info("No club found for shortName={}", shortName);
+            return null;
+        }
+        if (matches.size() > 1 && longName != null && !longName.isBlank())
+        {
+            List<Club> narrowed = matches.stream()
+                .filter(c -> longName.equalsIgnoreCase(c.longName()))
+                .toList();
+            if (narrowed.size() == 1)
+                return narrowed.getFirst();
+            // Narrowing didn't resolve it — fall through to ambiguity log below
+            matches = narrowed.isEmpty() ? matches : narrowed;
+        }
+        if (matches.size() > 1)
+        {
+            LOG.warn("Ambiguous shortName={} — {} matches ({}); clubId not set",
+                shortName, matches.size(),
+                matches.stream().map(c -> c.id() + "/" + c.state()).toList());
+            return null;
+        }
+        return matches.getFirst();
     }
 
     /**
@@ -229,12 +323,13 @@ public class DataStore
         requireStarted();
         boolean blankState = state == null || state.isBlank();
         // Search persisted clubs first; fall back to seed stubs
-        List<Club> matches = Stream.concat(clubs.values().stream(), clubSeed.values().stream())
+        List<Club> matches = Stream.concat(
+                clubs.values().stream(),
+                clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
             .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
             .filter(c -> blankState
                 ? (c.state() == null || c.state().isBlank())
                 : state.equalsIgnoreCase(c.state()))
-            .distinct()
             .toList();
         if (matches.isEmpty())
         {
@@ -320,7 +415,7 @@ public class DataStore
         boats.values().forEach(b -> write(boatsDir.resolve(b.id() + ".json"), b));
         designs.values().forEach(d -> write(designsDir.resolve(d.id() + ".json"), d));
         clubs.values().forEach(c -> write(clubsDir.resolve(c.id() + ".json"), c));
-        races.values().forEach(r -> write(racesDir.resolve(r.id() + ".json"), r));
+        races.values().forEach(r -> write(raceFilePath(r), r));
         if (makersDirty)
         {
             write(catalogueDir.resolve("makers.json"), makers);
@@ -340,10 +435,11 @@ public class DataStore
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
         clubSeed = ClubSeedLoader.load();
+        aliasSeed = AliasSeedLoader.load();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
         races = new LinkedHashMap<>();
-        loadDir(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
+        loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
         makers = new ArrayList<>(loadList(catalogueDir.resolve("makers.json"), Maker.class));
         makersDirty = false;
     }
@@ -361,6 +457,7 @@ public class DataStore
         designs = null;
         clubs = null;
         clubSeed = null;
+        aliasSeed = null;
         makers = null;
         makersDirty = false;
     }
@@ -397,6 +494,72 @@ public class DataStore
             {
                 throw new UncheckedIOException(e);
             }
+        }
+
+        LOG.info("Loaded {} {}(s)", loaded.size(), type.getSimpleName());
+        return loaded;
+    }
+
+    /**
+     * Returns the file path for a race: races/{clubId}/{seriesSlug}/{raceId}.json
+     * seriesSlug is the portion of the first seriesId after the clubId prefix.
+     */
+    private Path raceFilePath(Race race)
+    {
+        String clubSlug = race.clubId() != null ? race.clubId() : "unknown";
+        String seriesSlug;
+        if (race.seriesIds() == null || race.seriesIds().isEmpty())
+        {
+            seriesSlug = "uncategorised";
+        }
+        else
+        {
+            String firstSeries = race.seriesIds().getFirst();
+            int slashIdx = firstSeries.indexOf('/');
+            seriesSlug = slashIdx >= 0 ? firstSeries.substring(slashIdx + 1) : "uncategorised";
+        }
+        return racesDir.resolve(clubSlug).resolve(seriesSlug).resolve(race.id() + ".json");
+    }
+
+    /**
+     * Like loadDir but walks all subdirectories recursively. Used for races.
+     */
+    private <T> List<T> loadDirRecursive(Path dir, Class<T> type)
+    {
+        if (!Files.exists(dir))
+        {
+            LOG.info("Loaded 0 {}(s) (directory absent)", type.getSimpleName());
+            return Collections.emptyList();
+        }
+        List<T> loaded;
+        try (var stream = Files.walk(dir))
+        {
+            loaded = stream
+                .filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".json"))
+                .map(p ->
+                {
+                    try
+                    {
+                        T entity = MAPPER.readValue(p.toFile(), type);
+                        if (entity instanceof Loadable<?>)
+                        {
+                            Instant modified = Files.getLastModifiedTime(p).toInstant();
+                            @SuppressWarnings("unchecked") T stamped = (T)((Loadable<T>)entity).withLoadedAt(modified);
+                            entity = stamped;
+                        }
+                        return entity;
+                    }
+                    catch (IOException e)
+                    {
+                        throw new UncheckedIOException(e);
+                    }
+                })
+                .toList();
+        }
+        catch (IOException e)
+        {
+            throw new UncheckedIOException(e);
         }
 
         LOG.info("Loaded {} {}(s)", loaded.size(), type.getSimpleName());

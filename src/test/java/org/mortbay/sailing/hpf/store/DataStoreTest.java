@@ -9,9 +9,7 @@ import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Race;
-import org.mortbay.sailing.hpf.data.Season;
 import org.mortbay.sailing.hpf.data.Series;
-import org.mortbay.sailing.hpf.store.DataStore;
 
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -68,14 +66,11 @@ class DataStoreTest {
         assertEquals(1, store.clubs().size());
         Club club = store.clubs().values().iterator().next();
         assertEquals("MYC", club.shortName());
+        assertEquals("NSW", club.state());
 
-        assertEquals(1, club.seasons().size());
-        Season season = club.seasons().getFirst();
-        assertEquals("2020-21", season.id());
-
-        assertEquals(1, season.series().size());
-        Series series = season.series().getFirst();
-        assertEquals("myc.com.au/2020-21/club-championship", series.id());
+        assertEquals(1, club.series().size());
+        Series series = club.series().getFirst();
+        assertEquals("myc.com.au/club-championship", series.id());
         assertFalse(series.isCatchAll());
         assertEquals(List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"), series.raceIds());
 
@@ -128,10 +123,9 @@ class DataStoreTest {
         assertEquals(boats, store2.boats().values().stream()
                 .sorted(java.util.Comparator.comparing(Boat::id)).toList());
 
-        Series series = new Series("myc.com.au/2020-21/club-championship", "Club Championship", false,
+        Series series = new Series("myc.com.au/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001"));
-        Season season = new Season("2020-21", List.of(series));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(season), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(series), null);
         store2.putClub(club);
         store2.stop();
 
@@ -152,10 +146,10 @@ class DataStoreTest {
     void eachRaceInOwnFile(@TempDir Path tempDir) {
         Race race1 = buildRace();
         Race race2 = new Race("myc.com.au-2020-09-20-0002", "myc.com.au",
-                List.of("myc.com.au/2020-21/club-championship"),
+                List.of("myc.com.au/club-championship"),
                 LocalDate.of(2020, 9, 20), 2, null, "PHS", false,
                 List.of(new Division("Division 1", List.of(
-                        new Finisher("MYC7-tensixty-radford1060", Duration.ofMinutes(72).plusSeconds(5), false)
+                        new Finisher("MYC7-tensixty-radford1060", Duration.ofMinutes(72).plusSeconds(5), false, null)
                 ))), null);
 
         DataStore store = new DataStore(tempDir);
@@ -215,11 +209,10 @@ class DataStoreTest {
     }
 
     @Test
-    void clubWithSeasonsSeriesRoundTrip(@TempDir Path tempDir) {
-        Series series = new Series("myc.com.au/2020-21/club-championship", "Club Championship", false,
+    void clubWithSeriesRoundTrip(@TempDir Path tempDir) {
+        Series series = new Series("myc.com.au/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"));
-        Season season = new Season("2020-21", List.of(series));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(season), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(series), null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -231,12 +224,9 @@ class DataStoreTest {
         assertEquals(1, store2.clubs().size());
         Club loadedClub = store2.clubs().get(club.id());
         assertEquals(club, loadedClub);
-        assertEquals(1, loadedClub.seasons().size());
-        Season loadedSeason = loadedClub.seasons().getFirst();
-        assertEquals("2020-21", loadedSeason.id());
-        assertEquals(1, loadedSeason.series().size());
-        Series loadedSeries = loadedSeason.series().getFirst();
-        assertEquals("myc.com.au/2020-21/club-championship", loadedSeries.id());
+        assertEquals(1, loadedClub.series().size());
+        Series loadedSeries = loadedClub.series().getFirst();
+        assertEquals("myc.com.au/club-championship", loadedSeries.id());
         assertFalse(loadedSeries.isCatchAll());
         assertEquals(List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"), loadedSeries.raceIds());
     }
@@ -404,6 +394,67 @@ class DataStoreTest {
         assertEquals(1, store.boats().size());
     }
 
+    // --- Alias seed integration ---
+
+    @Test
+    void findOrCreateDesignResolvesAliasFromSeed(@TempDir Path tempDir) {
+        // aliases.yaml maps "Sydney 36 OD" → sydney36cr
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        // Pre-populate the canonical design
+        Design canonical = new Design("sydney36cr", "Sydney 36 CR", List.of(), List.of(), null);
+        store.putDesign(canonical);
+
+        Design found = store.findOrCreateDesign("Sydney 36 OD");
+
+        assertEquals("sydney36cr", found.id());
+        assertEquals(1, store.designs().size());
+    }
+
+    @Test
+    void findOrCreateDesignCreatesCanonicalDesignViaSeedWhenAbsent(@TempDir Path tempDir) {
+        // aliases.yaml maps "Sydney 36 OD" → sydney36cr with canonicalName "Sydney 36 CR"
+        // If sydney36cr doesn't exist yet, it should be created with the seed's canonical name
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Design found = store.findOrCreateDesign("Sydney 36 OD");
+
+        assertEquals("sydney36cr", found.id());
+        assertEquals("Sydney 36 CR", found.canonicalName());
+        assertEquals(1, store.designs().size());
+    }
+
+    @Test
+    void findOrCreateBoatResolvesAliasFromSeedToExistingCanonicalBoat(@TempDir Path tempDir) {
+        // aliases.yaml maps MYC7 / "1060" → canonical name "Day Dreaming"
+        // Pre-populate the canonical boat; searching by "1060" should find it
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat canonical = new Boat("MYC7-day_dreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), null);
+        store.putBoat(canonical);
+
+        Boat found = store.findOrCreateBoat("MYC7", "1060", null);
+
+        assertEquals("MYC7-day_dreaming", found.id());
+        assertEquals(1, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateBoatCreatesWithCanonicalNameWhenAliasEncounteredFirst(@TempDir Path tempDir) {
+        // aliases.yaml maps MYC7 / "1060" → canonical "Day Dreaming"
+        // No boat yet — first encounter via an alias name should create with canonical name + alias recorded
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Boat boat = store.findOrCreateBoat("MYC7", "1060", null);
+
+        assertEquals("MYC7-day_dreaming", boat.id());
+        assertEquals("Day Dreaming", boat.name());
+        assertEquals(List.of("1060"), boat.aliases());
+        assertEquals(1, store.boats().size());
+    }
+
     // --- Helpers ---
 
     private DataStore testDataStore() throws URISyntaxException {
@@ -415,7 +466,7 @@ class DataStoreTest {
         return new Race(
                 "myc.com.au-2020-09-13-0001",
                 "myc.com.au",
-                List.of("myc.com.au/2020-21/club-championship"),
+                List.of("myc.com.au/club-championship"),
                 LocalDate.of(2020, 9, 13),
                 1,
                 null,
@@ -423,15 +474,15 @@ class DataStoreTest {
                 false,
                 List.of(
                         new Division("Division 1", List.of(
-                                new Finisher("MYC100-shear_magic-adams10", Duration.ofMinutes(69).plusSeconds(42), false),
-                                new Finisher("MYC7-tensixty-radford1060",  Duration.ofMinutes(67).plusSeconds(37), false),
-                                new Finisher("MYC12-san_toy",              Duration.ofMinutes(67).plusSeconds(22), true),
-                                new Finisher("5656-mondo-sydney38",        Duration.ofMinutes(67).plusSeconds(19), false)
+                                new Finisher("MYC100-shear_magic-adams10", Duration.ofMinutes(69).plusSeconds(42), false, null),
+                                new Finisher("MYC7-tensixty-radford1060",  Duration.ofMinutes(67).plusSeconds(37), false, null),
+                                new Finisher("MYC12-san_toy",              Duration.ofMinutes(67).plusSeconds(22), true,  null),
+                                new Finisher("5656-mondo-sydney38",        Duration.ofMinutes(67).plusSeconds(19), false, null)
                         )),
                         new Division("Division 2", List.of(
-                                new Finisher("1152-bokarra-santana22",     Duration.ofMinutes(80).plusSeconds(26), false),
-                                new Finisher("1255-melody",               Duration.ofMinutes(77).plusSeconds(32), false),
-                                new Finisher("6295-ratty_tooey",          Duration.ofMinutes(77).plusSeconds(59), false)
+                                new Finisher("1152-bokarra-santana22",     Duration.ofMinutes(80).plusSeconds(26), false, null),
+                                new Finisher("1255-melody",               Duration.ofMinutes(77).plusSeconds(32), false, null),
+                                new Finisher("6295-ratty_tooey",          Duration.ofMinutes(77).plusSeconds(59), false, null)
                         ))
                 ),
                 null

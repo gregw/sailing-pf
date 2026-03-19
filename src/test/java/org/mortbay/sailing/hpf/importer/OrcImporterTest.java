@@ -83,7 +83,7 @@ class OrcImporterTest {
         assertEquals(1, boat.certificates().size());
         Certificate cert = boat.certificates().getFirst();
         assertEquals("ORC", cert.system());
-        assertEquals(612.3, cert.value());
+        assertEquals(600.0 / 612.3, cert.value(), 1e-10);
         assertEquals(2024, cert.year());
         assertEquals("AUS-2024-001", cert.certificateNumber());
         assertEquals(LocalDate.of(2024, 12, 31), cert.expiryDate());

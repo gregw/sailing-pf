@@ -1,5 +1,6 @@
 package org.mortbay.sailing.hpf.importer;
 
+import java.time.LocalDate;
 import java.util.Locale;
 
 import org.mortbay.sailing.hpf.data.Design;
@@ -53,9 +54,41 @@ public class IdGenerator
     public static String generateBoatId(String rawSail, String rawName, Design design)
     {
         String normSail = normaliseSailNumber(rawSail);
+        if (normSail.isEmpty())
+            normSail = "nosail";
         String normName = normaliseName(rawName);
         String base = normSail + "-" + normName;
         return design == null ? base : base + "-" + design.id();
+    }
+
+    /**
+     * Lowercase, replace runs of non-alphanumeric characters with a single hyphen, trim
+     * leading/trailing hyphens.
+     * "Main Series 2018-19" → "main-series-2018-19"
+     */
+    public static String normaliseSeriesName(String raw)
+    {
+        if (raw == null)
+            return "";
+        return raw.toLowerCase(Locale.ENGLISH).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+    }
+
+    /**
+     * Generate a series ID from the club ID and series name.
+     * "myc.com.au", "Main Series 2018-19" → "myc.com.au/main-series-2018-19"
+     */
+    public static String generateSeriesId(String clubId, String seriesName)
+    {
+        return clubId + "/" + normaliseSeriesName(seriesName);
+    }
+
+    /**
+     * Generate a race ID from the club ID, date, and race number.
+     * "myc.com.au", 2020-09-13, 1 → "myc.com.au-2020-09-13-0001"
+     */
+    public static String generateRaceId(String clubId, LocalDate date, int number)
+    {
+        return clubId + "-" + date + String.format("-%04d", number);
     }
 
     private IdGenerator()

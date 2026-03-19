@@ -2,14 +2,12 @@
   "id" : "myc.com.au",
   "shortName" : "MYC",
   "longName" : "Manly Yacht Club",
+  "state" : "NSW",
   "aliases" : [ ],
-  "seasons" : [ {
-    "id" : "2020-21",
-    "series" : [ {
-      "id" : "myc.com.au/2020-21/club-championship",
-      "name" : "Club Championship",
-      "isCatchAll" : false,
-      "raceIds" : [ "myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002" ]
-    } ]
+  "series" : [ {
+    "id" : "myc.com.au/club-championship",
+    "name" : "Club Championship",
+    "isCatchAll" : false,
+    "raceIds" : [ "myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002" ]
   } ]
 }

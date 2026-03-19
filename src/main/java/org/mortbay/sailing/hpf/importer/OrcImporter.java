@@ -29,7 +29,7 @@ import org.w3c.dom.NodeList;
  * Feed URL: <a href="https://data.orc.org/public/WPub.dll?action=activecerts&amp;CountryId=AUS">active certs feed</a>
  * Individual cert: <a href="https://data.orc.org/public/WPub.dll/CC/">WPub.dll/CC/{dxtID}</a>
  * <p>
- * GPH is the general-purpose handicap value stored; convert to TCF via 600/GPH.
+ * GPH is parsed from the certificate page and converted to TCF (600/GPH) before storing.
  * The certificateNumber field stores the ORC dxtID for idempotency checking.
  */
 public class OrcImporter
@@ -45,12 +45,12 @@ public class OrcImporter
     // CertType values indicating non-spinnaker
     private static final Set<String> NON_SPIN_CERT_TYPES = Set.of("10", "11");
 
-    // Matches GPH label followed (within ~200 chars) by a decimal number in a table cell.
-    // Handles: ...GPH...</td><td...>612.3<  or  ...GPH...value="612.3"
+    // Matches the GPH table cell: <td ... filecode="GPH">521.7</td>
+    // This attribute is present on all ORC cert page variants (club, NS, international, DH).
     private static final java.util.regex.Pattern GPH_PATTERN =
         java.util.regex.Pattern.compile(
-            "GPH[^0-9]{0,200}?([0-9]{3,4}(?:\\.[0-9]+)?)",
-            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+            "filecode=\"GPH\">([0-9]{3,4}(?:\\.[0-9]+)?)</td>",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private final DataStore store;
     private final HttpClient client;
@@ -188,6 +188,12 @@ public class OrcImporter
             LOG.warn("Skipping cert dxtID={}: GPH not found in cert HTML", dxtId);
             return;
         }
+        if (gph < 400 || gph > 900)
+        {
+            LOG.warn("Skipping cert dxtID={}: implausible GPH={} (expected 400-900, regex mismatch?)", dxtId, gph);
+            return;
+        }
+        double tcf = 600.0 / gph;
 
         boolean nonSpinnaker = (familyName != null && familyName.contains("Non Spinnaker"))
             || NON_SPIN_CERT_TYPES.contains(certType == null ? "" : certType.trim());
@@ -217,7 +223,7 @@ public class OrcImporter
         updatedCerts.removeIf(c -> finalDxtId.equals(c.certificateNumber()));
 
         Certificate cert = new Certificate("ORC",
-            year, gph, nonSpinnaker, false, dxtId, expiry);
+            year, tcf, nonSpinnaker, false, dxtId, expiry);
         updatedCerts.add(cert);
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
