@@ -37,6 +37,8 @@ clubs:
     state: NSW
     fullName: Cruising Yacht Club of Australia
     aliases: []
+    topyacht:
+      - https://cyca.com.au/results/2019/bwps_1920/index.htm
 
   cycsa.com.au:
     shortName: CYCSA
@@ -44,7 +46,11 @@ clubs:
     fullName: Cruising Yacht Club of SA
     aliases: []
     topyacht:
-      - https://www.topyacht.net.au/results/cycsa/2025/club/index.htm
+      - http://cycsa.com.au/results/2017/index.htm
+      - https://topyacht.net.au/results/cycsa/2020/club/index.htm
+      - https://topyacht.net.au/results/cycsa/2021/club/index.htm
+      - https://topyacht.net.au/results/cycsa/2022/club/index.htm
+      - https://topyacht.net.au/results/cycsa/2025/club/index.htm
 
   hbyc.org.au:
     shortName: HBYC
@@ -127,6 +133,13 @@ clubs:
     state: VIC
     fullName: Royal Geelong Yacht Club
     aliases: []
+    topyacht:
+      - https://topyacht.net.au/results/rgyc/2020-2021_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2021-2022_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2022-2023_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2023-2024_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2024-2025_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2025-2026_keel_boat_club_series/
 
   rmys.com.au:
     shortName: RMYS
@@ -134,12 +147,7 @@ clubs:
     fullName: Royal Melbourne Yacht Squadron
     aliases: []
     topyacht:
-      - https://www.topyacht.net.au/results/rmys/2024/winter/
-      - https://www.topyacht.net.au/results/rmys/2024/summer/
-      - https://www.topyacht.net.au/results/rmys/2025/winter/
-      - https://www.topyacht.net.au/results/rmys/2025/summer/
-      - https://www.topyacht.net.au/results/rmys/2026/winter/
-      - https://www.topyacht.net.au/results/rmys/2026/summer/
+      - https://www.topyacht.net.au/results/rmys/2022/awkr22/index.htm
 
   rqys.com.au:
     shortName: RQYS
@@ -152,6 +160,8 @@ clubs:
     state: SA
     fullName: Royal South Australian Yacht Squadron
     aliases: []
+    topyacht:
+      - https://topyacht.net.au/results/rsays/2022/vxonestate/index.htm
 
   ryct.org.au:
     shortName: RYCT
@@ -159,12 +169,21 @@ clubs:
     fullName: Royal Yacht Club of Tasmania
     aliases: []
     topyacht:
-      - http://results.ryct.org.au/Pretwilight24/
-      - http://results.ryct.org.au/Pretwilight25/
-      - http://results.ryct.org.au/Pretwilight26/
-      - http://results.ryct.org.au/wkbr2024/
-      - http://results.ryct.org.au/wkbr2025/
-      - http://results.ryct.org.au/wkbr2026/
+      - http://results.ryct.org.au/bruny20/
+      - http://results.ryct.org.au/bruny22/
+      - http://results.ryct.org.au/bruny23/
+      - http://results.ryct.org.au/ccharbour22/
+      - http://results.ryct.org.au/ccharbour23/
+      - http://results.ryct.org.au/cclong23/
+      - http://results.ryct.org.au/cclong24/
+      - http://results.ryct.org.au/channel20/
+      - http://results.ryct.org.au/channel21/
+      - http://results.ryct.org.au/channel22/
+      - http://results.ryct.org.au/channel23/
+      - http://results.ryct.org.au/drgstates20/
+      - http://results.ryct.org.au/drgstates21/
+      - http://results.ryct.org.au/drgstates22/
+      - http://results.ryct.org.au/drgstates23/
 
   # DISAMBIGUATE: "RYCV" appears in both SA and VIC in the AMS feed.
   # No SA club with this abbreviation found. Likely a data anomaly.
@@ -179,6 +198,17 @@ clubs:
     state: VIC
     fullName: Royal Yacht Club of Victoria
     aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/rycv/2020/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2021/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2021/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2022/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2022/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2023/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2023/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2024/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2024/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2025/summer/index-summer.htm
 
   sbsc.net.au:
     shortName: SBSC
@@ -199,6 +229,17 @@ clubs:
     state: VIC
     fullName: Sandringham Yacht Club
     aliases: []
+    topyacht:
+      - https://topyacht.net.au/results/syc/2024/kblt/
+      - https://topyacht.net.au/results/syc/2025/kblt/
+      - https://topyacht.net.au/results/syc/2026/kblt/
+      - https://www.topyacht.net.au/results/2020/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2021/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2022/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2023/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2024/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2025/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2026/sailsandy/index.htm
 
   # ------------------------------------------------------------
   # ADDITIONAL CLUBS — from AS finder / SailSys, not in AMS feed
@@ -217,6 +258,11 @@ clubs:
     state: NSW
     fullName: Middle Harbour Yacht Club
     aliases: []
+    topyacht:
+      - https://www.mhyc.com.au/files/results/2020/champsregattas/index.htm
+      - https://www.mhyc.com.au/files/results/2021/champsregattas/index.htm
+      - https://www.mhyc.com.au/files/results/2020/club/index.htm
+      - https://www.mhyc.com.au/files/results/2021/club/index.htm
 
   sasc.com.au:
     shortName: SASC
@@ -249,6 +295,8 @@ clubs:
     state: NSW
     fullName: Royal Prince Alfred Yacht Club
     aliases: []
+    topyacht:
+      - https://rpayc.com.au/results/2022/club/otb/index.htm
 
   byra.org.au:
     shortName: BYRA
@@ -263,7 +311,7 @@ clubs:
     aliases: [RMYCBB]
 
   avalonsailingclub.com.au:
-    shortName: ASC    # TODO — check short name; "ASC" used by both Adelaide SC and Avalon SC in SailSys
+    shortName: ASC
     state: NSW
     fullName: Avalon Sailing Club
     aliases: []
@@ -273,9 +321,14 @@ clubs:
     state: NSW
     fullName: Botany Bay Yacht Club
     aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/botanybay/2022/club_series/
+      - https://www.topyacht.net.au/results/botanybay/2023/club_series/
+      - https://www.topyacht.net.au/results/botanybay/2024/club_series/
+      - https://www.topyacht.net.au/results/botanybay/2025/club_series/
 
   cronullasailingclub.com.au:
-    shortName: CSC    # TODO — check short name; "CSC" also used by Christies SC (SA) in SailSys
+    shortName: CSC
     state: NSW
     fullName: Cronulla Sailing Club
     aliases: []
@@ -287,10 +340,17 @@ clubs:
     aliases: []
 
   balmainsailingclub.com.au:
-    shortName: BSC    # TODO — check short name; "BSC" used by multiple clubs in SailSys
+    shortName: BSC
     state: NSW
     fullName: Balmain Sailing Club
     aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/balmainsc/2020/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2021/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2022/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2024/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2025/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2026/kb/index.htm
 
   prsc.org.au:
     shortName: PRSC
@@ -299,7 +359,7 @@ clubs:
     aliases: []
 
   dsc.org.au:
-    shortName: DSC    # TODO — check short name; "DSC" also used by Darwin SC in SailSys
+    shortName: DSC
     state: NSW
     fullName: Drummoyne Sailing Club
     aliases: []
@@ -309,6 +369,9 @@ clubs:
     state: NSW
     fullName: Newcastle Cruising Yacht Club
     aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/ncyc/2021/sf2021/index.htm
+      - https://www.topyacht.net.au/results/ncyc/2022/sf2022/index.htm
 
   lmyc.com.au:
     shortName: LMYC
@@ -316,12 +379,14 @@ clubs:
     fullName: Lake Macquarie Yacht Club
     aliases: []
     topyacht:
-      - https://mail.lmycraceresults.com.au/results/2024/tyshesails/
-      - https://mail.lmycraceresults.com.au/results/2025/tyshesails/
-      - https://mail.lmycraceresults.com.au/results/2026/tyshesails/
+      - https://www.lmycraceresults.com.au/results/2021/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2022/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2023/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2024/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2025/tyregattas/
 
   gossail.com.au:
-    shortName: GSC    # TODO — check short name; "GSC" used by both Gosford SC and Greenwich SC in SailSys
+    shortName: GSC
     state: NSW
     fullName: Gosford Sailing Club
     aliases: []
@@ -352,7 +417,7 @@ clubs:
     aliases: []
 
   queenscliffcruisingyachtclub.org:
-    shortName: QCYC   # TODO — check short name; "QCYC" also used by Queensland CYC in SailSys
+    shortName: QCYC
     state: VIC
     fullName: Queenscliff Cruising Yacht Club
     aliases: []
@@ -364,13 +429,13 @@ clubs:
     aliases: [MYC]
 
   rosebudyachtclub.au:
-    shortName: RYC    # TODO — check short name; "RYC" also used by Rhyll YC in SailSys
+    shortName: RYC
     state: VIC
     fullName: Rosebud Yacht Club
     aliases: []
 
   flindersyc.com.au:
-    shortName: FYC    # TODO — check short name; "FYC" used by Frankston YC in SailSys
+    shortName: FYC
     state: VIC
     fullName: Flinders Yacht Club
     aliases: []
@@ -382,13 +447,13 @@ clubs:
     aliases: []
 
   mordiallocsc.com.au:
-    shortName: MSC    # TODO — check short name; "MSC" used by Mackay SC and Maroochydore SC in SailSys
+    shortName: MSC
     state: VIC
     fullName: Mordialloc Sailing Club
     aliases: []
 
   williamstownsailingclub.org.au:
-    shortName: WSC    # TODO — check short name; "WSC" used by multiple clubs in SailSys
+    shortName: WSC
     state: VIC
     fullName: Williamstown Sailing Club
     aliases: []
@@ -410,19 +475,25 @@ clubs:
     aliases: [MYC, WMYC]
 
   qcyc.com.au:
-    shortName: QCYC   # TODO — check short name; "QCYC" also used by Queenscliff CYC (VIC) in SailSys
+    shortName: QCYC
     state: QLD
     fullName: Queensland Cruising Yacht Club
     aliases: []
 
   southportyachtclub.com.au:
-    shortName: SYC    # TODO — check short name; "SYC" used by multiple clubs in SailSys
+    shortName: SYC
     state: QLD
     fullName: Southport Yacht Club
     aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/2020/sailparadise/
+      - https://www.topyacht.net.au/results/2021/sailparadise/
+      - https://www.topyacht.net.au/results/2022/sailparadise/
+      - https://www.topyacht.net.au/results/2023/sailparadise/
+      - https://www.topyacht.net.au/results/2024/sailparadise/
 
   mooloolabayachtclub.com.au:
-    shortName: MYC    # TODO — check short name; "MYC" used by multiple clubs in SailSys
+    shortName: MYC
     state: QLD
     fullName: Mooloolaba Yacht Club
     aliases: []
@@ -434,7 +505,7 @@ clubs:
     aliases: []
 
   whitsundaysailingclub.com.au:
-    shortName: WSC    # TODO — check short name; "WSC" used by multiple clubs in SailSys
+    shortName: WSC
     state: QLD
     fullName: Whitsunday Sailing Club
     aliases: []
@@ -445,7 +516,7 @@ clubs:
   # --- SA ---
 
   adelaidesailingclub.com.au:
-    shortName: ASC    # TODO — check short name; "ASC" used by both Adelaide SC and Avalon SC in SailSys
+    shortName: ASC
     state: SA
     fullName: Adelaide Sailing Club
     aliases: []
@@ -486,7 +557,7 @@ clubs:
     aliases: []
 
   hillarysyachtclub.com.au:
-    shortName: HYC    # TODO — check short name; "HYC" also used by Hastings YC (VIC) and Humpybong YC (QLD) in SailSys
+    shortName: HYC
     state: WA
     fullName: Hillarys Yacht Club
     aliases: []
@@ -498,7 +569,7 @@ clubs:
     aliases: []
 
   pfsyc.com.au:
-    shortName: PFSYC  # TODO — check short name
+    shortName: PFSYC
     state: WA
     fullName: Perth Flying Squadron Yacht Club
     aliases: []
@@ -506,7 +577,7 @@ clubs:
   # --- NT ---
 
   darwinsailingclub.com.au:
-    shortName: DSC    # TODO — check short name; "DSC" also used by Drummoyne SC in SailSys
+    shortName: DSC
     state: NT
     fullName: Darwin Sailing Club
     aliases: []
@@ -534,5 +605,80 @@ clubs:
     state: SA
     fullName: Goolwa Yacht Club
 
-# Excluded (blank shortName, 5 rows — data quality gaps in the AMS feed):
-# blank / NSW, blank / QLD, blank / SA, blank / VIC, blank / blank
+  # ------------------------------------------------------------
+  # CLUBS DISCOVERED FROM TOPYACHT URL PROBING
+  # ------------------------------------------------------------
+
+  rmyctoronto.com.au:
+    shortName: RMYCT
+    state: NSW
+    fullName: Royal Motor Yacht Club Toronto
+    aliases: []
+    topyacht:
+      - https://www.raceresults.rmyctoronto.com.au/results/2020_2021/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2020_2021/regattaindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2021_2022/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2021_2022/regattaindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2022_2023/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2023_2024/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2024_2025/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2025_2026/hcwindex.htm
+
+  gfs.org.au:
+    shortName: GFS
+    state: NSW
+    fullName: Greenwich Flying Squadron
+    aliases: []
+    topyacht:
+      - https://gfs.org.au/handicapper/results/2020/2020_club_series/index.htm
+      - https://gfs.org.au/handicapper/results/2021/2021_club_series/index.htm
+      - https://gfs.org.au/handicapper/results/2022/2022_club_series/index.htm
+      - https://gfs.org.au/handicapper/results/2023/2023_club_series/index.htm
+
+  pmyc.asn.au:
+    shortName: PMYC
+    state: VIC
+    fullName: Port Melbourne Yacht Club
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/pmyc/2020/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2021/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2022/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2023/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2024/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2025/club/index.htm
+
+  gryc.com.au:
+    shortName: GRYC
+    state: SA
+    fullName: Goolwa Regatta Yacht Club
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/gryc/2020/club/Winter2020/series.htm
+      - https://www.topyacht.net.au/results/gryc/2021/club/Winter2021/series.htm
+      - https://www.topyacht.net.au/results/gryc/2022/club/Winter2022/series.htm
+      - https://www.topyacht.net.au/results/gryc/2025/club/Winter2025/series.htm
+
+  # ------------------------------------------------------------
+  # UNMATCHED TOPYACHT CLUBS
+  # ------------------------------------------------------------
+
+  # topyacht slug "orwa" — Ocean Racing WA? Based in WA.
+  oceanracingwa.com.au:
+    shortName: ORWA
+    state: WA
+    fullName: "Ocean Racing Western Australia"
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/orwa/2021/index.htm
+      - https://www.topyacht.net.au/results/orwa/2022/index.htm
+      - https://www.topyacht.net.au/results/orwa/2023/index.htm
+
+  classicyacht.com.au:
+    shortName: CYAA
+    state: VIC
+    fullName: "Classic Yacht Association Australia"
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm
+      - https://www.topyacht.net.au/results/cyaa/2022/winter/index.htm
