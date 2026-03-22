@@ -226,3 +226,9 @@ Small: ~600 boats each doing ~50 races/year. No need for premature optimisation.
 - Raw race results: no claim — public record
 
 See [LICENSE.md](LICENSE.md) for full details.
+
+## Communication Style
+
+Use plain, direct language at all times. No jokes, wordplay, puns, or attempts at humour.
+No dramatic flair or colourful descriptions of what you are doing. State actions and
+findings factually. "Running tests" not "putting the code through its paces".

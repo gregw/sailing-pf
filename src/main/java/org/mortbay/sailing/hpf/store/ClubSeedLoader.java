@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,16 +23,16 @@ import java.util.Map;
 class ClubSeedLoader
 {
     private static final Logger LOG = LoggerFactory.getLogger(ClubSeedLoader.class);
-    private static final String RESOURCE_PATH = "/clubs.yaml";
+    private static final String FILENAME = "clubs.yaml";
     private static final String PLACEHOLDER_PREFIX = "unknown.domain.";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
-    static Map<String, Club> load()
+    static Map<String, Club> load(Path configDir)
     {
-        InputStream stream = ClubSeedLoader.class.getResourceAsStream(RESOURCE_PATH);
+        InputStream stream = openStream(configDir, FILENAME);
         if (stream == null)
         {
-            LOG.warn("No clubs.yaml found on classpath; club seed not loaded");
+            LOG.warn("No clubs.yaml found; club seed not loaded");
             return Map.of();
         }
         try
@@ -49,10 +51,12 @@ class ClubSeedLoader
                     continue;
                 }
                 Club stub = new Club(domain, entry.shortName, entry.fullName, entry.state,
-                    entry.aliases != null ? entry.aliases : List.of(), List.of(), null);
+                    entry.aliases != null ? entry.aliases : List.of(),
+                    entry.topyacht != null ? entry.topyacht : List.of(),
+                    List.of(), null);
                 result.put(domain, stub);
             }
-            LOG.info("Loaded {} club seed entries from {}", result.size(), RESOURCE_PATH);
+            LOG.info("Loaded {} club seed entries from {}", result.size(), FILENAME);
             return result;
         }
         catch (Exception e)
@@ -60,6 +64,25 @@ class ClubSeedLoader
             LOG.error("Failed to load clubs.yaml: {}", e.getMessage(), e);
             return Map.of();
         }
+    }
+
+    private static InputStream openStream(Path configDir, String filename)
+    {
+        Path file = configDir.resolve(filename);
+        if (Files.exists(file))
+        {
+            try
+            {
+                LOG.info("Loading {} from {}", filename, file.toAbsolutePath());
+                return Files.newInputStream(file);
+            }
+            catch (Exception e)
+            {
+                LOG.warn("Failed to open {}: {}", file, e.getMessage());
+            }
+        }
+        // Fallback to classpath (test resources)
+        return ClubSeedLoader.class.getResourceAsStream("/" + filename);
     }
 
     static class SeedFile
@@ -73,5 +96,6 @@ class ClubSeedLoader
         public String state;
         public String fullName;
         public List<String> aliases;
+        public List<String> topyacht;
     }
 }

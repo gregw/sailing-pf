@@ -74,12 +74,22 @@ public class IdGenerator
     }
 
     /**
+     * Replaces '/' with '--' so a club ID can be used safely as a filename or directory name.
+     * "rycv.com.au/ppnyc" → "rycv.com.au--ppnyc"
+     * "myc.com.au"        → "myc.com.au"  (no-op)
+     */
+    public static String sanitizeIdForFilesystem(String id)
+    {
+        return id == null ? "" : id.replace("/", "--");
+    }
+
+    /**
      * Generate a series ID from the club ID and series name.
      * "myc.com.au", "Main Series 2018-19" → "myc.com.au/main-series-2018-19"
      */
     public static String generateSeriesId(String clubId, String seriesName)
     {
-        return clubId + "/" + normaliseSeriesName(seriesName);
+        return sanitizeIdForFilesystem(clubId) + "/" + normaliseSeriesName(seriesName);
     }
 
     /**
@@ -88,7 +98,7 @@ public class IdGenerator
      */
     public static String generateRaceId(String clubId, LocalDate date, int number)
     {
-        return clubId + "-" + date + String.format("-%04d", number);
+        return sanitizeIdForFilesystem(clubId) + "-" + date + String.format("-%04d", number);
     }
 
     private IdGenerator()

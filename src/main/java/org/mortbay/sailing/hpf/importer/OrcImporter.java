@@ -222,8 +222,10 @@ public class OrcImporter
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.removeIf(c -> finalDxtId.equals(c.certificateNumber()));
 
+        // CertType 1 = IRC+ORC international, 2 = ORC international; all others are club
+        boolean orcClub = certType == null || (!"1".equals(certType.trim()) && !"2".equals(certType.trim()));
         Certificate cert = new Certificate("ORC",
-            year, tcf, nonSpinnaker, false, dxtId, expiry);
+            year, tcf, nonSpinnaker, false, orcClub, dxtId, expiry);
         updatedCerts.add(cert);
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 

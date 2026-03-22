@@ -40,13 +40,13 @@ class OrcImporterTest {
 
     @Test
     void parseGphFindsValueInTableCell() {
-        String html = "<html><body><table><tr><td>GPH</td><td>612.3</td></tr></table></body></html>";
+        String html = "<table><tr><td filecode=\"GPH\">612.3</td></tr></table>";
         assertEquals(612.3, importer.parseGph(html, "TEST-001"));
     }
 
     @Test
     void parseGphHandlesWhitespaceBetweenLabelAndValue() {
-        String html = "<td>GPH</td>  \n  <td>  588.4  </td>";
+        String html = "<td scoringkind=\"tod\" filecode=\"GPH\">588.4</td>";
         assertEquals(588.4, importer.parseGph(html, "TEST-002"));
     }
 
@@ -219,8 +219,8 @@ class OrcImporterTest {
         }
     }
 
-    /** Minimal HTML page containing a GPH value. */
+    /** Minimal HTML page containing a GPH value in the ORC cert page format. */
     private String gphHtml(double gph) {
-        return "<table><tr><td>GPH</td><td>" + gph + "</td></tr></table>";
+        return "<table><tr><td scoringkind=\"tod\" filecode=\"GPH\">" + gph + "</td></tr></table>";
     }
 }

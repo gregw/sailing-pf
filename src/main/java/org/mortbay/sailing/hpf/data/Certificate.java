@@ -2,6 +2,9 @@ package org.mortbay.sailing.hpf.data;
 
 import java.time.LocalDate;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * A measurement-based handicap certificate held by a boat.
  * Only IRC, ORC and AMS certificates are stored — PHS and CBH are excluded.
@@ -24,6 +27,27 @@ public record Certificate(
     double value,            // TCF for all systems (IRC TCC; ORC 600/GPH; AMS TCF)
     boolean nonSpinnaker,    // true if this is a non-spinnaker certificate
     boolean twoHanded,       // true for AMS two-handed certificates; false for all IRC/ORC certs
+    boolean orcClub,         // true for ORC club certs (CertType 3); false for international and all IRC/AMS
     String certificateNumber, // dxtID for ORC; cert number for AMS
     LocalDate expiryDate     // null for AMS
-) {}
+)
+{
+    /**
+     * Jackson deserialisation factory. The {@code orcClub} field was added after initial
+     * data files were written, so it may be absent from older JSON — treat null as false.
+     */
+    @JsonCreator
+    public static Certificate create(
+        @JsonProperty("system")            String system,
+        @JsonProperty("year")              int year,
+        @JsonProperty("value")             double value,
+        @JsonProperty("nonSpinnaker")      boolean nonSpinnaker,
+        @JsonProperty("twoHanded")         boolean twoHanded,
+        @JsonProperty("orcClub")           Boolean orcClub,
+        @JsonProperty("certificateNumber") String certificateNumber,
+        @JsonProperty("expiryDate")        LocalDate expiryDate)
+    {
+        return new Certificate(system, year, value, nonSpinnaker, twoHanded,
+            orcClub != null && orcClub, certificateNumber, expiryDate);
+    }
+}

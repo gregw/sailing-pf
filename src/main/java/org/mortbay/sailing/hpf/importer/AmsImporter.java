@@ -203,6 +203,6 @@ public class AmsImporter
     private Certificate makeCert(int year, double value,
                                   boolean nonSpinnaker, boolean twoHanded, String certNo)
     {
-        return new Certificate("AMS", year, value, nonSpinnaker, twoHanded, certNo, null);
+        return new Certificate("AMS", year, value, nonSpinnaker, twoHanded, false, certNo, null);
     }
 }

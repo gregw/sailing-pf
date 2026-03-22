@@ -125,7 +125,7 @@ class DataStoreTest {
 
         Series series = new Series("myc.com.au/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001"));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(series), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(), List.of(series), null);
         store2.putClub(club);
         store2.stop();
 
@@ -189,7 +189,7 @@ class DataStoreTest {
     @Test
     void boatWithCertificatesRoundTrip(@TempDir Path tempDir) {
         Certificate cert = new Certificate(
-                "ORC", 2020, 588.4, false, false, "AUS-2020-1234",
+                "ORC", 2020, 588.4, false, false, false, "AUS-2020-1234",
                 LocalDate.of(2021, 6, 30));
         Boat boat = new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", "myc.com.au",
                 List.of(), List.of(cert), null);
@@ -212,7 +212,7 @@ class DataStoreTest {
     void clubWithSeriesRoundTrip(@TempDir Path tempDir) {
         Series series = new Series("myc.com.au/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(series), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, List.of(), List.of(), List.of(series), null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -229,6 +229,26 @@ class DataStoreTest {
         assertEquals("myc.com.au/club-championship", loadedSeries.id());
         assertFalse(loadedSeries.isCatchAll());
         assertEquals(List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"), loadedSeries.raceIds());
+    }
+
+    @Test
+    void clubWithPathIdRoundTrip(@TempDir Path tempDir) {
+        Club club = new Club("rycv.com.au/ppnyc", "PPNYC", "Port Phillip North Yacht Clubs",
+                "VIC", List.of(), List.of(), List.of(), null);
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putClub(club);
+        store.stop();
+
+        // File should use '--' as filesystem separator
+        assertTrue(tempDir.resolve("clubs/rycv.com.au--ppnyc.json").toFile().exists());
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        Club loaded = store2.clubs().get("rycv.com.au/ppnyc");
+        assertNotNull(loaded);
+        assertEquals(club, loaded);
     }
 
     // --- findOrCreateBoat / findOrCreateDesign ---

@@ -44,9 +44,14 @@ public class DataStore
     private static final Logger LOG = LoggerFactory.getLogger(DataStore.class);
     private static final JaroWinklerSimilarity JARO_WINKLER = new JaroWinklerSimilarity();
     private static final double FUZZY_THRESHOLD = 0.90;
-    private static final JsonMapper MAPPER = JsonMapper.builder().addModule(new JavaTimeModule()).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS).build();
+    private static final JsonMapper MAPPER = JsonMapper.builder()
+        .addModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
+        .build();
 
     private final Path root;
+    private final Path configDir;
     private final Path racesDir;
     private final Path boatsDir;
     private final Path designsDir;
@@ -66,6 +71,7 @@ public class DataStore
     public DataStore(Path root)
     {
         this.root = root;
+        this.configDir = root.resolve("config");
         this.racesDir = root.resolve("races");
         this.boatsDir = root.resolve("boats");
         this.designsDir = root.resolve("designs");
@@ -414,7 +420,7 @@ public class DataStore
         requireStarted();
         boats.values().forEach(b -> write(boatsDir.resolve(b.id() + ".json"), b));
         designs.values().forEach(d -> write(designsDir.resolve(d.id() + ".json"), d));
-        clubs.values().forEach(c -> write(clubsDir.resolve(c.id() + ".json"), c));
+        clubs.values().forEach(c -> write(clubsDir.resolve(IdGenerator.sanitizeIdForFilesystem(c.id()) + ".json"), c));
         races.values().forEach(r -> write(raceFilePath(r), r));
         if (makersDirty)
         {
@@ -434,8 +440,8 @@ public class DataStore
         loadDir(boatsDir, Boat.class).forEach(b -> boats.put(b.id(), b));
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
-        clubSeed = ClubSeedLoader.load();
-        aliasSeed = AliasSeedLoader.load();
+        clubSeed = ClubSeedLoader.load(configDir);
+        aliasSeed = AliasSeedLoader.load(configDir);
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
         races = new LinkedHashMap<>();
@@ -506,7 +512,7 @@ public class DataStore
      */
     private Path raceFilePath(Race race)
     {
-        String clubSlug = race.clubId() != null ? race.clubId() : "unknown";
+        String clubSlug = race.clubId() != null ? IdGenerator.sanitizeIdForFilesystem(race.clubId()) : "unknown";
         String seriesSlug;
         if (race.seriesIds() == null || race.seriesIds().isEmpty())
         {
