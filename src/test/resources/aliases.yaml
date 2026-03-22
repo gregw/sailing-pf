@@ -1,0 +1,17 @@
+# Design name equivalences.
+# Key: canonical design ID (normalised, e.g. "sydney36cr").
+# aliases: alternate names that should resolve to this design.
+designs:
+  sydney36cr:
+    canonicalName: Sydney 36 CR
+    aliases:
+      - Sydney 36 OD
+
+# Boat name aliases, keyed by normalised sail number.
+# All aliases use the object form; 'from' and 'until' are optional ISO dates.
+boats:
+  MYC7:
+    canonicalName: Day Dreaming
+    aliases:
+      - name: "1060"
+      - name: TenSixty

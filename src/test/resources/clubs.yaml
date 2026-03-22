@@ -1,0 +1,504 @@
+# Club seed data.
+# domain: website domain — this IS the Club ID. Replace unknown.domain.N with the real domain.
+# Entries with DISAMBIGUATE comments appear multiple times with the same shortName.
+#
+# Sources:
+#   - Original AMS feed (shortName/state data)
+#   - Australian Sailing club finder (sailing.org.au/club-finder), March 2026 (fullName/domain)
+#   - SailSys shortName/longName extract from boat JSON records (March 2026)
+
+clubs:
+
+  # ------------------------------------------------------------
+  # AMS FEED ENTRIES — domains resolved from AS finder / SailSys
+  # ------------------------------------------------------------
+
+  bbsc.org.au:
+    shortName: BBSC
+    state: NSW
+    fullName: Batemans Bay Sailing Club
+    aliases: []
+
+  # DISAMBIGUATE: "BYC" is used by both Bellerive YC (TAS) and Ballarat YC (VIC) in SailSys
+  byc.org.au:
+    shortName: BYC
+    state: TAS
+    fullName: Bellerive Yacht Club
+    aliases: []
+
+  ballaratyachtclub.com.au:
+    shortName: BYC
+    state: VIC
+    fullName: Ballarat Yacht Club
+    aliases: []
+
+  cyca.com.au:
+    shortName: CYCA
+    state: NSW
+    fullName: Cruising Yacht Club of Australia
+    aliases: []
+
+  cycsa.com.au:
+    shortName: CYCSA
+    state: SA
+    fullName: Cruising Yacht Club of SA
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/cycsa/2025/club/index.htm
+
+  hbyc.org.au:
+    shortName: HBYC
+    state: VIC
+    fullName: Hobsons Bay Yacht Club
+    aliases: []
+
+  hastingsyachtclub.org.au:
+    shortName: HYC
+    state: VIC
+    fullName: Hastings Yacht Club
+    aliases: []
+
+  mcys.com.au:
+    shortName: MCYS
+    state: VIC
+    fullName: Martha Cove Yacht Squadron
+    aliases: []
+
+  morningtonyc.net.au:
+    shortName: MYC
+    state: VIC
+    fullName: Mornington Yacht Club
+    aliases: []
+
+  portadelaidesailingclub.com:
+    shortName: PASC
+    state: SA
+    fullName: Port Adelaide Sailing Club
+    aliases: []
+
+  gyc.com.au:
+    shortName: PCSC
+    state: QLD
+    fullName: Port Curtis Sailing Club
+    aliases: []
+
+  pdyc.org.au:
+    shortName: PDYC
+    state: TAS
+    fullName: Port Dalrymple Yacht Club
+    aliases: []
+
+  plyc.com.au:
+    shortName: PLYC
+    state: SA
+    fullName: Port Lincoln Yacht Club
+    aliases: []
+
+  # DISAMBIGUATE: "RBYC" is used by Royal Brighton YC (VIC) in SailSys.
+  # The TAS entry in the AMS feed has no confident match — retained as unknown.
+  unknown.domain.14:
+    shortName: RBYC
+    state: TAS
+    fullName: ""      # TODO — no confident TAS match found
+    aliases: []
+
+  rbyc.org.au:
+    shortName: RBYC
+    state: VIC
+    fullName: Royal Brighton Yacht Club
+    aliases: []
+
+  rfbyc.asn.au:
+    shortName: RFBYC
+    state: WA
+    fullName: Royal Freshwater Bay Yacht Club
+    aliases: []
+
+  rgyc.com.au:
+    shortName: RGYC
+    state: VIC
+    fullName: Royal Geelong Yacht Club
+    aliases: []
+
+  rmys.com.au:
+    shortName: RMYS
+    state: VIC
+    fullName: Royal Melbourne Yacht Squadron
+    aliases: []
+
+  rqys.com.au:
+    shortName: RQYS
+    state: QLD
+    fullName: Royal Queensland Yacht Squadron
+    aliases: []
+
+  rsays.com.au:
+    shortName: RSAYS
+    state: SA
+    fullName: Royal South Australian Yacht Squadron
+    aliases: []
+
+  ryct.org.au:
+    shortName: RYCT
+    state: TAS
+    fullName: Royal Yacht Club of Tasmania
+    aliases: []
+
+  # DISAMBIGUATE: "RYCV" appears in both SA and VIC in the AMS feed.
+  # No SA club with this abbreviation found. Likely a data anomaly.
+  unknown.domain.22:
+    shortName: RYCV
+    state: SA
+    fullName: ""      # TODO — probable AMS data anomaly, no SA match found
+    aliases: []
+
+  rycv.com.au:
+    shortName: RYCV
+    state: VIC
+    fullName: Royal Yacht Club of Victoria
+    aliases: []
+
+  sbsc.net.au:
+    shortName: SBSC
+    state: VIC
+    fullName: Safety Beach Sailing Club
+    aliases: []
+
+  # DISAMBIGUATE: "SBYC" appears in VIC in the AMS feed.
+  # Sorrento Sailing Couta Boat Club uses "SSCBC". No confident VIC match found.
+  unknown.domain.25:
+    shortName: SBYC
+    state: VIC
+    fullName: ""      # TODO — no confident match found
+    aliases: []
+
+  syc.com.au:
+    shortName: SYC
+    state: VIC
+    fullName: Sandringham Yacht Club
+    aliases: []
+
+  # ------------------------------------------------------------
+  # ADDITIONAL CLUBS — from AS finder / SailSys, not in AMS feed
+  # ------------------------------------------------------------
+
+  # --- NSW ---
+
+  myc.org.au:
+    shortName: MYC
+    state: NSW
+    fullName: Manly Yacht Club
+    aliases: []
+
+  mhyc.com.au:
+    shortName: MHYC
+    state: NSW
+    fullName: Middle Harbour Yacht Club
+    aliases: []
+
+  sasc.com.au:
+    shortName: SASC
+    state: NSW
+    fullName: Sydney Amateur Sailing Club
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/sasc/2023/club/index.htm
+
+  rpeyc.com.au:
+    shortName: RPEYC
+    state: NSW
+    fullName: Royal Prince Edward Yacht Club
+    aliases: []
+
+  rsys.com.au:
+    shortName: RSYS
+    state: NSW
+    fullName: Royal Sydney Yacht Squadron
+    aliases: []
+
+  ransa.com.au:
+    shortName: RANSA
+    state: NSW
+    fullName: Royal Australian Naval Sailing Association
+    aliases: []
+
+  rpayc.com.au:
+    shortName: RPAYC
+    state: NSW
+    fullName: Royal Prince Alfred Yacht Club
+    aliases: []
+
+  byra.org.au:
+    shortName: BYRA
+    state: NSW
+    fullName: Bayview Yacht Racing Association
+    aliases: []
+
+  royalmotor.com.au:
+    shortName: RMYC
+    state: NSW
+    fullName: Royal Motor Yacht Club Broken Bay
+    aliases: [RMYCBB]
+
+  avalonsailingclub.com.au:
+    shortName: ASC    # TODO — check short name; "ASC" used by both Adelaide SC and Avalon SC in SailSys
+    state: NSW
+    fullName: Avalon Sailing Club
+    aliases: []
+
+  bbyc.com.au:
+    shortName: BBYC
+    state: NSW
+    fullName: Botany Bay Yacht Club
+    aliases: []
+
+  cronullasailingclub.com.au:
+    shortName: CSC    # TODO — check short name; "CSC" also used by Christies SC (SA) in SailSys
+    state: NSW
+    fullName: Cronulla Sailing Club
+    aliases: []
+
+  rmycph.com.au:
+    shortName: "RMYC (PH)"
+    state: NSW
+    fullName: Royal Motor Yacht Club - Port Hacking
+    aliases: []
+
+  balmainsailingclub.com.au:
+    shortName: BSC    # TODO — check short name; "BSC" used by multiple clubs in SailSys
+    state: NSW
+    fullName: Balmain Sailing Club
+    aliases: []
+
+  prsc.org.au:
+    shortName: PRSC
+    state: NSW
+    fullName: Parramatta River Sailing Club
+    aliases: []
+
+  dsc.org.au:
+    shortName: DSC    # TODO — check short name; "DSC" also used by Darwin SC in SailSys
+    state: NSW
+    fullName: Drummoyne Sailing Club
+    aliases: []
+
+  ncyc.net.au:
+    shortName: NCYC
+    state: NSW
+    fullName: Newcastle Cruising Yacht Club
+    aliases: []
+
+  lmyc.com.au:
+    shortName: LMYC
+    state: NSW
+    fullName: Lake Macquarie Yacht Club
+    aliases: []
+
+  gossail.com.au:
+    shortName: GSC    # TODO — check short name; "GSC" used by both Gosford SC and Greenwich SC in SailSys
+    state: NSW
+    fullName: Gosford Sailing Club
+    aliases: []
+
+  # --- VIC ---
+
+  orcv.org.au:
+    shortName: ORCV
+    state: VIC
+    fullName: Ocean Racing Club of Victoria
+    aliases: []
+
+  dbyc.com.au:
+    shortName: DBYC
+    state: VIC
+    fullName: Davey's Bay Yacht Club
+    aliases: []
+
+  bys.asn.au:
+    shortName: BYS
+    state: VIC
+    fullName: Blairgowrie Yacht Squadron
+    aliases: []
+
+  queenscliffcruisingyachtclub.org:
+    shortName: QCYC   # TODO — check short name; "QCYC" also used by Queensland CYC in SailSys
+    state: VIC
+    fullName: Queenscliff Cruising Yacht Club
+    aliases: []
+
+  mccraeyc.com.au:
+    shortName: McCYC
+    state: VIC
+    fullName: McCrae Yacht Club
+    aliases: [MYC]
+
+  rosebudyachtclub.au:
+    shortName: RYC    # TODO — check short name; "RYC" also used by Rhyll YC in SailSys
+    state: VIC
+    fullName: Rosebud Yacht Club
+    aliases: []
+
+  flindersyc.com.au:
+    shortName: FYC    # TODO — check short name; "FYC" used by Frankston YC in SailSys
+    state: VIC
+    fullName: Flinders Yacht Club
+    aliases: []
+
+  mmyc.org.au:
+    shortName: MMYC
+    state: VIC
+    fullName: Mount Martha Yacht Club
+    aliases: []
+
+  mordiallocsc.com.au:
+    shortName: MSC    # TODO — check short name; "MSC" used by Mackay SC and Maroochydore SC in SailSys
+    state: VIC
+    fullName: Mordialloc Sailing Club
+    aliases: []
+
+  williamstownsailingclub.org.au:
+    shortName: WSC    # TODO — check short name; "WSC" used by multiple clubs in SailSys
+    state: VIC
+    fullName: Williamstown Sailing Club
+    aliases: []
+
+  # --- TAS ---
+
+  dssinc.org.au:
+    shortName: DSS
+    state: TAS
+    fullName: Derwent Sailing Squadron
+    aliases: []
+
+  # --- QLD ---
+
+  wmyc.com.au:
+    shortName: WMSC
+    state: QLD
+    fullName: Wynnum Manly Sailing Club
+    aliases: [MYC, WMYC]
+
+  qcyc.com.au:
+    shortName: QCYC   # TODO — check short name; "QCYC" also used by Queenscliff CYC (VIC) in SailSys
+    state: QLD
+    fullName: Queensland Cruising Yacht Club
+    aliases: []
+
+  southportyachtclub.com.au:
+    shortName: SYC    # TODO — check short name; "SYC" used by multiple clubs in SailSys
+    state: QLD
+    fullName: Southport Yacht Club
+    aliases: []
+
+  mooloolabayachtclub.com.au:
+    shortName: MYC    # TODO — check short name; "MYC" used by multiple clubs in SailSys
+    state: QLD
+    fullName: Mooloolaba Yacht Club
+    aliases: []
+
+  nyrc.com.au:
+    shortName: NYRC
+    state: QLD
+    fullName: Noosa Yacht & Rowing Club
+    aliases: []
+
+  whitsundaysailingclub.com.au:
+    shortName: WSC    # TODO — check short name; "WSC" used by multiple clubs in SailSys
+    state: QLD
+    fullName: Whitsunday Sailing Club
+    aliases: []
+
+  # --- SA ---
+
+  adelaidesailingclub.com.au:
+    shortName: ASC    # TODO — check short name; "ASC" used by both Adelaide SC and Avalon SC in SailSys
+    state: SA
+    fullName: Adelaide Sailing Club
+    aliases: []
+
+  bsyc.com.au:
+    shortName: BSYC
+    state: SA
+    fullName: Brighton & Seacliff Yacht Club
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/bsyc/2023/club/index.htm
+      - https://www.topyacht.net.au/results/bsyc/2024/club/index.htm
+
+  # --- WA ---
+
+  rpyc.com.au:
+    shortName: RPYC
+    state: WA
+    fullName: Royal Perth Yacht Club
+    aliases: []
+
+  fsc.com.au:
+    shortName: FSC
+    state: WA
+    fullName: Fremantle Sailing Club
+    aliases: []
+
+  efyc.com.au:
+    shortName: EFYC
+    state: WA
+    fullName: East Fremantle Yacht Club
+    aliases: []
+
+  nyc.org.au:
+    shortName: NYC
+    state: WA
+    fullName: Nedlands Yacht Club
+    aliases: []
+
+  hillarysyachtclub.com.au:
+    shortName: HYC    # TODO — check short name; "HYC" also used by Hastings YC (VIC) and Humpybong YC (QLD) in SailSys
+    state: WA
+    fullName: Hillarys Yacht Club
+    aliases: []
+
+  sopyc.com.au:
+    shortName: SoPYC
+    state: WA
+    fullName: South of Perth Yacht Club
+    aliases: []
+
+  pfsyc.com.au:
+    shortName: PFSYC  # TODO — check short name
+    state: WA
+    fullName: Perth Flying Squadron Yacht Club
+    aliases: []
+
+  # --- NT ---
+
+  darwinsailingclub.com.au:
+    shortName: DSC    # TODO — check short name; "DSC" also used by Drummoyne SC in SailSys
+    state: NT
+    fullName: Darwin Sailing Club
+    aliases: []
+
+  dbcya.com.au:
+    shortName: DBCYA
+    state: NT
+    fullName: Dinah Beach Cruising Yacht Association
+    aliases: []
+
+  # ------------------------------------------------------------
+  # SYNTHETIC / SHARED PLATFORM CLUBS
+  # (clubs whose ID requires a path because their domain is shared)
+  # ------------------------------------------------------------
+
+  # PPNYC hosts results on RYCV's domain
+  rycv.com.au/port-phillip-north-yacht-clubs-ppnyc:
+    shortName: PPNYC
+    state: VIC
+    fullName: Port Phillip North Yacht Clubs
+
+  # Goolwa YC uses the RevSports shared platform
+  revolutionise.com.au/goolwaryc:
+    shortName: GWYC
+    state: SA
+    fullName: Goolwa Yacht Club
+
+# Excluded (blank shortName, 5 rows — data quality gaps in the AMS feed):
+# blank / NSW, blank / QLD, blank / SA, blank / VIC, blank / blank
