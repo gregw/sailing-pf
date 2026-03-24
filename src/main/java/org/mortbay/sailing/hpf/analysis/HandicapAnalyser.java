@@ -33,12 +33,20 @@ import java.util.TreeSet;
 public class HandicapAnalyser
 {
     private static final Logger LOG = LoggerFactory.getLogger(HandicapAnalyser.class);
+    private static final double DEFAULT_OUTLIER_SIGMA = 2.5;
 
     private final DataStore store;
+    private final double outlierSigma;
 
     public HandicapAnalyser(DataStore store)
     {
+        this(store, DEFAULT_OUTLIER_SIGMA);
+    }
+
+    public HandicapAnalyser(DataStore store, double outlierSigma)
+    {
         this.store = store;
+        this.outlierSigma = outlierSigma;
     }
 
     // -------------------------------------------------------------------------
@@ -196,7 +204,7 @@ public class HandicapAnalyser
         }
     }
 
-    /** Variant comparisons: spin vs non-spin, AMS two-handed vs normal. */
+    /** Variant comparisons: spin vs non-spin, two-handed vs spin, pooled across all systems. */
     private void emitVariantPairs(String boatId,
                                   Map<CertBucket, Certificate> best,
                                   Map<ComparisonKey, List<DataPair>> result)
@@ -207,36 +215,25 @@ public class HandicapAnalyser
 
         for (int year : years)
         {
+            // NS vs spin — pool observations from all three systems into one comparison
             for (String sys : new String[]{"IRC", "ORC", "AMS"})
             {
                 Certificate spin = best.get(new CertBucket(sys, year, false, false));
                 Certificate nonSpin = best.get(new CertBucket(sys, year, true, false));
-
                 if (spin != null && nonSpin != null)
-                {
-                    ComparisonKey key = switch (sys)
-                    {
-                        case "IRC" -> ComparisonKey.ircNsVsSpin(year);
-                        case "ORC" -> ComparisonKey.orcNsVsSpin(year);
-                        default -> ComparisonKey.amsNsVsSpin(year);
-                    };
-                    addPair(result, key, boatId, toTcf(nonSpin), toTcf(spin));
-                }
+                    addPair(result, ComparisonKey.allNsVsSpin(year), boatId,
+                        toTcf(nonSpin), toTcf(spin));
             }
 
-            // AMS two-handed → spin
-            Certificate amsNormal = best.get(new CertBucket("AMS", year, false, false));
-            Certificate amsTwoH = best.get(new CertBucket("AMS", year, false, true));
-            if (amsNormal != null && amsTwoH != null)
-                addPair(result, ComparisonKey.amsTwoHandedVsSpin(year), boatId,
-                    toTcf(amsTwoH), toTcf(amsNormal));
-
-            // ORC two-handed → spin
-            Certificate orcNormal = best.get(new CertBucket("ORC", year, false, false));
-            Certificate orcTwoH = best.get(new CertBucket("ORC", year, false, true));
-            if (orcNormal != null && orcTwoH != null)
-                addPair(result, ComparisonKey.orcTwoHandedVsSpin(year), boatId,
-                    toTcf(orcTwoH), toTcf(orcNormal));
+            // Two-handed vs spin — pool AMS and ORC into one comparison
+            for (String sys : new String[]{"AMS", "ORC"})
+            {
+                Certificate normal = best.get(new CertBucket(sys, year, false, false));
+                Certificate twoH = best.get(new CertBucket(sys, year, false, true));
+                if (normal != null && twoH != null)
+                    addPair(result, ComparisonKey.allTwoHandedVsSpin(year), boatId,
+                        toTcf(twoH), toTcf(normal));
+            }
         }
     }
 
@@ -282,12 +279,70 @@ public class HandicapAnalyser
     // OLS regression
     // -------------------------------------------------------------------------
 
+    /**
+     * Maximum fraction of pairs that may be trimmed as outliers.
+     * If more than this fraction would be removed the trim is suppressed — the data
+     * is probably just noisy rather than containing a handful of genuine strays.
+     */
+    private static final double MAX_TRIM_FRACTION = 0.20;
+
+    /**
+     * Fits pairs using a two-pass approach:
+     * <ol>
+     *   <li>First-pass OLS on all pairs.</li>
+     *   <li>Remove any pair whose residual exceeds {@code outlierSigma} × SE,
+     *       provided the trim removes ≤ {@link #MAX_TRIM_FRACTION} of the data
+     *       and at least 3 pairs remain.</li>
+     *   <li>Second-pass OLS on the trimmed set.</li>
+     * </ol>
+     * If no trimming occurs (no outliers, or guard conditions not met) the first-pass
+     * fit is returned directly.
+     */
     ComparisonResult fitPairs(ComparisonKey key, List<DataPair> pairs)
     {
         if (pairs.size() < 3)
-            return new ComparisonResult(key, List.copyOf(pairs), null);
+            return new ComparisonResult(key, List.copyOf(pairs), List.of(), null);
 
+        LinearFit first = fitOls(pairs);
+        if (first == null)
+            return new ComparisonResult(key, List.copyOf(pairs), List.of(), null);
+
+        // Identify outliers: |residual| > outlierSigma × SE
+        double threshold = outlierSigma * first.se();
+        List<DataPair> kept = new ArrayList<>();
+        List<DataPair> trimmed = new ArrayList<>();
+        for (DataPair p : pairs)
+        {
+            if (Math.abs(p.y() - first.predict(p.x())) > threshold)
+                trimmed.add(p);
+            else
+                kept.add(p);
+        }
+
+        if (!trimmed.isEmpty()
+            && trimmed.size() <= pairs.size() * MAX_TRIM_FRACTION
+            && kept.size() >= 3)
+        {
+            LinearFit second = fitOls(kept);
+            if (second != null)
+            {
+                LOG.info("fitPairs {}: trimmed {}/{} outlier(s), R² {} → {}",
+                    key.toId(), trimmed.size(), pairs.size(),
+                    String.format("%.4f", first.r2()), String.format("%.4f", second.r2()));
+                return new ComparisonResult(key, List.copyOf(kept), List.copyOf(trimmed), second);
+            }
+        }
+
+        return new ComparisonResult(key, List.copyOf(pairs), List.of(), first);
+    }
+
+    /** Ordinary least-squares fit; returns {@code null} if degenerate (< 3 pairs or zero variance). */
+    private LinearFit fitOls(List<DataPair> pairs)
+    {
         int n = pairs.size();
+        if (n < 3)
+            return null;
+
         double sumX = 0, sumY = 0;
         for (DataPair p : pairs)
         {
@@ -305,10 +360,7 @@ public class HandicapAnalyser
         }
 
         if (ssx == 0)
-        {
-            // All x values identical — degenerate; cannot fit a slope
-            return new ComparisonResult(key, List.copyOf(pairs), null);
-        }
+            return null;  // all x values identical — degenerate
 
         double slope = ssxy / ssx;
         double intercept = yMean - slope * xMean;
@@ -324,8 +376,7 @@ public class HandicapAnalyser
         double r2 = ssTot > 0 ? Math.max(0, 1.0 - ssRes / ssTot) : 1.0;
         double se = Math.sqrt(ssRes / (n - 2));
 
-        LinearFit fit = new LinearFit(slope, intercept, r2, se, n, xMean, ssx);
-        return new ComparisonResult(key, List.copyOf(pairs), fit);
+        return new LinearFit(slope, intercept, r2, se, n, xMean, ssx);
     }
 
     // -------------------------------------------------------------------------

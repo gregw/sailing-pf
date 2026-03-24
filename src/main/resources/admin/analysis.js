@@ -11,7 +11,8 @@ async function loadAnalysisList() {
         const opt = document.createElement('option');
         opt.value = item.id;
         const r2str = item.r2 != null ? `  R²=${item.r2.toFixed(3)}` : '  (insufficient data)';
-        opt.textContent = `${item.id}  (n=${item.n}${r2str})`;
+        const trimStr = item.trimmed ? `  ${item.trimmed} trimmed` : '';
+        opt.textContent = `${item.id}  (n=${item.n}${r2str}${trimStr})`;
         sel.appendChild(opt);
     }
 }
@@ -38,8 +39,12 @@ async function loadAnalysis() {
     const MIN_R2 = 0.75;
     if (data.fit) {
         const r2 = data.fit.r2;
+        const nKept = data.pairs ? data.pairs.length : 0;
+        const nTrimmed = data.trimmedPairs ? data.trimmedPairs.length : 0;
+        const nTotal = nKept + nTrimmed;
+        const trimStr = nTrimmed > 0 ? `  (${nTrimmed} trimmed)` : '';
         document.getElementById('analysis-summary').textContent =
-            `n=${data.pairs ? data.pairs.length : 0}  R²=${r2.toFixed(4)}  y = ${data.fit.slope.toFixed(5)}·x ${data.fit.intercept >= 0 ? '+' : ''}${data.fit.intercept.toFixed(5)}`;
+            `n=${nTotal}${trimStr}  R²=${r2.toFixed(4)}  y = ${data.fit.slope.toFixed(5)}·x ${data.fit.intercept >= 0 ? '+' : ''}${data.fit.intercept.toFixed(5)}`;
         if (r2 >= MIN_R2) {
             document.getElementById('analysis-table-section').style.display = 'block';
             document.getElementById('analysis-table-warning').style.display = 'none';
@@ -81,7 +86,9 @@ function axisLabels(id) {
     }
     m = id.match(/^([a-z]+)-([a-z]+)-vs-([a-z]+)-(\d{4})$/);
     if (m) {
-        const sys = m[1].toUpperCase(), vA = variantLabel(m[2]) || ' Spin';
+        const rawSys = m[1].toUpperCase();
+        const sys = rawSys === 'ALL' ? 'All Systems' : rawSys;
+        const vA = variantLabel(m[2]) || ' Spin';
         const vB = variantLabel(m[3]) || ' Spin', year = m[4];
         return { x: `${year} ${sys}${vA}`, y: `${year} ${sys}${vB}` };
     }
@@ -90,6 +97,7 @@ function axisLabels(id) {
 
 function renderScatterPlot(id, data) {
     const pairs = data.pairs || [];
+    const trimmedPairs = data.trimmedPairs || [];
     const fit = data.fit;
 
     const scatterTrace = {
@@ -103,6 +111,18 @@ function renderScatterPlot(id, data) {
     };
 
     const traces = [scatterTrace];
+
+    if (trimmedPairs.length > 0) {
+        traces.push({
+            x: trimmedPairs.map(p => p.x),
+            y: trimmedPairs.map(p => p.y),
+            mode: 'markers',
+            type: 'scatter',
+            name: 'Trimmed outliers',
+            text: trimmedPairs.map(p => p.boatId),
+            marker: { color: '#aaa', size: 7, opacity: 0.6, symbol: 'x' }
+        });
+    }
 
     if (fit) {
         const xs = pairs.map(p => p.x);

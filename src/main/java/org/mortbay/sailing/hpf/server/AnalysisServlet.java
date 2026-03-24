@@ -76,9 +76,15 @@ public class AnalysisServlet extends HttpServlet
         List<Map<String, Object>> summaries = new ArrayList<>();
         for (ComparisonResult r : results)
         {
-            Map<String, Object> s = r.fit() != null
-                ? Map.of("id", r.key().toId(), "n", r.n(), "r2", r.fit().r2())
-                : Map.of("id", r.key().toId(), "n", r.n());
+            Map<String, Object> s;
+            int nTotal = r.nTotal();
+            int trimmed = r.trimmedPairs().size();
+            if (r.fit() != null && trimmed > 0)
+                s = Map.of("id", r.key().toId(), "n", nTotal, "r2", r.fit().r2(), "trimmed", trimmed);
+            else if (r.fit() != null)
+                s = Map.of("id", r.key().toId(), "n", nTotal, "r2", r.fit().r2());
+            else
+                s = Map.of("id", r.key().toId(), "n", nTotal);
             summaries.add(s);
         }
         writeJson(resp, summaries);

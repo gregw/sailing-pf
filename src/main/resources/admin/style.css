@@ -77,6 +77,7 @@ th.sortable:hover { background: #e0e0e0; }
 th.sort-active { color: #2255aa; }
 td { padding: 4px 8px; border-bottom: 1px solid #eee; }
 tr:hover td { background: #f9f9f9; cursor: pointer; }
+tr.selected td { background: #e8f0fe; }
 .pagination { margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; }
 pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; font-size: 0.8rem; margin-top: 0.75rem; white-space: pre-wrap; word-break: break-all; }
 .detail-panel { display: none; }

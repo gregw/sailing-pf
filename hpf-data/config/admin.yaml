@@ -1,3 +1,10 @@
+# List of importers shown in the admin UI.
+# Each entry has:
+#   name               - importer identifier (sailsys-boats, sailsys-races, orc, ams,
+#                        topyacht, bwps, analysis, reference-factors)
+#   mode               - "directory" reads from local files; "api" fetches from the source;
+#                        "run" triggers an in-process computation (analysis, reference-factors)
+#   includeInSchedule  - if true, this importer is included in the automatic scheduled run
 importers:
 - name: "sailsys-boats"
   mode: "directory"
@@ -29,10 +36,28 @@ importers:
 - name: "reference-factors"
   mode: "run"
   includeInSchedule: false
+
+# Automatic scheduled run configuration.
+#   days  - list of days on which the scheduled run fires (e.g. [MONDAY, THURSDAY]);
+#           empty list disables the schedule
+#   time  - time of day to run, in HH:MM:SS (server local time)
 schedule:
   days: []
   time: "03:00:00"
+
+# Highest SailSys ID successfully processed by each API-mode importer.
+# Updated automatically after each API run; used as the default start ID for the next run.
 lastSailSysIds:
   sailsys-boats-api: 13014
   sailsys-races-api: 40809
+
+# The IRC certificate year to use as the target when computing reference factors.
+# Boats with certificates from earlier years are converted to this year via the
+# year-transition regression. Set to null to auto-detect from the most recent
+# issued IRC certificate in the data store.
 targetIrcYear: 2025
+
+# Outlier trimming threshold: pairs whose residual exceeds this many standard errors
+# are removed before the second-pass OLS regression. Increase to keep more points;
+# decrease to trim more aggressively. Set to null to use the default (2.5).
+outlierSigma: 2.0

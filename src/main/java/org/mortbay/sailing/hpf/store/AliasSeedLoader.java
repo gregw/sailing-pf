@@ -3,6 +3,7 @@ package org.mortbay.sailing.hpf.store;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.mortbay.sailing.hpf.data.TimedAlias;
 import org.mortbay.sailing.hpf.importer.IdGenerator;
@@ -13,8 +14,10 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,11 +27,12 @@ import java.util.Map;
  * <p>
  * The loaded seed is lookup-only and is never written back to disk.
  */
-class AliasSeedLoader
+public class AliasSeedLoader
 {
     private static final Logger LOG = LoggerFactory.getLogger(AliasSeedLoader.class);
     private static final String FILENAME = "aliases.yaml";
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory())
+    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
+            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
         .registerModule(new JavaTimeModule());
 
     static AliasSeed load(Path configDir)
@@ -76,6 +80,8 @@ class AliasSeedLoader
     {
         public Map<String, DesignSeedEntry> designs;
         public Map<String, BoatSeedEntry> boats;
+        /** normSailNumber → normCanonicalSailNumber for boats with typo/old sail numbers. */
+        public Map<String, String> sailNumberRedirects;
     }
 
     static class DesignSeedEntry
@@ -116,15 +122,18 @@ class AliasSeedLoader
         private final Map<String, List<TimedAlias>> boatAliasMap;
         /** normalised sail number → canonical boat name */
         private final Map<String, String> boatCanonicalNames;
+        /** normalised typo/old sail number → normalised canonical sail number */
+        private final Map<String, String> sailNumberRedirects;
 
         private AliasSeed(SeedFile seed)
         {
-            if (seed == null || (seed.designs == null && seed.boats == null))
+            if (seed == null || (seed.designs == null && seed.boats == null && seed.sailNumberRedirects == null))
             {
                 designAliasIndex = Map.of();
                 designCanonicalNames = Map.of();
                 boatAliasMap = Map.of();
                 boatCanonicalNames = Map.of();
+                sailNumberRedirects = Map.of();
                 return;
             }
 
@@ -176,8 +185,21 @@ class AliasSeedLoader
             boatAliasMap = Collections.unmodifiableMap(boatMap);
             boatCanonicalNames = Collections.unmodifiableMap(boatNames);
 
-            LOG.info("Loaded alias seed: {} design alias(es), {} boat entry(ies)",
-                aliasIdx.size(), boatMap.size());
+            // Build sail number redirect index
+            Map<String, String> redirects = new HashMap<>();
+            if (seed.sailNumberRedirects != null)
+            {
+                for (Map.Entry<String, String> e : seed.sailNumberRedirects.entrySet())
+                {
+                    String from = IdGenerator.normaliseSailNumber(e.getKey());
+                    String to   = IdGenerator.normaliseSailNumber(e.getValue());
+                    redirects.put(from, to);
+                }
+            }
+            sailNumberRedirects = Collections.unmodifiableMap(redirects);
+
+            LOG.info("Loaded alias seed: {} design alias(es), {} boat entry(ies), {} sail number redirect(s)",
+                aliasIdx.size(), boatMap.size(), redirects.size());
         }
 
         /**
@@ -210,6 +232,97 @@ class AliasSeedLoader
         String boatCanonicalName(String normalisedSailNumber)
         {
             return boatCanonicalNames.get(normalisedSailNumber);
+        }
+
+        /**
+         * Returns the canonical sail number for a typo/old sail number, or null if not in seed.
+         * Used to redirect boats whose sail numbers were corrected post-merge.
+         */
+        String sailNumberRedirect(String normalisedSailNumber)
+        {
+            return sailNumberRedirects.get(normalisedSailNumber);
+        }
+    }
+
+    // ---- Alias file update (called after a merge operation) ----
+
+    /**
+     * Spec for one merged-away boat: what alias entries to add to aliases.yaml.
+     */
+    public record MergeAliasSpec(
+        String sailNumber,          // normalised sail number of the merged-away boat
+        String canonicalSailNumber, // normalised sail number of the keep boat (may be equal)
+        String canonicalName,       // canonical name of the keep boat
+        List<String> aliasNames     // names to record as aliases under sailNumber
+    ) {}
+
+    /**
+     * Reads aliases.yaml, merges in entries from a merge operation (skipping existing entries),
+     * and writes the file back.  Pre-existing comments in the file are not preserved.
+     */
+    public static void appendMergeAliases(Path configDir, List<MergeAliasSpec> specs)
+    {
+        Path file = configDir.resolve(FILENAME);
+        SeedFile seedFile = null;
+        if (Files.exists(file))
+        {
+            try
+            {
+                seedFile = YAML_MAPPER.readValue(file.toFile(), SeedFile.class);
+            }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for update: {}", file, e.getMessage());
+                return;
+            }
+        }
+        if (seedFile == null)
+            seedFile = new SeedFile();
+        if (seedFile.boats == null)
+            seedFile.boats = new LinkedHashMap<>();
+        if (seedFile.sailNumberRedirects == null)
+            seedFile.sailNumberRedirects = new LinkedHashMap<>();
+
+        for (MergeAliasSpec spec : specs)
+        {
+            // Boat name alias entry — always add (even for different sail numbers, so the
+            // canonical name is recorded for that sail number in case it reappears)
+            BoatSeedEntry entry = seedFile.boats.computeIfAbsent(spec.sailNumber(), k ->
+            {
+                BoatSeedEntry e = new BoatSeedEntry();
+                e.canonicalName = spec.canonicalName();
+                e.aliases = new ArrayList<>();
+                return e;
+            });
+            if (entry.canonicalName == null)
+                entry.canonicalName = spec.canonicalName();
+            if (entry.aliases == null)
+                entry.aliases = new ArrayList<>();
+            for (String name : spec.aliasNames())
+            {
+                boolean present = entry.aliases.stream().anyMatch(a -> name.equalsIgnoreCase(a.name));
+                if (!present)
+                {
+                    AliasEntry ae = new AliasEntry();
+                    ae.name = name;
+                    entry.aliases.add(ae);
+                }
+            }
+
+            // Sail number redirect — only when sail numbers differ
+            if (!spec.sailNumber().equals(spec.canonicalSailNumber()))
+                seedFile.sailNumberRedirects.putIfAbsent(spec.sailNumber(), spec.canonicalSailNumber());
+        }
+
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), seedFile);
+            LOG.info("Updated {} with {} merge alias spec(s)", file, specs.size());
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
         }
     }
 }

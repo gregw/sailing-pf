@@ -11,6 +11,8 @@ import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Factor;
 import org.mortbay.sailing.hpf.data.Race;
+import org.mortbay.sailing.hpf.importer.IdGenerator;
+import org.mortbay.sailing.hpf.store.AliasSeedLoader;
 import org.mortbay.sailing.hpf.store.DataStore;
 
 import java.io.IOException;
@@ -99,6 +101,10 @@ public class AdminApiServlet extends HttpServlet
         {
             handleSetSchedule(req, resp);
         }
+        else if ("/boats/merge".equals(path))
+        {
+            handleMergeBoats(req, resp);
+        }
         else
         {
             resp.sendError(404);
@@ -174,6 +180,89 @@ public class AdminApiServlet extends HttpServlet
         result.put("nonSpin",   factors != null ? factorMap(factors.nonSpin())   : null);
         result.put("twoHanded", factors != null ? factorMap(factors.twoHanded()) : null);
         writeJson(resp, result);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handleMergeBoats(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String keepId = (String) body.get("keepId");
+            List<String> mergeIds = (List<String>) body.get("mergeIds");
+
+            if (keepId == null || keepId.isBlank())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "keepId is required"));
+                return;
+            }
+            if (mergeIds == null || mergeIds.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "mergeIds must be a non-empty list"));
+                return;
+            }
+            if (mergeIds.contains(keepId))
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "keepId must not appear in mergeIds"));
+                return;
+            }
+
+            // Build alias specs before merging (while we still have all boat records)
+            Boat keepBoat = store.boats().get(keepId);
+            if (keepBoat == null)
+            {
+                resp.setStatus(404);
+                writeJson(resp, Map.of("error", "Keep boat not found: " + keepId));
+                return;
+            }
+            List<AliasSeedLoader.MergeAliasSpec> aliasSpecs = new ArrayList<>();
+            for (String mergeId : mergeIds)
+            {
+                Boat mb = store.boats().get(mergeId);
+                if (mb == null)
+                {
+                    resp.setStatus(404);
+                    writeJson(resp, Map.of("error", "Merge boat not found: " + mergeId));
+                    return;
+                }
+                List<String> names = new ArrayList<>();
+                // Always record the merged boat's name (even if it equals the canonical, for completeness)
+                names.add(mb.name());
+                names.addAll(mb.aliases());
+                aliasSpecs.add(new AliasSeedLoader.MergeAliasSpec(
+                    IdGenerator.normaliseSailNumber(mb.sailNumber()),
+                    IdGenerator.normaliseSailNumber(keepBoat.sailNumber()),
+                    keepBoat.name(),
+                    names
+                ));
+            }
+
+            DataStore.MergeResult result = store.mergeBoats(keepId, mergeIds);
+            store.save();
+
+            // Update aliases.yaml and reload the alias seed so future imports honour the merge
+            AliasSeedLoader.appendMergeAliases(store.configDir(), aliasSpecs);
+            store.reloadAliasSeed();
+
+            writeJson(resp, Map.of(
+                "ok", true,
+                "updatedRaces", result.updatedRaces(),
+                "updatedFinishers", result.updatedFinishers()
+            ));
+        }
+        catch (IllegalArgumentException e)
+        {
+            resp.setStatus(400);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
     }
 
     private Map<String, Object> factorMap(Factor f)
@@ -325,6 +414,7 @@ public class AdminApiServlet extends HttpServlet
         result.put("entries", entries);
         result.put("schedule", importerService.globalSchedule());
         result.put("targetIrcYear", importerService.targetIrcYear());
+        result.put("outlierSigma", importerService.outlierSigma());
         writeJson(resp, result);
     }
 
@@ -390,8 +480,12 @@ public class AdminApiServlet extends HttpServlet
             Integer targetIrcYear = (rawYear instanceof Number n && n.intValue() > 0)
                 ? n.intValue() : null;
 
+            Object rawSigma = body.get("outlierSigma");
+            Double outlierSigma = (rawSigma instanceof Number n && n.doubleValue() > 0)
+                ? n.doubleValue() : null;
+
             importerService.setConfig(entries, new ImporterService.GlobalSchedule(days, time),
-                targetIrcYear);
+                targetIrcYear, outlierSigma);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }

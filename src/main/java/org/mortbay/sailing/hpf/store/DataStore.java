@@ -7,9 +7,13 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -17,8 +21,11 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.mortbay.sailing.hpf.data.Boat;
+import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Club;
 import org.mortbay.sailing.hpf.data.Design;
+import org.mortbay.sailing.hpf.data.Division;
+import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Loadable;
 import org.mortbay.sailing.hpf.data.Maker;
 import org.mortbay.sailing.hpf.data.Race;
@@ -133,6 +140,11 @@ public class DataStore
      *   <li>{@code $HOME/.hpf-data} as the default fallback</li>
      * </ol>
      */
+    public Path configDir()
+    {
+        return configDir;
+    }
+
     public static Path resolveDataRoot(String[] args)
     {
         if (args.length > 0)
@@ -244,6 +256,15 @@ public class DataStore
             putBoat(newBoat);
             LOG.info("Created new boat (via alias seed) {}", newBoat);
             return newBoat;
+        }
+
+        // Check sail number redirect: if this sail number is a known typo/alias for another,
+        // retry with the canonical sail number so the boats are not re-duplicated.
+        String redirectSail = aliasSeed.sailNumberRedirect(normSail);
+        if (redirectSail != null && !redirectSail.equals(normSail))
+        {
+            LOG.info("Sail number {} redirected to {} via alias seed", normSail, redirectSail);
+            return findOrCreateBoat(redirectSail, name, design);
         }
 
         Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), null);
@@ -450,6 +471,130 @@ public class DataStore
                 LOG.warn("Could not delete boat file {}: {}", id, e.getMessage());
             }
         }
+    }
+
+    /**
+     * Reloads the alias seed from disk.  Called after aliases.yaml has been updated
+     * (e.g. following a merge operation) so that subsequent imports honour the new entries.
+     */
+    public void reloadAliasSeed()
+    {
+        requireStarted();
+        aliasSeed = AliasSeedLoader.load(configDir);
+    }
+
+    /**
+     * Result of a {@link #mergeBoats} operation.
+     */
+    public record MergeResult(int updatedRaces, int updatedFinishers) {}
+
+    /**
+     * Merges a set of duplicate boats into one canonical boat.
+     * <ul>
+     *   <li>All names and aliases from the merged-away boats are added to the keep boat's
+     *       aliases list.</li>
+     *   <li>Certificates are merged (duplicates by system+year+variant are dropped).</li>
+     *   <li>All {@link Finisher} records in all races that reference a merged-away boat ID
+     *       are repointed to the keep boat ID.</li>
+     *   <li>The merged-away boat files are deleted from disk.</li>
+     * </ul>
+     * Callers must call {@link #save()} after this method to persist the changes.
+     *
+     * @param keepId    ID of the canonical boat to keep
+     * @param mergeIds  IDs of the boats to merge into keepId (must not include keepId)
+     * @return summary of the number of races and finisher records updated
+     */
+    public MergeResult mergeBoats(String keepId, List<String> mergeIds)
+    {
+        requireStarted();
+        Boat keepBoat = boats.get(keepId);
+        if (keepBoat == null)
+            throw new IllegalArgumentException("Keep boat not found: " + keepId);
+
+        List<Boat> toMerge = new ArrayList<>();
+        for (String id : mergeIds)
+        {
+            Boat b = boats.get(id);
+            if (b == null)
+                throw new IllegalArgumentException("Merge boat not found: " + id);
+            toMerge.add(b);
+        }
+
+        // Build merged aliases — collect all names and existing aliases from merged-away boats
+        Set<String> allAliases = new LinkedHashSet<>(keepBoat.aliases());
+        for (Boat mb : toMerge)
+        {
+            if (!mb.name().equalsIgnoreCase(keepBoat.name()))
+                allAliases.add(mb.name());
+            allAliases.addAll(mb.aliases());
+        }
+        allAliases.removeIf(a -> a.equalsIgnoreCase(keepBoat.name()));
+
+        // Merge certificates — deduplicate by system+year+variant; keep boat's certs take priority
+        Map<String, Certificate> certMap = new LinkedHashMap<>();
+        for (Certificate c : keepBoat.certificates())
+            certMap.put(certKey(c), c);
+        for (Boat mb : toMerge)
+            for (Certificate c : mb.certificates())
+                certMap.putIfAbsent(certKey(c), c);
+
+        // Prefer a non-null designId and clubId from any of the boats
+        String designId = keepBoat.designId() != null ? keepBoat.designId()
+            : toMerge.stream().map(Boat::designId).filter(Objects::nonNull).findFirst().orElse(null);
+        String clubId = keepBoat.clubId() != null ? keepBoat.clubId()
+            : toMerge.stream().map(Boat::clubId).filter(Objects::nonNull).findFirst().orElse(null);
+
+        Boat mergedBoat = new Boat(keepBoat.id(), keepBoat.sailNumber(), keepBoat.name(),
+            designId, clubId, List.copyOf(allAliases), List.copyOf(certMap.values()), null);
+        putBoat(mergedBoat);
+
+        // Repoint all finisher records that reference a merged-away boat ID
+        Set<String> mergeIdSet = new HashSet<>(mergeIds);
+        int updatedRaces = 0;
+        int updatedFinishers = 0;
+        for (Race race : List.copyOf(races.values()))
+        {
+            boolean changed = false;
+            List<Division> newDivisions = new ArrayList<>();
+            for (Division div : race.divisions())
+            {
+                List<Finisher> newFinishers = new ArrayList<>();
+                for (Finisher f : div.finishers())
+                {
+                    if (mergeIdSet.contains(f.boatId()))
+                    {
+                        newFinishers.add(new Finisher(keepId, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                        changed = true;
+                        updatedFinishers++;
+                    }
+                    else
+                    {
+                        newFinishers.add(f);
+                    }
+                }
+                newDivisions.add(new Division(div.name(), newFinishers));
+            }
+            if (changed)
+            {
+                putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
+                    race.number(), race.name(), race.handicapSystem(), race.offsetPursuit(),
+                    newDivisions, null));
+                updatedRaces++;
+            }
+        }
+
+        // Delete merged-away boat files
+        for (Boat mb : toMerge)
+            removeBoat(mb.id());
+
+        LOG.info("mergeBoats: kept={} merged={} updatedRaces={} updatedFinishers={}",
+            keepId, mergeIds, updatedRaces, updatedFinishers);
+        return new MergeResult(updatedRaces, updatedFinishers);
+    }
+
+    private static String certKey(Certificate c)
+    {
+        return c.system() + "|" + c.year() + "|" + c.nonSpinnaker() + "|" + c.twoHanded();
     }
 
     /**

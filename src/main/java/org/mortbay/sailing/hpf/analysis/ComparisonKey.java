@@ -62,34 +62,16 @@ public record ComparisonKey(
         return new ComparisonKey("AMS", false, true, "ORC", false, true, year, year);
     }
 
-    /** IRC non-spinnaker vs IRC spinnaker, same year (convert NS → spin). */
-    public static ComparisonKey ircNsVsSpin(int year)
+    /** Non-spinnaker vs spinnaker, pooled across all handicap systems, same year. */
+    public static ComparisonKey allNsVsSpin(int year)
     {
-        return new ComparisonKey("IRC", true, false, "IRC", false, false, year, year);
+        return new ComparisonKey("ALL", true, false, "ALL", false, false, year, year);
     }
 
-    /** ORC non-spinnaker vs ORC spinnaker, same year (convert NS → spin). */
-    public static ComparisonKey orcNsVsSpin(int year)
+    /** Two-handed vs spinnaker, pooled across all handicap systems, same year. */
+    public static ComparisonKey allTwoHandedVsSpin(int year)
     {
-        return new ComparisonKey("ORC", true, false, "ORC", false, false, year, year);
-    }
-
-    /** AMS non-spinnaker vs AMS spinnaker, same year (convert NS → spin). */
-    public static ComparisonKey amsNsVsSpin(int year)
-    {
-        return new ComparisonKey("AMS", true, false, "AMS", false, false, year, year);
-    }
-
-    /** AMS two-handed vs AMS spinnaker, same year (convert 2H → spin). */
-    public static ComparisonKey amsTwoHandedVsSpin(int year)
-    {
-        return new ComparisonKey("AMS", false, true, "AMS", false, false, year, year);
-    }
-
-    /** ORC two-handed vs ORC spinnaker, same year (convert 2H → spin). */
-    public static ComparisonKey orcTwoHandedVsSpin(int year)
-    {
-        return new ComparisonKey("ORC", false, true, "ORC", false, false, year, year);
+        return new ComparisonKey("ALL", false, true, "ALL", false, false, year, year);
     }
 
     /** Year-to-year transition for IRC spinnaker certs. */

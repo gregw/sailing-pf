@@ -26,7 +26,9 @@ const state = {
     sort:   { boats: 'id', designs: 'id', races: 'date' },
     dir:    { boats: 'asc', designs: 'asc', races: 'desc' },
     searchTimers: {},
-    activeTab: 'boats'
+    activeTab: 'boats',
+    selectedBoats: new Set(),   // IDs of checked boat rows
+    selectedBoatData: new Map() // id → { id, sailNumber, name } for merge panel
 };
 
 function switchTab(entity) {
@@ -70,12 +72,15 @@ function renderHeaders(entity) {
     const cols   = COLUMNS[entity];
     const active = state.sort[entity];
     const dir    = state.dir[entity];
-    thead.innerHTML = cols.map(col => {
+    let html = '';
+    if (entity === 'boats') html += '<th style="width:2rem"></th>';
+    html += cols.map(col => {
         const isActive = col.key === active;
         const arrow    = isActive ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
         return `<th class="sortable${isActive ? ' sort-active' : ''}"
                     onclick="sortBy('${entity}', '${col.key}')">${esc(col.label)}${arrow}</th>`;
     }).join('');
+    thead.innerHTML = html;
 }
 
 function sortBy(entity, key) {
@@ -95,12 +100,27 @@ function renderTable(entity, items) {
 
     for (const item of items) {
         const tr = document.createElement('tr');
-        tr.onclick = () => loadDetail(entity, item.id);
-        tr.innerHTML = cols.map(col => {
+        if (entity === 'boats') {
+            if (state.selectedBoats.has(item.id)) tr.classList.add('selected');
+            // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
+            const tdCb = document.createElement('td');
+            tdCb.style.textAlign = 'center';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = state.selectedBoats.has(item.id);
+            cb.onclick = (e) => { e.stopPropagation(); toggleBoatSelect(item, cb.checked); };
+            tdCb.appendChild(cb);
+            tr.appendChild(tdCb);
+            tr.onclick = () => loadDetail(entity, item.id);
+        } else {
+            tr.onclick = () => loadDetail(entity, item.id);
+        }
+        cols.forEach(col => {
+            const td = document.createElement('td');
             const v = item[col.key];
-            const cell = col.render ? col.render(v) : esc(v != null ? String(v) : '');
-            return `<td>${cell}</td>`;
-        }).join('');
+            td.innerHTML = col.render ? col.render(v) : esc(v != null ? String(v) : '');
+            tr.appendChild(td);
+        });
         tbody.appendChild(tr);
     }
 }
@@ -168,6 +188,91 @@ function renderReferenceFactors(ref) {
           ${row('Two-handed', ref.twoHanded)}
         </tbody>
       </table>`;
+}
+
+// ---- Boat selection and merge ----
+
+function toggleBoatSelect(item, checked) {
+    if (checked) {
+        state.selectedBoats.add(item.id);
+        state.selectedBoatData.set(item.id, item);
+    } else {
+        state.selectedBoats.delete(item.id);
+        state.selectedBoatData.delete(item.id);
+    }
+    updateMergeBar();
+}
+
+function updateMergeBar() {
+    const n = state.selectedBoats.size;
+    const bar = document.getElementById('merge-bar');
+    bar.style.display = n >= 2 ? '' : 'none';
+    document.getElementById('merge-bar-count').textContent =
+        n + ' boat' + (n !== 1 ? 's' : '') + ' selected';
+}
+
+function clearSelection() {
+    state.selectedBoats.clear();
+    state.selectedBoatData.clear();
+    updateMergeBar();
+    hideMergePanel();
+    // Uncheck any visible checkboxes
+    document.querySelectorAll('#tbody-boats input[type=checkbox]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#tbody-boats tr.selected').forEach(tr => tr.classList.remove('selected'));
+}
+
+function showMergePanel() {
+    const panel = document.getElementById('merge-panel');
+    const list  = document.getElementById('merge-radio-list');
+    document.getElementById('merge-status').textContent = '';
+    list.innerHTML = '';
+    const ids = Array.from(state.selectedBoats);
+    ids.forEach((id, i) => {
+        const b = state.selectedBoatData.get(id);
+        const label = document.createElement('label');
+        label.style.display = 'block';
+        label.style.margin  = '0.25rem 0';
+        const radio = document.createElement('input');
+        radio.type  = 'radio';
+        radio.name  = 'merge-keep';
+        radio.value = id;
+        if (i === 0) radio.checked = true;
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(
+            ' ' + esc(id) + '  —  sail: ' + esc(b.sailNumber || '') + '  name: ' + esc(b.name || '')
+        ));
+        list.appendChild(label);
+    });
+    panel.style.display = '';
+}
+
+function hideMergePanel() {
+    document.getElementById('merge-panel').style.display = 'none';
+}
+
+async function performMerge() {
+    const keepRadio = document.querySelector('#merge-radio-list input[name="merge-keep"]:checked');
+    if (!keepRadio) return;
+    const keepId   = keepRadio.value;
+    const mergeIds = Array.from(state.selectedBoats).filter(id => id !== keepId);
+    const statusEl = document.getElementById('merge-status');
+    statusEl.textContent = 'Merging…';
+
+    const result = await fetchJson('/api/boats/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepId, mergeIds })
+    });
+
+    if (!result) {
+        statusEl.textContent = 'Merge failed — see console.';
+        return;
+    }
+    statusEl.textContent =
+        'Merged. Updated ' + result.updatedRaces + ' race(s), ' + result.updatedFinishers + ' finisher record(s).';
+    clearSelection();
+    hideMergePanel();
+    loadList('boats', 0);
 }
 
 loadList('boats', 0);

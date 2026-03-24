@@ -39,11 +39,13 @@ public class AnalysisCache
      * Recomputes comparisons and reference factors.
      *
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
+     * @param outlierSigma  outlier trimming threshold in units of SE, or null to use default (2.5)
      */
-    public void refresh(Integer targetIrcYear)
+    public void refresh(Integer targetIrcYear, Double outlierSigma)
     {
         LOG.info("AnalysisCache: refreshing...");
-        List<ComparisonResult> newComparisons = new HandicapAnalyser(store).analyseAll();
+        double sigma = outlierSigma != null ? outlierSigma : 2.5;
+        List<ComparisonResult> newComparisons = new HandicapAnalyser(store, sigma).analyseAll();
         ConversionGraph graph = ConversionGraph.from(newComparisons);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         Map<String, BoatReferenceFactors> newFactors =
@@ -57,7 +59,7 @@ public class AnalysisCache
 
     /**
      * Recomputes reference factors only, using the existing comparisons and conversion graph.
-     * Faster than {@link #refresh(Integer)} when only the boat certificate data has changed.
+     * Faster than {@link #refresh(Integer, Double)} when only the boat certificate data has changed.
      *
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
      */

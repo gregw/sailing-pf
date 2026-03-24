@@ -308,8 +308,8 @@ public class SailSysRaceImporter
         String handicapSystem = resolveHandicapSystem(data.handicappings);
 
         // Finishers
-        boolean isPhs = "PHS".equalsIgnoreCase(handicapSystem);
-        List<Division> divisions = buildDivisions(data.competitors, handicapSystem, isPhs, date.getYear());
+        boolean measurementSystem = isMeasurementHandicapSystem(handicapSystem);
+        List<Division> divisions = buildDivisions(data.competitors, handicapSystem, measurementSystem, date.getYear());
 
         Race race = new Race(
             raceId,
@@ -331,7 +331,7 @@ public class SailSysRaceImporter
     }
 
     private List<Division> buildDivisions(List<DivisionData> competitors, String handicapSystem,
-                                          boolean isPhs, int raceYear)
+                                          boolean measurementSystem, int raceYear)
     {
         if (competitors == null)
             return List.of();
@@ -340,7 +340,7 @@ public class SailSysRaceImporter
         for (DivisionData divData : competitors)
         {
             String divName = divData.parent != null ? divData.parent.name : "Unknown";
-            List<Finisher> finishers = buildFinishers(divData.items, handicapSystem, isPhs, raceYear);
+            List<Finisher> finishers = buildFinishers(divData.items, handicapSystem, measurementSystem, raceYear);
             if (!finishers.isEmpty())
                 divisions.add(new Division(divName, finishers));
         }
@@ -348,7 +348,7 @@ public class SailSysRaceImporter
     }
 
     private List<Finisher> buildFinishers(List<EntryData> items, String handicapSystem,
-                                          boolean isPhs, int raceYear)
+                                          boolean measurementSystem, int raceYear)
     {
         if (items == null)
             return List.of();
@@ -369,7 +369,7 @@ public class SailSysRaceImporter
             boolean nonSpinnaker = entry.nonSpinnaker != null && entry.nonSpinnaker;
 
             String certNumber = null;
-            if (!isPhs && entry.boat != null)
+            if (measurementSystem && entry.boat != null)
             {
                 Double hcFrom = extractHandicapCreatedFrom(entry.calculations);
                 if (hcFrom != null)
@@ -466,6 +466,18 @@ public class SailSysRaceImporter
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(),
             club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+    }
+
+    /**
+     * Returns true only for measurement-based handicap systems (IRC, ORC, AMS).
+     * Any other system — PHS, TCF, CBH, or unknown — is treated as performance-based
+     * and must not produce inferred certificates.
+     */
+    private static boolean isMeasurementHandicapSystem(String system)
+    {
+        return "IRC".equalsIgnoreCase(system)
+            || "ORC".equalsIgnoreCase(system)
+            || "AMS".equalsIgnoreCase(system);
     }
 
     private String resolveHandicapSystem(List<HandicappingSummary> handicappings)

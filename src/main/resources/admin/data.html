@@ -32,6 +32,21 @@
       <tbody id="tbody-boats"></tbody>
     </table>
     <div class="pagination" id="pager-boats"></div>
+
+    <div id="merge-bar" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+      <span id="merge-bar-count"></span>
+      <button onclick="showMergePanel()" style="margin-left:1rem;">Merge selected…</button>
+      <button onclick="clearSelection()" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="merge-panel" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong>Select the canonical boat to keep:</strong>
+      <div id="merge-radio-list" style="margin:0.6rem 0;"></div>
+      <button onclick="performMerge()">Confirm merge</button>
+      <button onclick="hideMergePanel()" style="margin-left:0.5rem;">Cancel</button>
+      <div id="merge-status" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
     <div class="detail-panel" id="detail-boats">
       <div id="ref-factors-boats" style="margin-bottom:0.75rem;"></div>
       <pre id="pre-boats"></pre>

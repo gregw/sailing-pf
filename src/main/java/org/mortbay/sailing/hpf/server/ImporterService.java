@@ -66,7 +66,8 @@ public class ImporterService
     public record GlobalSchedule(List<DayOfWeek> days, LocalTime time) {}
 
     private record AdminConfig(List<ImporterEntry> importers, GlobalSchedule schedule,
-                               Map<String, Integer> lastSailSysIds, Integer targetIrcYear) {}
+                               Map<String, Integer> lastSailSysIds, Integer targetIrcYear,
+                               Double outlierSigma) {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
         new ImporterEntry("sailsys-boats", "directory", false),
@@ -86,6 +87,7 @@ public class ImporterService
     private ScheduledFuture<?> scheduledFuture;
     private volatile Map<String, Integer> lastSailSysIds = Map.of();
     private volatile Integer targetIrcYear = null;   // null = auto-detect from data
+    private volatile Double outlierSigma = null;     // null = use default (2.5)
 
     public ImporterService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
@@ -120,6 +122,7 @@ public class ImporterService
             if (config.lastSailSysIds() != null)
                 lastSailSysIds = Map.copyOf(config.lastSailSysIds());
             targetIrcYear = config.targetIrcYear();   // null is valid (auto-detect)
+            outlierSigma = config.outlierSigma();    // null is valid (use default 2.5)
             if (globalSchedule != null && !globalSchedule.days().isEmpty())
                 armSchedule();
             LOG.info("Loaded admin config from {}", configFile);
@@ -181,11 +184,12 @@ public void stop()
     }
 
     public synchronized void setConfig(List<ImporterEntry> entries, GlobalSchedule schedule,
-                                       Integer targetIrcYear)
+                                       Integer targetIrcYear, Double outlierSigma)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
         this.targetIrcYear = targetIrcYear;
+        this.outlierSigma = outlierSigma;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -234,6 +238,11 @@ public void stop()
     public Integer targetIrcYear()
     {
         return targetIrcYear;
+    }
+
+    public Double outlierSigma()
+    {
+        return outlierSigma;
     }
 
     public void submitScheduledRun()
@@ -331,7 +340,7 @@ public void stop()
             case "analysis" ->
             {
                 if (cache != null)
-                    cache.refresh(targetIrcYear);
+                    cache.refresh(targetIrcYear, outlierSigma);
                 else
                     LOG.warn("Analysis requested but cache is not configured");
             }
@@ -366,7 +375,7 @@ public void stop()
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(
                 configFile.toFile(),
                 new AdminConfig(importerEntries, globalSchedule, new LinkedHashMap<>(lastSailSysIds),
-                    targetIrcYear));
+                    targetIrcYear, outlierSigma));
         }
         catch (IOException e)
         {

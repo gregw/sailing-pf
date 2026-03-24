@@ -598,7 +598,7 @@ public class TopYachtImporter
             }
 
             String certNumber = null;
-            if (!"PHS".equals(handicapSystem) && row.ahcValue() != null)
+            if (isMeasurementHandicapSystem(handicapSystem) && row.ahcValue() != null)
             {
                 boat = store.boats().get(boat.id());
                 certNumber = inferCertificate(boat, handicapSystem, year, row.ahcValue());
@@ -648,6 +648,18 @@ public class TopYachtImporter
             boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(certs), null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;
+    }
+
+    /**
+     * Returns true only for measurement-based handicap systems (IRC, ORC, AMS).
+     * Any other system — PHS, TCF, CBH, or unknown — is treated as performance-based
+     * and must not produce inferred certificates.
+     */
+    private static boolean isMeasurementHandicapSystem(String system)
+    {
+        return "IRC".equalsIgnoreCase(system)
+            || "ORC".equalsIgnoreCase(system)
+            || "AMS".equalsIgnoreCase(system);
     }
 
     private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)

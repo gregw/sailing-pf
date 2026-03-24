@@ -8,10 +8,13 @@ function esc(val) {
         .replace(/>/g, '&gt;');
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, options) {
     try {
-        const resp = await fetch(url);
-        if (!resp.ok) return null;
+        const resp = await fetch(url, options);
+        if (!resp.ok) {
+            console.error('fetchJson non-OK:', resp.status, url);
+            return null;
+        }
         return await resp.json();
     } catch (e) {
         console.error('fetchJson failed:', url, e);
