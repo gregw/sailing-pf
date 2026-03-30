@@ -1,0 +1,35 @@
+{
+  "boats": [
+    "0000-no_name-bavaria37",
+    "1111-ransa_1test-higson29",
+    "0000-nil",
+    "109-j80_test_boat_3-jboatsj80",
+    "0000-sold-rsaero5",
+    "000-pdy_test_boat-test",
+    "2384-testing",
+    "44444-test_yacht-ty56789",
+    "00-xxx",
+    "10-test_10-testerfinn",
+    "0000-test",
+    "1111-test_boat-young88",
+    "252-test_boat_2",
+    "22222-test_yacht_3-ty5",
+    "23456-test_yacht-ty56",
+    "101-gsc_test_yacht_1",
+    "477-test",
+    "111-test",
+    "1010-gsc_test_yacht_x",
+    "00-test",
+    "4646464-test_test",
+    "4567-test"
+  ],
+  "designs": [
+    "aaa",
+    "",
+    "testerfinn",
+    "test",
+    "testyacht",
+    "openbic"
+  ],
+  "races": []
+}
