@@ -30,3 +30,22 @@ async function fetchJson(url, options) {
         if (href === page) a.classList.add('active');
     });
 })();
+
+// Show an import-running banner on pages that have #import-banner
+(function() {
+    const banner = document.getElementById('import-banner');
+    if (!banner) return;
+    let importBannerPoller = null;
+    async function checkImportStatus() {
+        const data = await fetchJson('/api/importers/status');
+        if (!data) return;
+        banner.style.display = data.running ? '' : 'none';
+        if (data.running && !importBannerPoller) {
+            importBannerPoller = setInterval(checkImportStatus, 5000);
+        } else if (!data.running && importBannerPoller) {
+            clearInterval(importBannerPoller);
+            importBannerPoller = null;
+        }
+    }
+    checkImportStatus();
+})();

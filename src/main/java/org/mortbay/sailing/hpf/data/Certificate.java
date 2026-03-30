@@ -16,7 +16,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * ORC — TCF (time correction factor), e.g. 1.020; stored as 600/GPH, never raw GPH
  * AMS — TCF (time correction factor), same scale as IRC TCC
  * <p>
- * twoHanded is only set for AMS two-handed certificates; false for all IRC/ORC certs.
+ * twoHanded is set for AMS two-handed and ORC Double Handed (DH) certificates; false for IRC.
  * <p>
  * Not a Loadable — Certificate is embedded in its owning Boat file; dirty semantics
  * are inherited from the Boat.
@@ -26,15 +26,16 @@ public record Certificate(
     int year,                // certificate year
     double value,            // TCF for all systems (IRC TCC; ORC 600/GPH; AMS TCF)
     boolean nonSpinnaker,    // true if this is a non-spinnaker certificate
-    boolean twoHanded,       // true for AMS two-handed certificates; false for all IRC/ORC certs
-    boolean orcClub,         // true for ORC club certs (CertType 3); false for international and all IRC/AMS
+    boolean twoHanded,       // true for AMS two-handed and ORC Double Handed (DH) certificates; false for IRC
+    boolean club,            // true for club-level certs (ORC club, potentially IRC club); carries configurable weight penalty
+    boolean windwardLeeward, // true for ORC WL (windward/leeward) course-specific certs; carries 0.8× weight penalty
     String certificateNumber, // dxtID for ORC; cert number for AMS
     LocalDate expiryDate     // null for AMS
 )
 {
     /**
-     * Jackson deserialisation factory. The {@code orcClub} field was added after initial
-     * data files were written, so it may be absent from older JSON — treat null as false.
+     * Jackson deserialisation factory. Reads both {@code club} and legacy {@code orcClub}
+     * field names for backward compatibility with older JSON files.
      */
     @JsonCreator
     public static Certificate create(
@@ -43,11 +44,16 @@ public record Certificate(
         @JsonProperty("value")             double value,
         @JsonProperty("nonSpinnaker")      boolean nonSpinnaker,
         @JsonProperty("twoHanded")         boolean twoHanded,
+        @JsonProperty("club")             Boolean club,
         @JsonProperty("orcClub")           Boolean orcClub,
+        @JsonProperty("windwardLeeward")   Boolean windwardLeeward,
         @JsonProperty("certificateNumber") String certificateNumber,
         @JsonProperty("expiryDate")        LocalDate expiryDate)
     {
+        // Accept either "club" or legacy "orcClub" field
+        boolean isClub = (club != null && club) || (orcClub != null && orcClub);
         return new Certificate(system, year, value, nonSpinnaker, twoHanded,
-            orcClub != null && orcClub, certificateNumber, expiryDate);
+            isClub, windwardLeeward != null && windwardLeeward,
+            certificateNumber, expiryDate);
     }
 }

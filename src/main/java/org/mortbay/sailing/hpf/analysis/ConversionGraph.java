@@ -48,6 +48,22 @@ public class ConversionGraph
             ConversionNode from = new ConversionNode(k.systemA(), k.yearA(), k.nonSpinA(), k.twoHandedA());
             ConversionNode to   = new ConversionNode(k.systemB(), k.yearB(), k.nonSpinB(), k.twoHandedB());
             adj.computeIfAbsent(from, n -> new ArrayList<>()).add(new ConversionEdge(from, to, fit));
+
+            // For pooled ALL-system variant comparisons (e.g. NS→spin), also add per-system
+            // forward+inverse edges so the reference-factor DFS can reach cross-variant targets
+            // from real system nodes (IRC, ORC, AMS) without needing a separate pair emission.
+            if ("ALL".equals(k.systemA()) && "ALL".equals(k.systemB())
+                && k.yearA() == k.yearB())
+            {
+                LinearFit inv = fit.inverse();
+                for (String sys : new String[]{"IRC", "ORC", "AMS"})
+                {
+                    ConversionNode sFrom = new ConversionNode(sys, k.yearA(), k.nonSpinA(), k.twoHandedA());
+                    ConversionNode sTo   = new ConversionNode(sys, k.yearB(), k.nonSpinB(), k.twoHandedB());
+                    adj.computeIfAbsent(sFrom, n -> new ArrayList<>()).add(new ConversionEdge(sFrom, sTo, fit));
+                    adj.computeIfAbsent(sTo,   n -> new ArrayList<>()).add(new ConversionEdge(sTo, sFrom, inv));
+                }
+            }
         }
         return new ConversionGraph(adj);
     }

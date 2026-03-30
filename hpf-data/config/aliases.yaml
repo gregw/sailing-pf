@@ -48,9 +48,196 @@ designs:
     aliases:
     - "Archambault 32"
     - "archambault32"
+  beneteaufirst50:
+    canonicalName: "Beneteau First 50"
+    aliases:
+    - "FIRST 50"
+    - "first50"
+  beneteaufirst45:
+    canonicalName: "Beneteau First 45"
+    aliases:
+    - "FIRST 45"
+    - "first45"
+  beneteaufirst40:
+    canonicalName: "Beneteau First 40"
+    aliases:
+    - "FIRST 40"
+    - "first40"
+  beneteaufirst35:
+    canonicalName: "Beneteau First 35"
+    aliases:
+    - "FIRST 35"
+    - "first35"
+  beneteaufirst53:
+    canonicalName: "Beneteau First 53"
+    aliases:
+    - "FIRST YACHT 53"
+    - "firstyacht53"
+  beneteaufirst305:
+    canonicalName: "Beneteau First 305"
+    aliases:
+    - "First 305"
+    - "first305"
+  beneteaufirst30:
+    canonicalName: "Beneteau First 30"
+    aliases:
+    - "FIRST 30 (2010)"
+    - "first302010"
+  beneteaufirst325:
+    canonicalName: "Beneteau First 325"
+    aliases:
+    - "First 325"
+    - "first325"
+  beneteaufirst345:
+    canonicalName: "Beneteau First 345"
+    aliases:
+    - "FIRST 345"
+    - "first345"
+  jeanneausunfast3300:
+    canonicalName: "Jeanneau Sunfast 3300"
+    aliases:
+    - "SUN FAST 3300"
+    - "sunfast3300"
+  jeanneausunfast3600:
+    canonicalName: "Jeanneau Sun Fast 3600"
+    aliases:
+    - "SUN FAST 3600"
+    - "sunfast3600"
+  jeanneausunfast3200:
+    canonicalName: "Jeanneau Sunfast 3200"
+    aliases:
+    - "SUN FAST 3200"
+    - "sunfast3200"
+  sydney38:
+    canonicalName: "SYDNEY 38"
+    aliases:
+    - "Sydney Yachts Sydney 38"
+    - "sydneyyachtssydney38"
+  yngling:
+    canonicalName: "Yngling"
+    aliases:
+    - "Sunburst Yngling"
+    - "sunburstyngling"
+  j24:
+    canonicalName: "J 24"
+    aliases:
+    - "J24 J24"
+    - "j24j24"
+    - "Jarkan J24"
+    - "jarkanj24"
+    - "J Boats J24"
+    - "jboatsj24"
+    - "Bashford J24"
+    - "bashfordj24"
+    - "J 24 ORC Only"
+    - "j24orconly"
+  jboatsj122:
+    canonicalName: "J Boats J/122"
+    aliases:
+    - "J122"
+  jboatsj111:
+    canonicalName: "J Boats J/111"
+    aliases:
+    - "J 111"
+    - "j111"
+  jboatsj80:
+    canonicalName: "J Boats J/80"
+    aliases:
+    - "J/80 J/80"
+    - "j80j80"
+    - "J 80"
+    - "j80"
+  jboatsj70:
+    canonicalName: "J Boats J/70"
+    aliases:
+    - "J70"
+  jboatsj99:
+    canonicalName: "J Boats J/99"
+    aliases:
+    - "J 99"
+    - "j99"
+  jboatsj100:
+    canonicalName: "J Boats J/100"
+    aliases:
+    - "J 100"
+    - "j100"
+  jboatsj109:
+    canonicalName: "J Boats J/109"
+    aliases:
+    - "J109"
+  jboatsj112e:
+    canonicalName: "J Boats J/112E"
+    aliases:
+    - "J 112e"
+    - "j112e"
+  jboatsj130:
+    canonicalName: "J Boats J/130"
+    aliases:
+    - "J/130"
+    - "j130"
+  jboatsj133:
+    canonicalName: "J Boats J/133"
+    aliases:
+    - "J 133"
+    - "j133"
+  jboatsj35:
+    canonicalName: "J Boats J35"
+    aliases:
+    - "J 35"
+    - "j35"
+  jboatsj88:
+    canonicalName: "J Boats J/88"
+    aliases:
+    - "J 88"
+    - "j88"
+  jboatsj97:
+    canonicalName: "J Boats J/97"
+    aliases:
+    - "J 97"
+    - "j97"
+  adams10:
+    canonicalName: "ADAMS 10"
+    aliases:
+    - "Adams 10 Adams 10 racing"
+    - "adams10adams10racing"
+  openbic:
+    canonicalName: "O'Pen Bic"
+    aliases:
+    - "Bic Open Skiff"
+    - "bicopenskiff"
+    - "Bic Open Bic"
+    - "bicopenbic"
+  opti:
+    canonicalName: "Opti"
+    aliases:
+    - "Maclaughlin Optimist"
+    - "maclaughlinoptimist"
+    - "Mccloughlan Optimist"
+    - "mccloughlanoptimist"
+  bashfordsydney36:
+    canonicalName: "BASHFORD (SYDNEY) 36"
+    aliases:
+    - "Bashford Howison 36"
+    - "bashfordhowison36"
+  flyingtiger10:
+    canonicalName: "FLYING TIGER 10"
+    aliases:
+    - "Flying Tiger"
+    - "flyingtiger"
+  farr30od:
+    canonicalName: "FARR 30 OD"
+    aliases:
+    - "Mumm 30"
+    - "mumm30"
+  farr36:
+    canonicalName: "FARR 36"
+    aliases:
+    - "MUMM 36"
+    - "mumm36"
 boats:
-  MYC7:
+  day_dreaming:
     canonicalName: "Day Dreaming"
+    canonicalSailNumber: "MYC7"
     aliases:
     - name: "1060"
       from: null
@@ -58,35 +245,43 @@ boats:
     - name: "TenSixty"
       from: null
       until: "2026-01-01"
-  "040":
+    altSailNumbers: []
+  navy_one:
     canonicalName: "Navy One"
+    canonicalSailNumber: "0404"
     aliases:
     - name: "Navy One"
       from: null
       until: null
-  "0404":
-    canonicalName: "Navy One"
-    aliases:
     - name: "B Navy One"
       from: null
       until: null
     - name: "NAVY ONE"
       from: null
       until: null
-  "052":
+    altSailNumbers:
+    - number: "040"
+      from: null
+      until: null
+  gweilo:
     canonicalName: "Gweilo"
+    canonicalSailNumber: "052"
     aliases:
     - name: "Gweilo"
       from: null
       until: null
-  "1088":
+    altSailNumbers: []
+  norton_white_corum:
     canonicalName: "Norton White Corum"
+    canonicalSailNumber: "1088"
     aliases:
     - name: "CORUM"
       from: null
       until: null
-  "1014":
+    altSailNumbers: []
+  wild_thing:
     canonicalName: "Wild Thing"
+    canonicalSailNumber: "1014"
     aliases:
     - name: "UBS Wild Thing"
       from: null
@@ -94,24 +289,98 @@ boats:
     - name: "Tribeca Wild Thing"
       from: null
       until: null
-  "1956":
+    altSailNumbers: []
+  cheeky:
     canonicalName: "Cheeky"
+    canonicalSailNumber: "2499"
     aliases:
     - name: "Rhianon"
       from: null
       until: null
-  "2499":
-    canonicalName: "Cheeky"
-    aliases:
     - name: "Cheeky"
       from: null
       until: null
-  ASC1:
+    altSailNumbers:
+    - number: "1956"
+      from: null
+      until: null
+  rising_sun:
     canonicalName: "Rising Sun"
+    canonicalSailNumber: "ASC1"
     aliases:
     - name: "Rising Sun"
       from: null
       until: null
-sailNumberRedirects:
-  "040": "0404"
-  "1956": "2499"
+    altSailNumbers: []
+  much_ado_v:
+    canonicalName: "MUCH ADO V"
+    canonicalSailNumber: "11978"
+    aliases:
+    - name: "Much Ado V"
+      from: null
+      until: null
+    altSailNumbers: []
+  local_hero:
+    canonicalName: "LOCAL HERO"
+    canonicalSailNumber: "1236"
+    aliases:
+    - name: "Local Hero"
+      from: null
+      until: null
+    altSailNumbers: []
+  jupiter:
+    canonicalName: "Jupiter"
+    canonicalSailNumber: "MYC99"
+    aliases:
+    - name: "Jupiter (DH)"
+      from: null
+      until: null
+    altSailNumbers: []
+  joss:
+    canonicalName: "Joss"
+    canonicalSailNumber: "MYC10"
+    aliases:
+    - name: "Joss"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "RF177"
+      from: null
+      until: null
+  maxishambles:
+    canonicalName: "MAXISHAMBLES"
+    canonicalSailNumber: "335"
+    aliases:
+    - name: "MAXISHAMBLES"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "335TBA"
+      from: null
+      until: null
+  maxishambles-beneteaufirst40:
+    canonicalName: "MAXISHAMBLES"
+    canonicalSailNumber: "2472"
+    aliases:
+    - name: "MAXISHAMBLES"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "335"
+      from: null
+      until: null
+    - number: "335TBA"
+      from: null
+      until: null
+  omnishambles-farr30od:
+    canonicalName: "OMNISHAMBLES"
+    canonicalSailNumber: "SU150"
+    aliases:
+    - name: "OMNISHAMBLES"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "SM150"
+      from: null
+      until: null
+sailNumberRedirects: {}

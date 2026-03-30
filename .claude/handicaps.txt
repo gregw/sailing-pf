@@ -65,6 +65,7 @@ certificates are now also accepted at some clubs. IRC certificates are renewed a
 be directly compared to that of a different year, though values are normally similar.
 + boats may have multiple IRC certificates for different configurations.  Different certificates may be used in different races within a
 series.
++ IRC also has a shorthanded (IRC SH) variant for two-handed or shorthanded sailing.
 + IRC is primarily used for offshore races
 + ORCi (ORC International) is a measurement-based handicap system managed by the Offshore Racing Congress (ORC). Unlike IRC, its Velocity
 Prediction Program (VPP) algorithm is publicly known and transparent. A complete set of hull, appendage, stability, rig and sail
@@ -75,11 +76,18 @@ accounts for specific race conditions.
 + ORCclub (ORC Club) is a simplified version of ORCi that uses the same VPP but allows owner-declared measurements supported by
 comparable boat data, making it less costly and onerous than ORCi. Validated certificates using accredited measurer data are also
 available.
++ ORC certificates come in several variants: standard (all-purpose), non-spinnaker (NS), double-handed (DH), and windward/leeward (WL).
+The NS and DH variants use different VPP predictions reflecting the different sailing configurations. WL certificates are optimised
+for windward/leeward courses specifically. Club certificates use owner-declared or comparable boat measurements rather than
+accredited measurer data, and are considered less authoritative than international certificates.
++ In TopYacht, ORC group names encode these variants in the caption, e.g. "ORC NS WL LO results" means ORC non-spinnaker
+windward/leeward. The "LO" and "HI" suffixes indicate light/heavy wind ranges and can be ignored for handicap purposes.
 + AMS is an Australian measurement-based handicap system administered by the Yacht Racing Services Association (YRSA), and is primarily
 used in Victoria. Its algorithm is not publicly disclosed. The system is recalibrated on a 4-year cycle aligned with the Racing Rules of
 Sailing: the algorithm's weightings and parameters are adjusted based on fleet performance data accumulated over that period, rather than
 the algorithm being fundamentally redesigned. This understanding is based on how the system has been described by those involved, rather
 than published documentation.
++ AMS also has non-spinnaker (AMS NS) and two-handed (AMS 2HD) variants.
 + PHS is a performance-based handicap system used in many Australian clubs, where a boat's past performance is used to calculate its next
 handicap. Essentially it is some form of sliding average with clamps for unusual performances.
 + Races can be decided by a combination of sailing skill; suitability of a particular design for the conditions; luck with unexpected

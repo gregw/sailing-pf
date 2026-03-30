@@ -337,7 +337,7 @@ class TopYachtImporterTest
             resultRow("1", "DEVILJSH", "4988R", "Skipper", "DSS", "15:25:51", "03:00:51")
         ));
 
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 7, LocalDate.of(2024, 8, 15), html);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 7, LocalDate.of(2024, 8, 15), html, null);
 
         assertEquals(1, store.races().size());
         Race race = store.races().values().iterator().next();
@@ -367,8 +367,8 @@ class TopYachtImporterTest
             resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")
         ));
 
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, LocalDate.of(2024, 8, 9), html);
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 2, LocalDate.of(2024, 8, 16), html);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, LocalDate.of(2024, 8, 9), html, null);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 2, LocalDate.of(2024, 8, 16), html, null);
 
         Club updated = store.clubs().get("bsyc.com.au");
         assertEquals(1, updated.series().size());
@@ -385,8 +385,8 @@ class TopYachtImporterTest
         ));
         LocalDate date = LocalDate.of(2024, 8, 9);
 
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html);
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html, null);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html, null);
 
         assertEquals(1, store.races().size());
     }
@@ -403,7 +403,7 @@ class TopYachtImporterTest
             resultRow("1", "DEVILJSH", "4988R", "Skipper", "DSS", "15:25:51", "03:00:51")
         ));
 
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 7, LocalDate.of(2024, 8, 15), html);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 7, LocalDate.of(2024, 8, 15), html, null);
 
         Boat boat = store.boats().values().iterator().next();
         assertEquals("dssinc.org.au", boat.clubId());
@@ -416,7 +416,7 @@ class TopYachtImporterTest
             resultRowWithDesign("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00", "J/24")
         ));
 
-        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, LocalDate.of(2024, 8, 9), html);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, LocalDate.of(2024, 8, 9), html, null);
 
         assertFalse(store.designs().isEmpty());
         assertNotNull(store.designs().get("j24"));
@@ -433,8 +433,8 @@ class TopYachtImporterTest
         Duration elapsed = Duration.ofHours(3);
         ParsedRow ircRow = new ParsedRow("AUS1", "BOAT", elapsed, null, null, "1.267");
         ParsedRow orcRow = new ParsedRow("AUS1", "BOAT", elapsed, null, null, "1.470");
-        ParsedRace ircPage = new ParsedRace(List.of(new ParsedDivision(null, "IRC", List.of(ircRow))));
-        ParsedRace orcPage = new ParsedRace(List.of(new ParsedDivision(null, "ORC", List.of(orcRow))));
+        ParsedRace ircPage = new ParsedRace(List.of(new ParsedDivision(null, "IRC", false, false, false, List.of(ircRow))));
+        ParsedRace orcPage = new ParsedRace(List.of(new ParsedDivision(null, "ORC", false, false, false, List.of(orcRow))));
 
         importer.processResultsPages(TEST_CLUB, "Rating Passage", 1,
             LocalDate.of(2025, 8, 9), List.of(ircPage, orcPage));
@@ -452,8 +452,8 @@ class TopYachtImporterTest
         // Same sail number but different elapsed times in IRC vs ORC page — discard the second
         ParsedRow row1 = new ParsedRow("AUS1", "BOAT", Duration.ofHours(3), null, null, "1.267");
         ParsedRow row2 = new ParsedRow("AUS1", "BOAT", Duration.ofHours(4), null, null, "1.470");
-        ParsedRace page1 = new ParsedRace(List.of(new ParsedDivision(null, "IRC", List.of(row1))));
-        ParsedRace page2 = new ParsedRace(List.of(new ParsedDivision(null, "ORC", List.of(row2))));
+        ParsedRace page1 = new ParsedRace(List.of(new ParsedDivision(null, "IRC", false, false, false, List.of(row1))));
+        ParsedRace page2 = new ParsedRace(List.of(new ParsedDivision(null, "ORC", false, false, false, List.of(row2))));
 
         importer.processResultsPages(TEST_CLUB, "Rating Passage", 1,
             LocalDate.of(2025, 8, 9), List.of(page1, page2));
@@ -470,8 +470,8 @@ class TopYachtImporterTest
         // IRC page has boat A; ORC page has boat B — both in same race, one division
         ParsedRow rowA = new ParsedRow("AUS1", "BOAT A", Duration.ofHours(3), null, null, "1.267");
         ParsedRow rowB = new ParsedRow("AUS2", "BOAT B", Duration.ofHours(2).plusMinutes(30), null, null, "1.470");
-        ParsedRace ircPage = new ParsedRace(List.of(new ParsedDivision(null, "IRC", List.of(rowA))));
-        ParsedRace orcPage = new ParsedRace(List.of(new ParsedDivision(null, "ORC", List.of(rowB))));
+        ParsedRace ircPage = new ParsedRace(List.of(new ParsedDivision(null, "IRC", false, false, false, List.of(rowA))));
+        ParsedRace orcPage = new ParsedRace(List.of(new ParsedDivision(null, "ORC", false, false, false, List.of(rowB))));
 
         importer.processResultsPages(TEST_CLUB, "Rating Passage", 1,
             LocalDate.of(2025, 8, 9), List.of(ircPage, orcPage));
@@ -485,7 +485,7 @@ class TopYachtImporterTest
     void processResultsPagesInfersCertificateFromAhc()
     {
         ParsedRow row = new ParsedRow("AUS1", "BOAT", Duration.ofHours(3), null, null, "1.267");
-        ParsedRace ircPage = new ParsedRace(List.of(new ParsedDivision(null, "IRC", List.of(row))));
+        ParsedRace ircPage = new ParsedRace(List.of(new ParsedDivision(null, "IRC", false, false, false, List.of(row))));
 
         importer.processResultsPages(TEST_CLUB, "Rating Passage", 1,
             LocalDate.of(2025, 8, 9), List.of(ircPage));
@@ -509,7 +509,7 @@ class TopYachtImporterTest
     {
         // PHS results: AHC column present but must NOT be used to infer a certificate
         ParsedRow row = new ParsedRow("AUS1", "BOAT", Duration.ofHours(3), null, null, "0.856");
-        ParsedRace phsPage = new ParsedRace(List.of(new ParsedDivision(null, "PHS", List.of(row))));
+        ParsedRace phsPage = new ParsedRace(List.of(new ParsedDivision(null, "PHS", false, false, false, List.of(row))));
 
         importer.processResultsPages(TEST_CLUB, "Performance Racing", 1,
             LocalDate.of(2025, 8, 9), List.of(phsPage));
@@ -526,7 +526,7 @@ class TopYachtImporterTest
     {
         // First race: infers IRC cert from AHC
         ParsedRow row1 = new ParsedRow("AUS1", "BOAT", Duration.ofHours(3), null, null, "1.267");
-        ParsedRace page1 = new ParsedRace(List.of(new ParsedDivision(null, "IRC", List.of(row1))));
+        ParsedRace page1 = new ParsedRace(List.of(new ParsedDivision(null, "IRC", false, false, false, List.of(row1))));
         importer.processResultsPages(TEST_CLUB, "Rating Passage", 1,
             LocalDate.of(2025, 8, 9), List.of(page1));
 
@@ -535,7 +535,7 @@ class TopYachtImporterTest
 
         // Second race: same TCF — should reuse existing cert, not add a second one
         ParsedRow row2 = new ParsedRow("AUS1", "BOAT", Duration.ofHours(2).plusMinutes(45), null, null, "1.267");
-        ParsedRace page2 = new ParsedRace(List.of(new ParsedDivision(null, "IRC", List.of(row2))));
+        ParsedRace page2 = new ParsedRace(List.of(new ParsedDivision(null, "IRC", false, false, false, List.of(row2))));
         importer.processResultsPages(TEST_CLUB, "Rating Passage", 2,
             LocalDate.of(2025, 8, 16), List.of(page2));
 
@@ -547,8 +547,10 @@ class TopYachtImporterTest
 
     private String seriesHtml(String rows)
     {
+        // 4 columns: Race label | IRC results | ORC results | Entrants
+        // Entrants column (index 3) is recognised as excluded by the column-header filter.
         return "<html><body><table class='centre_index_table'>" +
-            "<tr class='type1'><td>Race</td><td>Results</td><td>Entrants</td></tr>" +
+            "<tr class='type1'><td>Race</td><td>IRC</td><td>ORC</td><td>Entrants</td></tr>" +
             rows +
             "</table></body></html>";
     }

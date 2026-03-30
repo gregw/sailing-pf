@@ -6,157 +6,170 @@ This document describes the full processing pipeline for the Australian Yacht Ra
 
 ---
 
-## Phase 1: Data Preparation and Reference Network Construction
+## Phase 1: Data Preparation and Reference Network Construction (Implemented)
 
-### Step 1: Fetch ORC Australian Certificate Data
+All steps in Phase 1 are implemented and operational. They are run via the admin webapp's
+import management page or via scheduled runs configured in `admin.yaml`.
 
-If not done within the configured refresh interval, fetch the ORC Australian certificate list from:
+### Step 1: Import ORC Certificate Data (`OrcImporter`)
 
+Fetch the ORC Australian certificate list from:
 ```
 https://data.orc.org/public/WPub.dll?action=activecerts&CountryId=AUS
 ```
 
-For each certificate in the list, fetch the full certificate detail page using the `dxtID` field. This provides:
+For each certificate, fetch the full certificate detail page using `dxtID`. Parse GPH from the
+HTML (regex on `filecode="GPH"`) and convert to TCF via `600 / GPH`. Detect certificate variant
+from `CertType` and `FamilyName` fields:
 
-- Boat name and sail number
-- ORC certificate information (GPH, VPP data, certificate type, expiry)
-- Design name via the `Class` field — authoritative, controlled vocabulary
-- Hull file reference via `dxtName` — identifies sister ships and design variants
+| CertType | FamilyName | Flags set |
+|---|---|---|
+| 1 | — | (IRC+ORC international) |
+| 2 | ORC Standard | (none — standard international) |
+| 3 | ORC Standard | `club=true` |
+| 8 | Double Handed | `twoHanded=true` |
+| 9 | Double Handed | `twoHanded=true`, `club=true` |
+| 10 | Non Spinnaker | `nonSpinnaker=true` |
+| 11 | Non Spinnaker | `nonSpinnaker=true`, `club=true` |
 
-For each boat, create or update a Boat instance using the canonical ID strategy. For each design name encountered, create or update a Design instance. Store the certificate as a MeasurementCertificate record linked to the boat.
-
----
-
-### Step 2: Fetch TopYacht Boat Register
-
-If not done within the configured refresh interval, fetch the TopYacht boat register from:
-
-```
-https://www.topyacht.com.au/mt/boat_list.php
-```
-
-For each boat in the register, fetch the individual boat detail page (`mt_pub.php?boid=`). This provides:
-
-- Boat name and sail number
-- Design name
-- IRC and ORC ratings where held
-
-For each boat, create or update a Boat instance. Store the TopYacht `boid` as an alias for ingestion mapping purposes. Create any new Design instances encountered. Design names from the TopYacht register are cleaner than SailSys but less authoritative than ORC — use ORC `Class` as the canonical design name where both exist.
+Creates/updates `Boat`, `Design`, and embedded `Certificate` records. Certificate is stored
+with `system="ORC"` and the `dxtID` as `certificateNumber` for idempotency.
 
 ---
 
-### Step 3: Refresh SailSys Boat Records
+### Step 2: Import AMS Certificates (`AmsImporter`)
 
-For all boats whose details originated from SailSys and have not been updated within the configured refresh interval, fetch the boat JSON from:
-
-```
-https://api.sailsys.com.au/api/v1/boats/{id}
-```
-
-Update the Boat instance with any changes. The SailSys boat endpoint is authoritative for SailSys-sourced handicap values and physical measurements. Note that `make` and `model` fields can bleed together in SailSys — apply normalisation rules and prefer ORC or TopYacht design names where available.
+Scrape AMS certificate listings from raceyachts.org. Creates `Certificate` records with
+`system="AMS"`. Includes non-spinnaker and two-handed variants.
 
 ---
 
-### Step 4: Scan TopYacht Results Pages for New or Updated Races
+### Step 3: Import SailSys Boat Records (`SailSysBoatImporter`)
 
-Scan the manually curated list of TopYacht club result page URLs for new or updated race results. For each result page not yet ingested, or whose content has changed since last ingestion, download the results.
-
-For each result page, extract:
-- Race metadata (series name, club, race number, date, start time, handicap system)
-- Per-boat entries: boat name, sail number, skipper, home club, elapsed time, allocated handicap used for scoring
-
-Elapsed times from PHS races are valid and will be stored. PHS handicap values and PHS-derived corrected times are excluded. The allocated handicap from IRC, ORC or AMS races is stored as the handicap used for scoring in that race entry.
+Import boats from SailSys, either from pre-downloaded JSON files (`--local` mode) or via
+HTTP API with configurable throttling. Extracts IRC certificates from the `handicaps[]` array
+where `definition.shortName` is `IRC` or `IRC SH`. Maps `IRC SH` to `twoHanded=true`.
+`make`/`model` fields are normalised for design name derivation; ORC `Class` is preferred.
 
 ---
 
-### Step 5: Scan SailSys Races for New or Updated Races
+### Step 4: Import SailSys Races (`SailSysRaceImporter`)
 
-Scan SailSys race records starting from a configurable start index (set to avoid re-scanning the full history on each run). For each race, fetch:
+Scan SailSys race records starting from `nextSailSysRaceId` (configured in `admin.yaml`).
+Supports local file mode and HTTP API mode. For each completed race (non-null
+`lastProcessedTime`), extracts:
 
-```
-https://api.sailsys.com.au/api/v1/races/{id}/resultsentrants/display
-```
+- Race metadata (club, series, date, handicap system, divisions)
+- Per-boat entries: sail number, name, elapsed time, `nonSpinnaker` flag
+- Certificate inference from `handicapCreatedFrom` in `calculations[]` — the handicap actually
+  used for scoring. Inferred certificates include the `nonSpinnaker` flag from the race entry.
 
-A race is considered complete when `lastProcessedTime` transitions from null to non-null. Store `lastProcessedTime` per race and re-ingest if it has changed since last fetch. For each completed race, extract the same fields as Step 4. The `handicapCreatedFrom` field in `calculations[]` is the handicap actually used for scoring — use this in preference to `currentHandicaps[].value`.
-
----
-
-### Step 6: Create Boat Instances for Unknown Boats in SailSys Races
-
-For any boat appearing in a SailSys race result that cannot be matched to an existing Boat instance (via normalised sail number, name similarity and club context), fetch the boat detail:
-
-```
-https://api.sailsys.com.au/api/v1/boats/{id}
-```
-
-Create a new Boat instance using the canonical ID strategy. Add an Alias record capturing the raw sail number and name as they appeared in the source. Apply the same process for unknown boats appearing in TopYacht results, using the `boid` from the boat name link to fetch the TopYacht boat detail page.
+Unknown boats are resolved via fuzzy matching (Jaro-Winkler, threshold configurable in
+`admin.yaml`) or created as new `Boat` instances. The SailSys boat API is fetched on demand
+for design information. Clubs are matched via `clubs.yaml` seed data.
 
 ---
 
-### Step 7: Create Series and Match to Known Clubs
+### Step 5: Import TopYacht Races (`TopYachtImporter`)
 
-As races are ingested, create Series instances and match them to known Club instances using the club information embedded in the race records.
+Scrape TopYacht HTML result pages from club URLs curated in `clubs.yaml`. For each result page:
 
-If a race references a club that cannot be matched to any known Club instance, store the race in a pending state and emit a prompt so that the manually maintained club URL list can be updated. Pending races are not processed further until their club is resolved. No data is silently dropped.
+1. Parse the group caption to detect handicap system and variant flags. The caption parser
+   detects `ORC`, `AMS`, and `IRC` as base system keywords, then scans subsequent tokens:
+   - `NS` → `nonSpinnaker=true`
+   - `WL` → `windwardLeeward=true`
+   - `DH`, `2HD`, `SH` → `twoHanded=true`
+   - Underscores are normalised to spaces before splitting (handles `ORC_AP`, `ORC_WL` etc.)
+2. Only measurement systems (IRC, ORC, AMS) have their AHC values stored as inferred
+   certificates; PHS and other systems are stored for elapsed time only.
+3. Multi-page results (same race with different handicap systems) are merged into a single
+   `Race` with multiple divisions. The merge path uses `isMeasurementHandicapSystem()` to
+   filter which handicap values to keep.
 
----
-
-### Step 8: Build the Reference Factor Network from Measurement Certificates
-
-Scan all Boat instances for measurement certificates (IRC, ORC, AMS). For each certificate, derive a single reference handicap number:
-
-- **IRC**: use TCC directly
-- **ORC**: convert GPH to TCF using `TCF = 600 / GPH`
-- **AMS**: use the AMS value directly
-
-Assign each boat a reference factor and an initial reference factor weight based on the quality of its certificate(s):
-
-| Certificate basis | Weight |
-|---|---|
-| IRC or ORC certificate used in the race being analysed | 1.0 |
-| IRC or ORC certificate held, used for the race | 0.9 |
-| IRC or ORC certificate held, but racing under PHS | 0.8 |
-| No certificate, but design has many certificated boats | 0.7 |
-
-Where a boat holds certificates of more than one type, combine them as a weighted aggregate. Record the contributing certificates and their weights alongside the reference factor.
+Inferred certificates include `nonSpinnaker`, `twoHanded`, and `windwardLeeward` flags from
+the parsed caption.
 
 ---
 
-### Step 9: Aggregate Reference Factors to Design Level
+### Step 6: Import BWPS Races (`BwpsImporter`)
 
-For all designs, find all Boat instances of that design that have a reference factor. Aggregate these into a design-level reference factor using a weighted mean in log space:
-
-```
-log(referenceFactor_design) = Σ( w_boat × log(referenceFactor_boat) ) / Σ(w_boat)
-```
-
-The design-level reference factor weight is set to 0.7 (reflecting that it is inferred from sister ships rather than a certificate held by this specific boat), scaled by the number and quality of contributing boats.
+Import BWPS race results from the Cruising Yacht Club of Australia. IRC-based races providing
+boat identity, elapsed times, and IRC handicaps used for scoring.
 
 ---
 
-### Step 10: Propagate Reference Factors via Race Co-participation
+### Step 7: Build Indexes (`AnalysisCache.refreshIndexes()`)
 
-For all boats that do not yet have a reference factor, find all races in which they have competed against one or more boats that do have a reference factor. For each such race, estimate the unweighted boat's implied reference factor from the ratio of elapsed times relative to the reference boats in that race.
+Build navigation indexes from raw data:
+- `boatIdsByDesignId` — designId → Set of boatIds
+- `raceIdsByBoatId` — boatId → Set of raceIds
+- `seriesIdsByBoatId` — boatId → Set of seriesIds
 
-Aggregate these implied values across all qualifying races using a weighted mean in log space, where the weight of each race's contribution is proportional to the total reference factor weight of the reference boats present in that race.
-
-Assign the resulting value as the boat's reference factor with a weight reflecting the indirectness of the derivation.
+These indexes replace back-references that would otherwise be needed on entity records.
 
 ---
 
-### Step 11: Apply Design-Level Reference Factor as Fallback
+### Step 8: Build Conversion Graph (`HandicapAnalyser`)
 
-For all boats that still have no reference factor after Step 10, assign the design-level reference factor computed in Step 9 (if one exists for their design), with the design-level weight.
+`HandicapAnalyser.analyseAll()` mines all boats for paired handicap observations. For each
+boat holding certificates in multiple systems, years, or variants, it emits `DataPair` records
+linking the two TCF values. Pairs are grouped by `ComparisonKey` (e.g. "IRC spin 2024 → ORC
+spin 2024", "IRC spin 2023 → IRC spin 2024").
+
+For each comparison key with enough pairs, a `LinearFit` is computed via least squares
+regression. Outliers beyond a configurable sigma threshold (default 2.5) are trimmed and the
+fit recomputed.
+
+`ConversionGraph.from(comparisons)` builds a directed graph where:
+- **Nodes** are `ConversionNode(system, year, nonSpinnaker, twoHanded)` tuples
+- **Edges** carry the `LinearFit` (minimum R² = 0.75 required for inclusion)
+- The graph enables conversion between any two connected system×year×variant nodes
+
+---
+
+### Step 9: Compute Reference Factors (`ReferenceNetworkBuilder`)
+
+`ReferenceNetworkBuilder.build(store, graph, targetYear)` computes a `BoatReferenceFactors`
+for every boat. The target is the IRC node for `targetYear` (configurable, defaults to the
+max issued IRC cert year in the data).
+
+**Certificate-based factors (generation 0):**
+For each boat's certificates, perform DFS through the ConversionGraph to find the shortest
+weighted path from the certificate's node to the target IRC node. Certificate base weight is
+1.0, with multiplicative discounts:
+- Club certificate: × `clubCertificateWeight` (default 0.9, configurable in `admin.yaml`)
+- Windward/leeward: × 0.8
+- Certificate age: degrades by 0.2 per year beyond the target year
+- Each graph hop: weight scaled by the edge's `LinearFit.weight()`
+
+Where multiple paths exist, the highest-weight path wins. Three factors are computed
+independently: spinnaker, non-spinnaker, and two-handed.
+
+---
+
+### Step 10: Aggregate to Design Level
+
+For each design with multiple boats having reference factors, aggregate into a design-level
+factor using `Factor.aggregate()` (weighted mean). Design-level factor weight is scaled by
+`DESIGN_FACTOR_WEIGHT` (0.85).
+
+---
+
+### Step 11: Propagate via Race Co-participation
+
+For boats without reference factors, scan all races where they competed against boats that
+do have factors. Estimate an implied factor from elapsed time ratios, weighted by the
+reference boats' factor weights. Propagation weight is scaled by `PROPAGATION_FACTOR_WEIGHT`
+(0.7).
 
 ---
 
 ### Step 12: Iterate Until Convergence
 
-Repeat Steps 9, 10 and 11 in sequence. Each iteration may produce new design-level reference factors (as more boats acquire individual reference factors) and new boat-level reference factors (as more races become usable for propagation).
-
-Continue iterating until no new reference factors are assigned in a full pass. If more than 10 iterations complete without full convergence, halt with an error. This indicates a subgraph that is entirely disconnected from the measurement certificate network — resolution requires manually adding a synthetic reference anchor for the affected design or club.
-
-At the end of Step 12, every boat and design in the database will have a reference factor and an associated weight. Boats with high-quality certificates will have weights near 1.0; boats whose reference factor was derived through many hops of propagation will have lower weights. This weight is carried forward into all subsequent HPF calculations.
+Repeat steps 10 and 11 until no new factors are assigned (max 20 iterations). Each iteration
+may produce new design-level factors and new boat-level propagated factors. At convergence,
+every reachable boat has a `BoatReferenceFactors` with spin, nonSpin, and/or twoHanded
+factors and associated weights.
 
 ---
 

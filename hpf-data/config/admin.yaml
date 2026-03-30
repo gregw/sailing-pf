@@ -1,27 +1,21 @@
 importers:
-- name: "orc"
+- name: "ams"
   mode: "api"
   includeInSchedule: true
-- name: "ams"
+- name: "orc"
   mode: "api"
   includeInSchedule: true
 - name: "bwps"
   mode: "api"
   includeInSchedule: true
-- name: "sailsys-boats"
-  mode: "directory"
-  includeInSchedule: true
-- name: "sailsys-boats"
-  mode: "api"
-  includeInSchedule: true
-- name: "sailsys-races"
-  mode: "directory"
-  includeInSchedule: true
-- name: "sailsys-races"
-  mode: "api"
-  includeInSchedule: true
 - name: "topyacht"
   mode: "api"
+  includeInSchedule: true
+- name: "sailsys-races"
+  mode: "run"
+  includeInSchedule: true
+- name: "build-indexes"
+  mode: "run"
   includeInSchedule: true
 - name: "analysis"
   mode: "run"
@@ -31,12 +25,15 @@ importers:
   includeInSchedule: true
 schedule:
   days:
-  - "WEDNESDAY"
-  time: "09:56:00"
-lastSailSysIds:
-  sailsys-races-api: 40809
-  sailsys-boats-api: 14937
+  - "MONDAY"
+  - "SUNDAY"
+  time: "14:42:00"
+nextSailSysRaceId: 32638
 targetIrcYear: 2025
 outlierSigma: null
 mergeCandidateThreshold: 0.5
 fuzzyMatchThreshold: 0.9
+sailsysCacheMaxAgeDays: 7
+sailsysHttpDelayMs: 200
+sailsysRecentRaceDays: 14
+clubCertificateWeight: 0.9

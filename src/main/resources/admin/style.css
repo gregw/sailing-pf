@@ -5,6 +5,13 @@ h2 { margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid #ccc; p
 button { font-family: monospace; padding: 3px 10px; cursor: pointer; }
 a { color: #2255aa; }
 
+/* Import-running warning banner */
+.import-warning-banner {
+  background: #fff3cd; border: 1px solid #ffc107;
+  border-radius: 4px; padding: 0.4rem 0.8rem;
+  margin-bottom: 0.75rem; font-size: 0.9em; color: #856404;
+}
+
 /* Navigation */
 .site-nav {
   display: flex;
@@ -52,8 +59,10 @@ a { color: #2255aa; }
 .badge { padding: 2px 8px; border-radius: 3px; font-size: 0.75rem; }
 .badge-idle { background: #eee; color: #555; }
 .badge-running { background: #4caf50; color: #fff; }
-.importer-table td:nth-child(4) { white-space: nowrap; }
-.importer-table td:nth-child(5) { text-align: center; }
+.importer-table td:nth-child(3) { white-space: nowrap; }
+.importer-table td:nth-child(4) { text-align: center; }
+tr.excluded td { color: #aaa; }
+tr.excluded td:last-child { color: inherit; }
 
 /* Schedule section */
 .schedule-days { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
@@ -68,8 +77,9 @@ a { color: #2255aa; }
 .tab.active { background: #fff; border-bottom: 1px solid #fff; margin-bottom: -1px; z-index: 1; position: relative; }
 .tab-panel { border: 1px solid #ccc; padding: 1rem; display: none; }
 .tab-panel.active { display: block; }
-.search-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-.search-row input { font-family: monospace; padding: 4px; width: 300px; max-width: 600px; flex: 1 1 300px; }
+.search-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.search-row input[type="text"] { font-family: monospace; padding: 4px; width: 300px; max-width: 600px; flex: 1 1 300px; }
+.search-row label { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th { text-align: left; padding: 4px 8px; background: #f0f0f0; border-bottom: 2px solid #ccc; }
 th.sortable { cursor: pointer; user-select: none; }
@@ -83,6 +93,24 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
 .detail-panel { display: none; }
 .detail-panel.visible { display: block; }
 
+/* Collapsible JSON tree */
+.json-tree { font-family: monospace; font-size: 1.2em; line-height: 1.6; }
+.json-tree details { margin-left: 1.1em; }
+.json-tree summary.jt-sum {
+  cursor: pointer; list-style: none; display: inline;
+  color: #555; user-select: none;
+}
+.json-tree summary.jt-sum::before { content: '▶ '; font-size: 0.75em; color: #999; }
+.json-tree details[open] > summary.jt-sum::before { content: '▼ '; }
+.json-tree .jt-body { border-left: 1px solid #e0e0e0; margin-left: 0.3em; padding-left: 0.5em; }
+.json-tree .jt-row { padding: 1px 0; }
+.json-tree .jt-key  { color: #881391; }
+.json-tree .jt-str  { color: #1a6b25; }
+.json-tree .jt-num  { color: #1c5cb7; }
+.json-tree .jt-bool { color: #c47900; }
+.json-tree .jt-null { color: #999; font-style: italic; }
+.json-tree .jt-punct { color: #555; }
+
 /* Analysis */
 .analysis-controls { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
 .analysis-controls select, .analysis-controls input[type=number] { font-family: monospace; padding: 3px 6px; }
@@ -91,3 +119,14 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
 .conv-table { max-height: 400px; overflow-y: auto; }
 .conv-table table { width: auto; min-width: 360px; }
 .weight-bar { display: inline-block; background: #4caf50; height: 10px; vertical-align: middle; }
+
+/* Data browser filter banner */
+.filter-banner {
+    background: #e8f0fe; border: 1px solid #aac4f7;
+    border-radius: 4px; padding: 0.3rem 0.7rem;
+    margin-bottom: 0.5rem; font-size: 0.9em;
+}
+.filter-banner button { margin-left: 0.7rem; cursor: pointer; }
+
+/* Inline action link button (Finishes, Boats) */
+.link-btn { background: none; border: none; color: #2255aa; cursor: pointer; padding: 0; font-family: monospace; font-size: inherit; text-decoration: underline; }

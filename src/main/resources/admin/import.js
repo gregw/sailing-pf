@@ -3,21 +3,21 @@ const DAY_LABELS = {
     MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu',
     FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun'
 };
-const MODE_LABEL = { directory: 'files', api: 'network', run: '—' };
-
 const DISPLAY_NAMES = {
-    'sailsys-boats': 'SailSys Boats',
-    'sailsys-races': 'SailSys Races',
-    'orc': 'ORC',
-    'ams': 'AMS',
-    'topyacht': 'TopYacht',
-    'bwps': 'BWPS',
-    'analysis': 'Analysis',
-    'reference-factors': 'Reference Factors'
+    'sailsys-races': 'Import SailSys Races',
+    'orc': 'Import ORC Certificates',
+    'ams': 'Import AMS Certificates',
+    'topyacht': 'Import TopYacht Races',
+    'bwps': 'Import BWPS Races',
+    'analysis': 'Analyse Certificates',
+    'reference-factors': 'Calculate Reference Factors',
+    'build-indexes': 'Build Indexes'
 };
 
 let currentEntries = [];
 let statusPoller = null;
+let prevRunningName = null;
+let prevRunningMode = null;
 
 function displayName(name) {
     return DISPLAY_NAMES[name] || name;
@@ -56,10 +56,9 @@ function buildRow(entry) {
     tr.dataset.name = entry.name;
     tr.dataset.mode = entry.mode;
     const isRunning = entry.status === 'running';
-    const isSailSysApi = entry.mode === 'api' &&
-        (entry.name === 'sailsys-boats' || entry.name === 'sailsys-races');
+    const isSailSysApi = entry.name === 'sailsys-races';
     const key = entry.name + '-' + entry.mode;
-    const defaultStart = (entry.lastId != null) ? entry.lastId + 1 : 1;
+    const defaultStart = (entry.nextStartId != null) ? entry.nextStartId : 1;
     const startInput = isSailSysApi
         ? `<input type="number" id="start-${esc(key)}" value="${defaultStart}" min="1" style="width:5em">`
         : '';
@@ -79,7 +78,6 @@ function buildRow(entry) {
                 onclick="moveRow('${esc(entry.name)}','${esc(entry.mode)}','down')">↓</button>
       </td>
       <td>${esc(displayName(entry.name))}</td>
-      <td>${esc(MODE_LABEL[entry.mode] || entry.mode)}</td>
       <td><span class="badge ${isRunning ? 'badge-running' : 'badge-idle'}"
                id="badge-${esc(key)}">${esc(entry.status)}</span></td>
       <td>${startInput}${runStopBtns}</td>
@@ -118,6 +116,7 @@ async function runImporter(name, mode) {
         alert('An import is already running');
     } else if (resp.status === 202) {
         setBadge(name, mode, 'running');
+        setAllRunButtonsDisabled(true);
         startStatusPoller();
     } else {
         alert('Unexpected response: ' + resp.status);
@@ -126,6 +125,11 @@ async function runImporter(name, mode) {
 
 async function stopImport() {
     await fetch('/api/importers/stop', { method: 'POST' });
+}
+
+async function stopSchedule() {
+    await fetch('/api/importers/stop', { method: 'POST' });
+    setStopScheduleVisible(false);
 }
 
 async function saveSchedule() {
@@ -153,17 +157,58 @@ async function saveSchedule() {
     }
 }
 
+function setAllRunButtonsDisabled(disabled) {
+    for (const entry of currentEntries) {
+        const key = entry.name + '-' + entry.mode;
+        const runBtn = document.getElementById('run-btn-' + key);
+        // Non-sailsys rows have buttons rendered inline without an id; find by row
+        const row = document.getElementById('row-' + key);
+        if (row) {
+            row.querySelectorAll('button:not([id^="stop-btn"])').forEach(btn => {
+                if (!btn.classList.contains('order-btn'))
+                    btn.disabled = disabled;
+            });
+        }
+    }
+}
+
+function setStopScheduleVisible(visible) {
+    const btn = document.getElementById('stop-schedule-btn');
+    if (btn) btn.style.display = visible ? '' : 'none';
+}
+
 function startStatusPoller() {
     if (statusPoller) return;
+    prevRunningName = null;
+    prevRunningMode = null;
     statusPoller = setInterval(async () => {
         const data = await fetchJson('/api/importers/status');
         if (!data) return;
         if (!data.running) {
             clearInterval(statusPoller);
             statusPoller = null;
+            prevRunningName = null;
+            prevRunningMode = null;
+            setStopScheduleVisible(false);
             await loadImporters();   // rebuilds table, applying any saved nextStartId values
         } else {
+            // If task changed, clear the previous task's badge
+            if (prevRunningName && (prevRunningName !== data.name || prevRunningMode !== data.mode)) {
+                setBadge(prevRunningName, prevRunningMode, 'idle');
+                // Hide stop btn on previous sailsys row if applicable
+                const prevKey = prevRunningName + '-' + prevRunningMode;
+                const prevRunBtn  = document.getElementById('run-btn-'  + prevKey);
+                const prevStopBtn = document.getElementById('stop-btn-' + prevKey);
+                if (prevRunBtn)  prevRunBtn.style.display  = '';
+                if (prevStopBtn) prevStopBtn.style.display = 'none';
+            }
+            prevRunningName = data.name;
+            prevRunningMode = data.mode;
+
             setBadge(data.name, data.mode, 'running');
+            setAllRunButtonsDisabled(true);
+            setStopScheduleVisible(!!data.scheduledRun);
+
             if (data.currentId != null) {
                 const key = data.name + '-' + data.mode;
                 const startInput = document.getElementById('start-' + key);

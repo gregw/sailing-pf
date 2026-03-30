@@ -61,7 +61,7 @@ public class RemoveNonMeasurementCertificates
                 certsRemoved += boat.certificates().size() - kept.size();
                 boatsModified++;
                 store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                    boat.designId(), boat.clubId(), boat.aliases(), kept, boat.sources(), boat.lastUpdated(), null));
+                    boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(), kept, boat.sources(), boat.lastUpdated(), null));
             }
 
             LOG.info("Removed {} non-measurement certificate(s) from {} boat(s)", certsRemoved, boatsModified);

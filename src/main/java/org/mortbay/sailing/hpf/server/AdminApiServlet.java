@@ -85,7 +85,13 @@ public class AdminApiServlet extends HttpServlet
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
-        if (path.startsWith("/importers/") && path.endsWith("/run"))
+        if ("/boats/exclude".equals(path))
+            handleSetExcluded("boats", req, resp);
+        else if ("/designs/exclude".equals(path))
+            handleSetExcluded("designs", req, resp);
+        else if ("/races/exclude".equals(path))
+            handleSetExcluded("races", req, resp);
+        else if (path.startsWith("/importers/") && path.endsWith("/run"))
         {
             String name = path.substring("/importers/".length(), path.length() - "/run".length());
             String mode = req.getParameter("mode");
@@ -114,6 +120,37 @@ public class AdminApiServlet extends HttpServlet
         else
         {
             resp.sendError(404);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handleSetExcluded(String entity, HttpServletRequest req,
+                                   HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String id = (String) body.get("id");
+            if (id == null)
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "id is required"));
+                return;
+            }
+            boolean excluded = Boolean.TRUE.equals(body.get("excluded"));
+            switch (entity)
+            {
+                case "boats"   -> store.setBoatExcluded(id, excluded);
+                case "designs" -> store.setDesignExcluded(id, excluded);
+                case "races"   -> store.setRaceExcluded(id, excluded);
+                default        -> { resp.sendError(400); return; }
+            }
+            writeJson(resp, Map.of("ok", true, "excluded", excluded));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
         }
     }
 
@@ -154,11 +191,15 @@ public class AdminApiServlet extends HttpServlet
                     .collect(Collectors.toCollection(HashSet::new));
             }
 
+            String filterDesignId = req.getParameter("designId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             final Set<String> finalCandidateIds = candidateIds;
             List<Boat> all = store.boats().values().stream()
                 .filter(b -> finalCandidateIds == null || finalCandidateIds.contains(b.id()))
-                .filter(b -> showExcluded || b.designId() == null || !store.isDesignExcluded(b.designId()))
+                .filter(b -> filterDesignId == null || filterDesignId.equals(b.designId()))
+                .filter(b -> showExcluded
+                    || (!store.isBoatExcluded(b.id())
+                        && (b.designId() == null || !store.isDesignExcluded(b.designId()))))
                 .filter(b -> lower == null
                     || b.id().toLowerCase().contains(lower)
                     || b.name().toLowerCase().contains(lower))
@@ -172,12 +213,32 @@ public class AdminApiServlet extends HttpServlet
                     case "name"       -> Comparator.comparing(Boat::name,       Comparator.nullsLast(Comparator.naturalOrder()));
                     case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsLast(Comparator.naturalOrder()));
                     case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "spinRef"    -> Comparator.comparing(
+                                            (Boat b2) -> { BoatReferenceFactors brf2 = cache.referenceFactors().get(b2.id()); return (brf2 != null && brf2.spin() != null) ? brf2.spin().value() : null; },
+                                            Comparator.nullsLast(Comparator.<Double>naturalOrder()));
                     default           -> Comparator.comparing(Boat::id,         Comparator.nullsLast(Comparator.naturalOrder()));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
             }
 
-            writeJson(resp, paginate(all, page, size));
+            List<Map<String, Object>> rows = all.stream().map(b ->
+            {
+                boolean excl = store.isBoatExcluded(b.id())
+                    || (b.designId() != null && store.isDesignExcluded(b.designId()));
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id",         b.id());
+                row.put("sailNumber", b.sailNumber());
+                row.put("name",       b.name());
+                row.put("designId",   b.designId());
+                row.put("clubId",     b.clubId());
+                BoatReferenceFactors brf = cache.referenceFactors().get(b.id());
+                Factor spin = (brf != null) ? brf.spin() : null;
+                row.put("spinRef",    spin != null ? factorMap(spin) : null);
+                row.put("excluded",   excl);
+                return row;
+            }).collect(Collectors.toList());
+
+            writeJson(resp, paginate(rows, page, size));
         }
         else
         {
@@ -202,10 +263,10 @@ public class AdminApiServlet extends HttpServlet
         BoatReferenceFactors factors = cache.referenceFactors().get(id);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("boatId", id);
-        result.put("currentYear", LocalDate.now().getYear());
-        result.put("spin",      factors != null ? factorMap(factors.spin())      : null);
-        result.put("nonSpin",   factors != null ? factorMap(factors.nonSpin())   : null);
-        result.put("twoHanded", factors != null ? factorMap(factors.twoHanded()) : null);
+        result.put("currentYear", cache.targetYear());
+        result.put("spin",      factors != null ? factorMap(factors.spin(),      factors.spinGeneration())      : null);
+        result.put("nonSpin",   factors != null ? factorMap(factors.nonSpin(),   factors.nonSpinGeneration())   : null);
+        result.put("twoHanded", factors != null ? factorMap(factors.twoHanded(), factors.twoHandedGeneration()) : null);
         writeJson(resp, result);
     }
 
@@ -263,6 +324,7 @@ public class AdminApiServlet extends HttpServlet
                     IdGenerator.normaliseSailNumber(mb.sailNumber()),
                     IdGenerator.normaliseSailNumber(keepBoat.sailNumber()),
                     keepBoat.name(),
+                    keepBoat.designId(),
                     names
                 ));
             }
@@ -348,6 +410,8 @@ public class AdminApiServlet extends HttpServlet
             store.save();
 
             AliasSeedLoader.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
+            for (String mergeId : mergeIds)
+                AliasSeedLoader.updateBoatAliasKeysForDesignMerge(store.configDir(), mergeId, keepId);
             store.reloadAliasSeed();
 
             writeJson(resp, Map.of("ok", true,
@@ -377,6 +441,17 @@ public class AdminApiServlet extends HttpServlet
         return m;
     }
 
+    private Map<String, Object> factorMap(Factor f, int generation)
+    {
+        if (f == null)
+            return null;
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("value",      f.value());
+        m.put("weight",     f.weight());
+        m.put("generation", generation);
+        return m;
+    }
+
     private void handleDesigns(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (sub.isEmpty() || "/".equals(sub))
@@ -396,15 +471,41 @@ public class AdminApiServlet extends HttpServlet
                     || d.canonicalName().toLowerCase().contains(lower))
                 .collect(Collectors.toList());
 
+            // Design-level spin factors from AnalysisCache (cert-based + race-propagated boats only)
+            Map<String, Factor> designSpinRef = new LinkedHashMap<>();
+            for (Map.Entry<String, Factor[]> e : cache.designFactors().entrySet())
+            {
+                Factor spin = e.getValue()[0];  // [0] = spin
+                if (spin != null)
+                    designSpinRef.put(e.getKey(), spin);
+            }
+
             if (sort != null && !sort.isBlank())
             {
-                Comparator<Design> cmp = "canonicalName".equals(sort)
-                    ? Comparator.comparing(Design::canonicalName, Comparator.nullsLast(Comparator.naturalOrder()))
-                    : Comparator.comparing(Design::id,            Comparator.nullsLast(Comparator.naturalOrder()));
+                Comparator<Design> cmp = switch (sort)
+                {
+                    case "canonicalName" -> Comparator.comparing(Design::canonicalName, Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "spinRef"       -> Comparator.comparing(
+                                               (Design d2) -> { Factor f = designSpinRef.get(d2.id()); return f != null ? f.value() : null; },
+                                               Comparator.nullsLast(Comparator.<Double>naturalOrder()));
+                    default              -> Comparator.comparing(Design::id, Comparator.nullsLast(Comparator.naturalOrder()));
+                };
                 all.sort(asc ? cmp : cmp.reversed());
             }
 
-            writeJson(resp, paginate(all, page, size));
+            List<Map<String, Object>> rows = all.stream().map(d ->
+            {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id",            d.id());
+                row.put("canonicalName", d.canonicalName());
+                row.put("makerIds",      d.makerIds());
+                Factor dspin = designSpinRef.get(d.id());
+                row.put("spinRef",       dspin != null ? factorMap(dspin) : null);
+                row.put("excluded",      store.isDesignExcluded(d.id()));
+                return row;
+            }).collect(Collectors.toList());
+
+            writeJson(resp, paginate(rows, page, size));
         }
         else
         {
@@ -430,13 +531,15 @@ public class AdminApiServlet extends HttpServlet
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
+            String filterBoatId = req.getParameter("boatId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             // Enrich all filtered rows — needed to allow sort by seriesName or finishers
             List<Map<String, Object>> enriched = store.races().values().stream()
+                .filter(r -> filterBoatId == null || raceContainsBoat(r, filterBoatId))
                 .filter(r -> lower == null
                     || r.id().toLowerCase().contains(lower)
                     || (r.clubId() != null && r.clubId().toLowerCase().contains(lower)))
-                .filter(r -> showExcluded || !isRaceAllExcluded(r))
+                .filter(r -> showExcluded || (!store.isRaceExcluded(r.id()) && !isRaceAllExcluded(r)))
                 .map(this::raceRow)
                 .collect(Collectors.toList());
 
@@ -456,6 +559,15 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJson(resp, race);
         }
+    }
+
+    private static boolean raceContainsBoat(Race r, String boatId)
+    {
+        if (r.divisions() == null) return false;
+        for (var div : r.divisions())
+            for (var f : div.finishers())
+                if (boatId.equals(f.boatId())) return true;
+        return false;
     }
 
     private boolean isRaceAllExcluded(Race r)
@@ -513,13 +625,14 @@ public class AdminApiServlet extends HttpServlet
         row.put("seriesName", seriesName);
         row.put("name", r.name());
         row.put("finishers", finishers);
+        row.put("excluded", store.isRaceExcluded(r.id()) || isRaceAllExcluded(r));
         return row;
     }
 
     private void handleImporters(HttpServletResponse resp) throws IOException
     {
         ImporterService.ImportStatus status = importerService.currentStatus();
-        Map<String, Integer> lastIds = importerService.lastSailSysIds();
+        Integer nextSailSysRaceId = importerService.nextSailSysRaceId();
         List<Map<String, Object>> entries = new ArrayList<>();
         for (ImporterService.ImporterEntry e : importerService.importerEntries())
         {
@@ -531,7 +644,7 @@ public class AdminApiServlet extends HttpServlet
             row.put("mode", e.mode());
             row.put("includeInSchedule", e.includeInSchedule());
             row.put("status", isRunning ? "running" : "idle");
-            row.put("lastId", lastIds.get(e.name() + "-" + e.mode()));
+            row.put("nextStartId", "sailsys-races".equals(e.name()) ? nextSailSysRaceId : null);
             entries.add(row);
         }
         Map<String, Object> result = new LinkedHashMap<>();
@@ -556,6 +669,7 @@ public class AdminApiServlet extends HttpServlet
             m.put("name", status.importerName());
             m.put("mode", status.mode());
             m.put("startedAt", status.startedAt().toString());
+            m.put("scheduledRun", importerService.isScheduledRunActive());
             int sailSysId = importerService.currentSailSysId();
             if (sailSysId > 0)
                 m.put("currentId", sailSysId);

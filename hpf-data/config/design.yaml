@@ -72,3 +72,12 @@ excluded:
   - Sharpie
   - Blazer
   - Arrow
+
+# Boat-to-design overrides: assign a specific designId to boats identified by sail number + name.
+# Use this for boats that import without a design (e.g. PHS-only boats) or with the wrong design.
+# designId must match an existing normalised design ID in the store (e.g. from ORC import).
+# boatDesignOverrides:
+#   - designId: "farr40"
+#     boats:
+#       - sailNumber: "AUS1234"
+#         name: "Boat Name"

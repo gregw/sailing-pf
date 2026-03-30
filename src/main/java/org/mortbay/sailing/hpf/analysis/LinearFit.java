@@ -35,6 +35,24 @@ public record LinearFit(
     }
 
     /**
+     * Computes the inverse fit: if this fit models y = slope·x + intercept (e.g. spin from NS),
+     * returns a new LinearFit modelling x from y (NS from spin).
+     * <p>
+     * Prediction uses the simple algebraic inverse: x = (y − intercept) / slope.
+     * The weight statistics (se, xMean, ssx) are derived from OLS theory so that
+     * {@link #weight(double)} returns a sensible confidence value for the inverse prediction.
+     */
+    public LinearFit inverse()
+    {
+        double slopeInv     = 1.0 / slope;
+        double interceptInv = -intercept / slope;
+        double seInv        = se * Math.sqrt(r2) / Math.abs(slope);  // se_inv = se * √R² / |slope|
+        double xMeanInv     = slope * xMean + intercept;              // mean of original y values
+        double ssxInv       = slope * slope * ssx / r2;               // SSyy of forward fit
+        return new LinearFit(slopeInv, interceptInv, r2, seInv, n, xMeanInv, ssxInv);
+    }
+
+    /**
      * Confidence weight for the prediction at x₀, combining:
      * <ul>
      *   <li>Global: R² — low if the regression line is a poor overall fit</li>

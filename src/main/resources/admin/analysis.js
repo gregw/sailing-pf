@@ -69,7 +69,16 @@ function axisLabels(id) {
         if (v === 'twohanded') return ' 2H';
         return '';
     }
-    let m = id.match(/^([a-z]+)-(\d{4})-to-(\d{4})$/);
+    // NS/2H year transition: {sys}-{variant}-{yearA}-to-{yearB}
+    let m = id.match(/^([a-z]+)-(nonspin|twohanded)-(\d{4})-to-(\d{4})$/);
+    if (m) {
+        const sys = m[1].toUpperCase();
+        const v   = m[2] === 'nonspin' ? ' NS' : ' 2H';
+        return { x: `${m[3]} ${sys}${v}`, y: `${m[4]} ${sys}${v}` };
+    }
+
+    // Spin year transition: {sys}-{yearA}-to-{yearB}
+    m = id.match(/^([a-z]+)-(\d{4})-to-(\d{4})$/);
     if (m) {
         const sys = m[1].toUpperCase();
         return { x: `${m[2]} ${sys}`, y: `${m[3]} ${sys}` };
@@ -189,4 +198,399 @@ async function loadConversionTable() {
     }
 }
 
+async function loadNetwork() {
+    const data = await fetchJson('/api/analyse/network');
+    if (!data || !data.nodes) return;
+    renderNetworkGraph(data);
+}
+
+function renderNetworkGraph(data) {
+    const nodes = data.nodes || [];
+    const edges = data.edges || [];
+
+    if (!nodes.length && !edges.length) {
+        Plotly.purge('network-plot');
+        return;
+    }
+
+    // edgeIds[i] = analysisId for trace i, or null if not a clickable edge trace.
+    // Built in lock-step with traces[] below.
+    const edgeIds = [];
+
+    const targetYear = data.targetYear ||
+        Math.max(...nodes.filter(n => n.system !== 'ALL').map(n => n.year),
+                 new Date().getFullYear());
+    const certAgeYears = data.certAgeYears || 5;
+    const yearStart    = targetYear - certAgeYears + 1;
+    // Only show targetYear+1 column if actual data nodes exist there
+    const hasForwardYear = nodes.some(n => n.system !== 'ALL' && n.year === targetYear + 1);
+    const yearEnd      = hasForwardYear ? targetYear + 1 : targetYear;
+    const displayYears = [];
+    for (let y = yearStart; y <= yearEnd; y++) displayYears.push(y);
+
+    // Layout constants
+    const SYS_SPACING  = 2.5;   // vertical gap ORC/AMS → IRC centre within a grid
+    const GRID_SPACING = 10.0;  // distance between variant-grid centres
+    const TAB_PAD      = 0.8;   // padding above/below ORC/AMS rows within each tab
+    const AMS_ORC_BOW  = 0.7;   // x-bow for quadratic-bezier AMS→ORC curve
+    const TEXT_DY      = 0.22;  // vertical offset for two text lines inside node dots
+
+    // Tab boundaries — each variant section is a rectangular panel
+    function tabTop(nonSpin, twoHanded)    { return gridCenterY(nonSpin, twoHanded) + SYS_SPACING + TAB_PAD; }
+    function tabBottom(nonSpin, twoHanded) { return gridCenterY(nonSpin, twoHanded) - SYS_SPACING - TAB_PAD; }
+
+    function gridCenterY(nonSpin, twoHanded) {
+        if (nonSpin)   return  GRID_SPACING;   // non-spin top
+        if (twoHanded) return -GRID_SPACING;   // two-handed bottom
+        return 0;                               // spin middle
+    }
+    function sysOffsetY(system) {
+        if (system === 'ORC') return  SYS_SPACING;
+        if (system === 'AMS') return -SYS_SPACING;
+        return 0;  // IRC in the middle
+    }
+
+    const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+    const posMap = {};
+    for (const n of nodes) {
+        if (n.system === 'ALL') continue;
+        if (n.year < yearStart || n.year > yearEnd) continue;
+        posMap[n.id] = { x: n.year, y: gridCenterY(n.nonSpin, n.twoHanded) + sysOffsetY(n.system) };
+    }
+
+    const sysEdges = [];
+    const allEdges = [];
+    const weakSysEdges = [];
+    const weakAllEdges = [];
+    for (const e of edges) {
+        const fn = nodeById[e.fromId];
+        const tn = nodeById[e.toId];
+        if (!fn || !tn) continue;
+        if (fn.system === 'ALL' || tn.system === 'ALL') {
+            if (fn.year >= yearStart && fn.year <= yearEnd) {
+                if (e.weak) weakAllEdges.push({ e, fn, tn });
+                else allEdges.push({ e, fn, tn });
+            }
+        } else if (posMap[e.fromId] && posMap[e.toId]) {
+            if (e.weak) weakSysEdges.push({ e, fn, tn });
+            else sysEdges.push({ e, fn, tn });
+        }
+    }
+
+    // Nodes that appear in at least one network edge (not orphans)
+    const connectedIds = new Set(sysEdges.flatMap(({ e }) => [e.fromId, e.toId]));
+
+    const traces  = [];
+    const labelXs = [], labelYs = [], labelTexts = [];
+
+    // Interpolate a straight line into n+1 evenly-spaced points so Plotly's
+    // "closest point" hover detection fires on intermediate points, not just
+    // endpoints that coincide with node markers.
+    function densify(x1, y1, x2, y2, n) {
+        const xs = [], ys = [];
+        for (let i = 0; i <= n; i++) {
+            const t = i / n;
+            xs.push(x1 + (x2 - x1) * t);
+            ys.push(y1 + (y2 - y1) * t);
+        }
+        return { xs, ys };
+    }
+
+    // --- Within-grid system edges ---
+    // Drawn from node centre to node centre; filled node markers rendered on top visually clip
+    // the line endpoints, giving the appearance that edges start/end at the node boundary.
+    for (const { e, fn, tn } of sysEdges) {
+        const from  = posMap[e.fromId];
+        const to    = posMap[e.toId];
+        const alpha = Math.max(0.2, e.medianWeight).toFixed(2);
+        const curved = fn.system === 'AMS' && tn.system === 'ORC' && fn.year === tn.year;
+
+        let xs, ys;
+        if (curved) {
+            // Quadratic bezier bowing left.
+            // x(t) = year − 2t(1−t)·bow  (P0.x = P2.x = year)
+            // y(t) = from.y + (to.y − from.y)·t  (linear, because P1.y = midY exactly)
+            const nPts = 24;
+            xs = []; ys = [];
+            for (let i = 0; i <= nPts; i++) {
+                const t = i / nPts;
+                xs.push(from.x - 2 * t * (1 - t) * AMS_ORC_BOW);
+                ys.push(from.y + (to.y - from.y) * t);
+            }
+            // Label at leftmost point (t=0.5), shifted above the IRC mid-line
+            const midY = (from.y + to.y) / 2;
+            labelXs.push(from.x - 0.5 * AMS_ORC_BOW);
+            labelYs.push(midY + SYS_SPACING * 0.45);
+            labelTexts.push(e.medianWeight.toFixed(2));
+        } else if (fn.year === tn.year) {
+            // Same-year vertical edge (ORC→IRC or AMS→IRC)
+            ({ xs, ys } = densify(from.x, from.y, to.x, to.y, 20));
+            // Label ~1 em (≈0.12 data units) to the side of the line
+            labelXs.push(from.x + (fn.system === 'AMS' ? -0.12 : 0.12));
+            labelYs.push((from.y + to.y) / 2);
+            labelTexts.push(e.medianWeight.toFixed(2));
+        } else {
+            // Year-transition horizontal edge
+            ({ xs, ys } = densify(from.x, from.y, to.x, to.y, 20));
+            labelXs.push((from.x + to.x) / 2);
+            labelYs.push(from.y + 0.4);
+            labelTexts.push(e.medianWeight.toFixed(2));
+        }
+
+        traces.push({
+            x: xs, y: ys, mode: 'lines', type: 'scatter',
+            showlegend: false, hoverinfo: 'text',
+            hovertext: `${fn.system} ${fn.year} → ${tn.system} ${tn.year}<br>` +
+                       `R²=${e.r2.toFixed(3)}  n=${e.n}  weight=${e.medianWeight.toFixed(2)}`,
+            line: { color: `rgba(100,100,100,${alpha})`, width: 3, shape: 'linear' }
+        });
+        edgeIds.push(e.analysisId || null);
+    }
+
+    // --- Weak within-grid system edges: dashed, low opacity, still clickable ---
+    for (const { e, fn, tn } of weakSysEdges) {
+        const from  = posMap[e.fromId];
+        const to    = posMap[e.toId];
+        const curved = fn.system === 'AMS' && tn.system === 'ORC' && fn.year === tn.year;
+
+        let xs, ys;
+        if (curved) {
+            const nPts = 24;
+            xs = []; ys = [];
+            for (let i = 0; i <= nPts; i++) {
+                const t = i / nPts;
+                xs.push(from.x - 2 * t * (1 - t) * AMS_ORC_BOW);
+                ys.push(from.y + (to.y - from.y) * t);
+            }
+        } else {
+            ({ xs, ys } = densify(from.x, from.y, to.x, to.y, 20));
+        }
+
+        const nLabel = e.n > 0 ? `n=${e.n}` : 'no data';
+        traces.push({
+            x: xs, y: ys, mode: 'lines', type: 'scatter',
+            showlegend: false, hoverinfo: 'text',
+            hovertext: `${fn.system} ${fn.year} → ${tn.system} ${tn.year}<br>` +
+                       `${nLabel}  (weak — click to inspect)`,
+            line: { color: 'rgba(180,180,180,0.4)', width: 2, dash: 'dot' }
+        });
+        edgeIds.push(e.analysisId || null);
+    }
+
+    // --- Between-tab ALL edges: short connector in the gap between tab panels ---
+    for (const { e, fn, tn } of allEdges) {
+        const year    = fn.year;
+        const sign    = Math.sign(gridCenterY(tn.nonSpin, tn.twoHanded) - gridCenterY(fn.nonSpin, fn.twoHanded));
+        const lineFromY = sign > 0 ? tabTop(fn.nonSpin, fn.twoHanded) : tabBottom(fn.nonSpin, fn.twoHanded);
+        const lineToY   = sign > 0 ? tabBottom(tn.nonSpin, tn.twoHanded) : tabTop(tn.nonSpin, tn.twoHanded);
+        const alpha     = Math.max(0.2, e.medianWeight).toFixed(2);
+        const label     = fn.nonSpin ? 'NS→Spin' : '2H→Spin';
+
+        const { xs: allXs, ys: allYs } = densify(year, lineFromY, year, lineToY, 20);
+        traces.push({
+            x: allXs, y: allYs, mode: 'lines', type: 'scatter',
+            showlegend: false, hoverinfo: 'text',
+            hovertext: `${label} ${year}<br>` +
+                       `R²=${e.r2.toFixed(3)}  n=${e.n}  weight=${e.medianWeight.toFixed(2)}`,
+            line: { color: `rgba(110,60,180,${alpha})`, width: 4, dash: 'dot' }
+        });
+        edgeIds.push(e.analysisId || null);
+        labelXs.push(year + 0.12);
+        labelYs.push((lineFromY + lineToY) / 2);
+        labelTexts.push(e.medianWeight.toFixed(2));
+    }
+
+    // --- Weak between-tab ALL edges: dashed, low opacity ---
+    for (const { e, fn, tn } of weakAllEdges) {
+        const year    = fn.year;
+        const sign    = Math.sign(gridCenterY(tn.nonSpin, tn.twoHanded) - gridCenterY(fn.nonSpin, fn.twoHanded));
+        const lineFromY = sign > 0 ? tabTop(fn.nonSpin, fn.twoHanded) : tabBottom(fn.nonSpin, fn.twoHanded);
+        const lineToY   = sign > 0 ? tabBottom(tn.nonSpin, tn.twoHanded) : tabTop(tn.nonSpin, tn.twoHanded);
+        const label     = fn.nonSpin ? 'NS→Spin' : '2H→Spin';
+
+        const { xs: allXs, ys: allYs } = densify(year, lineFromY, year, lineToY, 20);
+        const nLabel = e.n > 0 ? `n=${e.n}` : 'no data';
+        traces.push({
+            x: allXs, y: allYs, mode: 'lines', type: 'scatter',
+            showlegend: false, hoverinfo: 'text',
+            hovertext: `${label} ${year}<br>${nLabel}  (weak — click to inspect)`,
+            line: { color: 'rgba(180,140,220,0.3)', width: 2, dash: 'dot' }
+        });
+        edgeIds.push(e.analysisId || null);
+    }
+
+    // Edge weight labels
+    traces.push({
+        x: labelXs, y: labelYs, text: labelTexts,
+        mode: 'text', type: 'scatter',
+        showlegend: false, hoverinfo: 'skip',
+        textfont: { size: 18, color: '#555' }
+    });
+    edgeIds.push(null);
+
+    // --- Node markers (orphans first so connected nodes render on top) ---
+    const NODE_COLORS = { IRC: '#3a7ec4', ORC: '#e67e22', AMS: '#27ae60' };
+    const displayNodes = nodes.filter(n =>
+        n.system !== 'ALL' && n.year >= yearStart && n.year <= yearEnd);
+    const orphanNodes    = displayNodes.filter(n => !connectedIds.has(n.id));
+    const connectedNodes = displayNodes.filter(n =>  connectedIds.has(n.id));
+
+    // Orphan: empty circle (outline only, same size)
+    if (orphanNodes.length) {
+        traces.push({
+            x: orphanNodes.map(n => posMap[n.id]?.x),
+            y: orphanNodes.map(n => posMap[n.id]?.y),
+            mode: 'markers', type: 'scatter',
+            showlegend: false, hoverinfo: 'text',
+            hovertext: orphanNodes.map(n => `${n.label}  (${n.certCount ?? 0} boats — no network edge)`),
+            marker: {
+                size: 40, color: 'rgba(255,255,255,0)',
+                line: { color: orphanNodes.map(n => NODE_COLORS[n.system] || '#555'), width: 3 }
+            }
+        });
+        edgeIds.push(null);
+    }
+
+    // Connected: filled circle
+    if (connectedNodes.length) {
+        traces.push({
+            x: connectedNodes.map(n => posMap[n.id]?.x),
+            y: connectedNodes.map(n => posMap[n.id]?.y),
+            mode: 'markers', type: 'scatter',
+            showlegend: false, hoverinfo: 'text',
+            hovertext: connectedNodes.map(n => `${n.label}  (${n.certCount ?? 0} boats)`),
+            marker: {
+                size: 40,
+                color: connectedNodes.map(n => NODE_COLORS[n.system] || '#555'),
+                line: { color: '#fff', width: 2 }
+            }
+        });
+        edgeIds.push(null);
+    }
+
+    // System name text (upper half of dot) and cert count (lower half), rendered last so they
+    // sit on top of the marker fills.  Connected nodes use white text; orphans use their system colour.
+    function nodeTextTraces(nlist, color) {
+        traces.push({
+            x: nlist.map(n => posMap[n.id]?.x),
+            y: nlist.map(n => (posMap[n.id]?.y ?? 0) + TEXT_DY),
+            text: nlist.map(n => n.system),
+            mode: 'text', type: 'scatter', showlegend: false, hoverinfo: 'skip',
+            textposition: 'middle center', textfont: { size: 14, color }
+        });
+        edgeIds.push(null);
+        traces.push({
+            x: nlist.map(n => posMap[n.id]?.x),
+            y: nlist.map(n => (posMap[n.id]?.y ?? 0) - TEXT_DY),
+            text: nlist.map(n => String(n.certCount ?? 0)),
+            mode: 'text', type: 'scatter', showlegend: false, hoverinfo: 'skip',
+            textposition: 'middle center', textfont: { size: 14, color }
+        });
+        edgeIds.push(null);
+    }
+    if (connectedNodes.length) nodeTextTraces(connectedNodes, '#fff');
+    if (orphanNodes.length)
+        nodeTextTraces(orphanNodes, orphanNodes.map(n => NODE_COLORS[n.system] || '#555'));
+
+    // Year labels above the top tab
+    const yearAnnotations = [];
+    const topLabelY = tabTop(true, false) + 0.3;   // just above Non-Spin tab
+    for (const year of displayYears) {
+        if (year === targetYear) continue;
+        yearAnnotations.push({
+            x: year, y: topLabelY, text: String(year), showarrow: false,
+            font: { size: 26, color: '#888' }, xref: 'x', yref: 'y',
+            xanchor: 'center', yanchor: 'bottom'
+        });
+    }
+
+    // Tab panel rectangles and labels
+    const TAB_FILL   = 'rgba(0,0,0,0.025)';
+    const TAB_BORDER = { color: '#bbb', width: 1 };
+    const tabDefs = [
+        { label: 'Non-Spinnaker', ns: true,  th: false },
+        { label: 'Spinnaker',     ns: false, th: false },
+        { label: '2-Handed',      ns: false, th: true  },
+    ];
+    const tabShapes = tabDefs.map(t => ({
+        type: 'rect', xref: 'paper', yref: 'y',
+        x0: 0, x1: 1,
+        y0: tabBottom(t.ns, t.th), y1: tabTop(t.ns, t.th),
+        line: TAB_BORDER, fillcolor: TAB_FILL
+    }));
+    const tabLabels = tabDefs.map(t => ({
+        x: 0, y: gridCenterY(t.ns, t.th),
+        text: `<b>${t.label}</b>`, showarrow: false,
+        font: { size: 14, color: '#666' },
+        xref: 'paper', yref: 'y', xanchor: 'right', yanchor: 'middle',
+        xshift: -8
+    }));
+
+    // Target year highlight — vertical stripe across all tabs
+    const targetYearShape = {
+        type: 'rect', xref: 'x', yref: 'y',
+        x0: targetYear - 0.45, x1: targetYear + 0.45,
+        y0: tabBottom(false, true) - 0.2,
+        y1: tabTop(true, false) + 0.2,
+        line: { color: '#c0392b', width: 2 },
+        fillcolor: 'rgba(192,57,43,0.04)'
+    };
+
+    const layout = {
+        font: { size: 14 },
+        xaxis: {
+            title: 'Certificate year',
+            tickvals: displayYears, ticktext: displayYears.map(String),
+            showgrid: true, gridcolor: '#eee', zeroline: false,
+            range: [yearStart - 0.7, yearEnd + 0.5]
+        },
+        yaxis: {
+            showticklabels: false, showgrid: false, zeroline: false,
+            range: [tabBottom(false, true) - 1.5, tabTop(true, false) + 2.5]
+        },
+        shapes: [...tabShapes, targetYearShape],
+        annotations: [
+            ...yearAnnotations,
+            ...tabLabels,
+            { x: targetYear, y: tabTop(true, false) + 0.2,
+              text: 'target year', showarrow: false,
+              font: { size: 13, color: '#c0392b' },
+              xref: 'x', yref: 'y', xanchor: 'center', yanchor: 'bottom' }
+        ],
+        margin: { t: 20, b: 50, l: 110, r: 20 },
+        hovermode: 'closest'
+    };
+
+    Plotly.newPlot('network-plot', traces, layout, { responsive: true });
+
+    const plotDiv = document.getElementById('network-plot');
+    plotDiv.on('plotly_hover', function(eventData) {
+        const pt = eventData.points[0];
+        const id = edgeIds[pt.curveNumber];
+        plotDiv.style.cursor = id ? 'pointer' : '';
+        if (id) {
+            const sel = document.getElementById('analysis-select');
+            if (sel.value !== id) {
+                sel.value = id;
+                onAnalysisSelect();
+            }
+        }
+    });
+    plotDiv.on('plotly_unhover', function() {
+        plotDiv.style.cursor = '';
+    });
+    plotDiv.on('plotly_click', function(eventData) {
+        const pt = eventData.points[0];
+        const id = edgeIds[pt.curveNumber];
+        if (id) {
+            const sel = document.getElementById('analysis-select');
+            sel.value = id;
+            onAnalysisSelect();
+            loadAnalysis();
+            document.querySelector('.analysis-controls').scrollIntoView({ behavior: 'smooth' });
+        }
+    });
+}
+
 loadAnalysisList();
+loadNetwork();

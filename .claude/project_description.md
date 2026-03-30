@@ -8,25 +8,36 @@ The goal is to build an online database of elapsed times for all boats racing in
 
 ## Data Collection
 
+Six importers collect data from four source systems:
+
 ### SailSys
-- JSON data downloads are available from a single SailSys website.
-- A SailSys importer will be built to consume these JSON feeds.
+- `SailSysBoatImporter` — imports boat records and IRC certificates from the SailSys boat API. Supports local file mode (pre-downloaded JSON) and HTTP API mode with configurable throttling and caching.
+- `SailSysRaceImporter` — imports races, divisions, and finishers from the SailSys race API. Scans from a configurable start ID; supports local file mode and HTTP API mode. Infers certificates from the `handicapCreatedFrom` field in race results, propagating the `nonSpinnaker` flag from race entries.
 
 ### TopYacht
-- TopYacht results are published across many individual club websites.
-- A manually curated list of club result page URLs will be maintained as input.
-- A web scraper will be built to extract results from these HTML pages.
-- Discovery of new TopYacht result pages is a project activity (searching the web for club result pages to add to the list).
+- `TopYachtImporter` — scrapes TopYacht HTML result pages from a curated list of club URLs (maintained in `clubs.yaml`). Parses group captions to detect handicap system and variant flags (e.g. "Div 1 ORC NS WL results" → system=ORC, nonSpinnaker=true, windwardLeeward=true). Merges multi-page results (same race, different handicap systems) into a single race. Discovery of new TopYacht result pages is an ongoing activity.
+
+### ORC Certificates
+- `OrcImporter` — fetches the ORC Australian certificate XML feed from `data.orc.org`. For each certificate, fetches the detail page to extract GPH (converted to TCF via `600/GPH`). Detects non-spinnaker (NS), double-handed (DH), and club certificate variants from `CertType` and `FamilyName` fields.
+
+### AMS Certificates
+- `AmsImporter` — scrapes AMS certificate listings from raceyachts.org. Includes non-spinnaker and two-handed variants.
+
+### BWPS (CYCA)
+- `BwpsImporter` — imports BWPS race results from the Cruising Yacht Club of Australia. IRC-based races providing boat identity, elapsed times, and IRC handicaps used for scoring.
 
 ### Data Included
-- Boat entry details (sail number, name, design, club, owner/representative)
+- Boat entry details (sail number, name, design, club)
 - Elapsed times per race
-- Measurement-based handicap certificates (IRC, ORC/ORCi/ORCclub, AMS) where published
+- Measurement-based handicap certificates (IRC, ORC, AMS) with variant flags (nonSpinnaker, twoHanded, windwardLeeward, club)
+- Handicap values used for scoring in measurement-system races (IRC, ORC, AMS AHC values)
 
 ### Data Excluded
-- PHS handicap numbers assigned to boats
+- PHS handicap numbers assigned to boats (considered proprietary)
 - Computed PHS race results (corrected times, positions derived from PHS)
-- Note: elapsed times from PHS races are valid and will be used
+- Skipper/owner names (not persisted)
+- TopYacht `boid` internal identifiers (not persisted)
+- Note: elapsed times from PHS races are valid and are used
 
 ---
 
@@ -45,20 +56,26 @@ Boat identity is complex and must be handled carefully:
 
 Statistical analysis is anchored on "standard candles" — boats for which performance can be independently estimated from measurement-based handicaps.
 
-### Candle Quality Tiers
-1. **Best candle**: A boat with an IRC/ORC/AMS handicap *used in the race being analysed*, with a history of racing against other measurement-handicapped boats, ideally of the same design.
-2. **Good candle**: A boat with an IRC/ORC/AMS certificate used for the race.
-3. **OK candle**: A boat holding an IRC/ORC/AMS certificate, even if racing under PHS in a given race (elapsed time used, PHS number ignored).
-4. **Weak candle**: A boat of a design for which many other boats hold IRC/ORC/AMS certificates, allowing the design's performance envelope to be characterised even if this specific boat lacks a certificate.
+### Reference Factor Computation (Implemented)
+
+Reference factors are computed by `ReferenceNetworkBuilder` via DFS traversal of a `ConversionGraph` — a directed graph of empirical linear fits between handicap system×year×variant nodes, built by `HandicapAnalyser` from paired observations across boats.
+
+Certificate base weight is 1.0, with multiplicative discounts for certificate quality:
+
+| Modifier | Weight | Applies when |
+|---|---|---|
+| Club certificate | configurable (default 0.9) | ORC club certs |
+| Windward/leeward cert | 0.8× | ORC WL course-specific certs |
+| Design-level fallback | 0.85× | No individual cert; using design aggregate |
+| Race propagation | 0.7× | Derived indirectly from race co-participation |
+
+Each certificate is converted to a target IRC-equivalent TCF for the current year via the shortest weighted path through the conversion graph. Factors degrade through each hop. Three separate factors are computed per boat: spinnaker, non-spinnaker, and two-handed.
 
 ### Candle Propagation
-- Races without direct candles may still include boats that have raced elsewhere against candles.
-- Boats of candle designs further extend the network.
-- The goal is to build a web of relationships connecting all boats — however indirectly — back to the measurement-handicap anchor.
-
-### Single Number Handicap
-- Each measurement certificate will be reduced to a single handicap number for analysis purposes (e.g. IRC TCC, ORC GPH, AMS value).
-- The candle quality score will be stored alongside the handicap value.
+- `HandicapAnalyser` mines all boats with certificates in multiple systems or across years to produce paired observations
+- `ConversionGraph` builds a directed graph from these pairs, with `LinearFit` edges (minimum R² = 0.75)
+- `ReferenceNetworkBuilder` performs DFS from each boat's certificates through the graph to reach the target IRC node
+- Design-level aggregation and race co-participation propagation extend coverage iteratively (up to 20 iterations)
 
 ---
 
@@ -113,22 +130,41 @@ To compare races within a series:
 
 ## Website & Visualisation
 
-A website will present the data and analysis graphically. Example views include:
+An admin webapp is operational at `http://localhost:8080/` with three main sections:
 
-- **Series view**: All races in a series plotted with back-calculated handicaps for each boat in each race.
-- **Design comparison**: Select two or more designs and plot their relative performance across all races where they have competed.
-- **Boat comparison**: Select two or more specific boats and plot all races in which they have competed against each other.
-- Other views to be defined as the project evolves.
+### Data Browser (implemented)
+- **Boats**: paginated list with search/filter, drill-down to certificates and race history
+- **Designs**: paginated list with boat counts and design-level factors
+- **Races**: paginated list with date/club filtering, drill-down to divisions and finishers
+- **Manual merge**: admin UI for merging duplicate boats/designs, with alias YAML updates
+
+### Analysis Charts (implemented)
+- **Comparison scatter plots**: Plotly.js charts showing paired observations between handicap systems
+- **Conversion graph visualisation**: dropdown selection of system×year×variant comparisons
+- **Reference factor inspection**: per-boat factor details with generation tracking
+
+### Import Management (implemented)
+- **Importer controls**: run individual importers (SailSys, TopYacht, ORC, AMS, BWPS, analysis, reference-factors, build-indexes)
+- **Scheduling**: configurable days and time for automatic import runs
+- **Progress monitoring**: live status of running imports
+
+### Future Views (not yet implemented — requires Phase 2)
+- **Series view**: All races in a series plotted with back-calculated handicaps for each boat in each race
+- **Boat comparison**: Select two or more specific boats and plot all races in which they have competed
+- **Design comparison**: Select two or more designs and plot their relative performance
 
 ---
 
 ## Technology
 
-- **Developer background**: Strong Java, competent JavaScript, historical C/C++. Open to new languages and infrastructure.
-- **Tech stack**: Not yet determined; to be selected based on suitability.
-- **Database**: To be determined (likely a relational database given the structured nature of the data).
-- **Scraping**: Custom scraper for TopYacht HTML pages, driven by a curated list of URLs.
-- **Data ingestion**: JSON importer for SailSys data.
+- **Language:** Java 21
+- **Server:** Jetty 12.1 embedded (plain Jakarta servlets — no Spring, no Spring Boot)
+- **Data store:** Jackson JSON/YAML files (file-per-entity persistence under `hpf-data/`)
+- **HTTP client:** Jetty HttpClient (for API calls and web scraping)
+- **HTML parsing:** JSoup (TopYacht HTML scraping)
+- **Fuzzy matching:** Apache Commons Text (Jaro-Winkler similarity for boat/design name matching)
+- **Frontend:** Plain JavaScript, Plotly.js — no React, no build pipeline
+- **Testing:** JUnit 5
 
 ---
 

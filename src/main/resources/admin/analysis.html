@@ -15,7 +15,17 @@
     <a href="analysis.html">Analysis</a>
   </nav>
 
+  <div id="import-banner" class="import-warning-banner" style="display:none">
+    Data import is in progress — results may be incomplete or stale
+  </div>
+
   <h1>Handicap Analysis</h1>
+
+  <section>
+    <h2>Handicap Conversion Weights</h2>
+    <p style="font-size:0.85rem;color:#666;margin:0 0 0.5rem;">Edge labels show the median conversion weight between handicap systems or years. Darker lines indicate a stronger relationship (higher R²). Hover over any edge for full details.</p>
+    <div id="network-plot" style="width:100%; height:1000px;"></div>
+  </section>
 
   <div class="analysis-controls">
     <label>Comparison:

@@ -1,15 +1,61 @@
+function renderJsonTree(val, depth) {
+    if (val === null) return '<span class="jt-null">null</span>';
+    const t = typeof val;
+    if (t === 'boolean') return `<span class="jt-bool">${val}</span>`;
+    if (t === 'number')  return `<span class="jt-num">${val}</span>`;
+    if (t === 'string')  return `<span class="jt-str">"${esc(val)}"</span>`;
+    if (Array.isArray(val)) {
+        if (val.length === 0) return '<span class="jt-punct">[]</span>';
+        const open = depth < 2 ? ' open' : '';
+        const rows = val.map(v => `<div class="jt-row">${renderJsonTree(v, depth + 1)}</div>`).join('');
+        return `<details${open}><summary class="jt-sum">[ ${val.length} ]</summary><div class="jt-body">${rows}</div></details>`;
+    }
+    if (t === 'object') {
+        const keys = Object.keys(val);
+        if (keys.length === 0) return '<span class="jt-punct">{}</span>';
+        const open = depth < 2 ? ' open' : '';
+        const preview = keys.slice(0, 4).map(k => esc(k)).join(', ') + (keys.length > 4 ? ', …' : '');
+        const rows = keys.map(k =>
+            `<div class="jt-row"><span class="jt-key">${esc(k)}</span>: ${renderJsonTree(val[k], depth + 1)}</div>`
+        ).join('');
+        return `<details${open}><summary class="jt-sum">{ ${preview} }</summary><div class="jt-body">${rows}</div></details>`;
+    }
+    return esc(String(val));
+}
+
+function weightColor(w) {
+    const g = Math.round((1 - Math.min(w ?? 0, 1)) * 140);
+    return `rgb(${g},${g},${g})`;
+}
+
 const COLUMNS = {
     boats: [
         { label: 'ID',     key: 'id' },
         { label: 'Sail',   key: 'sailNumber' },
         { label: 'Name',   key: 'name' },
         { label: 'Design', key: 'designId' },
-        { label: 'Club',   key: 'clubId' },
+        { label: 'RF',     key: 'spinRef',
+          render: v => v && v.value != null
+            ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
+            : '<span style="color:#bbb">—</span>' },
+        { label: 'Club',     key: 'clubId' },
+        { label: 'Finishes', type: 'action',
+          action: item => { setFilter('races', 'boatId', item.id,
+                            'Races for ' + (item.name || item.id)); switchTab('races'); } },
+        { label: 'Excl',   key: 'excluded', type: 'toggle' },
     ],
     designs: [
         { label: 'ID',     key: 'id' },
         { label: 'Name',   key: 'canonicalName' },
+        { label: 'RF',     key: 'spinRef',
+          render: v => v && v.value != null
+            ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
+            : '<span style="color:#bbb">—</span>' },
         { label: 'Makers', key: 'makerIds', render: v => esc((v || []).join(', ')) },
+        { label: 'Boats',  type: 'action',
+          action: item => { setFilter('boats', 'designId', item.id,
+                            'Boats of design ' + (item.canonicalName || item.id)); switchTab('boats'); } },
+        { label: 'Excl',   key: 'excluded', type: 'toggle' },
     ],
     races: [
         { label: 'ID',        key: 'id' },
@@ -18,6 +64,7 @@ const COLUMNS = {
         { label: 'Series',    key: 'seriesName' },
         { label: 'Race',      key: 'name' },
         { label: 'Finishers', key: 'finishers' },
+        { label: 'Excl',      key: 'excluded', type: 'toggle' },
     ],
 };
 
@@ -29,6 +76,7 @@ const state = {
     activeTab: 'boats',
     selected:     { boats: new Set(), designs: new Set() },   // IDs of checked rows
     selectedData: { boats: new Map(), designs: new Map() },   // id → item for merge panel
+    filter: { boats: null, designs: null, races: null },      // { param, value, label } or null
 };
 
 function switchTab(entity) {
@@ -37,9 +85,49 @@ function switchTab(entity) {
         document.getElementById('panel-' + e).classList.toggle('active', e === entity);
     });
     state.activeTab = entity;
+    updateFilterBanner(entity);
+    updateFilterControls(entity);
     if (document.querySelector('#tbody-' + entity + ' tr') === null) {
         loadList(entity, 0);
     }
+}
+
+function setFilter(entity, param, value, label) {
+    state.filter[entity] = { param, value, label };
+    state.pages[entity] = 0;
+    const q = document.getElementById('q-' + entity);
+    if (q) q.value = '';
+    updateFilterBanner(entity);
+    updateFilterControls(entity);
+    loadList(entity, 0);
+}
+
+function clearFilter(entity) {
+    state.filter[entity] = null;
+    updateFilterBanner(entity);
+    updateFilterControls(entity);
+    loadList(entity, 0);
+}
+
+function updateFilterBanner(entity) {
+    const f   = state.filter[entity];
+    const div = document.getElementById('filter-banner-' + entity);
+    if (!div) return;
+    if (!f) { div.style.display = 'none'; return; }
+    div.style.display = '';
+    div.innerHTML = esc(f.label) +
+        ` <button onclick="clearFilter('${entity}')">× clear</button>`;
+}
+
+function updateFilterControls(entity) {
+    const active = !!state.filter[entity];
+    ['show-excluded-' + entity, 'filter-dupe-sails'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.disabled = active;
+            if (el.parentElement) el.parentElement.style.opacity = active ? '0.4' : '';
+        }
+    });
 }
 
 function debounceSearch(entity) {
@@ -58,10 +146,12 @@ async function loadList(entity, page) {
     const sort = state.sort[entity];
     const dir  = state.dir[entity];
     let url = `/api/${entity}?page=${page}&size=50&q=${encodeURIComponent(q)}&sort=${sort}&dir=${dir}`;
-    if (entity === 'boats') {
+    const f = state.filter[entity];
+    if (f) url += `&${f.param}=${encodeURIComponent(f.value)}`;
+    if (entity === 'boats' && !f) {
         if (document.getElementById('filter-dupe-sails').checked) url += '&dupeSails=true';
     }
-    if (document.getElementById('show-excluded-' + entity).checked) url += '&showExcluded=true';
+    if (!f && document.getElementById('show-excluded-' + entity).checked) url += '&showExcluded=true';
     const data = await fetchJson(url);
     if (!data) return;
 
@@ -78,6 +168,7 @@ function renderHeaders(entity) {
     let html = '';
     if (entity === 'boats' || entity === 'designs') html += '<th style="width:2rem"></th>';
     html += cols.map(col => {
+        if (col.type === 'toggle' || col.type === 'action') return `<th>${esc(col.label)}</th>`;
         const isActive = col.key === active;
         const arrow    = isActive ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
         return `<th class="sortable${isActive ? ' sort-active' : ''}"
@@ -103,6 +194,7 @@ function renderTable(entity, items) {
 
     for (const item of items) {
         const tr = document.createElement('tr');
+        if (item.excluded) tr.classList.add('excluded');
         if (entity === 'boats' || entity === 'designs') {
             if (state.selected[entity].has(item.id)) tr.classList.add('selected');
             // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
@@ -118,8 +210,29 @@ function renderTable(entity, items) {
         tr.onclick = () => loadDetail(entity, item.id);
         cols.forEach(col => {
             const td = document.createElement('td');
-            const v = item[col.key];
-            td.innerHTML = col.render ? col.render(v) : esc(v != null ? String(v) : '');
+            if (col.type === 'toggle') {
+                td.style.textAlign = 'center';
+                const ecb = document.createElement('input');
+                ecb.type = 'checkbox';
+                ecb.title = 'Exclude from analysis';
+                ecb.checked = !!item[col.key];
+                ecb.onclick = (e) => {
+                    e.stopPropagation();
+                    item[col.key] = ecb.checked;
+                    tr.classList.toggle('excluded', ecb.checked);
+                    toggleExcluded(entity, item.id, ecb.checked);
+                };
+                td.appendChild(ecb);
+            } else if (col.type === 'action') {
+                const btn = document.createElement('button');
+                btn.className = 'link-btn';
+                btn.textContent = col.label;
+                btn.onclick = (e) => { e.stopPropagation(); col.action(item); };
+                td.appendChild(btn);
+            } else {
+                const v = item[col.key];
+                td.innerHTML = col.render ? col.render(v) : esc(v != null ? String(v) : '');
+            }
             tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -147,7 +260,7 @@ async function loadDetail(entity, id) {
 
     const panel = document.getElementById('detail-' + entity);
     const pre   = document.getElementById('pre-' + entity);
-    pre.textContent = JSON.stringify(data, null, 2);
+    pre.innerHTML = renderJsonTree(data, 0);
 
     if (entity === 'boats') {
         const refDiv = document.getElementById('ref-factors-boats');
@@ -162,17 +275,19 @@ async function loadDetail(entity, id) {
 
 function renderReferenceFactors(ref) {
     function row(label, f) {
-        if (!f) return `<tr><td>${label}</td><td colspan="2" style="color:#999">—</td></tr>`;
+        if (!f) return `<tr><td>${label}</td><td colspan="3" style="color:#999">—</td></tr>`;
         const barWidth = Math.round(f.weight * 80);
+        const genLabel = f.generation === 0 ? 'cert' : `gen ${f.generation}`;
         return `<tr>
           <td>${label}</td>
           <td>${f.value.toFixed(4)}</td>
           <td>${f.weight.toFixed(3)} <span class="weight-bar" style="width:${barWidth}px"></span></td>
+          <td style="color:#888;font-size:0.85em">${genLabel}</td>
         </tr>`;
     }
     return `<strong>Reference factors (IRC equivalent, ${ref.currentYear})</strong>
       <table style="width:auto;margin-top:0.4rem;">
-        <thead><tr><th>Variant</th><th>Value (TCF)</th><th>Weight</th></tr></thead>
+        <thead><tr><th>Variant</th><th>Value (TCF)</th><th>Weight</th><th>Gen</th></tr></thead>
         <tbody>
           ${row('Spin',       ref.spin)}
           ${row('Non-spin',   ref.nonSpin)}
@@ -269,6 +384,18 @@ async function performMerge(entity) {
     clearSelection(entity);
     hideMergePanel(entity);
     loadList(entity, 0);
+}
+
+async function toggleExcluded(entity, id, excluded) {
+    const resp = await fetch('/api/' + entity + '/exclude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, excluded })
+    });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert('Failed to update exclusion: ' + (err.error || resp.status));
+    }
 }
 
 loadList('boats', 0);

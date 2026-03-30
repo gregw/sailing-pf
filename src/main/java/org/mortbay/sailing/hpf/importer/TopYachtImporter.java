@@ -19,17 +19,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -73,15 +78,19 @@ public class TopYachtImporter
      * to normalised system identifiers. Used during caption parsing to handle
      * names like "ORC AP" → "ORC".
      */
-    private static final Map<String, String> KNOWN_SYSTEMS = Map.of(
-        "IRC", "IRC",
-        "ORC", "ORC", "ORC AP", "ORC", "ORC CLUB", "ORC",
-        "ORC I", "ORC", "ORCI", "ORC",
-        "AMS", "AMS",
-        "PHS", "PHS");
+    private static final Map<String, String> KNOWN_SYSTEMS = Map.ofEntries(
+        Map.entry("IRC", "IRC"),
+        Map.entry("ORC", "ORC"), Map.entry("ORC AP", "ORC"), Map.entry("ORC CLUB", "ORC"),
+        Map.entry("ORC I", "ORC"), Map.entry("ORCI", "ORC"),
+        Map.entry("ORC_AP", "ORC"), Map.entry("ORC_CLUB", "ORC"),
+        Map.entry("ORCAP", "ORC"), Map.entry("ORCCI", "ORC"),
+        Map.entry("AMS", "AMS"),
+        Map.entry("PHS", "PHS"));
 
     private final DataStore store;
     private final HttpClient httpClient;
+    /** Lazily resolved on first parse error; null until run() sets it. */
+    private Path errorFile;
 
     public TopYachtImporter(DataStore store, HttpClient httpClient)
     {
@@ -112,6 +121,7 @@ public class TopYachtImporter
 
     public void run() throws Exception
     {
+        errorFile = store.dataRoot().resolve("topyacht-errors.txt");
         // topyachtUrls are configured in the seed (clubs.yaml); merge seed + persisted
         // so we don't miss clubs that haven't been imported yet.
         List<Club> allClubs = Stream.concat(
@@ -173,14 +183,15 @@ public class TopYachtImporter
             if (row.resultsUrls().size() == 1)
             {
                 // Single results page: fetch and process directly (preserves multi-division pages)
+                String url = row.resultsUrls().get(0);
                 try
                 {
-                    String html2 = fetch(row.resultsUrls().get(0));
-                    processResultsPage(club, seriesName, row.number(), row.date(), html2);
+                    String html2 = fetch(url);
+                    processResultsPage(club, seriesName, row.number(), row.date(), html2, url);
                 }
                 catch (Exception e)
                 {
-                    LOG.error("Failed to fetch results url={}: {}", row.resultsUrls().get(0), e.getMessage());
+                    LOG.error("Failed to fetch results url={}: {}", url, e.getMessage());
                 }
             }
             else
@@ -194,6 +205,8 @@ public class TopYachtImporter
                         ParsedRace pr = parseResultsPage(fetch(url));
                         if (pr != null)
                             parsedList.add(pr);
+                        else
+                            appendParseError(url);
                     }
                     catch (Exception e)
                     {
@@ -209,13 +222,17 @@ public class TopYachtImporter
     /**
      * Processes a single results HTML page. Preserves multiple divisions when the page
      * contains multiple {@code centre_results_table} tables (e.g. CYCSA division pages).
-     * Package-private for testing with inline HTML.
+     * Package-private for testing with inline HTML (pass {@code null} for url in tests).
      */
-    void processResultsPage(Club club, String seriesName, int raceNumber, LocalDate date, String html)
+    void processResultsPage(Club club, String seriesName, int raceNumber, LocalDate date,
+                             String html, String url)
     {
         ParsedRace parsed = parseResultsPage(html);
         if (parsed == null)
+        {
+            appendParseError(url);
             return;
+        }
 
         String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
         String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
@@ -227,13 +244,17 @@ public class TopYachtImporter
             return;
         }
 
+        boolean seriesNS = isNonSpinSeries(seriesName);
+
         List<Division> divisions = new ArrayList<>();
         int totalFinishers = 0;
         String handicapSystem = parsed.divisions().get(0).handicapSystem();
 
         for (ParsedDivision parsedDiv : parsed.divisions())
         {
-            List<Finisher> finishers = buildFinishers(parsedDiv.rows(), parsedDiv.handicapSystem(), date.getYear());
+            boolean divNS = parsedDiv.nonSpinnaker() || seriesNS;
+            List<Finisher> finishers = buildFinishers(parsedDiv.rows(), parsedDiv.handicapSystem(),
+                date.getYear(), divNS, parsedDiv.twoHanded(), parsedDiv.windwardLeeward());
             divisions.add(new Division(parsedDiv.name(), List.copyOf(finishers)));
             totalFinishers += finishers.size();
         }
@@ -281,7 +302,7 @@ public class TopYachtImporter
                     {
                         MergeEntry entry = new MergeEntry(row.boatName(), row.elapsed(),
                             row.clubCode(), row.designName());
-                        entry.sysAhcs.add(new SysAhc(div.handicapSystem(), row.ahcValue()));
+                        entry.sysAhcs.add(new SysAhc(div.handicapSystem(), row.ahcValue(), div.twoHanded(), div.windwardLeeward()));
                         merged.put(row.sailNo(), entry);
                     }
                     else
@@ -297,12 +318,19 @@ public class TopYachtImporter
                         }
                         else
                         {
-                            existing.sysAhcs.add(new SysAhc(div.handicapSystem(), row.ahcValue()));
+                            existing.sysAhcs.add(new SysAhc(div.handicapSystem(), row.ahcValue(), div.twoHanded(), div.windwardLeeward()));
                         }
                     }
                 }
             }
         }
+
+        // Non-spinnaker: series-level heuristic applies to all pages of this race.
+        // Division-level: true if ANY of the merged pages detected an NS division.
+        boolean seriesNS = isNonSpinSeries(seriesName);
+        boolean divNS = seriesNS || parsedList.stream()
+            .flatMap(pr -> pr.divisions().stream())
+            .anyMatch(ParsedDivision::nonSpinnaker);
 
         // Derive race handicapSystem from the distinct systems seen across all pages
         LinkedHashSet<String> systems = new LinkedHashSet<>();
@@ -328,26 +356,26 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(),
+                        boat.designId(), fromClub.id(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
 
-            // Infer certificates from AHC values for non-PHS systems; use first cert number
+            // Infer certificates from AHC values for measurement systems; use first cert number
             String certNumber = null;
             for (SysAhc sa : me.sysAhcs)
             {
-                if (!"PHS".equals(sa.system()))
+                if (isMeasurementHandicapSystem(sa.system()))
                 {
                     // Re-read boat in case a previous iteration updated it
                     boat = store.boats().get(boat.id());
-                    String cn = inferCertificate(boat, sa.system(), date.getYear(), sa.ahcValue());
+                    String cn = inferCertificate(boat, sa.system(), date.getYear(), sa.ahcValue(), divNS, sa.twoHanded(), sa.windwardLeeward());
                     if (certNumber == null)
                         certNumber = cn;
                 }
             }
 
-            finishers.add(new Finisher(boat.id(), me.elapsed, false, certNumber));
+            finishers.add(new Finisher(boat.id(), me.elapsed, divNS, certNumber));
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
@@ -388,7 +416,28 @@ public class TopYachtImporter
         Document doc = Jsoup.parse(html, baseUrl);
         List<RaceRow> result = new ArrayList<>();
 
-        Elements rows = doc.select("table.centre_index_table tr");
+        Element table = doc.selectFirst("table.centre_index_table");
+        if (table == null)
+            return result;
+
+        // Identify excluded column indices from the header row.
+        // Columns labelled "Notes", "Entrants", or "Finish Times" do not contain
+        // results links — the first two contain admin pages, the last contains raw
+        // finish-time pages that lack the centre_results_table structure.
+        Set<Integer> excludedCols = new HashSet<>();
+        Element headerRow = table.selectFirst("tr");
+        if (headerRow != null)
+        {
+            Elements headerCells = headerRow.select("td");
+            for (int i = 0; i < headerCells.size(); i++)
+            {
+                String h = headerCells.get(i).text().trim().toLowerCase();
+                if (h.contains("note") || h.contains("entr") || h.contains("finish time"))
+                    excludedCols.add(i);
+            }
+        }
+
+        Elements rows = table.select("tr");
         for (Element row : rows)
         {
             Elements cells = row.select("td");
@@ -419,16 +468,23 @@ public class TopYachtImporter
                 continue;
             }
 
-            // Collect ALL results links (not entrant or series/score links)
+            // Collect results links, excluding links from non-results columns (by index)
+            // and excluding known non-results href patterns.
             List<String> resultsUrls = new ArrayList<>();
-            for (Element a : row.select("a[href]"))
+            for (int ci = 0; ci < cells.size(); ci++)
             {
-                String href = a.attr("href").toLowerCase();
-                if (!href.contains("entr") && !href.contains("series") && !href.contains("score"))
+                if (excludedCols.contains(ci))
+                    continue;
+                for (Element a : cells.get(ci).select("a[href]"))
                 {
-                    String resolved = resolveUrl(baseUrl, a.attr("href"));
-                    if (resolved != null)
-                        resultsUrls.add(resolved);
+                    String href = a.attr("href").toLowerCase();
+                    if (!href.contains("entr") && !href.contains("note")
+                            && !href.contains("series") && !href.contains("score"))
+                    {
+                        String resolved = resolveUrl(baseUrl, a.attr("href"));
+                        if (resolved != null)
+                            resultsUrls.add(resolved);
+                    }
                 }
             }
 
@@ -452,17 +508,24 @@ public class TopYachtImporter
 
         for (Element table : tables)
         {
-            // Extract division name and handicap system from caption.
-            // Caption format: "[DivisionName] HandicapSystem results [rest]"
+            // Extract division name, handicap system, and variant flags from caption.
+            // Caption format: "[DivisionName] GroupName results [rest]"
             // e.g. "PHS results  Start : 12:25"
             //      "Cruising A PHS results Start : 12:25"
             //      "ORC AP results Start : 10:00"
+            //      "ORC NS WL LO results Start : 10:00"
+            //      "AMS NS results Start : 12:25"
+            //      "IRC SH results Start : 10:00"
             Element caption = table.selectFirst("caption");
             String handicapSystem = "UNKNOWN";
             String divisionName = null;
+            boolean captionNonSpinnaker = false;
+            boolean captionTwoHanded = false;
+            boolean captionWindwardLeeward = false;
             if (caption != null)
             {
-                String captionText = caption.text().trim();
+                // Normalise underscores to spaces so "ORC_NS_AP" → "ORC NS AP", "IRC_SH" → "IRC SH"
+                String captionText = caption.text().trim().replace('_', ' ');
                 String[] words = captionText.split("\\s+");
 
                 // Find the index of "results" keyword
@@ -478,23 +541,75 @@ public class TopYachtImporter
 
                 if (resultsIdx > 0)
                 {
-                    // Try 2-word suffix then 1-word suffix against KNOWN_SYSTEMS.
-                    // This handles "ORC AP results" → system="ORC" as well as "PHS results".
                     List<String> before = List.of(words).subList(0, resultsIdx);
-                    String matched = null;
-                    for (int len = Math.min(2, before.size()); len >= 1; len--)
+
+                    // Look for a measurement system keyword (ORC, AMS, IRC) as a standalone
+                    // word. Handles multi-token TopYacht group names like:
+                    //   ORC [NS] [DH] [AP|WL] [LO|MD|HI]
+                    //   AMS [NS] [2HD]
+                    //   IRC [SH]
+                    int sysIdx = -1;
+                    String detectedSystem = null;
+                    for (int i = 0; i < before.size(); i++)
                     {
-                        String candidate = String.join(" ",
-                            before.subList(before.size() - len, before.size())).toUpperCase();
-                        if (KNOWN_SYSTEMS.containsKey(candidate))
+                        String upper = before.get(i).toUpperCase();
+                        if ("ORC".equals(upper) || "ORCC".equals(upper))
                         {
-                            matched = KNOWN_SYSTEMS.get(candidate);
-                            if (before.size() > len)
-                                divisionName = String.join(" ", before.subList(0, before.size() - len));
+                            sysIdx = i;
+                            detectedSystem = "ORC";
+                            break;
+                        }
+                        if ("AMS".equals(upper))
+                        {
+                            sysIdx = i;
+                            detectedSystem = "AMS";
+                            break;
+                        }
+                        if ("IRC".equals(upper))
+                        {
+                            sysIdx = i;
+                            detectedSystem = "IRC";
                             break;
                         }
                     }
-                    handicapSystem = matched != null ? matched : before.get(before.size() - 1).toUpperCase();
+
+                    if (sysIdx >= 0)
+                    {
+                        handicapSystem = detectedSystem;
+                        if (sysIdx > 0)
+                            divisionName = String.join(" ", before.subList(0, sysIdx));
+                        // Scan remaining tokens for variant flags
+                        for (int i = sysIdx + 1; i < before.size(); i++)
+                        {
+                            String token = before.get(i).toUpperCase();
+                            switch (token)
+                            {
+                                case "NS" -> captionNonSpinnaker = true;
+                                case "WL" -> captionWindwardLeeward = true;
+                                case "DH", "2HD", "SH" -> captionTwoHanded = true;
+                                // AP, LO, MD, HI, I, O, C — recognised, no additional flags
+                                default -> {}
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Fallback: try 2-word suffix then 1-word suffix against KNOWN_SYSTEMS.
+                        String matched = null;
+                        for (int len = Math.min(2, before.size()); len >= 1; len--)
+                        {
+                            String candidate = String.join(" ",
+                                before.subList(before.size() - len, before.size())).toUpperCase();
+                            if (KNOWN_SYSTEMS.containsKey(candidate))
+                            {
+                                matched = KNOWN_SYSTEMS.get(candidate);
+                                if (before.size() > len)
+                                    divisionName = String.join(" ", before.subList(0, before.size() - len));
+                                break;
+                            }
+                        }
+                        handicapSystem = matched != null ? matched : before.get(before.size() - 1).toUpperCase();
+                    }
                 }
                 else
                 {
@@ -570,7 +685,8 @@ public class TopYachtImporter
                 rows.add(new ParsedRow(sailNo, boatName, elapsed, clubCode, designName, ahcValue));
             }
 
-            divisions.add(new ParsedDivision(divisionName, handicapSystem, rows));
+            boolean divNonSpin = captionNonSpinnaker || isDivisionNonSpinnaker(divisionName);
+            divisions.add(new ParsedDivision(divisionName, handicapSystem, divNonSpin, captionTwoHanded, captionWindwardLeeward, rows));
         }
 
         return divisions.isEmpty() ? null : new ParsedRace(divisions);
@@ -581,8 +697,12 @@ public class TopYachtImporter
     /**
      * Builds a list of Finisher records from parsed rows, inferring certificates
      * from AHC values for non-PHS systems.
+     *
+     * @param nonSpinnaker true if all finishers in this division raced non-spinnaker
      */
-    private List<Finisher> buildFinishers(List<ParsedRow> rows, String handicapSystem, int year)
+    private List<Finisher> buildFinishers(List<ParsedRow> rows, String handicapSystem,
+                                          int year, boolean nonSpinnaker, boolean twoHanded,
+                                          boolean windwardLeeward)
     {
         List<Finisher> finishers = new ArrayList<>();
         for (ParsedRow row : rows)
@@ -597,7 +717,7 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(),
+                        boat.designId(), fromClub.id(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -606,10 +726,11 @@ public class TopYachtImporter
             if (isMeasurementHandicapSystem(handicapSystem) && row.ahcValue() != null)
             {
                 boat = store.boats().get(boat.id());
-                certNumber = inferCertificate(boat, handicapSystem, year, row.ahcValue());
+                certNumber = inferCertificate(boat, handicapSystem, year, row.ahcValue(),
+                    nonSpinnaker, twoHanded, windwardLeeward);
             }
 
-            finishers.add(new Finisher(boat.id(), row.elapsed(), false, certNumber));
+            finishers.add(new Finisher(boat.id(), row.elapsed(), nonSpinnaker, certNumber));
         }
         return finishers;
     }
@@ -621,7 +742,8 @@ public class TopYachtImporter
      * @return the {@code certificateNumber} of the matching or newly created certificate,
      *         or {@code null} if {@code ahcValue} cannot be parsed as a number.
      */
-    private String inferCertificate(Boat boat, String system, int year, String ahcValue)
+    private String inferCertificate(Boat boat, String system, int year, String ahcValue,
+                                    boolean nonSpinnaker, boolean twoHanded, boolean windwardLeeward)
     {
         if (ahcValue == null)
             return null;
@@ -635,25 +757,80 @@ public class TopYachtImporter
             return null;
         }
 
-        // Check existing certs: system match + year within 1 + value within tolerance
+        // Check existing certs: system + variant flags + year within 1 + value within tolerance
         for (Certificate cert : boat.certificates())
         {
             if (cert.system().equalsIgnoreCase(system)
+                    && cert.nonSpinnaker() == nonSpinnaker
+                    && cert.twoHanded() == twoHanded
+                    && cert.windwardLeeward() == windwardLeeward
                     && Math.abs(cert.year() - year) <= 1
                     && Math.abs(cert.value() - tcf) < 0.001)
                 return cert.certificateNumber();
         }
 
         // Create inferred certificate with a deterministic number (idempotent on re-runs)
-        String certNumber = String.format("ty-%s-%d-%.4f", system.toLowerCase(), year, tcf);
-        Certificate inferred = new Certificate(system, year, tcf, false, false, false, certNumber, null);
+        String certNumber = String.format("ty-%s%s%s%s-%d-%.4f",
+            system.toLowerCase(),
+            nonSpinnaker ? "-ns" : "", twoHanded ? "-2h" : "", windwardLeeward ? "-wl" : "",
+            year, tcf);
+        Certificate inferred = new Certificate(system, year, tcf, nonSpinnaker, twoHanded, false, windwardLeeward, certNumber, null);
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(certs),
+            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(), List.copyOf(certs),
             addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;
+    }
+
+    /**
+     * Appends {@code url} (plus newline) to the topyacht-errors.txt file in the data root.
+     * Does nothing if {@code url} is null or if {@code errorFile} has not been set.
+     */
+    private void appendParseError(String url)
+    {
+        if (url == null || errorFile == null)
+            return;
+        try
+        {
+            Files.writeString(errorFile, url + System.lineSeparator(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        }
+        catch (Exception e)
+        {
+            LOG.warn("TopYacht: could not write to {}: {}", errorFile, e.getMessage());
+        }
+    }
+
+    /**
+     * Returns true if the division name indicates a non-spinnaker division.
+     * Matches "Non Spin", "Non-Spin", "NonSpin", "NS", "Non Spinnaker", etc.
+     */
+    static boolean isDivisionNonSpinnaker(String divisionName)
+    {
+        if (divisionName == null || divisionName.isBlank())
+            return false;
+        String lower = divisionName.toLowerCase().trim();
+        // Exact "ns" or starts with "ns " (to avoid matching e.g. "Ensign")
+        if (lower.equals("ns") || lower.startsWith("ns "))
+            return true;
+        return lower.contains("non spin") || lower.contains("non-spin")
+            || lower.contains("nonspin") || lower.contains("non spinnaker")
+            || lower.contains("non-spinnaker");
+    }
+
+    /**
+     * Returns true if the series name suggests a non-spinnaker event.
+     * Heuristic: contains "twilight" (case-insensitive) and does NOT contain "spinnaker".
+     */
+    static boolean isNonSpinSeries(String seriesName)
+    {
+        if (seriesName == null)
+            return false;
+        String lower = seriesName.toLowerCase();
+        return lower.contains("twilight") && !lower.contains("spinnaker");
     }
 
     /**
@@ -784,7 +961,7 @@ public class TopYachtImporter
 
     record ParsedRace(List<ParsedDivision> divisions) {}
 
-    record ParsedDivision(String name, String handicapSystem, List<ParsedRow> rows) {}
+    record ParsedDivision(String name, String handicapSystem, boolean nonSpinnaker, boolean twoHanded, boolean windwardLeeward, List<ParsedRow> rows) {}
 
     record ParsedRow(String sailNo, String boatName, Duration elapsed,
                      String clubCode, String designName, String ahcValue) {}
@@ -807,5 +984,5 @@ public class TopYachtImporter
         }
     }
 
-    private record SysAhc(String system, String ahcValue) {}
+    private record SysAhc(String system, String ahcValue, boolean twoHanded, boolean windwardLeeward) {}
 }

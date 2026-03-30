@@ -36,20 +36,23 @@ Read these files before working in any given area:
 
 ## Background
 
-This project is being started in the repository called sailing-handicaps, which contains a prototype of this project as well as downloaded sailsys files and processed race data.
-The intention is that this project will only be used for the purpose of training Claude on the problem domain and past attempts.
-After analysis, the intention is to remove all the code and start again, renaming the project to sailing-history-performance-factors.
-The sailsys files which have been downloaded are publicly available but probably contain proprietary data.
-They are to be processed and only public data (e.g. names and elapsed times) extracted and stored in a data format for this project.
-The sailsys files are to be deleted.
+This project was originally prototyped in a repository called sailing-handicaps. The prototype
+code has been deleted; only the domain knowledge it embodied influenced the new design. Raw
+SailSys files have been processed and only public data (names, sail numbers, elapsed times,
+measurement handicaps) extracted and stored. The original downloads have been deleted.
 
 ---
 
 ## Technology Stack
 
-- **Language:** Java (Spring Boot - maybe?)
-- **Data access:** Jackson JSON files inflated to java records.
+- **Language:** Java 21
+- **Server:** Jetty 12.1 embedded (plain Jakarta servlets — no Spring, no Spring Boot)
+- **Data access:** Jackson JSON/YAML files inflated to Java records; file-per-entity persistence
+- **HTTP client:** Jetty HttpClient (for importer API calls and web scraping)
+- **HTML parsing:** JSoup (TopYacht HTML scraping)
+- **Fuzzy matching:** Apache Commons Text (Jaro-Winkler similarity for boat/design name matching)
 - **Frontend:** Plain JavaScript, Plotly.js — no React, no build pipeline
+- **Testing:** JUnit 5
 - **Deployment target:** Google Cloud Run or Fly.io (scale-to-zero)
 
 ---
@@ -67,25 +70,27 @@ Raw                →  (nothing)
 ### Layer 1: Raw (always persisted, immutable)
 - Ingested data exactly as received from source systems
 - Java **records** — immutable, no back-references, no derived fields
-- Entities: `Boat`, `Race`, `Entry`, `MeasurementCertificate`, `Club`, `Design`, `Series`, `Season`
+- Top-level entities (one JSON file each): `Boat`, `Race`, `Club`, `Design`
+- Embedded records (nested inside their parent): `Certificate` (in Boat), `Division` and `Finisher` (in Race), `Series` (in Club), `TimedAlias` (in Boat)
+- Supporting records: `Factor` (value + weight pair), `Maker` (in catalogue/makers.json)
 
-### Layer 2: Deterministic Derived (persisted, invalidated on raw change)
-- Computed from raw by pure functions with no tuning parameters
-- Java **records** — always the same output given the same raw input
-- Entities: `BoatReference`, `DesignReference`, `RaceDispersion`
-- Invalidated and recomputed when upstream raw records change
+### Layer 2: Deterministic Derived (recomputed, held in AnalysisCache)
+- Computed from raw data by pure functions, optionally with tuning parameters
+- Java **records** — always the same output given the same raw input and parameters
+- `ComparisonResult` / `DataPair` / `LinearFit` — empirical conversion fits between handicap systems
+- `ConversionGraph` / `ConversionNode` / `ConversionEdge` — directed graph of system×year×variant conversions
+- `BoatReferenceFactors` — per-boat reference factors (spin, nonSpin, twoHanded) with generation tracking
+- Recomputed via `AnalysisCache.refresh()` after importer runs
 
-### Layer 3: Index (derived, optionally persisted for performance)
+### Layer 3: Index (derived, held in AnalysisCache)
 - Provides navigation that would otherwise require back-references (e.g. "all races for a boat")
 - Always recomputable from raw; correctness never depends on the persisted index
-- Use `entryIndex.entriesByBoatId(boat.id())` — **never** `boat.getEntries()`
-- Is essentially a special case of Deterministic Derived data.
+- Volatile maps in `AnalysisCache`: `boatIdsByDesignId`, `raceIdsByBoatId`, `seriesIdsByBoatId`
+- Use indexes — **never** `boat.getEntries()` or similar back-references
 
-### Layer 4: Optimised Derived (never persisted, recomputed on demand)
-- Output of the HPF optimisation — depends on configuration (scope, λ, convergence threshold)
+### Layer 4: Optimised Derived (not yet implemented — see Phase 2 in processing_pipeline.md)
+- Will contain HPF optimisation output — depends on configuration (scope, λ, convergence threshold)
 - Mutable **classes** for working objects during iteration; **records** for final output snapshots
-- Working types: `EntryWeight`, `RaceContext`, `BoatHpfEstimate`
-- Final output: `BoatHpf` (record)
 
 ### Persistence boundary summary
 
@@ -106,23 +111,41 @@ with a 1.000 reference boat, averaged across its racing history. **Historical me
 
 ### References (aka "standard candles")
 Boats whose performance can be independently estimated from measurement-based handicaps.
-Used to anchor the optimisation.  They function like standard candles in Astrophysics.  Four quality tiers with associated factor weights:
+Used to anchor the optimisation. They function like standard candles in Astrophysics.
 
-| Tier | Basis | Weight |
+Reference factors are computed by `ReferenceNetworkBuilder` via DFS traversal of the
+`ConversionGraph` — a network of empirical linear fits between handicap system×year×variant
+nodes. Certificate base weight is 1.0, with multiplicative discounts:
+
+| Modifier | Weight multiplier | Applies when |
 |---|---|---|
-| 1 | IRC/ORC/AMS certificate used in the race | 1.0 |
-| 2 | IRC/ORC/AMS certificate held, used for the race | 0.9 |
-| 3 | Holds certificate but racing under PHS | 0.8 |
-| 4 | No certificate; design has many certificated boats | 0.7 |
+| Club certificate | configurable (default 0.9) | ORC club, potentially IRC club |
+| Windward/leeward cert | 0.8 | ORC WL course-specific certs |
+| Design-level fallback | 0.85 | No individual cert; using design aggregate |
+| Race propagation | 0.7 | Derived from race co-participation |
+
+Factors degrade through DFS path traversal (each hop through the conversion graph applies
+the edge's linear fit and accumulates weight penalties).
 
 ### Measurement Handicap Systems
 - **IRC** — secret algorithm, RORC/UNCL managed, produces TCC. Do NOT use the RORC online
   TCC database (restricted). Acceptable sources: SailSys boat records, published race result AHC values.
+  Variants: standard (spinnaker), shorthanded (IRC_SH → stored as `twoHanded=true`).
 - **ORC / ORCi / ORCclub** — transparent VPP algorithm, public data feed at `data.orc.org`.
   Produces GPH (convert to TCF: `TCF = 600 / GPH`) and full VPP curves.
+  Variants: standard, non-spinnaker (NS), double-handed (DH), windward/leeward (WL), club.
+  TopYacht encodes variants in group captions (e.g. "ORC NS WL LO results").
 - **AMS** — Australian system, Victorian-primary, 4-year recalibration cycle, no public algorithm.
+  Variants: standard, non-spinnaker (AMS NS), two-handed (AMS 2HD).
 - **PHS** — performance (past results) based. **Exclude PHS handicap values entirely as they may reflect proprietary information of other clubs or systems.**
   Elapsed times from PHS races are valid and used; only the PHS number itself is excluded.
+
+### Certificate Variant Flags
+Each `Certificate` record carries boolean flags that capture the certificate variant:
+- `nonSpinnaker` — true for NS certificates (ORC NS, AMS NS, IRC NS)
+- `twoHanded` — true for double-handed/shorthanded certs (ORC DH, AMS 2HD, IRC SH)
+- `windwardLeeward` — true for ORC WL (windward/leeward course-specific) certs
+- `club` — true for club-level certs (ORC club); carries configurable weight penalty (default 0.9)
 
 ---
 
@@ -139,10 +162,12 @@ Used to anchor the optimisation.  They function like standard candles in Astroph
 - extract only data that is public record: names, sail numbers, clubs, elapsed times, etc.
 
 ### TopYacht
-- Data may be on many individual club websites with similar HTML structure
-- There may be `robots.txt` files that block crawling; scrape from saved local copies or club-hosted pages
-- `boid` in boat name links is the cross-reference to the TopYacht boat register, however, it should not be persisted.
-- `AHC` column is the handicap used for scoring and it should be ignored. Only elapsed times are used.
+- Data on many individual club websites with similar HTML structure
+- `robots.txt` may block crawling; scrape from saved local copies or club-hosted pages
+- `boid` in boat name links is the cross-reference to the TopYacht boat register — not persisted
+- `AHC` column is the handicap used for scoring — stored only for measurement systems (IRC, ORC, AMS)
+- Group captions encode handicap system and variant flags (e.g. "Div 1 ORC NS WL results")
+- Multi-page results (same race, different handicap systems) are merged into a single race
 
 ### Manly Yacht Club
 - For many years MYC ran their own handicap processing system and much of the data is still relevant to their current fleet.
@@ -151,6 +176,16 @@ Used to anchor the optimisation.  They function like standard candles in Astroph
 - `https://data.orc.org/public/WPub.dll?action=activecerts&CountryId=AUS`
 - Open data, no restrictions. Best source for authoritative design names (`Class` field)
 - `dxtName` field groups sister ships (same hull file = same design variant)
+- CertType values: 1=IRC+ORC intl, 2=ORC intl, 3=ORC club, 8=DH intl, 9=DH club, 10=NS intl, 11=NS club
+- FamilyName indicates variants: "Non Spinnaker", "Double Handed"
+
+### AMS Certificates
+- Scraped from `raceyachts.org` listing
+- Includes non-spinnaker and two-handed variants
+
+### CYCA BWPS (BlueSail WorldWide Performance System)
+- Publicly available club result pages from the Cruising Yacht Club of Australia
+- IRC-based races; provides boat identity, elapsed times, and IRC handicaps used for scoring
 
 ---
 
@@ -160,15 +195,14 @@ Read [id_strategy.md](.claude/id_strategy.md) fully before touching IDs. Summary
 
 | Entity | Key pattern | Example |
 |---|---|---|
-| Club | Website domain | `manlysc.com.au` |
+| Club | Website domain | `myc.com.au` |
 | Maker | Normalised name | `farr` |
 | Design | Normalised name | `j24`, `farr40` |
-| Season | Year label | `2024-25` |
-| Series | `clubDomain/season/normalisedName` | `manlysc.com.au/2024-25/wednesday-twilight` |
-| Boat | `sailnum-firstname-hex` | `aus1234-raging-3f9a` |
-| Race | `clubDomain-date-hex` | `manlysc.com.au-2024-11-06-4a1f` |
-| RaceEntry | `raceId+boatId` | composite |
-| MeasurementCertificate | `boatId-type-year-hex` | `aus1234-raging-3f9a-irc-2024-001` |
+| Series | `clubDomain/normalisedName` | `myc.com.au/wednesday-twilight` |
+| Boat | `sailnum-name-designid` | `AUS1234-raging-tp52` |
+| Race | `clubDomain-date-nnnn` | `myc.com.au-2024-11-06-0001` |
+| Certificate | Embedded in Boat | `orc-inferred-ns-4a1f...` or ORC dxtID |
+| Finisher | Embedded in Race→Division | keyed by boatId within a division |
 
 **IDs are never derived from SailSys or TopYacht internal IDs.** Source system IDs may be
 stored in alias/mapping tables for ingestion purposes only, never as primary keys.
@@ -194,10 +228,53 @@ The old prototype is in the repo as domain knowledge only. **Do not replicate:**
 
 Logic lives in services, not entities:
 
-- `ReferenceNetworkBuilder` — computes `BoatReference` and `DesignReference` (pipeline steps 8–12)
-- `HpfOptimiser` — alternating least squares HPF optimisation (steps 13–17)
-- `SailSysImporter` — translates SailSys JSON into raw layer records
-- `TopYachtImporter` — translates TopYacht HTML into raw layer records
+### Importers (populate Layer 1)
+- `SailSysBoatImporter` — imports boats and IRC certificates from SailSys boat API/files
+- `SailSysRaceImporter` — imports races, divisions, finishers from SailSys race API/files
+- `TopYachtImporter` — scrapes TopYacht HTML result pages; handles multi-page merging
+- `OrcImporter` — fetches ORC certificate feed XML; creates ORC certificates with variant flags
+- `AmsImporter` — scrapes AMS certificate listings from raceyachts.org
+- `BwpsImporter` — imports BWPS (CYCA) race results
+
+### Analysis (Layers 2–3)
+- `HandicapAnalyser` — mines paired observations to produce empirical conversion fits (ComparisonResult)
+- `ConversionGraph` — directed graph of system×year×variant conversions with LinearFit edges
+- `ReferenceNetworkBuilder` — DFS traversal of ConversionGraph to compute BoatReferenceFactors (steps 8–12)
+- `AnalysisCache` — holds comparisons, reference factors, design factors, and navigation indexes
+
+### Server
+- `HpfServer` — Jetty 12.1 embedded server entry point (port 8080)
+- `ImporterService` — manages importer lifecycle, scheduling, and admin configuration
+- `AdminApiServlet` — REST API for boats/designs/races/importers/stats (paginated)
+- `AnalysisServlet` — REST API for comparison analysis results
+- `StaticResourceServlet` — serves admin frontend HTML/JS/CSS
+
+### Store
+- `DataStore` — central persistence; reads/writes JSON files; manages in-memory maps; fuzzy matching
+- `AliasSeedLoader` — reads aliases.yaml for boat/design name aliases and sail number redirects
+- `ClubSeedLoader` — reads clubs.yaml for club metadata and TopYacht URLs
+- `DesignCatalogueLoader` — reads design.yaml for exclusions and design overrides
+- `IdGenerator` — pure normalisation utilities for generating entity IDs
+- `RemoveNonMeasurementCertificates` — housekeeping: strips PHS/CBH certificates from stored boats
+
+---
+
+## Persistence Layout
+
+```
+hpf-data/                          (resolved via HPF_DATA env, ./hpf-data, or ~/.hpf-data)
+  boats/{boatId}.json
+  designs/{designId}.json
+  clubs/{clubId}.json
+  races/{clubId}/{seriesSlug}/{raceId}.json
+  catalogue/makers.json
+  config/
+    admin.yaml                     (importer schedule, thresholds, configurable weights)
+    aliases.yaml                   (read-only seed: boat/design aliases, sail number redirects)
+    clubs.yaml                     (read-only seed: club metadata, TopYacht URLs)
+    design.yaml                    (read-only seed: exclusions, design overrides)
+    exclusions.json                (mutable: excluded boat/design/race IDs, managed by admin UI)
+```
 
 ---
 
@@ -207,15 +284,16 @@ Small: ~600 boats each doing ~50 races/year. No need for premature optimisation.
 
 ---
 
-## Build Order
+## Build Status
 
-1. Data ingestion (SailSys importer, TopYacht scraper) → raw layer populated
-2. Reference network builder → deterministic derived layer
-3. HPF optimiser → optimised derived layer
-4. REST API → expose derived data as JSON
-5. Frontend → charts against real API output
+Phase 1 (steps 1–12) is implemented:
+1. **Data ingestion** — all six importers operational (SailSys boats/races, TopYacht, ORC, AMS, BWPS)
+2. **Reference network** — HandicapAnalyser + ConversionGraph + ReferenceNetworkBuilder operational
+3. **Admin webapp** — data browser, analysis charts (Plotly.js), import management
 
-**The frontend is last.** Do not design charts against hypothetical data shapes.
+Phase 2 (steps 13–19) is not yet implemented:
+4. HPF optimiser → optimised derived layer
+5. Public-facing frontend → charts against real HPF output
 
 ---
 

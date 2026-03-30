@@ -92,6 +92,42 @@ public record ComparisonKey(
         return new ComparisonKey("AMS", false, false, "AMS", false, false, yearFrom, yearFrom + 1);
     }
 
+    /** Year-to-year transition for IRC non-spinnaker certs. */
+    public static ComparisonKey ircNsYearTransition(int yearFrom)
+    {
+        return new ComparisonKey("IRC", true, false, "IRC", true, false, yearFrom, yearFrom + 1);
+    }
+
+    /** Year-to-year transition for ORC non-spinnaker certs. */
+    public static ComparisonKey orcNsYearTransition(int yearFrom)
+    {
+        return new ComparisonKey("ORC", true, false, "ORC", true, false, yearFrom, yearFrom + 1);
+    }
+
+    /** Year-to-year transition for AMS non-spinnaker certs. */
+    public static ComparisonKey amsNsYearTransition(int yearFrom)
+    {
+        return new ComparisonKey("AMS", true, false, "AMS", true, false, yearFrom, yearFrom + 1);
+    }
+
+    /** Year-to-year transition for IRC two-handed certs. */
+    public static ComparisonKey ircTwoHandedYearTransition(int yearFrom)
+    {
+        return new ComparisonKey("IRC", false, true, "IRC", false, true, yearFrom, yearFrom + 1);
+    }
+
+    /** Year-to-year transition for ORC two-handed certs. */
+    public static ComparisonKey orcTwoHandedYearTransition(int yearFrom)
+    {
+        return new ComparisonKey("ORC", false, true, "ORC", false, true, yearFrom, yearFrom + 1);
+    }
+
+    /** Year-to-year transition for AMS two-handed certs. */
+    public static ComparisonKey amsTwoHandedYearTransition(int yearFrom)
+    {
+        return new ComparisonKey("AMS", false, true, "AMS", false, true, yearFrom, yearFrom + 1);
+    }
+
     // --- String id encoding ---
 
     /**
@@ -108,7 +144,12 @@ public record ComparisonKey(
         if (yearA != yearB)
         {
             // Year transition: systemA == systemB, same variant
-            return sA + "-" + yearA + "-to-" + yearB;
+            // Include variant suffix for non-spin to avoid ID collisions with spin transitions
+            String v = variantSuffix(nonSpinA, twoHandedA);
+            if ("spin".equals(v))
+                return sA + "-" + yearA + "-to-" + yearB;
+            else
+                return sA + "-" + v + "-" + yearA + "-to-" + yearB;
         }
 
         if (systemA.equals(systemB))
@@ -140,7 +181,21 @@ public record ComparisonKey(
         if (id == null)
             return null;
 
-        // Year transition: {sys}-{yearA}-to-{yearB}
+        // NS/2H year transition: {sys}-{variant}-{yearA}-to-{yearB}
+        // e.g. irc-nonspin-2021-to-2022, ams-twohanded-2025-to-2026
+        if (id.matches("[a-z]+-[a-z]+-\\d{4}-to-\\d{4}"))
+        {
+            String[] parts = id.split("-");
+            String sys     = parts[0].toUpperCase();
+            String variant = parts[1];
+            int ya         = Integer.parseInt(parts[2]);
+            int yb         = Integer.parseInt(parts[4]);
+            boolean nonSpin   = "nonspin".equals(variant);
+            boolean twoHanded = "twohanded".equals(variant);
+            return new ComparisonKey(sys, nonSpin, twoHanded, sys, nonSpin, twoHanded, ya, yb);
+        }
+
+        // Spin year transition: {sys}-{yearA}-to-{yearB}
         // e.g. irc-2023-to-2024
         if (id.matches("[a-z]+-\\d{4}-to-\\d{4}"))
         {

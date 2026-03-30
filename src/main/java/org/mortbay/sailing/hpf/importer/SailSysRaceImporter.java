@@ -67,11 +67,21 @@ public class SailSysRaceImporter
 
     private final DataStore store;
     private final HttpClient client; // null in local mode
+    private final SailSysBoatImporter boatImporter;
+
+    // Set at start of run() so resolveBoatId can use them without extra params
+    private Path boatsDir;
+    private int cacheMaxAgeDays = 7;
+    private int httpDelayMs = 200;
+    private int recentRaceDays = 14;
+    // SailSys integer ID of the race currently being processed (for source tagging)
+    private int currentSailSysRaceId = 0;
 
     public SailSysRaceImporter(DataStore store, HttpClient client)
     {
         this.store = store;
         this.client = client;
+        this.boatImporter = new SailSysBoatImporter(store, client);
     }
 
     // --- Entry point ---
@@ -233,6 +243,130 @@ public class SailSysRaceImporter
         LOG.info("Done. Last id={}, processed={}.", id, processed);
     }
 
+    /**
+     * Unified run method: tries local cache first for each race ID; fetches from network
+     * only when the file is absent or stale (older than {@code cacheMaxAgeDays} days).
+     * Any cached race whose date falls within the recent window is always re-fetched from
+     * the network so that finishers are picked up once the race completes.
+     * Boats referenced by race entries are fetched on demand via the same cache logic.
+     *
+     * @return the minimum SailSys race ID whose date fell within the recent window,
+     *         or 0 if no races were in the recent window.
+     */
+    public int run(int startId, IntConsumer onId, BooleanSupplier stop,
+                   Path racesDir, Path boatsDir, int cacheMaxAgeDays, int httpDelayMs,
+                   int recentRaceDays)
+        throws Exception
+    {
+        this.boatsDir = boatsDir;
+        this.cacheMaxAgeDays = cacheMaxAgeDays;
+        this.httpDelayMs = httpDelayMs;
+        this.recentRaceDays = recentRaceDays;
+
+        LOG.info("Importing SailSys races starting at id={}", startId);
+        int id = startId;
+        int consecutiveNotFound = 0;
+        int processed = 0;
+        int minRecentId = Integer.MAX_VALUE;
+
+        while (consecutiveNotFound < NOT_FOUND_THRESHOLD)
+        {
+            LOG.info("Fetching race id={}", id);
+            Path cachedFile = racesDir != null
+                ? racesDir.resolve(String.format("race-%06d.json", id)) : null;
+            String json;
+
+            String cachedJson = null;
+            if (cachedFile != null && Files.exists(cachedFile))
+                cachedJson = Files.readString(cachedFile);
+
+            boolean forceRefresh = cachedJson != null && isRecent(peekRaceDate(cachedJson));
+
+            if (!forceRefresh && cachedJson != null
+                    && !SailSysBoatImporter.isStale(cachedFile, cacheMaxAgeDays))
+            {
+                json = cachedJson;
+            }
+            else
+            {
+                try
+                {
+                    Thread.sleep(httpDelayMs);
+                    ContentResponse response = client.GET(API_BASE + id + API_SUFFIX);
+                    json = response.getContentAsString();
+                    if (cachedFile != null)
+                    {
+                        Files.createDirectories(racesDir);
+                        Files.writeString(cachedFile, json);
+                    }
+                }
+                catch (Exception e)
+                {
+                    if (cachedJson != null)
+                    {
+                        LOG.debug("Network refresh failed for id={}, using cached: {}", id, e.getMessage());
+                        json = cachedJson;
+                    }
+                    else
+                    {
+                        LOG.warn("Error fetching race id={}: {}", id, e.getMessage());
+                        id++;
+                        continue;
+                    }
+                }
+            }
+
+            LocalDate raceDate = peekRaceDate(json);
+            if (isRecent(raceDate))
+                minRecentId = Math.min(minRecentId, id);
+
+            boolean found = processRaceJson(json);
+            if (found) { consecutiveNotFound = 0; onId.accept(id); }
+            else consecutiveNotFound++;
+
+            processed++;
+            if (processed % SAVE_INTERVAL == 0)
+            {
+                LOG.info("Fetched {} races (id={}) — saving", processed, id);
+                store.save();
+            }
+            if (stop.getAsBoolean())
+            {
+                LOG.info("Stop requested after id={}", id);
+                break;
+            }
+            id++;
+        }
+
+        store.save();
+        LOG.info("Done. Last id={}, processed={}.", id, processed);
+        return (minRecentId == Integer.MAX_VALUE) ? 0 : minRecentId;
+    }
+
+    /** Package-private — fast date peek from already-read JSON; returns null on any failure. */
+    LocalDate peekRaceDate(String json)
+    {
+        try
+        {
+            RaceResponse response = MAPPER.readValue(json, RaceResponse.class);
+            return (response.data != null) ? parseDate(response.data.dateTime) : null;
+        }
+        catch (Exception e) { return null; }
+    }
+
+    private boolean isRecent(LocalDate date)
+    {
+        return date != null && !date.isBefore(LocalDate.now().minusDays(recentRaceDays));
+    }
+
+    /** Package-private — allows tests to exercise on-demand boat fetch without calling run(). */
+    void setBoatCacheParams(Path boatsDir, int cacheMaxAgeDays, int httpDelayMs)
+    {
+        this.boatsDir = boatsDir;
+        this.cacheMaxAgeDays = cacheMaxAgeDays;
+        this.httpDelayMs = httpDelayMs;
+    }
+
     // --- Parse / import layer (package-private for testing) ---
 
     /**
@@ -279,6 +413,7 @@ public class SailSysRaceImporter
 
     private void processRace(RaceData data)
     {
+        currentSailSysRaceId = data.id != null ? data.id : 0;
         // Date from dateTime field (ISO-8601 "2018-09-01T00:00:00.000")
         LocalDate date = parseDate(data.dateTime);
         if (date == null)
@@ -324,7 +459,7 @@ public class SailSysRaceImporter
             handicapSystem,
             data.offsetPursuitRace != null && data.offsetPursuitRace,
             divisions,
-            SOURCE,
+            SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : ""),
             Instant.now(),
             null
         );
@@ -382,7 +517,7 @@ public class SailSysRaceImporter
                     String sailNo = entry.boat.sailNumber != null ? entry.boat.sailNumber : "";
                     String name = entry.boat.name != null ? entry.boat.name : "";
                     if (!sailNo.isBlank() && !name.isBlank())
-                        certNumber = resolveCertificate(sailNo, name, handicapSystem, hcFrom, raceYear);
+                        certNumber = resolveCertificate(sailNo, name, handicapSystem, hcFrom, raceYear, nonSpinnaker);
                 }
             }
 
@@ -400,7 +535,25 @@ public class SailSysRaceImporter
         if (boat == null || boat.sailNumber == null || boat.sailNumber.isBlank()
                 || boat.name == null || boat.name.isBlank())
             return null;
-        return store.findOrCreateBoat(boat.sailNumber.trim(), boat.name.trim(), null).id();
+
+        Boat existing = store.findOrCreateBoat(boat.sailNumber.trim(), boat.name.trim(), null);
+
+        // If the boat was just created (no design) and we have a SailSys boat ID,
+        // try to enrich it by fetching the full boat record from cache or network.
+        if (existing.designId() == null && boat.id != null && boatImporter != null
+                && boatsDir != null)
+        {
+            try
+            {
+                boatImporter.fetchAndImport(boat.id, boatsDir, cacheMaxAgeDays, httpDelayMs);
+                existing = store.findOrCreateBoat(boat.sailNumber.trim(), boat.name.trim(), null);
+            }
+            catch (Exception e)
+            {
+                LOG.debug("On-demand boat fetch failed for id={}: {}", boat.id, e.getMessage());
+            }
+        }
+        return existing.id();
     }
 
     /**
@@ -408,27 +561,29 @@ public class SailSysRaceImporter
      * returning the certificate number.
      */
     private String resolveCertificate(String sailNo, String name, String system,
-                                      double value, int year)
+                                      double value, int year, boolean nonSpinnaker)
     {
         Boat boat = store.findOrCreateBoat(sailNo.trim(), name.trim(), null);
 
-        // Search for an existing cert with matching system and value
+        // Search for an existing cert with matching system, value, and nonSpinnaker
         for (Certificate c : boat.certificates())
         {
-            if (c.system().equals(system) && c.value() == value)
+            if (c.system().equals(system) && c.value() == value && c.nonSpinnaker() == nonSpinnaker)
                 return c.certificateNumber();
         }
 
         // Create an inferred certificate
-        String certNum = system.toLowerCase() + "-inferred-"
-            + Long.toHexString(Double.doubleToLongBits(value));
-        Certificate cert = new Certificate(system, year, value, false, false, false, certNum, null);
+        String certNum = system.toLowerCase() + "-inferred"
+            + (nonSpinnaker ? "-ns" : "")
+            + "-" + Long.toHexString(Double.doubleToLongBits(value));
+        Certificate cert = new Certificate(system, year, value, nonSpinnaker, false, false, false, certNum, null);
 
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.add(cert);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(updatedCerts),
-            addSource(boat.sources(), SOURCE), Instant.now(), null));
+            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(), List.copyOf(updatedCerts),
+            addSource(boat.sources(), SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "")),
+            Instant.now(), null));
 
         return certNum;
     }
@@ -625,6 +780,7 @@ public class SailSysRaceImporter
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class BoatSummary
     {
+        public Integer id;       // SailSys internal boat ID — used for on-demand fetch only
         public String name;
         public String sailNumber;
     }

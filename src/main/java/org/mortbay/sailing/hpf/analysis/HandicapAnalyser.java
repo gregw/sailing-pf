@@ -10,9 +10,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -59,15 +61,21 @@ public class HandicapAnalyser
     public List<ComparisonResult> analyseAll()
     {
         Map<ComparisonKey, List<DataPair>> pairMap = extractPairs();
+
+        // Ensure all expected comparison keys exist (even with 0 pairs) so the
+        // network graph shows every potential edge, not just those with data.
+        for (ComparisonKey expected : generateExpectedKeys())
+            pairMap.putIfAbsent(expected, List.of());
+
         List<ComparisonResult> results = new ArrayList<>();
         for (Map.Entry<ComparisonKey, List<DataPair>> entry : pairMap.entrySet())
         {
             ComparisonResult r = fitPairs(entry.getKey(), entry.getValue());
-            if (r.n() > 0)
-                results.add(r);
+            results.add(r);
         }
         results.sort(Comparator.comparing(r -> r.key().toId()));
-        LOG.info("analyseAll: {} comparisons", results.size());
+        LOG.info("analyseAll: {} comparisons ({} with data)",
+            results.size(), results.stream().filter(r -> r.n() > 0).count());
         return results;
     }
 
@@ -113,6 +121,89 @@ public class HandicapAnalyser
         }
 
         return result;
+    }
+
+    /**
+     * Generates ComparisonKeys for all potential edges in the network — year transitions,
+     * cross-system comparisons, and variant comparisons — based on which
+     * (system, year, variant) nodes have at least one certificate.
+     * This ensures the network graph shows edges even when no boat has certificates
+     * in both endpoint nodes.
+     */
+    private List<ComparisonKey> generateExpectedKeys()
+    {
+        // Collect all (system, year, nonSpin, twoHanded) tuples that exist
+        Set<CertBucket> existingNodes = new HashSet<>();
+        for (Boat boat : store.boats().values())
+        {
+            for (Certificate c : boat.certificates())
+            {
+                String sys = c.system();
+                if (!"IRC".equals(sys) && !"ORC".equals(sys) && !"AMS".equals(sys))
+                    continue;
+                existingNodes.add(new CertBucket(sys, c.year(), c.nonSpinnaker(), c.twoHanded()));
+            }
+        }
+
+        List<ComparisonKey> keys = new ArrayList<>();
+
+        // Year transitions: for each (sys, variant), consecutive years where both exist
+        for (String sys : new String[]{"IRC", "ORC", "AMS"})
+        {
+            for (boolean[] variant : new boolean[][]{{false, false}, {true, false}, {false, true}})
+            {
+                boolean ns = variant[0], th = variant[1];
+                TreeSet<Integer> years = new TreeSet<>();
+                for (CertBucket b : existingNodes)
+                {
+                    if (b.system().equals(sys) && b.nonSpinnaker() == ns && b.twoHanded() == th)
+                        years.add(b.year());
+                }
+                Integer prev = null;
+                for (int year : years)
+                {
+                    if (prev != null && year == prev + 1)
+                        keys.add(yearTransitionKey(sys, ns, th, prev));
+                    prev = year;
+                }
+            }
+        }
+
+        // Cross-system comparisons: for each year where both systems have certs
+        TreeSet<Integer> allYears = new TreeSet<>();
+        for (CertBucket b : existingNodes)
+            allYears.add(b.year());
+
+        for (int year : allYears)
+        {
+            boolean ircSpin = existingNodes.contains(new CertBucket("IRC", year, false, false));
+            boolean orcSpin = existingNodes.contains(new CertBucket("ORC", year, false, false));
+            boolean amsSpin = existingNodes.contains(new CertBucket("AMS", year, false, false));
+            if (orcSpin && ircSpin) keys.add(ComparisonKey.orcVsIrc(year));
+            if (amsSpin && ircSpin) keys.add(ComparisonKey.amsVsIrc(year));
+            if (amsSpin && orcSpin) keys.add(ComparisonKey.amsVsOrc(year));
+
+            boolean ircNs = existingNodes.contains(new CertBucket("IRC", year, true, false));
+            boolean orcNs = existingNodes.contains(new CertBucket("ORC", year, true, false));
+            boolean amsNs = existingNodes.contains(new CertBucket("AMS", year, true, false));
+            if (orcNs && ircNs) keys.add(ComparisonKey.orcNsVsIrcNs(year));
+            if (amsNs && orcNs) keys.add(ComparisonKey.amsNsVsOrcNs(year));
+
+            boolean orcTh = existingNodes.contains(new CertBucket("ORC", year, false, true));
+            boolean ircTh = existingNodes.contains(new CertBucket("IRC", year, false, true));
+            boolean amsTh = existingNodes.contains(new CertBucket("AMS", year, false, true));
+            if (orcTh && ircTh) keys.add(ComparisonKey.orcTwoHandedVsIrcTwoHanded(year));
+            if (amsTh && orcTh) keys.add(ComparisonKey.amsTwoHandedVsOrcTwoHanded(year));
+
+            // Variant comparisons (pooled "ALL" system)
+            boolean anyNs = ircNs || orcNs || amsNs;
+            boolean anySpin = ircSpin || orcSpin || amsSpin;
+            boolean anyTh = ircTh || orcTh || amsTh;
+            if (anyNs && anySpin) keys.add(ComparisonKey.allNsVsSpin(year));
+            if (anyTh && anySpin) keys.add(ComparisonKey.allTwoHandedVsSpin(year));
+        }
+
+        return keys;
     }
 
     /**
@@ -244,35 +335,62 @@ public class HandicapAnalyser
     {
         for (String sys : new String[]{"IRC", "ORC", "AMS"})
         {
-            // Collect all years for which this boat has a spinnaker cert in this system
-            TreeSet<Integer> years = new TreeSet<>();
-            for (CertBucket b : best.keySet())
-            {
-                if (b.system().equals(sys) && !b.nonSpinnaker() && !b.twoHanded())
-                    years.add(b.year());
-            }
-
-            Integer prev = null;
-            for (int year : years)
-            {
-                if (prev != null && year == prev + 1)
-                {
-                    Certificate certPrev = best.get(new CertBucket(sys, prev, false, false));
-                    Certificate certThis = best.get(new CertBucket(sys, year, false, false));
-                    if (certPrev != null && certThis != null)
-                    {
-                        ComparisonKey key = switch (sys)
-                        {
-                            case "IRC" -> ComparisonKey.ircYearTransition(prev);
-                            case "ORC" -> ComparisonKey.orcYearTransition(prev);
-                            default -> ComparisonKey.amsYearTransition(prev);
-                        };
-                        addPair(result, key, boatId, toTcf(certPrev), toTcf(certThis));
-                    }
-                }
-                prev = year;
-            }
+            emitSystemYearTransitions(sys, false, false, boatId, best, result);  // spin
+            emitSystemYearTransitions(sys, true,  false, boatId, best, result);  // non-spin
+            emitSystemYearTransitions(sys, false, true,  boatId, best, result);  // two-handed
         }
+    }
+
+    private void emitSystemYearTransitions(String sys, boolean nonSpin, boolean twoHanded,
+                                            String boatId,
+                                            Map<CertBucket, Certificate> best,
+                                            Map<ComparisonKey, List<DataPair>> result)
+    {
+        TreeSet<Integer> years = new TreeSet<>();
+        for (CertBucket b : best.keySet())
+        {
+            if (b.system().equals(sys) && b.nonSpinnaker() == nonSpin && b.twoHanded() == twoHanded)
+                years.add(b.year());
+        }
+
+        Integer prev = null;
+        for (int year : years)
+        {
+            if (prev != null && year == prev + 1)
+            {
+                Certificate certPrev = best.get(new CertBucket(sys, prev,    nonSpin, twoHanded));
+                Certificate certThis = best.get(new CertBucket(sys, year, nonSpin, twoHanded));
+                if (certPrev != null && certThis != null)
+                {
+                    ComparisonKey key = yearTransitionKey(sys, nonSpin, twoHanded, prev);
+                    addPair(result, key, boatId, toTcf(certPrev), toTcf(certThis));
+                }
+            }
+            prev = year;
+        }
+    }
+
+    private static ComparisonKey yearTransitionKey(String sys, boolean nonSpin,
+                                                    boolean twoHanded, int yearFrom)
+    {
+        if (nonSpin) return switch (sys)
+        {
+            case "IRC" -> ComparisonKey.ircNsYearTransition(yearFrom);
+            case "ORC" -> ComparisonKey.orcNsYearTransition(yearFrom);
+            default    -> ComparisonKey.amsNsYearTransition(yearFrom);
+        };
+        if (twoHanded) return switch (sys)
+        {
+            case "IRC" -> ComparisonKey.ircTwoHandedYearTransition(yearFrom);
+            case "ORC" -> ComparisonKey.orcTwoHandedYearTransition(yearFrom);
+            default    -> ComparisonKey.amsTwoHandedYearTransition(yearFrom);
+        };
+        return switch (sys)
+        {
+            case "IRC" -> ComparisonKey.ircYearTransition(yearFrom);
+            case "ORC" -> ComparisonKey.orcYearTransition(yearFrom);
+            default    -> ComparisonKey.amsYearTransition(yearFrom);
+        };
     }
 
     // -------------------------------------------------------------------------

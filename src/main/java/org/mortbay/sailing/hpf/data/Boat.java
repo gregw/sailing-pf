@@ -24,7 +24,8 @@ public record Boat(
     String name,         // canonical name
     String designId,     // normalised design ID, nullable
     String clubId,       // primary home club domain, nullable
-    List<String> aliases, // alternate names seen for this boat across sources
+    List<String> aliases,           // alternate names seen for this boat across sources
+    List<String> altSailNumbers,    // alternate sail numbers (previous sail numbers after a change)
     List<Certificate> certificates, // measurement certificates held by this boat
     List<String> sources, // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
     Instant lastUpdated,  // when this record was last written by an importer; nullable
@@ -38,12 +39,15 @@ public record Boat(
             certificates = List.of();
         if (sources == null)
             sources = List.of();
+        if (altSailNumbers == null)
+            altSailNumbers = List.of();
     }
 
     @Override
     public Boat withLoadedAt(Instant t)
     {
-        return new Boat(id, sailNumber, name, designId, clubId, aliases, certificates, sources, lastUpdated, t);
+        return new Boat(id, sailNumber, name, designId, clubId, aliases,
+            altSailNumbers, certificates, sources, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -57,6 +61,7 @@ public record Boat(
         return Objects.equals(id, b.id) && Objects.equals(sailNumber, b.sailNumber)
             && Objects.equals(name, b.name) && Objects.equals(designId, b.designId)
             && Objects.equals(clubId, b.clubId) && Objects.equals(aliases, b.aliases)
+            && Objects.equals(altSailNumbers, b.altSailNumbers)
             && Objects.equals(certificates, b.certificates)
             && Objects.equals(sources, b.sources) && Objects.equals(lastUpdated, b.lastUpdated);
     }
@@ -64,6 +69,6 @@ public record Boat(
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, sailNumber, name, designId, clubId, aliases, certificates, sources, lastUpdated);
+        return Objects.hash(id, sailNumber, name, designId, clubId, aliases, altSailNumbers, certificates, sources, lastUpdated);
     }
 }

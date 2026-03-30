@@ -48,6 +48,13 @@ public class OrcImporter
     // CertType values indicating non-spinnaker
     private static final Set<String> NON_SPIN_CERT_TYPES = Set.of("10", "11");
 
+    // CertType values indicating double-handed
+    private static final Set<String> DH_CERT_TYPES = Set.of("8", "9");
+
+    // CertType values for international certificates; all others are club.
+    // 1 = IRC+ORC intl, 2 = ORC intl, 8 = DH intl, 10 = NS intl
+    private static final Set<String> INTL_CERT_TYPES = Set.of("1", "2", "8", "10");
+
     // Matches the GPH table cell: <td ... filecode="GPH">521.7</td>
     // This attribute is present on all ORC cert page variants (club, NS, international, DH).
     private static final java.util.regex.Pattern GPH_PATTERN =
@@ -200,6 +207,8 @@ public class OrcImporter
 
         boolean nonSpinnaker = (familyName != null && familyName.contains("Non Spinnaker"))
             || NON_SPIN_CERT_TYPES.contains(certType == null ? "" : certType.trim());
+        boolean twoHanded = (familyName != null && familyName.contains("Double Handed"))
+            || DH_CERT_TYPES.contains(certType == null ? "" : certType.trim());
 
         LocalDate expiry = null;
         if (expiryStr != null && !expiryStr.isBlank())
@@ -225,15 +234,15 @@ public class OrcImporter
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.removeIf(c -> finalDxtId.equals(c.certificateNumber()));
 
-        // CertType 1 = IRC+ORC international, 2 = ORC international; all others are club
-        boolean orcClub = certType == null || (!"1".equals(certType.trim()) && !"2".equals(certType.trim()));
+        // International cert types: 1 (IRC+ORC), 2 (ORC), 8 (DH intl), 10 (NS intl); all others are club
+        boolean club = certType == null || !INTL_CERT_TYPES.contains(certType.trim());
         Certificate cert = new Certificate("ORC",
-            year, tcf, nonSpinnaker, false, orcClub, dxtId, expiry);
+            year, tcf, nonSpinnaker, twoHanded, club, false, dxtId, expiry);
         updatedCerts.add(cert);
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(),
+            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(),
             List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
     }
 

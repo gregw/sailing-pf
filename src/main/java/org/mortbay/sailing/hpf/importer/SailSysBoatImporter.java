@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -226,6 +227,47 @@ public class SailSysBoatImporter
         LOG.info("Done. Last id={}, processed={}.", id, processed);
     }
 
+    /**
+     * Fetches (or reads from cache) a single boat by SailSys ID and imports it.
+     * Used by {@link SailSysRaceImporter} for on-demand boat enrichment.
+     * If a fresh cached file exists, no HTTP request is made.
+     *
+     * @return {@code true} if the boat was found and imported
+     */
+    boolean fetchAndImport(int boatId, Path cacheDir, int cacheMaxAgeDays, int httpDelayMs)
+        throws Exception
+    {
+        Path cachedFile = cacheDir != null
+            ? cacheDir.resolve(String.format("boat-%06d.json", boatId)) : null;
+        String json;
+        if (cachedFile != null && Files.exists(cachedFile) && !isStale(cachedFile, cacheMaxAgeDays))
+        {
+            json = Files.readString(cachedFile);
+        }
+        else
+        {
+            Thread.sleep(httpDelayMs);
+            ContentResponse response = client.GET(API_BASE + boatId);
+            json = response.getContentAsString();
+            if (cachedFile != null)
+            {
+                Files.createDirectories(cacheDir);
+                Files.writeString(cachedFile, json);
+            }
+        }
+        return processBoatJson(json);
+    }
+
+    static boolean isStale(Path file, int maxAgeDays)
+    {
+        try
+        {
+            return Files.getLastModifiedTime(file).toInstant()
+                .isBefore(Instant.now().minus(maxAgeDays, ChronoUnit.DAYS));
+        }
+        catch (IOException e) { return true; }
+    }
+
     // --- Parse / import layer (package-private for testing) ---
 
     /**
@@ -295,8 +337,9 @@ public class SailSysBoatImporter
         List<Certificate> certs = upsertIrcCerts(existing.certificates(), boat.handicaps);
 
         store.putBoat(new Boat(existing.id(), existing.sailNumber(), existing.name(),
-            existing.designId(), clubId, existing.aliases(), List.copyOf(certs),
-            addSource(existing.sources(), SOURCE), Instant.now(), null));
+            existing.designId(), clubId, existing.aliases(), existing.altSailNumbers(), List.copyOf(certs),
+            addSource(existing.sources(), SOURCE + (boat.id != null ? "-" + boat.id : "")),
+            Instant.now(), null));
     }
 
     /**
@@ -324,7 +367,7 @@ public class SailSysBoatImporter
             boolean nonSpinnaker = h.spinnakerType == 2;
             LocalDate expiry = parseExpiry(h.certificate.expiryDate);
             int year = certYear(expiry);
-            newIrcCerts.add(new Certificate("IRC", year, h.value, nonSpinnaker, false, false,
+            newIrcCerts.add(new Certificate("IRC", year, h.value, nonSpinnaker, false, false, false,
                 h.certificate.certificateNumber, expiry));
         }
 

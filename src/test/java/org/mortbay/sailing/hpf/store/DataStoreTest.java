@@ -109,8 +109,8 @@ class DataStoreTest {
     @Test
     void roundTripCatalogue(@TempDir Path tempDir) {
         List<Boat> boats = List.of(
-                new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), null, null),
-                new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), List.of(), null, null)
+                new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), List.of(), null, null),
+                new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), List.of(), List.of(), null, null)
         );
 
         DataStore store = new DataStore(tempDir);
@@ -167,8 +167,8 @@ class DataStoreTest {
 
     @Test
     void eachBoatInOwnFile(@TempDir Path tempDir) {
-        Boat boat1 = new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), null, null);
-        Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), List.of(), null, null);
+        Boat boat1 = new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), List.of(), null, null);
+        Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), List.of(), List.of(), null, null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -189,10 +189,10 @@ class DataStoreTest {
     @Test
     void boatWithCertificatesRoundTrip(@TempDir Path tempDir) {
         Certificate cert = new Certificate(
-                "ORC", 2020, 588.4, false, false, false, "AUS-2020-1234",
+                "ORC", 2020, 588.4, false, false, false, false, "AUS-2020-1234",
                 LocalDate.of(2021, 6, 30));
         Boat boat = new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", "myc.com.au",
-                List.of(), List.of(cert), List.of(), null, null);
+                List.of(), List.of(), List.of(cert), List.of(), null, null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -288,7 +288,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Boat existing = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, null,
-                List.of("RagingBull"), List.of(), List.of(), null, null);
+                List.of("RagingBull"), List.of(), List.of(), List.of(), null, null);
         store.putBoat(existing);
 
         Boat found = store.findOrCreateBoat("AUS1234", "RagingBull", null);
@@ -302,7 +302,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Boat noDesign = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, null,
-                List.of(), List.of(), List.of(), null, null);
+                List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(noDesign);
 
         Design design = new Design("j24", "J/24", List.of(), List.of(), List.of(), null, null);
@@ -391,7 +391,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Boat existing = new Boat("AUS1234-shear_magic", "AUS1234", "Shear Magic",
-                null, null, List.of("ShearMagic"), List.of(), List.of(), null, null);
+                null, null, List.of("ShearMagic"), List.of(), List.of(), List.of(), null, null);
         store.putBoat(existing);
 
         Boat found = store.findOrCreateBoat("AUS1234", "SheerMagic", null);
@@ -405,7 +405,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Boat existing = new Boat("AUS1234-shear_magic", "AUS1234", "Shear Magic",
-                null, null, List.of(), List.of(), List.of(), null, null);
+                null, null, List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(existing);
 
         Boat found = store.findOrCreateBoat("AUS1234", "Sheer Magic", null);
@@ -451,7 +451,7 @@ class DataStoreTest {
         // Pre-populate the canonical boat; searching by "1060" should find it
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat canonical = new Boat("MYC7-day_dreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), List.of(), null, null);
+        Boat canonical = new Boat("MYC7-day_dreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(canonical);
 
         Boat found = store.findOrCreateBoat("MYC7", "1060", null);
@@ -588,7 +588,7 @@ class DataStoreTest {
         store.putDesign(keepDesign);
 
         // Boat whose ID currently encodes the "old" design
-        Boat boat = new Boat("AUS1-foo-old", "AUS1", "Foo", "old", null, List.of(), List.of(), List.of(), null, null);
+        Boat boat = new Boat("AUS1-foo-old", "AUS1", "Foo", "old", null, List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(boat);
 
         // Race with a finisher referencing the old boat ID
@@ -625,13 +625,13 @@ class DataStoreTest {
 
         // Boat A: under the old design — will be renamed to AUS1-foo-keep
         Boat boatA = new Boat("AUS1-foo-old", "AUS1", "Foo", "old", null,
-                List.of("AliasFromOld"), List.of(), List.of("SailSys"), null, null);
+                List.of("AliasFromOld"), List.of(), List.of(), List.of("SailSys"), null, null);
         store.putBoat(boatA);
 
         // Boat B: already exists under the keep design with same sail+name — will collide
-        Certificate cert = new Certificate("ORC", 2023, 0.95, false, false, false, null, null);
+        Certificate cert = new Certificate("ORC", 2023, 0.95, false, false, false, false, null, null);
         Boat boatB = new Boat("AUS1-foo-keep", "AUS1", "Foo", "keep", "myclub.com",
-                List.of("AliasFromKeep"), List.of(cert), List.of("ORC"), null, null);
+                List.of("AliasFromKeep"), List.of(), List.of(cert), List.of("ORC"), null, null);
         store.putBoat(boatB);
 
         // Race with finisher referencing boatA
@@ -674,7 +674,7 @@ class DataStoreTest {
         store.putDesign(d1);
         store.putDesign(d2);
 
-        Boat noDesign = new Boat("AUS1-foo", "AUS1", "Foo", null, null, List.of(), List.of(), List.of(), null, null);
+        Boat noDesign = new Boat("AUS1-foo", "AUS1", "Foo", null, null, List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(noDesign);
 
         store.mergeDesigns("d1", List.of("d2"));

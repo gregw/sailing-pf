@@ -93,14 +93,23 @@ done
 
 Large volumes of data already downloaded locally. The importer must support local file reading as first priority.
 
-### Importer Requirements
+### Importer Implementation
 
-- **Local file mode** — read from directory of downloaded JSON files (immediate priority)
-- **HTTP fetch mode** — with throttling; must be a polite client
-- **Boat sweep** — slow periodic re-fetch of all known boat IDs to detect updates
-- **Race sweep** — more frequent re-fetch of current-season races to detect results processing (null → non-null `lastProcessedTime`)
-- **Change detection** — store `lastProcessedTime` per race; re-ingest if changed on re-fetch
-- **`If-Modified-Since`** — almost certainly not honoured by the API; do not rely on it
+Two importers handle SailSys data:
+
+**`SailSysBoatImporter`** — imports boats and IRC certificates:
+- **Local file mode** (`--local`) — reads from directory of downloaded `boat-{id}.json` files
+- **HTTP API mode** — fetches with configurable throttle (`sailsysHttpDelayMs`, default 200ms) and cache max age (`sailsysCacheMaxAgeDays`, default 7)
+- Extracts IRC certificates from `handicaps[]` where `definition.shortName` is `IRC` or `IRC SH`
+- Maps `IRC SH` → `twoHanded=true`
+
+**`SailSysRaceImporter`** — imports races and finishers:
+- **Local file mode** — reads from directory of downloaded `race-{id}.json` files
+- **HTTP API mode** — scans from `nextSailSysRaceId` (configured in `admin.yaml`)
+- Infers certificates from `handicapCreatedFrom` in `calculations[]`
+- Propagates `nonSpinnaker` flag from race entries to inferred certificates
+- Recent race window: `sailsysRecentRaceDays` (default 14) for re-check of recently processed races
+- Fuzzy matching for boat resolution: Jaro-Winkler threshold `fuzzyMatchThreshold` (default 0.90)
 
 ---
 
@@ -162,6 +171,38 @@ A DataTables-powered HTML table. Columns: Boat Name | Sail Number | Owner | Desi
 - HTML structure is identical regardless of central vs self-hosted publishing — one parser handles both
 - Historical seasons follow predictable URL patterns (year substitution)
 
+### Importer Implementation (`TopYachtImporter`)
+
+The TopYacht importer:
+1. Reads club URLs from `clubs.yaml` and crawls series index pages to discover race result links
+2. Parses each result page HTML (JSoup) extracting boat name, sail number, elapsed time, AHC value
+3. **Caption parsing**: Group captions like "Div 1 ORC NS WL results" are parsed to detect:
+   - Base system keyword: `ORC`, `AMS`, or `IRC`
+   - Variant tokens: `NS` → nonSpinnaker, `WL` → windwardLeeward, `DH`/`2HD`/`SH` → twoHanded
+   - Underscores normalised to spaces before splitting (handles `ORC_AP`, `ORC_WL`, etc.)
+4. **Multi-page merge**: When the same race appears on multiple pages (different handicap systems),
+   results are merged into a single `Race` with multiple divisions. Only measurement system AHC
+   values (IRC, ORC, AMS) are retained as inferred certificates.
+5. Inferred certificates carry `nonSpinnaker`, `twoHanded`, and `windwardLeeward` flags from the caption
+
+### TopYacht ORC Group Names
+
+TopYacht encodes ORC variants in many ways. The full set from the TopYacht documentation:
+
+| Caption pattern | System | Flags |
+|---|---|---|
+| ORC | ORC | (standard) |
+| ORC NS | ORC | nonSpinnaker |
+| ORC WL | ORC | windwardLeeward |
+| ORC NS WL | ORC | nonSpinnaker, windwardLeeward |
+| ORC DH | ORC | twoHanded |
+| ORC LO / ORC HI | ORC | (ignored — wind range indicators) |
+| ORCC (ORC Club) | ORC | club |
+| ORC_AP | ORC | (all purpose — treated as standard) |
+| ORC_WL | ORC | windwardLeeward |
+
+Similarly for AMS (`AMS NS`, `AMS 2HD`) and IRC (`IRC_SH` → twoHanded).
+
 ---
 
 ## ORC Certificate Data
@@ -190,12 +231,17 @@ Freely accessible XML feed — no terms of use, no login, no disclaimer. ORC's o
 | `dxtName` | Hull file reference (e.g. `2883.dxt`) — boats sharing the same `.dxt` are the same hull |
 
 **CertType values observed:**
-- 2 = International
-- 3 = Club
-- 8 = DH International
+- 1 = IRC + ORC International (combined certificate)
+- 2 = ORC International
+- 3 = ORC Club
+- 8 = DH (Double Handed) International
 - 9 = DH Club
-- 10 = NS International
+- 10 = NS (Non Spinnaker) International
 - 11 = NS Club
+
+**International vs Club:** CertTypes 1, 2, 8, 10 are international; all others are club.
+The `OrcImporter` uses `INTL_CERT_TYPES = Set.of("1", "2", "8", "10")` and sets `club=true`
+for certificates not in this set.
 
 ### Value for the Project
 
@@ -219,6 +265,22 @@ Recommended: periodic full ingest of Australian certificate list to enrich desig
 - SailSys boat records include IRC TCC values and certificate numbers where boats hold certificates (seen in boat-013143.json for "Magic")
 - TopYacht race result pages publish the IRC value used in each race
 - These sources represent publicly published race data rather than the proprietary RORC database, and are acceptable to use
+
+---
+
+## AMS Certificate Data
+
+**Source:** raceyachts.org
+
+AMS (Australian Measurement System) certificates are scraped from the raceyachts.org listing by `AmsImporter`. AMS is primarily used in Victoria and produces a TCF value on the same scale as IRC TCC. Includes non-spinnaker and two-handed variants.
+
+---
+
+## BWPS Race Data
+
+**Source:** CYCA (Cruising Yacht Club of Australia) publicly available result pages
+
+BWPS (BlueSail WorldWide Performance System) race results are imported by `BwpsImporter`. These are IRC-based offshore races providing boat identity, elapsed times, and IRC handicaps used for scoring. A good source of IRC AHC values from high-quality offshore racing.
 
 ---
 
@@ -248,10 +310,21 @@ Quality ranking (best to worst):
 
 ### Handicap System Coverage by Source
 
-| System | SailSys boats | SailSys races | TopYacht results | ORC feed | IRC feed |
-|---|---|---|---|---|---|
-| IRC | ✓ (certificate) | ✓ (AHC used) | ✓ (AHC used) | — | ✗ (restricted) |
-| ORC | ✓ (certificate) | ✓ (AHC used) | ✓ (AHC used) | ✓ (full feed) | — |
-| AMS | ✓ (no cert) | ✓ (AHC used) | ✓ (AHC used) | — | — |
-| PHS | ✗ (excluded) | ✗ (excluded) | ✗ (excluded) | — | — |
-| CBH | ✗ (excluded) | ✗ (excluded) | ✗ (excluded) | — | — |
+| System | SailSys boats | SailSys races | TopYacht results | ORC feed | AMS feed | BWPS | IRC feed |
+|---|---|---|---|---|---|---|---|
+| IRC | ✓ (certificate) | ✓ (AHC used) | ✓ (AHC used) | — | — | ✓ (AHC used) | ✗ (restricted) |
+| ORC | ✓ (certificate) | ✓ (AHC used) | ✓ (AHC used) | ✓ (full feed) | — | — | — |
+| AMS | ✓ (no cert) | ✓ (AHC used) | ✓ (AHC used) | — | ✓ (full list) | — | — |
+| PHS | ✗ (excluded) | ✗ (excluded) | ✗ (excluded) | — | — | — | — |
+| CBH | ✗ (excluded) | ✗ (excluded) | ✗ (excluded) | — | — | — | — |
+
+### Certificate Variant Flags
+
+All certificate records carry boolean variant flags, populated by the importer that creates them:
+
+| Flag | Meaning | Set by |
+|---|---|---|
+| `nonSpinnaker` | NS certificate | OrcImporter (CertType 10/11, FamilyName), TopYacht caption (NS), SailSys race entry flag |
+| `twoHanded` | DH/SH/2HD certificate | OrcImporter (CertType 8/9), TopYacht caption (DH/2HD/SH), SailSys IRC SH |
+| `windwardLeeward` | WL course-specific cert | TopYacht caption (WL) |
+| `club` | Club-level cert (not international) | OrcImporter (CertType not in 1,2,8,10) |

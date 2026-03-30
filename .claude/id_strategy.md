@@ -25,30 +25,29 @@
 
 ## Boats
 
-**Key format:** `{normalisedSailNumber}-{firstWordOfName}-{hex}`
+**Key format:** `{normalisedSailNumber}-{normalisedName}-{designId}`
 
-Examples: `aus1234-raging-3f9a`, `3721-azzuro-12bc`
+Examples: `AUS1234-raging-tp52`, `5656-mondo-sydney38`, `MYC7-tensixty-radford1060`
 
-**Construction rules:**
+**Construction rules** (see `IdGenerator.generateBoatId()`):
 
-- `normalisedSailNumber`: lowercase, strip all non-alphanumeric characters, collapse spaces. E.g. `AUS-1234` → `aus1234`, `aus 1234` → `aus1234`.
-- `firstWordOfName`: first whitespace-delimited word of the canonical name, lowercased, non-alphanumeric stripped. E.g. `Raging Bull` → `raging`, `TenSixty` → `tensixty`, `Komatsu Azzuro` → `komatsu`.
-- `hex`: a short random hex suffix (4 digits) used only when the `sailNumber-name` combination would otherwise collide with an existing ID. Attempt assignment without the suffix first; append and retry only on collision.
+- `normalisedSailNumber`: uppercase, strip all non-alphanumeric characters, collapse spaces. E.g. `AUS-1234` → `AUS1234`, `aus 1234` → `AUS1234`.
+- `normalisedName`: full name lowercased, non-alphanumeric stripped, spaces collapsed. E.g. `Raging Bull` → `raging_bull`, `TenSixty` → `tensixty`.
+- `designId`: the normalised design ID (e.g. `tp52`, `sydney38`). Omitted if design is unknown.
 
-**Rationale:** Sail numbers are mostly unique but not guaranteed so; the name fragment adds disambiguation. The hex suffix handles the rare genuine collision. The result is compact, memorable, and source-system-independent.
+**Rationale:** Sail numbers are mostly unique but not guaranteed so; the name and design add disambiguation. The result is compact, memorable, and source-system-independent.
 
-**Aliasing:** Each Boat has a list of Alias records capturing the raw source data:
+**Aliasing:** Each Boat has a list of `TimedAlias` records tracking name changes over time:
 
-```
-Alias {
-    sourceSystem,      // e.g. "sailsys", "topyacht"
-    sourceClubId,      // the source system's club identifier (transient use only)
-    rawSailNumber,     // exactly as it appeared in the source
-    rawName            // exactly as it appeared in the source
-}
+```java
+record TimedAlias(String name, LocalDate from, LocalDate until)
 ```
 
-Ingestion matching uses `normalisedSailNumber` + name similarity + club context to resolve an incoming record to an existing Boat, or to create a new one. A new Alias is added for each distinct raw representation encountered.
+The `from`/`until` dates allow tracking when a boat changed names. `activeOn(date)` checks whether the alias was active at a given point.
+
+Additionally, `altSailNumbers` tracks alternative sail numbers seen for the same boat.
+
+**Ingestion matching** uses `normalisedSailNumber` + Jaro-Winkler name similarity (configurable threshold, default 0.90) + design context to resolve an incoming record to an existing Boat, or to create a new one. The `aliases.yaml` seed file provides manual overrides for known difficult matches and sail number redirects.
 
 ---
 
@@ -70,64 +69,69 @@ Ingestion matching uses `normalisedSailNumber` + name similarity + club context 
 
 ---
 
-## Seasons
-
-**Key:** A short label representing the season span, e.g. `2024-25` for the Australian season running spring 2024 to winter 2025. Single-calendar-year seasons use `2024`.
-
----
-
 ## Series
 
-**Key:** `{clubDomain}/{season}/{normalisedSeriesName}`
+**Key:** `{clubDomain}/{normalisedSeriesName}`
 
-Example: `manlysc.com.au/2024-25/wednesday-twilight`
+Example: `myc.com.au/wednesday-twilight`
 
-**Normalisation:** Series names are lowercased, non-alphanumeric characters replaced with hyphens, multiple hyphens collapsed.
+**Construction** (see `IdGenerator.generateSeriesId()`): Club domain + `/` + normalised series name. Series names are lowercased, non-alphanumeric characters replaced with hyphens, multiple hyphens collapsed.
 
-**Source system mapping:** As with clubs, a hand-maintained mapping file resolves source system series identifiers to canonical series keys. Series names within a single club/season are unlikely to collide even with minor variations, so this mapping is expected to be straightforward.
+Note: Season is not included in the series ID. Series are embedded as records within `Club` JSON files and referenced by `seriesIds` in `Race` records.
 
-**Catch-all series:** Each club may have a pseudo-series named `events` for races that do not belong to any real series (e.g. standalone offshore races). Its key follows the same pattern: `manlysc.com.au/2024-25/events`. This series is flagged `isCatchAll: true` and is excluded from series-level aggregate analysis. Every Race belongs to at least one Series; no special null-series handling is required.
+**Catch-all series:** Each club may have a pseudo-series named `events` for races that do not belong to any real series. This series is flagged `isCatchAll: true` and is excluded from series-level aggregate analysis.
 
 ---
 
 ## Races
 
-**Key:** Surrogate generated ID — `{clubDomain}-{isoDate}-{hex}`
+**Key:** Generated ID — `{clubDomain}-{isoDate}-{nnnn}`
 
-Example: `manlysc.com.au-2024-11-06-4a1f`
+Example: `myc.com.au-2024-11-06-0001`
 
-**Rationale:** A race's identity is not cleanly derivable from any series it belongs to, because a race can belong to multiple series. The organising club and date are stable natural attributes; the hex suffix handles the case of multiple races on the same day by the same club (not uncommon for clubs running multiple divisions or back-to-back races).
+**Construction** (see `IdGenerator.generateRaceId()`): Club domain + `-` + ISO date + `-` + zero-padded 4-digit race number.
 
-**Named vs numbered races:** Whether a race is identified within its series by a number (Race 7) or a name (Flinders Race) is stored as a race attribute, not reflected in the primary key. The primary key is always the club+date+hex form.
+**Rationale:** A race's identity is not cleanly derivable from any series it belongs to, because a race can belong to multiple series. The organising club and date are stable natural attributes; the race number suffix distinguishes multiple races on the same day.
 
----
+**Named vs numbered races:** Whether a race is identified within its series by a number (Race 7) or a name (Flinders Race) is stored as a race attribute, not reflected in the primary key.
 
-## Race Entries
-
-**Key:** Composite of `{raceId}+{boatId}`. A boat enters a given race at most once (it may be in one division only, and holds one set of classifications for that race).
+**Persistence:** Races are stored as JSON files at `races/{clubId}/{seriesSlug}/{raceId}.json`.
 
 ---
 
-## Measurement Certificates
+## Finishers (embedded in Race → Division)
 
-**Key:** Surrogate generated ID — `{boatId}-{type}-{year}-{hex}`
+**Not a standalone entity.** A `Finisher` is embedded in a `Division` within a `Race`. It records:
+- `boatId` — reference to the Boat
+- `elapsedTime` — `Duration` (ISO-8601 format in JSON, e.g. `PT1H12M5S`)
+- `nonSpinnaker` — per-entry flag from the race
+- `certificateNumber` — reference to the certificate used for scoring (nullable)
 
-Example: `aus1234-raging-3f9a-irc-2024-001`
+A boat appears at most once per division.
 
-**Rationale:** A boat may hold multiple certificates of the same type in the same year (different configurations). The hex/sequence suffix disambiguates.
+---
+
+## Certificates (embedded in Boat)
+
+**Not a standalone entity.** `Certificate` records are embedded in the `certificates` list on `Boat`. They are identified by their `certificateNumber` field, which varies by source:
+
+- **ORC certificates:** `certificateNumber` is the ORC `dxtID` (e.g. `"62738"`)
+- **AMS certificates:** `certificateNumber` is the AMS cert number
+- **Inferred certificates** (from race results): generated IDs like `irc-inferred-ns-4a1f...` or `ty-orc-2024-0.8420`
+
+Each certificate carries variant flags: `nonSpinnaker`, `twoHanded`, `windwardLeeward`, `club`.
 
 ---
 
 ## Summary Table
 
-| Entity | Key Type | Key Pattern |
-|---|---|---|
-| Club | Natural | website domain name |
-| Maker | Natural | normalised name |
-| Design | Natural | normalised name |
-| Season | Natural | `2024-25` label |
-| Series | Natural composite | `clubDomain/season/normalisedName` |
-| Boat | Generated slug | `sailnum-firstname-hex` |
-| Race | Generated slug | `clubDomain-date-hex` |
-| RaceEntry | Composite | `raceId+boatId` |
-| MeasurementCertificate | Generated slug | `boatId-type-year-hex` |
+| Entity | Key Type | Key Pattern | Storage |
+|---|---|---|---|
+| Club | Natural | website domain name | `clubs/{clubId}.json` |
+| Maker | Natural | normalised name | `catalogue/makers.json` |
+| Design | Natural | normalised name | `designs/{designId}.json` |
+| Series | Natural composite | `clubDomain/normalisedName` | Embedded in Club |
+| Boat | Generated slug | `sailnum-name-designid` | `boats/{boatId}.json` |
+| Race | Generated slug | `clubDomain-date-nnnn` | `races/{clubId}/{seriesSlug}/{raceId}.json` |
+| Certificate | Embedded | varies by source | Embedded in Boat |
+| Finisher | Embedded | keyed by boatId | Embedded in Race → Division |

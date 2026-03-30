@@ -2,42 +2,106 @@
 
 ## Architecture
 
-The presentation layer is a **browser-based client** consuming a **RESTful JSON API** served by the Spring Boot backend. There is no server-side HTML rendering — the backend serves data only; the frontend handles all display and interaction.
+The presentation layer is a **browser-based admin webapp** consuming a **RESTful JSON API** served by Jetty 12.1 embedded servlets. There is no server-side HTML rendering — the backend serves data only; the frontend handles all display and interaction.
 
 This architecture serves two goals:
-1. A rich, interactive user experience with client-side charting
+1. A rich, interactive admin experience with client-side charting and data management
 2. An openly accessible JSON API that third parties can consume directly to build their own tools on top of the project's derived data
 
 ---
 
-## Backend: REST API
+## Backend: Jetty Servlets
 
-- Served by the Spring Boot application alongside the data and optimisation layers
-- Returns JSON; all derived data (HPF values, reference factors, residuals) is available via API endpoints
-- The API is the mechanism by which the CC BY-SA 4.0 derived data is made openly available
+The server runs on port 8080 via `HpfServer.main()`. Three servlets handle all requests:
 
-Key query shapes the API must support:
-- **Series view** — for a given series, return per-boat HPF estimates across all races in the series
-- **Boat comparison** — for two or more specified boats, return all races in which they have competed and their HPF estimates in each
-- **Design comparison** — for two or more specified designs, return aggregate HPF by design across all races where they have competed
+### `AdminApiServlet` — `/api/*`
+
+REST API for data access and management. Supports paginated responses (default page size 50).
+
+**GET endpoints:**
+- `/api/boats` — paginated boat list with optional search/filter query parameters
+- `/api/boats/{id}` — single boat detail (certificates, aliases, sources)
+- `/api/designs` — paginated design list with boat counts
+- `/api/designs/{id}` — single design detail
+- `/api/races` — paginated race list with date/club filtering
+- `/api/races/{id}` — single race detail (divisions, finishers)
+- `/api/importers` — list configured importers and their schedule
+- `/api/stats` — summary statistics (boat/design/race counts, reference factor coverage)
+
+**POST endpoints:**
+- `/api/importers/{name}/run` — trigger an importer run
+- `/api/importers/stop` — request stop of running import
+- `/api/config` — update admin configuration (schedule, thresholds)
+- `/api/exclusions` — manage excluded boat/design/race IDs
+- `/api/merge` — merge duplicate boats or designs (updates aliases.yaml)
+
+### `AnalysisServlet` — `/api/analyse/*`
+
+REST API for analysis results from `AnalysisCache`:
+
+- `/api/analyse/comparisons` — list all available comparison keys
+- `/api/analyse/comparisons/{id}` — get comparison result (pairs, fit, outliers) for a specific key
+- `/api/analyse/reference-factors` — per-boat reference factors
+- `/api/analyse/design-factors` — per-design aggregated factors
+
+### `StaticResourceServlet` — `/*`
+
+Serves the admin frontend HTML, JavaScript, and CSS from classpath resources (`src/main/resources/admin/`).
 
 ---
 
-## Frontend: JavaScript Charting
+## Frontend: Admin Webapp
 
-- A static single-page application (HTML + JS), served as static assets from the Spring Boot app or a CDN
-- Charts rendered client-side using a JavaScript charting library (Plotly.js is the leading candidate — it produces interactive, publication-quality charts and is open source)
-- No React or build pipeline complexity — plain JS or a lightweight framework is preferred given the limited UI scope
+A static single-page application (HTML + JavaScript), served as classpath resources. Charts rendered client-side using Plotly.js. No React, no build pipeline — plain JavaScript with DOM manipulation.
 
-### Intended Chart Types
-- **Time series / scatter** — HPF estimates per boat per race within a series, showing consistency and drift over time
+### Pages
+
+**Data Browser** (`data.html` + `data.js`):
+- Paginated tables for boats, designs, and races with search/filter
+- Drill-down to individual entity details (certificates, race history, design members)
+- Manual merge interface for duplicate boats and designs
+- Exclusion management (mark boats/designs/races as excluded from analysis)
+
+**Analysis** (`analysis.html` + `analysis.js`):
+- Dropdown selection of comparison type (system×year×variant pairs)
+- Plotly.js scatter plots showing paired observations with linear fit overlay
+- Reference factor inspection per boat (spin, non-spin, two-handed with generation info)
+- Design-level factor display
+
+**Import Management** (`import.html` + `import.js`):
+- Run individual importers (sailsys-races, orc, ams, topyacht, bwps, analysis, reference-factors, build-indexes)
+- Configure scheduled runs (days of week, time)
+- Live progress display for running imports
+- Stop button for running imports
+
+### Chart Types (Implemented)
+- **Scatter plots** — paired handicap observations (x=system A TCF, y=system B TCF) with least-squares fit line
+- **Residual highlights** — outlier pairs shown in different colour after sigma trimming
+
+### Chart Types (Future — requires Phase 2)
+- **Time series / scatter** — HPF estimates per boat per race within a series
 - **Box plots or violin plots** — HPF distribution per boat or per design across a season
 - **Comparison overlays** — two or more boats or designs on the same axes
 
 ---
 
-## Key Constraint
+## Configuration
 
-The presentation layer is deliberately **last in the build sequence**. The data ingestion, reference network, and HPF optimisation layers are built first. The REST API surface is defined once real optimisation outputs are available to inspect. The frontend is built against that real API.
+Admin configuration is stored in `hpf-data/config/admin.yaml` and managed via the admin webapp
+or direct file editing. Key settings:
 
-This avoids designing charts against hypothetical data shapes.
+```yaml
+importers:                    # list of importers with name, mode, includeInSchedule
+schedule:
+  days: [MONDAY, SUNDAY]     # days to run scheduled imports
+  time: "09:45:00"            # time of day for scheduled runs
+nextSailSysRaceId: 32638     # resume point for SailSys race scanning
+targetIrcYear: 2025           # target year for reference factor DFS
+outlierSigma: null            # outlier trimming threshold (null = default 2.5)
+mergeCandidateThreshold: 0.5  # JW threshold for merge candidate display
+fuzzyMatchThreshold: 0.9      # JW threshold for boat/design name matching
+clubCertificateWeight: 0.9    # weight multiplier for club-level certificates
+sailsysCacheMaxAgeDays: 7
+sailsysHttpDelayMs: 200
+sailsysRecentRaceDays: 14
+```

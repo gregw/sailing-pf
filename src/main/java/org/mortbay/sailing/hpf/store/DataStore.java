@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -75,6 +76,11 @@ public class DataStore
     private DesignCatalogueLoader.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
     private List<Maker> makers;
     private boolean makersDirty;
+
+    // Mutable exclusion sets — persisted to config/exclusions.json, managed via admin UI
+    private final Set<String> excludedBoatIds          = new LinkedHashSet<>();
+    private final Set<String> excludedDesignOverrideIds = new LinkedHashSet<>();
+    private final Set<String> excludedRaceIds           = new LinkedHashSet<>();
 
     public DataStore(Path root)
     {
@@ -146,6 +152,11 @@ public class DataStore
      *   <li>{@code $HOME/.hpf-data} as the default fallback</li>
      * </ol>
      */
+    public Path dataRoot()
+    {
+        return root;
+    }
+
     public Path configDir()
     {
         return configDir;
@@ -195,6 +206,24 @@ public class DataStore
 
     public Boat findOrCreateBoat(String sailNo, String name, Design design)
     {
+        // Apply design override from design.yaml config, if any
+        String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name);
+        if (overrideDesignId != null)
+        {
+            Design overrideDesign = designs.get(overrideDesignId);
+            if (overrideDesign != null)
+            {
+                if (design == null || !overrideDesignId.equals(design.id()))
+                    LOG.info("Boat {}/{}: design overridden {} → {}", sailNo, name,
+                        design == null ? "null" : design.id(), overrideDesignId);
+                design = overrideDesign;
+            }
+            else
+            {
+                LOG.warn("Boat {}/{}: design override designId='{}' not found in store", sailNo, name, overrideDesignId);
+            }
+        }
+
         String boatId = IdGenerator.generateBoatId(sailNo, name, design);
 
         Boat boat = boats.get(boatId);
@@ -206,7 +235,7 @@ public class DataStore
 
         for (Boat candidate : boats.values())
         {
-            if (!candidate.sailNumber().equals(normSail))
+            if (!candidate.sailNumber().equals(normSail) && !candidate.altSailNumbers().contains(normSail))
                 continue;
             if (design != null && candidate.designId() != null && !candidate.designId().equals(design.id()))
                 continue;
@@ -216,7 +245,7 @@ public class DataStore
                 if (candidate.designId() == null && design != null)
                 {
                     removeBoat(candidate.id());
-                    Boat upgraded = new Boat(boatId, normSail, name, design.id(), candidate.clubId(), candidate.aliases(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
+                    Boat upgraded = new Boat(boatId, normSail, name, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
                     putBoat(upgraded);
                     LOG.info("Upgraded boat {} → {}", candidate.id(), boatId);
                     return upgraded;
@@ -225,8 +254,54 @@ public class DataStore
             }
         }
 
-        // Check the alias seed: if the incoming name matches a known alias for this sail number,
-        // redirect to the canonical name — both for finding an existing boat and for creation.
+        // Check the alias seed using the new lookupBoat method (sail number + name-design key).
+        String nameDesignKey = normName + (design != null ? "-" + design.id() : "");
+        Optional<AliasSeedLoader.AliasSeed.BoatSeedMatch> seedMatch =
+            aliasSeed.lookupBoat(normSail, nameDesignKey);
+        if (seedMatch.isPresent())
+        {
+            String seedCanonicalName = seedMatch.get().canonicalName();
+            String seedCanonicalSail = seedMatch.get().canonicalSailNumber();
+            // If canonical sail differs from incoming, redirect to the canonical sail number
+            if (seedCanonicalSail != null && !seedCanonicalSail.equalsIgnoreCase(normSail))
+            {
+                LOG.info("Sail number {} redirected to {} via alias seed (altSailNumbers)", normSail, seedCanonicalSail);
+                normSail = seedCanonicalSail;
+            }
+            if (seedCanonicalName != null)
+            {
+                String normCanonical = IdGenerator.normaliseName(seedCanonicalName);
+                for (Boat candidate : boats.values())
+                {
+                    if (!candidate.sailNumber().equals(normSail) && !candidate.altSailNumbers().contains(normSail))
+                        continue;
+                    if (design != null && candidate.designId() != null && !candidate.designId().equals(design.id()))
+                        continue;
+                    if (boatNameMatches(candidate, seedCanonicalName, normCanonical))
+                    {
+                        if (candidate.designId() == null && design != null)
+                        {
+                            String canonicalBoatId = IdGenerator.generateBoatId(normSail, seedCanonicalName, design);
+                            removeBoat(candidate.id());
+                            Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
+                            putBoat(upgraded);
+                            LOG.info("Upgraded boat (via alias seed) {} → {}", candidate.id(), canonicalBoatId);
+                            return upgraded;
+                        }
+                        return candidate;
+                    }
+                }
+                // No existing boat found — create with the canonical name, recording the incoming name as an alias
+                String canonicalBoatId = IdGenerator.generateBoatId(normSail, seedCanonicalName, design);
+                List<String> aliases = normName.equals(normCanonical) ? List.of() : List.of(name);
+                Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), List.of(), null, null);
+                putBoat(newBoat);
+                LOG.info("Created new boat (via alias seed) {}", newBoat);
+                return newBoat;
+            }
+        }
+
+        // Fallback: check old boatAliases/boatCanonicalName for legacy compatibility
         List<org.mortbay.sailing.hpf.data.TimedAlias> seedAliases = aliasSeed.boatAliases(normSail);
         String seedCanonicalName = aliasSeed.boatCanonicalName(normSail);
         boolean nameMatchesSeedAlias = !seedAliases.isEmpty() && seedAliases.stream()
@@ -247,9 +322,9 @@ public class DataStore
                     {
                         String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
                         removeBoat(candidate.id());
-                        Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
+                        Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
                         putBoat(upgraded);
-                        LOG.info("Upgraded boat (via alias seed) {} → {}", candidate.id(), canonicalBoatId);
+                        LOG.info("Upgraded boat (via alias seed legacy) {} → {}", candidate.id(), canonicalBoatId);
                         return upgraded;
                     }
                     return candidate;
@@ -258,9 +333,9 @@ public class DataStore
             // No existing boat found — create with the canonical name, recording the incoming name as an alias
             String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
             List<String> aliases = normName.equals(normCanonical) ? List.of() : List.of(name);
-            Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), null, null);
+            Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), List.of(), null, null);
             putBoat(newBoat);
-            LOG.info("Created new boat (via alias seed) {}", newBoat);
+            LOG.info("Created new boat (via alias seed legacy) {}", newBoat);
             return newBoat;
         }
 
@@ -273,7 +348,7 @@ public class DataStore
             return findOrCreateBoat(redirectSail, name, design);
         }
 
-        Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), List.of(), null, null);
+        Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), List.of(), List.of(), null, null);
         putBoat(newBoat);
         LOG.info("Created new boat {}", newBoat);
         return newBoat;
@@ -611,20 +686,23 @@ public class DataStore
                     mergedSources.addAll(boat.sources());
 
                     String clubId = existingAtNewId.clubId() != null ? existingAtNewId.clubId() : boat.clubId();
+                    // Merge altSailNumbers from both boats
+                    LinkedHashSet<String> mergedAltSails = new LinkedHashSet<>(existingAtNewId.altSailNumbers());
+                    mergedAltSails.addAll(boat.altSailNumbers());
                     toWrite = new Boat(newId, existingAtNewId.sailNumber(), existingAtNewId.name(), keepId,
-                        clubId, List.copyOf(mergedAliases), List.copyOf(certMap.values()),
-                        List.copyOf(mergedSources), Instant.now(), null);
+                        clubId, List.copyOf(mergedAliases), List.copyOf(mergedAltSails),
+                        List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
                 }
                 else
                 {
                     toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                        boat.clubId(), boat.aliases(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                        boat.clubId(), boat.aliases(), boat.altSailNumbers(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
                 }
             }
             else
             {
                 toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                    boat.clubId(), boat.aliases(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                    boat.clubId(), boat.aliases(), boat.altSailNumbers(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
             }
             putBoat(toWrite);
             updatedBoats++;
@@ -679,11 +757,95 @@ public class DataStore
      * Returns true if the given design ID is configured as excluded (dinghy/OTB class).
      * The HPF optimiser uses this to skip excluded designs during calculation.
      * Raw records are still created — exclusion is a configuration concern, not a data concern.
+     * Checks both the static design.yaml catalogue and any UI-driven overrides.
      */
     public boolean isDesignExcluded(String designId)
     {
         requireStarted();
-        return designCatalogue.isExcluded(designId);
+        return designCatalogue.isExcluded(designId) || excludedDesignOverrideIds.contains(designId);
+    }
+
+    /** Returns true if the boat has been manually excluded from analysis via the admin UI. */
+    public boolean isBoatExcluded(String boatId)
+    {
+        requireStarted();
+        return excludedBoatIds.contains(boatId);
+    }
+
+    /** Returns true if the race has been manually excluded from analysis via the admin UI. */
+    public boolean isRaceExcluded(String raceId)
+    {
+        requireStarted();
+        return excludedRaceIds.contains(raceId);
+    }
+
+    public void setBoatExcluded(String id, boolean excluded)
+    {
+        requireStarted();
+        if (excluded) excludedBoatIds.add(id);
+        else excludedBoatIds.remove(id);
+        saveExclusions();
+    }
+
+    public void setDesignExcluded(String id, boolean excluded)
+    {
+        requireStarted();
+        if (excluded) excludedDesignOverrideIds.add(id);
+        else excludedDesignOverrideIds.remove(id);
+        saveExclusions();
+    }
+
+    public void setRaceExcluded(String id, boolean excluded)
+    {
+        requireStarted();
+        if (excluded) excludedRaceIds.add(id);
+        else excludedRaceIds.remove(id);
+        saveExclusions();
+    }
+
+    private static class ExclusionsFile
+    {
+        public Set<String> boats   = new LinkedHashSet<>();
+        public Set<String> designs = new LinkedHashSet<>();
+        public Set<String> races   = new LinkedHashSet<>();
+    }
+
+    private void loadExclusions()
+    {
+        Path file = configDir.resolve("exclusions.json");
+        if (!Files.exists(file))
+            return;
+        try
+        {
+            ExclusionsFile ef = MAPPER.readValue(file.toFile(), ExclusionsFile.class);
+            if (ef.boats   != null) excludedBoatIds.addAll(ef.boats);
+            if (ef.designs != null) excludedDesignOverrideIds.addAll(ef.designs);
+            if (ef.races   != null) excludedRaceIds.addAll(ef.races);
+            LOG.info("Loaded exclusions: {} boats, {} designs, {} races",
+                excludedBoatIds.size(), excludedDesignOverrideIds.size(), excludedRaceIds.size());
+        }
+        catch (Exception e)
+        {
+            LOG.warn("Failed to load exclusions.json: {}", e.getMessage());
+        }
+    }
+
+    private void saveExclusions()
+    {
+        Path file = configDir.resolve("exclusions.json");
+        ExclusionsFile ef = new ExclusionsFile();
+        ef.boats   = new LinkedHashSet<>(excludedBoatIds);
+        ef.designs = new LinkedHashSet<>(excludedDesignOverrideIds);
+        ef.races   = new LinkedHashSet<>(excludedRaceIds);
+        try
+        {
+            Files.createDirectories(configDir);
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), ef);
+        }
+        catch (Exception e)
+        {
+            LOG.warn("Failed to save exclusions.json: {}", e.getMessage());
+        }
     }
 
     /**
@@ -738,7 +900,7 @@ public class DataStore
             toMerge.add(b);
         }
 
-        // Build merged aliases — collect all names and existing aliases from merged-away boats
+        // Build merged aliases — collect all names and existing aliases from merged-away boats (name aliases only)
         Set<String> allAliases = new LinkedHashSet<>(keepBoat.aliases());
         for (Boat mb : toMerge)
         {
@@ -747,6 +909,16 @@ public class DataStore
             allAliases.addAll(mb.aliases());
         }
         allAliases.removeIf(a -> a.equalsIgnoreCase(keepBoat.name()));
+
+        // Build merged alternate sail numbers — collect from merged-away boats' canonical and alt sail numbers
+        LinkedHashSet<String> allAltSails = new LinkedHashSet<>(keepBoat.altSailNumbers());
+        for (Boat mb : toMerge)
+        {
+            // Add the merged-away boat's canonical sail number if different from keep boat's
+            if (!mb.sailNumber().equalsIgnoreCase(keepBoat.sailNumber()))
+                allAltSails.add(mb.sailNumber());
+            allAltSails.addAll(mb.altSailNumbers());
+        }
 
         // Merge certificates — deduplicate by system+year+variant; keep boat's certs take priority
         Map<String, Certificate> certMap = new LinkedHashMap<>();
@@ -766,7 +938,8 @@ public class DataStore
         for (Boat mb : toMerge)
             mergedSources.addAll(mb.sources());
         Boat mergedBoat = new Boat(keepBoat.id(), keepBoat.sailNumber(), keepBoat.name(),
-            designId, clubId, List.copyOf(allAliases), List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
+            designId, clubId, List.copyOf(allAliases), List.copyOf(allAltSails),
+            List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
         putBoat(mergedBoat);
 
         // Repoint all finisher records that reference a merged-away boat ID
@@ -849,6 +1022,7 @@ public class DataStore
         clubSeed = ClubSeedLoader.load(configDir);
         aliasSeed = AliasSeedLoader.load(configDir);
         designCatalogue = DesignCatalogueLoader.load(configDir);
+        loadExclusions();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
         races = new LinkedHashMap<>();
@@ -874,6 +1048,9 @@ public class DataStore
         designCatalogue = null;
         makers = null;
         makersDirty = false;
+        excludedBoatIds.clear();
+        excludedDesignOverrideIds.clear();
+        excludedRaceIds.clear();
     }
 
     private <T> List<T> loadDir(Path dir, Class<T> type)

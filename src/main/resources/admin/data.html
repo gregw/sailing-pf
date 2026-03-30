@@ -14,6 +14,10 @@
     <a href="analysis.html">Analysis</a>
   </nav>
 
+  <div id="import-banner" class="import-warning-banner" style="display:none">
+    Data import is in progress — results may be incomplete or stale
+  </div>
+
   <h1>Data Browser</h1>
 
   <div class="tabs">
@@ -23,11 +27,12 @@
   </div>
 
   <div id="panel-boats" class="tab-panel active">
+    <div id="filter-banner-boats" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-boats" placeholder="Search by id or name…" oninput="debounceSearch('boats')">
       <button onclick="doSearch('boats')">Search</button>
-      <label style="margin-left:1rem;"><input type="checkbox" id="filter-dupe-sails" onchange="doSearch('boats')"> Duplicate sail numbers</label>
-      <label style="margin-left:1rem;"><input type="checkbox" id="show-excluded-boats" onchange="doSearch('boats')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="filter-dupe-sails" onchange="doSearch('boats')"> Duplicate sail numbers</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-boats" onchange="doSearch('boats')"> Show excluded</label>
     </div>
     <div class="pagination" id="pager-top-boats"></div>
     <table>
@@ -38,7 +43,7 @@
 
     <div id="merge-bar-boats" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-boats"></span>
-      <button onclick="showMergePanel('boats')" style="margin-left:1rem;">Merge selected…</button>
+      <button onclick="showMergePanel('boats')" style="margin-left:0.5rem;">Merge selected…</button>
       <button onclick="clearSelection('boats')" style="margin-left:0.5rem;">Clear selection</button>
     </div>
 
@@ -52,15 +57,16 @@
 
     <div class="detail-panel" id="detail-boats">
       <div id="ref-factors-boats" style="margin-bottom:0.75rem;"></div>
-      <pre id="pre-boats"></pre>
+      <div id="pre-boats" class="json-tree"></div>
     </div>
   </div>
 
   <div id="panel-designs" class="tab-panel">
+    <div id="filter-banner-designs" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-designs" placeholder="Search by id or name…" oninput="debounceSearch('designs')">
       <button onclick="doSearch('designs')">Search</button>
-      <label style="margin-left:1rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
     </div>
     <div class="pagination" id="pager-top-designs"></div>
     <table>
@@ -71,7 +77,7 @@
 
     <div id="merge-bar-designs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-designs"></span>
-      <button onclick="showMergePanel('designs')" style="margin-left:1rem;">Merge selected…</button>
+      <button onclick="showMergePanel('designs')" style="margin-left:0.5rem;">Merge selected…</button>
       <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
     </div>
 
@@ -83,14 +89,15 @@
       <div id="merge-status-designs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
-    <div class="detail-panel" id="detail-designs"><pre id="pre-designs"></pre></div>
+    <div class="detail-panel" id="detail-designs"><div id="pre-designs" class="json-tree"></div></div>
   </div>
 
   <div id="panel-races" class="tab-panel">
+    <div id="filter-banner-races" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-races" placeholder="Search by id or club…" oninput="debounceSearch('races')">
       <button onclick="doSearch('races')">Search</button>
-      <label style="margin-left:1rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
     </div>
     <div class="pagination" id="pager-top-races"></div>
     <table>
@@ -98,7 +105,7 @@
       <tbody id="tbody-races"></tbody>
     </table>
     <div class="pagination" id="pager-races"></div>
-    <div class="detail-panel" id="detail-races"><pre id="pre-races"></pre></div>
+    <div class="detail-panel" id="detail-races"><div id="pre-races" class="json-tree"></div></div>
   </div>
 
   <script src="common.js"></script>

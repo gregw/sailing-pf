@@ -129,9 +129,9 @@ class SailSysBoatImporterTest
 
         Boat boat = store.boats().values().iterator().next();
         // Manually add an ORC cert as if OrcImporter had run
-        Certificate orcCert = new Certificate("ORC", 2023, 588.4, false, false, false, "AUS-2023-XYZ", null);
+        Certificate orcCert = new Certificate("ORC", 2023, 588.4, false, false, false, false, "AUS-2023-XYZ", null);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(),
+            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(),
             List.of(boat.certificates().getFirst(), orcCert), boat.sources(), boat.lastUpdated(), null));
 
         // Re-run SailSys importer with updated IRC

@@ -7,11 +7,13 @@ designs:
     aliases:
       - Sydney 36 OD
 
-# Boat name aliases, keyed by normalised sail number.
+# Boat name aliases, keyed by normName[-designId].
 # All aliases use the object form; 'from' and 'until' are optional ISO dates.
 boats:
-  MYC7:
+  day_dreaming:
     canonicalName: Day Dreaming
+    canonicalSailNumber: MYC7
     aliases:
       - name: "1060"
       - name: TenSixty
+    altSailNumbers: []

@@ -2,7 +2,7 @@
 
 ## Previous Implementation
 
-There is a previous Java implementation of this project in the repository. It was a deliberate **quick-and-dirty exploratory prototype** — written to understand the domain, not as a production design. It should be read to understand domain knowledge (entities, relationships, edge cases, field names) but **must not be used as an architectural template**. Specific design problems are listed below.
+There was a previous Java prototype in the repository. It was a deliberate **quick-and-dirty exploratory prototype** — written to understand the domain, not as a production design. The prototype code has been deleted; only the domain knowledge it embodied influenced the new design. The specific design problems it exhibited are listed below as guidance on what to avoid.
 
 ---
 
@@ -44,59 +44,82 @@ Raw                →  (nothing in this project)
 
 ### Layer 1: Raw — Records, Always Persisted, Immutable
 
-The raw layer captures data exactly as ingested from source systems. It is persisted to the database. Once stored, raw data is never mutated.
+The raw layer captures data exactly as ingested from source systems. It is persisted as JSON files (one per top-level entity). Once stored, raw data is never mutated — updates create a new record with updated fields.
 
-- Use **Java records** for all raw layer entities — immutability, compact syntax, and value semantics are all desirable.
+- All raw layer entities are **Java records** — immutability, compact syntax, and value semantics.
 - Raw records hold **no back-references** and **no derived fields**.
 - Raw records know nothing about any other layer.
+- Top-level entities implement the `Loadable` interface for dirty-tracking via `loadedAt()` timestamp.
 
-Key raw records: `Boat`, `Race`, `RaceEntry`, `MeasurementCertificate`, `Club`, `Design`, `Series`, `Season`.
+**Top-level records** (one JSON file each):
+- `Boat` — id, sailNumber, name, designId, clubId, aliases (List\<TimedAlias\>), altSailNumbers, certificates (List\<Certificate\>), sources, lastUpdated
+- `Race` — id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions (List\<Division\>), source, lastUpdated
+- `Club` — id, shortName, longName, state, aliases, topyachtUrls, series (List\<Series\>)
+- `Design` — id, canonicalName, makerIds, aliases, sources, lastUpdated
 
----
+**Embedded records** (nested inside their parent, not persisted separately):
+- `Certificate` — system (IRC/ORC/AMS), year, value (TCF), nonSpinnaker, twoHanded, club, windwardLeeward, certificateNumber, expiryDate. Embedded in `Boat`.
+- `Division` — name, finishers (List\<Finisher\>). Embedded in `Race`.
+- `Finisher` — boatId, elapsedTime (Duration), nonSpinnaker, certificateNumber. Embedded in `Division`.
+- `Series` — id, name, isCatchAll, raceIds. Embedded in `Club`.
+- `TimedAlias` — name, from (LocalDate), until (LocalDate). Embedded in `Boat`.
+- `Maker` — id, canonicalName, aliases. Stored in `catalogue/makers.json`.
 
-### Layer 2: Deterministic Derived — Records, Persisted, Invalidated on Raw Change
-
-The deterministic derived layer is computed from the raw layer by **pure functions with no tuning parameters**. Given the same raw data, it always produces the same result. It is persisted as a materialised view — recomputed only when the raw data it depends on changes.
-
-- Use **Java records** — these values are immutable once computed.
-- Cache invalidation is straightforward: track which raw records each derived record depends on; invalidate when those raw records change.
-- Recomputation is triggered by new race ingestion, new certificate arrival, or design alias updates — not by user configuration.
-
-Key deterministic derived records:
-- `BoatReference` — the reference factor and weight for a boat, derived from its measurement certificates and race co-participation (pipeline Steps 8–12)
-- `DesignReference` — the aggregated reference factor for a design, derived from its fleet of certificated boats
-- `RaceDispersion` — weighted IQR and dispersion metrics for a race, derived purely from elapsed times and reference factors
-
-These are the **anchors** for the optimisation layer. The optimisation layer treats them as fixed inputs, not variables.
-
----
-
-### Layer 3: Optimised Derived — Mutable Classes, Never Persisted
-
-The optimised derived layer is produced by the HPF optimisation (pipeline Steps 13–19). It is **non-deterministic** in the sense that its output depends on configuration (scope, λ, convergence threshold, number of outer iterations) and the iterative optimisation process. It is never persisted — always recomputed on demand with whatever configuration the user requests.
-
-- Use **ordinary mutable classes** for working objects updated during alternating least squares iterations.
-- Use **records** for final output snapshots once optimisation converges — these are read-only results handed to the presentation layer.
-- Working objects hold references to raw records and deterministic derived records as fixed inputs; they never mutate those inputs.
-
-Key optimised derived types:
-- `EntryWeight` (mutable, working) — the weight assigned to a race entry during iterations
-- `RaceContext` (mutable, working) — the current T estimate for a race during iterations
-- `BoatHpfEstimate` (mutable, working) — the current HPF estimate for a boat during iterations
-- `BoatHpf` (record, final output) — the converged HPF, confidence, and per-race residuals for a boat
+**Supporting records:**
+- `Factor` — value (double) + weight (double). Used throughout the analysis layer; provides static methods `apply()`, `compose()`, `aggregate()`.
+- `WeightedInterval` — duration + weight. Used in race analysis.
 
 ---
 
-### Layer 4: Index — Derived, Cheap, Optionally Persisted
+### Layer 2: Deterministic Derived — Records, Held in AnalysisCache
 
-Navigation that would require back-references on raw records (e.g. "all races for a boat") is handled by **index objects** rather than collection fields on parent entities. Indexes are derived deterministically from raw data and can be rebuilt at any time at negligible cost for the expected dataset size (~600 boats, ~50 races/year).
+The deterministic derived layer is computed from the raw layer by functions that are deterministic given the same raw data and configuration parameters. Results are held in volatile fields in `AnalysisCache` — not persisted to disk, but recomputed on startup and after each importer run.
+
+- All derived types are **Java records** — immutable once computed.
+- Recomputation is triggered by `AnalysisCache.refresh()` after importer runs or configuration changes.
+
+**Comparison analysis** (produced by `HandicapAnalyser`):
+- `ComparisonResult` — key (ComparisonKey), pairs (DataPair[]), trimmedPairs (outlier-removed), fit (LinearFit)
+- `ComparisonKey` — identifies a handicap comparison (system A/B, variant A/B, year A/B); factory methods for all comparison types
+- `DataPair` — boatId, x (TCF), y (TCF)
+- `LinearFit` — slope, intercept, r², se, n, xMean, ssx; methods: predict(x), inverse(), weight(x)
+
+**Conversion graph** (produced from ComparisonResults):
+- `ConversionGraph` — directed graph of system×year×variant nodes connected by LinearFit edges (minimum R² = 0.75)
+- `ConversionNode` — system, year, nonSpinnaker, twoHanded
+- `ConversionEdge` — from node, to node, fit
+
+**Reference factors** (produced by `ReferenceNetworkBuilder` via DFS of the ConversionGraph):
+- `BoatReferenceFactors` — spin (Factor), nonSpin (Factor), twoHanded (Factor), with generation tracking per variant
+- `Factor` — value + weight pair with static composition methods
+
+These are the **anchors** for the future HPF optimisation layer.
+
+---
+
+### Layer 3: Index — Derived, Held in AnalysisCache
+
+Navigation that would require back-references on raw records (e.g. "all races for a boat") is handled by **index maps** in `AnalysisCache` rather than collection fields on parent entities. Indexes are derived deterministically from raw data and rebuilt via `AnalysisCache.refreshIndexes()`.
 
 ```java
 // Rather than: boat.getEntries()  ← do not do this
-// Use:         entryIndex.entriesByBoatId(boat.id())
+// Use:         cache.raceIdsByBoatId().get(boat.id())
 ```
 
-Index objects may optionally be persisted to accelerate startup, but correctness never depends on the persisted index — it can always be recomputed from the raw layer.
+Current indexes (volatile `Map` fields in AnalysisCache):
+- `boatIdsByDesignId` — designId → Set of boatIds
+- `raceIdsByBoatId` — boatId → Set of raceIds
+- `seriesIdsByBoatId` — boatId → Set of seriesIds
+
+---
+
+### Layer 4: Optimised Derived — Not Yet Implemented
+
+The optimised derived layer will be produced by the HPF optimisation (pipeline Steps 13–19). It will be **non-deterministic** in the sense that its output depends on configuration (scope, λ, convergence threshold). It will never be persisted — always recomputed on demand.
+
+- Use **ordinary mutable classes** for working objects updated during alternating least squares iterations.
+- Use **records** for final output snapshots once optimisation converges.
+- Working objects hold references to raw records and deterministic derived records as fixed inputs; they never mutate those inputs.
 
 ---
 
@@ -104,12 +127,27 @@ Index objects may optionally be persisted to accelerate startup, but correctness
 
 | Layer | Persisted? | Condition |
 |---|---|---|
-| Raw | Always | Source of truth |
-| Deterministic derived | Yes | Invalidated when upstream raw data changes |
-| Index | Optional | Performance only; always recomputable |
-| Optimised derived | Never | Recomputed on demand per configuration |
+| Raw | Always (JSON files) | Source of truth |
+| Deterministic derived | No (held in AnalysisCache) | Recomputed on startup and after imports |
+| Index | No (held in AnalysisCache) | Recomputed on demand |
+| Optimised derived | Never | Not yet implemented |
 
-If any object needs to be serialised for an API response, a custom Jackson serialiser writes only the ID of any referenced raw record — it does not expand the full raw record inline.
+### Persistence Layout
+
+```
+hpf-data/                          (resolved via HPF_DATA env, ./hpf-data, or ~/.hpf-data)
+  boats/{boatId}.json
+  designs/{designId}.json
+  clubs/{clubId}.json
+  races/{clubId}/{seriesSlug}/{raceId}.json
+  catalogue/makers.json
+  config/
+    admin.yaml                     (importer schedule, thresholds, configurable weights)
+    aliases.yaml                   (read-only seed: boat/design aliases, sail number redirects)
+    clubs.yaml                     (read-only seed: club metadata, TopYacht URLs)
+    design.yaml                    (read-only seed: exclusions, design overrides)
+    exclusions.json                (mutable: excluded boat/design/race IDs, managed by admin UI)
+```
 
 ---
 
@@ -117,8 +155,33 @@ If any object needs to be serialised for an API response, a custom Jackson seria
 
 Analysis and optimisation logic lives in dedicated service classes, not in entity objects:
 
-- `ReferenceNetworkBuilder` — computes `BoatReference` and `DesignReference` records (deterministic derived layer, Steps 8–12)
-- `HpfOptimiser` — runs the alternating least squares optimisation (optimised derived layer, Steps 13–17)
-- Importers (`SailSysImporter`, `TopYachtImporter`) — translate raw source data into raw layer records
+**Importers** (populate Layer 1):
+- `SailSysBoatImporter` — imports boats and IRC certificates from SailSys boat API/files
+- `SailSysRaceImporter` — imports races, divisions, finishers from SailSys race API/files
+- `TopYachtImporter` — scrapes TopYacht HTML; handles multi-page merge, caption-based variant detection
+- `OrcImporter` — fetches ORC certificate feed XML; creates certificates with variant flags
+- `AmsImporter` — scrapes AMS certificate listings from raceyachts.org
+- `BwpsImporter` — imports BWPS (CYCA) race results
+
+**Analysis** (Layers 2–3):
+- `HandicapAnalyser` — mines paired observations across boats to produce `ComparisonResult` with `LinearFit`
+- `ConversionGraph` — directed graph of system×year×variant conversions
+- `ReferenceNetworkBuilder` — DFS traversal of ConversionGraph to compute `BoatReferenceFactors` (Steps 8–12)
+- `AnalysisCache` — holds all derived data in volatile fields; provides `refresh()`, `refreshReferenceFactors()`, `refreshIndexes()`
+
+**Server**:
+- `HpfServer` — Jetty 12.1 embedded server entry point (port 8080)
+- `ImporterService` — manages importer lifecycle, background execution, scheduling, and admin configuration (from `admin.yaml`)
+- `AdminApiServlet` — REST API for boats/designs/races/importers/stats (paginated, with search/filter)
+- `AnalysisServlet` — REST API for comparison analysis results
+- `StaticResourceServlet` — serves admin frontend HTML/JS/CSS from classpath resources
+
+**Store**:
+- `DataStore` — central persistence; reads/writes JSON files; manages in-memory maps; Jaro-Winkler fuzzy matching for boat/design names
+- `AliasSeedLoader` — reads `aliases.yaml` for boat/design name aliases and sail number redirects
+- `ClubSeedLoader` — reads `clubs.yaml` for club metadata and TopYacht URLs
+- `DesignCatalogueLoader` — reads `design.yaml` for exclusions and design overrides
+- `IdGenerator` — pure normalisation utilities for generating entity IDs
+- `RemoveNonMeasurementCertificates` — housekeeping utility to strip PHS/CBH certificates
 
 Entity records and classes hold data. Services hold behaviour.

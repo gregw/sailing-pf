@@ -19,6 +19,11 @@ past performance, anchored where possible to independently verifiable measuremen
 Results and HPF values are presented graphically via a web interface, and are also available
 as open data via a REST JSON API for anyone who wishes to build on them.
 
+Significant effort has also gone into cleaning the date from the multiple sources.
+Fuzzy matching is used to match boats with similar names and designs.
+Configured yaml files maintain aliases for boats, designs and alternate sailnumbers.
+The user interface provides a manual merge mechanism that will also update the yaml files so that future imports are clean.
+
 ---
 
 ## What This Project Is Not
@@ -26,12 +31,9 @@ as open data via a REST JSON API for anyone who wishes to build on them.
 **This is not a handicap system.**
 
 The HPF values produced by this project are historical performance measures, not allocated
-handicaps. They are intended to:
-
-- Inform the **initial allocation of a handicap** when a boat joins a series for the first time
-- Help a handicapper **evaluate whether an existing handicap is reasonable** in light of a boat's
-  broader racing history across multiple clubs
-- Provide a **cross-club performance reference** for boats that race at multiple venues
+handicaps. Specifically, the analysis done by this project is not suitable for week by week allocation of handicaps, as
+the statistical mechanisms used are of no use early in a season when little boat data is available.  
+Rather this project is better used for end of season analysis to help set handicap for the following season.
 
 The project is explicitly **not** intended to replace the way individual clubs age or adjust
 handicaps between races. Day-to-day handicap management — responding to a boat's recent
@@ -39,7 +41,8 @@ results within a series — remains the responsibility of each club's handicappe
 normal processes and systems (e.g. PHS).
 
 Any use of HPF values as direct handicap allocations is at the discretion of the handicapper
-and club concerned. The values are one input among many, not a definitive answer.
+and club concerned. The values are one input among many, not a definitive answer.  
+HPFs are roughly calibrated with IRC values, but are primarily designed to be compared to other HPFs.
 
 ---
 
@@ -47,14 +50,20 @@ and club concerned. The values are one input among many, not a definitive answer
 
 ### Raw Data
 
-Race result data is collected from publicly available sources:
+Race certificate and result data is collected from publicly available sources:
 
-- **SailSys** — via the public SailSys API (`api.sailsys.com.au`)
+- **ORC Certificates** — via data.orc.org public feed for Australian certificate data.
+- **AMS Certificates** — via raceyachts.org listing
+- **CYCA BWPS** — via the publicly available club result pages.
+- **SailSys** — via the SailSys API (`api.sailsys.com.au`) used by the public pages.
 - **TopYacht** — via publicly accessible club result pages
 
-Data collected includes boat entry details (sail number, name, design, club), elapsed times,
-and measurement-based handicap certificates (IRC, ORC, AMS) where published. Performance
-handicap (PHS) values assigned by clubs are explicitly excluded.
+Data collected includes public boat (sail number, name, design, club) and race (elapsed times, measurement-based handicaps) data.
+Performance handicap (PHS) values assigned by clubs are considered proprietary and are explicitly excluded.
+
+ORC certificate data is sourced from the ORC public data feed and used in accordance with
+ORC's open data policy. IRC values are sourced exclusively from publicly published race
+results — the restricted RORC/YCF TCC database is not used.
 
 This project makes no copyright claim over the raw race result data. It is reproduced as a
 matter of public record. See `LICENSE.md` for full provenance details.
@@ -65,10 +74,6 @@ HPF values, reference factors, and other analytical outputs computed by this pro
 published under the **Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**
 licence. You are free to use and build on this data provided you attribute the source and
 publish any derivative datasets under the same licence.
-
-ORC certificate data is sourced from the ORC public data feed and used in accordance with
-ORC's open data policy. IRC values are sourced exclusively from publicly published race
-results — the restricted RORC/YCF TCC database is not used.
 
 ---
 
@@ -91,19 +96,22 @@ toward what the race data suggests.
 
 Full technical details are in the project documentation:
 
-- `project_description.md` — overview and motivation
-- `processing_pipeline.md` — step-by-step pipeline description
-- `object_model_architecture.md` — Java object model and layering principles
-- `id_strategy.md` — how entities are identified and disambiguated
-- `data_sources_and_formats.md` — SailSys, TopYacht, ORC and IRC data formats
-- `presentation_layer.md` — REST API and browser-based charting frontend
+- `.claude/project_description.md` — overview and motivation
+- `.claude/processing_pipeline.md` — step-by-step pipeline description
+- `.claude/object_model_architecture.md` — Java object model and layering principles
+- `.claude/id_strategy.md` — how entities are identified and disambiguated
+- `.claude/data_sources_and_formats.md` — SailSys, TopYacht, ORC and IRC data formats
+- `.claude/presentation_layer.md` — REST API and browser-based admin/charting frontend
 
 ---
 
 ## Technology
 
-- **Backend:** Java, Spring Boot
-- **Database:** Relational (PostgreSQL or similar)
+- **Backend:** Java 21, Jetty 12.1 embedded (plain Jakarta servlets — no Spring)
+- **Data store:** Jackson JSON/YAML files (file-per-entity persistence)
+- **HTTP client:** Jetty HttpClient (API calls, web scraping)
+- **HTML parsing:** JSoup (TopYacht scraping)
+- **Fuzzy matching:** Apache Commons Text (Jaro-Winkler similarity)
 - **Frontend:** Plain JavaScript, Plotly.js for interactive charts
 - **Deployment:** Cloud Run or Fly.io (scale-to-zero)
 
@@ -121,7 +129,12 @@ See `LICENSE.md` for full details.
 
 ## Status
 
-Early development. Data ingestion and optimisation layers are being built first;
-the web frontend follows once real HPF outputs are available to present.
+**Phase 1 complete.** Data ingestion (six importers: SailSys boats/races, TopYacht, ORC, AMS,
+BWPS), reference network construction (empirical conversion graph, DFS-based reference factor
+computation), and an admin webapp (data browser, analysis charts, import scheduling) are all
+operational.
+
+**Phase 2 (HPF optimisation) is not yet implemented.** The alternating least squares HPF
+optimisation described in `processing_pipeline.md` steps 13–19 remains to be built.
 
 Contributions and issue reports are welcome.

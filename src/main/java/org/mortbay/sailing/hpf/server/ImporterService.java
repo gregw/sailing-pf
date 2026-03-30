@@ -26,9 +26,8 @@ import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,6 +42,7 @@ public class ImporterService
         .addModule(new JavaTimeModule())
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
+        .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .build();
 
     private final DataStore store;
@@ -58,6 +58,7 @@ public class ImporterService
 
     private volatile ImportStatus currentStatus;
     private volatile int currentSailSysId;
+    private volatile boolean scheduledRunActive = false;
 
     public record ImportStatus(String importerName, String mode, Instant startedAt) {}
 
@@ -66,31 +67,38 @@ public class ImporterService
     public record GlobalSchedule(List<DayOfWeek> days, LocalTime time) {}
 
     private record AdminConfig(List<ImporterEntry> importers, GlobalSchedule schedule,
-                               Map<String, Integer> lastSailSysIds, Integer targetIrcYear,
+                               Integer nextSailSysRaceId, Integer targetIrcYear,
                                Double outlierSigma, Double mergeCandidateThreshold,
-                               Double fuzzyMatchThreshold) {}
+                               Double fuzzyMatchThreshold,
+                               Integer sailsysCacheMaxAgeDays,   // null → default 7
+                               Integer sailsysHttpDelayMs,       // null → default 200
+                               Integer sailsysRecentRaceDays,    // null → default 14
+                               Double clubCertificateWeight)     // null → default 0.9
+    {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
-        new ImporterEntry("sailsys-boats", "directory", false),
-        new ImporterEntry("sailsys-boats", "api",       false),
-        new ImporterEntry("sailsys-races", "directory", false),
-        new ImporterEntry("sailsys-races", "api",       false),
-        new ImporterEntry("orc",           "api",       false),
-        new ImporterEntry("ams",           "api",       false),
-        new ImporterEntry("topyacht",            "api",       false),
+        new ImporterEntry("sailsys-races",      "run",       false),
+        new ImporterEntry("orc",                "api",       false),
+        new ImporterEntry("ams",                "api",       false),
+        new ImporterEntry("topyacht",           "api",       false),
         new ImporterEntry("bwps",               "api",       false),
         new ImporterEntry("analysis",           "run",       false),
-        new ImporterEntry("reference-factors",  "run",       false)
+        new ImporterEntry("reference-factors",  "run",       false),
+        new ImporterEntry("build-indexes",      "run",       false)
     );
 
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
     private GlobalSchedule globalSchedule = new GlobalSchedule(List.of(), LocalTime.of(3, 0));
     private ScheduledFuture<?> scheduledFuture;
-    private volatile Map<String, Integer> lastSailSysIds = Map.of();
+    private volatile Integer nextSailSysRaceId = null;   // null = start from 1
     private volatile Integer targetIrcYear = null;          // null = auto-detect from data
     private volatile Double outlierSigma = null;            // null = use default (2.5)
     private volatile double mergeCandidateThreshold = 0.50; // JW threshold for similar-name merge candidate filter
     private volatile double fuzzyMatchThreshold = 0.90;     // JW threshold for boat/design name matching in DataStore
+    private volatile int sailsysCacheMaxAgeDays = 7;
+    private volatile int sailsysHttpDelayMs = 200;
+    private volatile int sailsysRecentRaceDays = 14;
+    private volatile double clubCertificateWeight = 0.9;
 
     public ImporterService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
@@ -122,8 +130,8 @@ public class ImporterService
             }
             if (config.schedule() != null)
                 globalSchedule = config.schedule();
-            if (config.lastSailSysIds() != null)
-                lastSailSysIds = Map.copyOf(config.lastSailSysIds());
+            if (config.nextSailSysRaceId() != null)
+                nextSailSysRaceId = config.nextSailSysRaceId();
             targetIrcYear = config.targetIrcYear();   // null is valid (auto-detect)
             outlierSigma = config.outlierSigma();    // null is valid (use default 2.5)
             if (config.mergeCandidateThreshold() != null)
@@ -133,6 +141,10 @@ public class ImporterService
                 fuzzyMatchThreshold = config.fuzzyMatchThreshold();
                 store.setFuzzyThreshold(fuzzyMatchThreshold);
             }
+            if (config.sailsysCacheMaxAgeDays() != null) sailsysCacheMaxAgeDays = config.sailsysCacheMaxAgeDays();
+            if (config.sailsysHttpDelayMs() != null) sailsysHttpDelayMs = config.sailsysHttpDelayMs();
+            if (config.sailsysRecentRaceDays() != null) sailsysRecentRaceDays = config.sailsysRecentRaceDays();
+            if (config.clubCertificateWeight() != null) clubCertificateWeight = config.clubCertificateWeight();
             if (globalSchedule != null && !globalSchedule.days().isEmpty())
                 armSchedule();
             LOG.info("Loaded admin config from {}", configFile);
@@ -170,7 +182,7 @@ public void stop()
                     currentStatus = new ImportStatus(name, mode, Instant.now());
                     LOG.info("Starting importer={} mode={} startId={}", name, mode, startId);
                     runImporter(name, mode, startId);
-                    persistLastSailSysId(name, mode);
+                    persistNextSailSysRaceId(name);
                     store.save();
                     LOG.info("Finished importer={}", name);
                 }
@@ -230,9 +242,14 @@ public void stop()
         stopRequested.set(true);
     }
 
-    public Map<String, Integer> lastSailSysIds()
+    public boolean isScheduledRunActive()
     {
-        return lastSailSysIds;
+        return scheduledRunActive;
+    }
+
+    public Integer nextSailSysRaceId()
+    {
+        return nextSailSysRaceId;
     }
 
     public List<ImporterEntry> importerEntries()
@@ -265,6 +282,11 @@ public void stop()
         return fuzzyMatchThreshold;
     }
 
+    public double clubCertificateWeight()
+    {
+        return clubCertificateWeight;
+    }
+
     public void submitScheduledRun()
     {
         List<ImporterEntry> toRun = importerEntries.stream()
@@ -276,17 +298,27 @@ public void stop()
             LOG.warn("Scheduled run skipped — import already running");
             return;
         }
+        scheduledRunActive = true;
+        stopRequested.set(false);
         importExecutor.submit(() ->
         {
             try
             {
                 for (ImporterEntry entry : toRun)
                 {
+                    if (stopRequested.get())
+                    {
+                        LOG.info("Scheduled run stopped by request before {}", entry.name());
+                        break;
+                    }
                     currentSailSysId = 0;
                     currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
                     LOG.info("Scheduled: importer={} mode={}", entry.name(), entry.mode());
-                    runImporter(entry.name(), entry.mode(), 1);
-                    persistLastSailSysId(entry.name(), entry.mode());
+                    int startId = "sailsys-races".equals(entry.name()) && nextSailSysRaceId != null
+                        ? nextSailSysRaceId
+                        : 1;
+                    runImporter(entry.name(), entry.mode(), startId);
+                    persistNextSailSysRaceId(entry.name());
                     store.save();
                 }
                 LOG.info("Scheduled run complete");
@@ -298,6 +330,7 @@ public void stop()
             finally
             {
                 currentStatus = null;
+                scheduledRunActive = false;
                 running.set(false);
             }
         });
@@ -335,23 +368,16 @@ public void stop()
     {
         switch (name)
         {
-            case "sailsys-boats" ->
-            {
-                Path boatsDir = dataRoot.resolve("sailsys/boats");
-                SailSysBoatImporter importer = new SailSysBoatImporter(store, httpClient);
-                if ("api".equals(mode))
-                    importer.runFromApi(startId, id -> currentSailSysId = id, stopRequested::get, boatsDir);
-                else
-                    importer.runFromDirectory(boatsDir);
-            }
             case "sailsys-races" ->
             {
                 Path racesDir = dataRoot.resolve("sailsys/races");
-                SailSysRaceImporter importer = new SailSysRaceImporter(store, httpClient);
-                if ("api".equals(mode))
-                    importer.runFromApi(startId, id -> currentSailSysId = id, stopRequested::get, racesDir);
-                else
-                    importer.runFromDirectory(racesDir);
+                Path boatsDir = dataRoot.resolve("sailsys/boats");
+                int minRecentId = new SailSysRaceImporter(store, httpClient).run(
+                    startId, id -> currentSailSysId = id, stopRequested::get,
+                    racesDir, boatsDir, sailsysCacheMaxAgeDays, sailsysHttpDelayMs,
+                    sailsysRecentRaceDays);
+                if (minRecentId > 0)
+                    currentSailSysId = minRecentId - 1;
             }
             case "orc" -> new OrcImporter(store, httpClient).run();
             case "ams" -> new AmsImporter(store, httpClient).run();
@@ -360,29 +386,33 @@ public void stop()
             case "analysis" ->
             {
                 if (cache != null)
-                    cache.refresh(targetIrcYear, outlierSigma);
+                    cache.refresh(targetIrcYear, outlierSigma, clubCertificateWeight);
                 else
                     LOG.warn("Analysis requested but cache is not configured");
             }
             case "reference-factors" ->
             {
                 if (cache != null)
-                    cache.refreshReferenceFactors(targetIrcYear);
+                    cache.refreshReferenceFactors(targetIrcYear, clubCertificateWeight);
                 else
                     LOG.warn("Reference factors requested but cache is not configured");
+            }
+            case "build-indexes" ->
+            {
+                if (cache != null)
+                    cache.refreshIndexes();
+                else
+                    LOG.warn("Build indexes requested but cache is not configured");
             }
             default -> throw new IllegalArgumentException("Unknown importer: " + name);
         }
     }
 
-    private void persistLastSailSysId(String name, String mode)
+    private void persistNextSailSysRaceId(String name)
     {
-        if (currentSailSysId > 0 && "api".equals(mode)
-                && ("sailsys-boats".equals(name) || "sailsys-races".equals(name)))
+        if (currentSailSysId > 0 && "sailsys-races".equals(name))
         {
-            Map<String, Integer> updated = new LinkedHashMap<>(lastSailSysIds);
-            updated.put(name + "-api", currentSailSysId);
-            lastSailSysIds = Map.copyOf(updated);
+            nextSailSysRaceId = currentSailSysId + 1;
             persistConfig();
         }
     }
@@ -394,8 +424,10 @@ public void stop()
             Files.createDirectories(configFile.getParent());
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(
                 configFile.toFile(),
-                new AdminConfig(importerEntries, globalSchedule, new LinkedHashMap<>(lastSailSysIds),
-                    targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold));
+                new AdminConfig(importerEntries, globalSchedule, nextSailSysRaceId,
+                    targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold,
+                    sailsysCacheMaxAgeDays, sailsysHttpDelayMs, sailsysRecentRaceDays,
+                    clubCertificateWeight));
         }
         catch (IOException e)
         {

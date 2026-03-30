@@ -160,6 +160,7 @@ public class AmsImporter
         final String trimmedCertNo = certNo.trim();
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.removeIf(c -> "AMS".equals(c.system())
+                                   && c.year() == year
                                    && c.certificateNumber() != null
                                    && (c.certificateNumber().equals(trimmedCertNo)
                                        || c.certificateNumber().startsWith(trimmedCertNo + "-")));
@@ -179,7 +180,7 @@ public class AmsImporter
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                boat.designId(), boat.clubId(), boat.aliases(),
+                boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(),
                 List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
     }
 
@@ -215,6 +216,6 @@ public class AmsImporter
     private Certificate makeCert(int year, double value,
                                   boolean nonSpinnaker, boolean twoHanded, String certNo)
     {
-        return new Certificate("AMS", year, value, nonSpinnaker, twoHanded, false, certNo, null);
+        return new Certificate("AMS", year, value, nonSpinnaker, twoHanded, false, false, certNo, null);
     }
 }

@@ -140,6 +140,11 @@ clubs:
       - https://topyacht.net.au/results/rgyc/2023-2024_keel_boat_club_series/
       - https://topyacht.net.au/results/rgyc/2024-2025_keel_boat_club_series/
       - https://topyacht.net.au/results/rgyc/2025-2026_keel_boat_club_series/
+      - https://www.topyacht.net.au/results/2022/fos/index.htm
+      - https://www.topyacht.net.au/results/2023/fos/index.htm
+      - https://www.topyacht.net.au/results/2024/fos/index.htm
+      - https://www.topyacht.net.au/results/2025/fos/index.htm
+      - https://www.topyacht.net.au/results/2026/fos/index.htm
 
   rmys.com.au:
     shortName: RMYS
@@ -343,7 +348,7 @@ clubs:
     shortName: BSC
     state: NSW
     fullName: Balmain Sailing Club
-    aliases: []
+    aliases: ["BSC Yacht", "Balmain Sailing Club - Yacht"]
     topyacht:
       - https://www.topyacht.net.au/results/balmainsc/2020/kb/index.htm
       - https://www.topyacht.net.au/results/balmainsc/2021/kb/index.htm
@@ -543,6 +548,11 @@ clubs:
     state: WA
     fullName: Fremantle Sailing Club
     aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/fsc/2023/kb23/
+      - https://www.topyacht.net.au/results/fsc/2024/kb24/
+      - https://www.topyacht.net.au/results/fsc/2025/kb25/
+      - https://www.topyacht.net.au/results/fsc/2025/kb26/
 
   efyc.com.au:
     shortName: EFYC
@@ -682,3 +692,66 @@ clubs:
     topyacht:
       - https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm
       - https://www.topyacht.net.au/results/cyaa/2022/winter/index.htm
+
+  hamiltonisland.com.au:
+    shortName: HIYC
+    state: QLD
+    fullName: "Hamilton Island Yacht Club"
+    aliases: []
+    topyacht:
+      - https://www.topyacht.net.au/results/2025/hirw/index.htm
+      - https://www.topyacht.net.au/results/2024/hirw/index.htm
+      - https://www.topyacht.net.au/results/2023/hirw/index.htm
+      - https://www.topyacht.net.au/results/2022/hirw/index.htm
+
+  townsvilleyachtclub.com.au:
+    shortName: TYC
+    state: QLD
+    fullName: "Townsville Yacht Club"
+    aliases: [
+               "Townsville Cruising Yacht Club",
+               "TCYC"
+    ]
+    topyacht:
+      - https://www.topyacht.net.au/results/2022/mirw/index.htm
+      - https://www.topyacht.net.au/results/2023/mirw/index.htm
+      - https://www.topyacht.net.au/results/2024/mirw/index.htm
+      - https://www.topyacht.net.au/results/2025/mirw/index.htm
+
+  app.sailsys.com/au/club/27/profile:
+    shortName: SHCC
+    state: NSW
+    fullName: Sydney Harbour Combined Clubs
+    aliases: []
+
+  wyc.org.au:
+    shortName: WYC
+    state: NSW
+    fullName: Wollongong Yacht Club
+    aliases: []
+
+  pesc.com.au:
+    shortName: PESC
+    state: TAS
+    fullName: Port Esperance Sailing Club
+    aliases: []
+
+  multihullcruising.org.au:
+    shortName: MHYC
+    state: NSW
+    fullName: Multihull Cruising Yacht Club
+    aliases: []
+    exclude: true;
+
+  rhkyc.org.hk:
+    shortName: RHKYC
+    state: HongKong
+    fullName: Royal Hong Kong Yacht Club
+    aliases: []
+    exclude: true;
+
+  jbcyc.com.au:
+    shortName: JBCYC
+    state: NSW
+    fullName: Jervis Bay Cruising Yacht Club
+    aliases: []
