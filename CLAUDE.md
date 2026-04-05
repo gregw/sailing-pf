@@ -26,14 +26,14 @@ Read these files before working in any given area:
 
 | File | What it covers |
 |---|---|
-| [project_description.md](.claude/project_description.md) | Full overview: data collection, reference (candle) network, HPF estimation, website |
-| [object_model_architecture.md](.claude/object_model_architecture.md) | Java object model, layering principles, what NOT to replicate from the old prototype |
-| [processing_pipeline.md](.claude/processing_pipeline.md) | Step-by-step pipeline from data ingestion through to HPF output |
-| [id_strategy.md](.claude/id_strategy.md) | How entities are keyed and disambiguated — read before touching IDs |
-| [data_sources_and_formats.md](.claude/data_sources_and_formats.md) | SailSys API, TopYacht HTML, ORC feed — field-level detail |
-| [presentation_layer.md](.claude/presentation_layer.md) | REST API design and browser-based charting frontend |
-| [error_bars.md](.claude/error_bars.md) | Error bar math, sigma_0 calibration, display rules |
-| [handicaps.txt](.claude/handicaps.txt) | Domain knowledge notes on yacht racing handicap systems |
+| [project_description.md](src/main/resources/admin/guide/project_description.md) | Full overview: data collection, reference (candle) network, HPF estimation, website |
+| [object_model_architecture.md](src/main/resources/admin/guide/object_model_architecture.md) | Java object model, layering principles, what NOT to replicate from the old prototype |
+| [processing_pipeline.md](src/main/resources/admin/guide/processing_pipeline.md) | Step-by-step pipeline from data ingestion through to HPF output |
+| [id_strategy.md](src/main/resources/admin/guide/id_strategy.md) | How entities are keyed and disambiguated — read before touching IDs |
+| [data_sources_and_formats.md](src/main/resources/admin/guide/data_sources_and_formats.md) | SailSys API, TopYacht HTML, ORC feed — field-level detail |
+| [presentation_layer.md](src/main/resources/admin/guide/presentation_layer.md) | REST API design and browser-based charting frontend |
+| [error_bars.md](src/main/resources/admin/guide/error_bars.md) | Error bar math, sigma_0 calibration, display rules |
+| [handicaps.txt](src/main/resources/admin/guide/handicaps.txt) | Domain knowledge notes on yacht racing handicap systems |
 
 ## Background
 
