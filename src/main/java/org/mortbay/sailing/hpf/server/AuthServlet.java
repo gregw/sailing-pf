@@ -43,6 +43,11 @@ class AuthServlet extends HttpServlet
             resp.getWriter().write("{\"authenticated\":true,\"email\":\"dev@localhost\",\"devMode\":true}");
             return;
         }
+        if (authConfig.isAdminConnector(req))
+        {
+            resp.getWriter().write("{\"authenticated\":true,\"email\":\"admin@local\",\"adminConnector\":true}");
+            return;
+        }
         HttpSession session = req.getSession(false);
         @SuppressWarnings("unchecked")
         Map<String, Object> claims = session != null

@@ -84,25 +84,7 @@
         to jump directly to the relevant section. Sections are also listed in the navigation
         at the top of this page.</p>
 
-    <p>The <strong>HPF (Historical Performance Factor)</strong> is the back-calculated time correction factor a boat
-        would have needed, averaged across its recorded racing history, to have been equal-time with a
-        hypothetical 1.000 reference boat. It is a historical performance measure — not a handicap system.
-        Its primary use is informing initial handicap allocation at the start of a season, or when a new
-        boat joins a series. It is not a replacement for the way clubs age or adjust handicaps race-to-race.
-        A Handicap is a type of Factor that includes policy decision of clubs and possibly proprietary algorithms of
-        providers on how past performance should affect future results, whilst a Historical Performance Factor is one
-        that is purely an open mathematical analysis of elapsed times scaled by comparison to measurement certificates.
-    </p>
-
-    <p>The application collects elapsed times and measurement certificates (IRC, ORC, AMS) from
-        SailSys, TopYacht, ORC, AMS, and BWPS. Boats with known certificates serve as "standard candles"
-        that anchor the calculation. Their IRC-equivalent handicap, expressed as a <strong>Reference Factor (RF)</strong>,
-        is derived by traversing an empirical conversion network between handicap systems and years.</p>
-
-    <p>Note that <strong>The Handicaps/Factors are ALWAYS WRONG</strong>, because if they were correct,
-        then every race would end in a tie. At best, they are an approximate model of a possible reality, that
-        is a poor substitute for One Design racing. Furthermore, the implementation and documentation for this project
-        were largely created using AI, so significant human review is required (see contacts below).</p>
+<!-- INCLUDE _intro.md -->
     <h2 id="the-problem">The Problem with Elapsed-Time Analysis</h2>
 
     <p>Rating yacht performance from elapsed times sounds straightforward, but the data is deeply
@@ -843,11 +825,43 @@
         in the conditions typical of the shared races.</p>
 
 
-    <!-- ═══════════════════════════════════ HPF QUALITY ══════════════════════════════════ -->
+    <!-- ════════════════════════════════════ TECHNOLOGY ════════════════════════════════════ -->
+    <h2 id="technology">Technology</h2>
+    <ul>
+        <li><strong>Backend:</strong> Java 21, Jetty 12.1 embedded (plain Jakarta servlets — no Spring)</li>
+        <li><strong>Data store:</strong> Jackson JSON/YAML files (file-per-entity persistence)</li>
+        <li><strong>HTTP client:</strong> Jetty HttpClient (API calls, web scraping)</li>
+        <li><strong>HTML parsing:</strong> JSoup (TopYacht scraping)</li>
+        <li><strong>Fuzzy matching:</strong> Apache Commons Text (Jaro-Winkler similarity)</li>
+        <li><strong>Frontend:</strong> Plain JavaScript, Plotly.js for interactive charts</li>
+        <li><strong>Deployment:</strong> Cloud Run or Fly.io (scale-to-zero)</li>
+    </ul>
+    <p>The implementation and documentation for this project were largely created using AI, so
+        significant human review is required.</p>
+
+    <!-- ══════════════════════════════════════ STATUS ═══════════════════════════════════════ -->
+    <h2 id="status">Status</h2>
+    <p><strong>Phase 1 complete.</strong> Data ingestion (six importers: SailSys boats/races,
+        TopYacht, ORC, AMS, BWPS), reference network construction (empirical conversion graph,
+        DFS-based reference factor computation), and an admin webapp (data browser, analysis charts,
+        import scheduling) are all operational.</p>
+    <p><strong>Phase 2 (HPF optimisation) is not yet implemented.</strong> The alternating least
+        squares HPF optimisation described in the
+        <a href="guide/processing-pipeline.md">Processing Pipeline</a> steps 13–19 remains to be built.</p>
+
+    <!-- ══════════════════════════════════════ LICENCE ══════════════════════════════════════ -->
+    <h2 id="licence">Licence</h2>
+    <ul>
+        <li><strong>Source code:</strong> Apache License 2.0</li>
+        <li><strong>Derived data (HPF values etc.):</strong> CC BY-SA 4.0</li>
+        <li><strong>Raw race results:</strong> No claim — public record</li>
+    </ul>
+
+    <!-- ═════════════════════════════════════ CONTACTS ══════════════════════════════════════ -->
     <h2 id="contacts">Contacts</h2>
-    The source code for this project is available on <a href="https://github.com/gregw/sailing-hpf" target="_blank">GitHub</a>.
+    <p>The source code for this project is available on <a href="https://github.com/gregw/sailing-hpf" target="_blank">GitHub</a>.
     Please use the <a href="https://github.com/gregw/sailing-hpf/issues" target="_blank">Issue system</a> there for questions,
-    comments, or suggestions.
+    comments, or suggestions.</p>
 </div>
 
 <script src="common.js"></script>

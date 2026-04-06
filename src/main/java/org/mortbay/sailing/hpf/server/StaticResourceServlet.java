@@ -31,7 +31,7 @@ public class StaticResourceServlet extends HttpServlet
         if (path == null || "/".equals(path))
             path = "/index.html";
 
-        InputStream in = getClass().getResourceAsStream("/admin" + path);
+        InputStream in = getClass().getResourceAsStream("/content" + path);
         if (in == null)
         {
             resp.sendError(404);
@@ -104,9 +104,15 @@ public class StaticResourceServlet extends HttpServlet
         while (m.find())
         {
             String file = m.group(1);
-            InputStream inc = getClass().getResourceAsStream("/admin/" + file);
-            String replacement = inc != null
-                ? new String(inc.readAllBytes(), StandardCharsets.UTF_8) : "";
+            InputStream inc = getClass().getResourceAsStream("/content/" + file);
+            String replacement = "";
+            if (inc != null)
+            {
+                String content = new String(inc.readAllBytes(), StandardCharsets.UTF_8);
+                replacement = file.endsWith(".md")
+                    ? MD_RENDERER.render(MD_PARSER.parse(content))
+                    : content;
+            }
             m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         }
         m.appendTail(sb);

@@ -90,7 +90,10 @@ public class ImporterService
                                String googleClientId,            // null → fall back to env/devMode
                                String googleClientSecret,        // null → fall back to env
                                String authBaseUrl,               // null → fall back to env, then localhost
-                               String authAllowedDomain)         // null → no domain restriction
+                               String authAllowedDomain,         // null → no domain restriction
+                               Integer adminPort,                // null → default 8888
+                               Integer userPort,                 // null → default 8080
+                               String natGatewayIp)              // null → no gateway protection
     {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
@@ -133,6 +136,9 @@ public class ImporterService
     private volatile String googleClientSecret = null;
     private volatile String authBaseUrl = null;
     private volatile String authAllowedDomain = null;
+    private volatile int adminPort = 8888;
+    private volatile int userPort = 8080;
+    private volatile String natGatewayIp = null;
 
     public ImporterService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
@@ -195,6 +201,9 @@ public class ImporterService
             googleClientSecret = config.googleClientSecret();
             authBaseUrl        = config.authBaseUrl();
             authAllowedDomain  = config.authAllowedDomain();
+            if (config.adminPort() != null) adminPort = config.adminPort();
+            if (config.userPort() != null) userPort = config.userPort();
+            natGatewayIp = config.natGatewayIp();
             if (globalSchedule != null && !globalSchedule.days().isEmpty())
                 armSchedule();
             LOG.info("Loaded admin config from {}", configFile);
@@ -364,9 +373,9 @@ public void stop()
         String id     = firstNonBlank(System.getenv("GOOGLE_CLIENT_ID"),     googleClientId);
         String secret = firstNonBlank(System.getenv("GOOGLE_CLIENT_SECRET"), googleClientSecret);
         String base   = firstNonBlank(System.getenv("AUTH_BASE_URL"),        authBaseUrl,
-                                      "http://localhost:8080");
+                                      "http://localhost:" + userPort);
         String domain = firstNonBlank(System.getenv("AUTH_ALLOWED_DOMAIN"),  authAllowedDomain);
-        return new AuthConfig(id, secret, base, domain);
+        return new AuthConfig(id, secret, base, domain, adminPort, userPort, natGatewayIp);
     }
 
     private static String firstNonBlank(String... candidates)
@@ -584,7 +593,8 @@ public void stop()
                     sailsysHttpDelayMs, sailsysRecentRaceDays, sailsysNotFoundThreshold,
                     clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
                     hpfOuterDampingFactor, hpfOuterConvergenceThreshold, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
-                    slidingAverageCount, googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain));
+                    slidingAverageCount, googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
+                    adminPort, userPort, natGatewayIp));
         }
         catch (IOException e)
         {

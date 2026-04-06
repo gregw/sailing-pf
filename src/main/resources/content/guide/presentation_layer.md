@@ -46,7 +46,7 @@ REST API for analysis results from `AnalysisCache`:
 
 ### `StaticResourceServlet` — `/*`
 
-Serves the admin frontend HTML, JavaScript, and CSS from classpath resources (`src/main/resources/admin/`).
+Serves the admin frontend HTML, JavaScript, and CSS from classpath resources (`src/main/resources/content/`).
 
 ---
 

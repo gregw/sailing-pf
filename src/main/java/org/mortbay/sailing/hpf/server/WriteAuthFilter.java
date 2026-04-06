@@ -26,13 +26,15 @@ class WriteAuthFilter implements Filter
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
         throws IOException, ServletException
     {
-        if (authConfig.devMode())
+        HttpServletRequest request = (HttpServletRequest)req;
+        HttpServletResponse response = (HttpServletResponse)res;
+
+        // Dev mode and admin-connector requests are pre-authenticated — allow everything
+        if (authConfig.devMode() || authConfig.isAdminConnector(request))
         {
             chain.doFilter(req, res);
             return;
         }
-        HttpServletRequest request = (HttpServletRequest)req;
-        HttpServletResponse response = (HttpServletResponse)res;
         if (!"POST".equalsIgnoreCase(request.getMethod()))
         {
             chain.doFilter(req, res);

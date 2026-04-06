@@ -64,3 +64,6 @@ googleClientId: null
 googleClientSecret: null
 authBaseUrl: null
 authAllowedDomain: null
+adminPort: 8888
+userPort: 8080
+natGatewayIp: null

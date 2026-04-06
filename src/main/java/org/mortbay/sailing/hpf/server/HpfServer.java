@@ -12,6 +12,7 @@ import org.eclipse.jetty.ee10.servlet.SessionHandler;
 import org.eclipse.jetty.security.Constraint;
 import org.eclipse.jetty.security.SecurityHandler;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
 import org.mortbay.sailing.hpf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +44,18 @@ public class HpfServer
 
         AuthConfig authConfig = importerService.authConfig();
 
-        Server server = new Server(8080);
+        Server server = new Server();
+
+        ServerConnector userConnector = new ServerConnector(server);
+        userConnector.setName("user");
+        userConnector.setPort(authConfig.userPort());
+        server.addConnector(userConnector);
+
+        ServerConnector adminConnector = new ServerConnector(server);
+        adminConnector.setName("admin");
+        adminConnector.setPort(authConfig.adminPort());
+        server.addConnector(adminConnector);
+
         ServletContextHandler context = new ServletContextHandler("/");
 
         // Session handler (required for OpenID and for WriteAuthFilter's session check)
@@ -98,7 +110,8 @@ public class HpfServer
             }
         }));
 
-        LOG.info("HPF admin server started on http://localhost:8080/");
+        LOG.info("HPF server started — user: http://localhost:{}/ admin: http://localhost:{}/",
+            authConfig.userPort(), authConfig.adminPort());
         server.join();
     }
 }
