@@ -29,6 +29,7 @@
       <button onclick="doSearch('boats')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="filter-dupe-sails" onchange="doSearch('boats')"> Duplicate sail numbers</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-boats" onchange="doSearch('boats')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-boats" onchange="doSearch('boats')"> Exclude nulls</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-boats" onchange="setPageSize(this.value)">
         <option value="10">10</option>
         <option value="25" selected>25</option>
@@ -70,6 +71,7 @@
       <input type="text" id="q-designs" placeholder="Search by id or name…" oninput="debounceSearch('designs')">
       <button onclick="doSearch('designs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-designs" onchange="doSearch('designs')"> Exclude nulls</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-designs" onchange="setPageSize(this.value)">
         <option value="10">10</option>
         <option value="25" selected>25</option>
@@ -107,6 +109,7 @@
       <input type="text" id="q-clubs" placeholder="Search by id, short name or long name…" oninput="debounceSearch('clubs')">
       <button onclick="doSearch('clubs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-clubs" onchange="doSearch('clubs')"> Exclude nulls</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-clubs" onchange="setPageSize(this.value)">
         <option value="10">10</option>
         <option value="25" selected>25</option>
@@ -129,6 +132,7 @@
       <input type="text" id="q-races" placeholder="Search by id or club…" oninput="debounceSearch('races')">
       <button onclick="doSearch('races')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-races" onchange="doSearch('races')"> Exclude nulls</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-races" onchange="setPageSize(this.value)">
         <option value="10">10</option>
         <option value="25" selected>25</option>

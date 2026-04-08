@@ -38,7 +38,7 @@ public class HpfServer
         importerService.start();
 
         AnalysisCache cache = new AnalysisCache(store);
-        cache.refresh(importerService.targetIrcYear(), importerService.outlierSigma(), importerService.clubCertificateWeight());
+        cache.refresh(importerService.targetIrcYear(), importerService.outlierSigma(), importerService.clubCertificateWeight(), importerService.minAnalysisR2());
         importerService.setCache(cache);
         importerService.runStartupTasks();
 

@@ -29,8 +29,8 @@ class WriteAuthFilter implements Filter
         HttpServletRequest request = (HttpServletRequest)req;
         HttpServletResponse response = (HttpServletResponse)res;
 
-        // Dev mode and admin-connector requests are pre-authenticated — allow everything
-        if (authConfig.devMode() || authConfig.isAdminConnector(request))
+        // Admin-connector requests are pre-authenticated — allow everything
+        if (authConfig.isAdminConnector(request))
         {
             chain.doFilter(req, res);
             return;

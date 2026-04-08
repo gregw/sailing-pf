@@ -11,6 +11,7 @@ import org.mortbay.sailing.hpf.analysis.BoatHpf;
 import org.mortbay.sailing.hpf.analysis.DesignDerived;
 import org.mortbay.sailing.hpf.analysis.EntryResidual;
 import org.mortbay.sailing.hpf.analysis.HpfQuality;
+import org.mortbay.sailing.hpf.analysis.PerformanceProfile;
 import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Club;
@@ -204,6 +205,7 @@ public class AdminApiServlet extends HttpServlet
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
             boolean dupeSails = "true".equals(req.getParameter("dupeSails"));
+            boolean excludeNulls = "true".equals(req.getParameter("excludeNulls"));
 
             // Duplicate-sail filter operates on the full dataset, text search is applied on top.
             Set<String> candidateIds = null;
@@ -222,11 +224,13 @@ public class AdminApiServlet extends HttpServlet
             }
 
             String filterDesignId = req.getParameter("designId");
+            String filterClubId   = req.getParameter("clubId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             final Set<String> finalCandidateIds = candidateIds;
             List<Boat> all = store.boats().values().stream()
                 .filter(b -> finalCandidateIds == null || finalCandidateIds.contains(b.id()))
                 .filter(b -> filterDesignId == null || filterDesignId.equals(b.designId()))
+                .filter(b -> filterClubId   == null || filterClubId.equals(b.clubId()))
                 .filter(b -> showExcluded
                     || (!store.isBoatExcluded(b.id())
                         && (b.designId() == null || !store.isDesignExcluded(b.designId()))))
@@ -249,6 +253,10 @@ public class AdminApiServlet extends HttpServlet
                     case "hpf"        -> Comparator.comparing(
                                             (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.hpf() != null && bd2.hpf().spin() != null) ? bd2.hpf().spin().value() : 0.0; },
                                             Comparator.<Double>naturalOrder());
+                    case "finishes"   -> Comparator.comparingInt(
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return bd2 != null ? bd2.raceIds().size() : 0; });
+                    case "profile"    -> Comparator.comparingDouble(
+                                            (Boat b2) -> { PerformanceProfile p2 = cache.profilesByBoatId().get(b2.id()); return p2 != null ? p2.overallScore() : 0.0; });
                     default           -> Comparator.comparing(Boat::id,         Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
@@ -271,9 +279,14 @@ public class AdminApiServlet extends HttpServlet
                 Factor hpfSpin = (hpf != null) ? hpf.spin() : null;
                 row.put("hpf",       hpfSpin != null ? factorMap(hpfSpin) : null);
                 row.put("finishes", bd != null ? bd.raceIds().size() : 0);
+                PerformanceProfile prof = cache.profilesByBoatId().get(b.id());
+                row.put("profile", prof != null ? prof.overallScore() : null);
                 row.put("excluded",   excl);
                 return row;
             }).collect(Collectors.toList());
+
+            if (excludeNulls && sort != null && !sort.isBlank())
+                rows.removeIf(r -> r.get(sort) == null);
 
             writeJson(resp, paginate(rows, page, size));
         }
@@ -310,7 +323,8 @@ public class AdminApiServlet extends HttpServlet
 
     private void handleBoatHpf(String id, HttpServletResponse resp) throws IOException
     {
-        if (store.boats().get(id) == null)
+        Boat boat = store.boats().get(id);
+        if (boat == null)
         {
             resp.sendError(404);
             return;
@@ -321,6 +335,7 @@ public class AdminApiServlet extends HttpServlet
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("boatId", id);
+        result.put("boatName", boat.name());
         result.put("currentYear", cache.targetYear());
 
         result.put("spin", hpfVariantMap(hpf != null ? hpf.spin() : null,
@@ -362,6 +377,11 @@ public class AdminApiServlet extends HttpServlet
             result.put("residuals", List.of());
         }
 
+        // Performance profile — computed fleet-wide after HPF run, read from cache
+        PerformanceProfile profile = cache.profilesByBoatId().get(id);
+        if (profile != null)
+            result.put("profile", profileMap(profile));
+
         writeJson(resp, result);
     }
 
@@ -377,6 +397,18 @@ public class AdminApiServlet extends HttpServlet
         return m;
     }
 
+    private Map<String, Object> profileMap(PerformanceProfile p)
+    {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("frequency",    p.frequency());
+        m.put("diversity",    p.diversity());
+        m.put("consistency",  p.consistency());
+        m.put("stability",    p.stability());
+        m.put("nonChaotic",   p.nonChaotic());
+        m.put("overallScore", p.overallScore());
+        return m;
+    }
+
     private void handleClubs(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (sub.isEmpty() || "/".equals(sub))
@@ -388,6 +420,7 @@ public class AdminApiServlet extends HttpServlet
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+            boolean excludeNulls = "true".equals(req.getParameter("excludeNulls"));
 
             // Merge persisted clubs and seed stubs into a unified view
             Map<String, Club> all = new LinkedHashMap<>(store.clubSeed());
@@ -401,9 +434,12 @@ public class AdminApiServlet extends HttpServlet
                     || (c.longName() != null && c.longName().toLowerCase().contains(lower)))
                 .map(c ->
                 {
-                    // Count races for this club
+                    // Count races and boats for this club
                     long raceCount = store.races().values().stream()
                         .filter(r -> c.id().equals(r.clubId()))
+                        .count();
+                    long boatCount = store.boats().values().stream()
+                        .filter(b -> c.id().equals(b.clubId()))
                         .count();
 
                     Map<String, Object> row = new LinkedHashMap<>();
@@ -411,6 +447,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("shortName", c.shortName());
                     row.put("longName", c.longName());
                     row.put("state", c.state());
+                    row.put("boats", boatCount > 0 ? boatCount : null);
                     row.put("races", raceCount);
                     row.put("excluded", c.excluded());
                     return row;
@@ -419,6 +456,9 @@ public class AdminApiServlet extends HttpServlet
 
             if (sort != null && !sort.isBlank())
                 rows.sort(mapComparator(sort, asc));
+
+            if (excludeNulls && sort != null && !sort.isBlank())
+                rows.removeIf(r -> r.get(sort) == null);
 
             writeJson(resp, paginate(rows, page, size));
         }
@@ -762,7 +802,7 @@ public class AdminApiServlet extends HttpServlet
                     double backCalcFactor = hpfVariant.value() * Math.exp(-r.residual());
                     // Look up race name and series name for hover text
                     Race race = store.races().get(r.raceId());
-                    String raceName = race != null ? race.name() : null;
+                    String raceName = raceName(race);
                     String seriesName = null;
                     String seriesId   = null;
                     if (race != null && race.seriesIds() != null && !race.seriesIds().isEmpty())
@@ -821,8 +861,13 @@ public class AdminApiServlet extends HttpServlet
         Race race = store.races().get(raceId);
         if (race == null) { resp.sendError(404); return; }
 
+        // Empty string is a sentinel for a null-named division (legacy imported data)
+        boolean matchNull = divisionName.isEmpty();
         var div = race.divisions() == null ? null
-            : race.divisions().stream().filter(d -> divisionName.equals(d.name())).findFirst().orElse(null);
+            : race.divisions().stream()
+                .filter(d -> matchNull ? (d.name() == null || d.name().isBlank())
+                                       : divisionName.equals(d.name()))
+                .findFirst().orElse(null);
         if (div == null) { resp.sendError(404); return; }
 
         List<Map<String, Object>> finishers = new ArrayList<>();
@@ -888,7 +933,7 @@ public class AdminApiServlet extends HttpServlet
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("raceId",      raceId);
-        result.put("raceName",    race.name());
+        result.put("raceName",    raceName(race));
         result.put("seriesName",  seriesName);
         result.put("date",        race.date() != null ? race.date().toString() : null);
         result.put("divisionName",    divisionName);
@@ -934,6 +979,7 @@ public class AdminApiServlet extends HttpServlet
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+            boolean excludeNulls = "true".equals(req.getParameter("excludeNulls"));
             List<Design> all = store.designs().values().stream()
                 .filter(d -> showExcluded || !store.isDesignExcluded(d.id()))
                 .filter(d -> lower == null
@@ -949,6 +995,8 @@ public class AdminApiServlet extends HttpServlet
                     case "spinRef"       -> Comparator.comparing(
                                                (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return (dd2 != null && dd2.referenceFactors() != null && dd2.referenceFactors().spin() != null) ? dd2.referenceFactors().spin().value() : 0.0; },
                                                Comparator.<Double>naturalOrder());
+                    case "boats"         -> Comparator.comparingInt(
+                                               (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return dd2 != null ? dd2.boatIds().size() : 0; });
                     default              -> Comparator.comparing(Design::id, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
@@ -967,6 +1015,9 @@ public class AdminApiServlet extends HttpServlet
                 row.put("excluded",      store.isDesignExcluded(d.id()));
                 return row;
             }).collect(Collectors.toList());
+
+            if (excludeNulls && sort != null && !sort.isBlank())
+                rows.removeIf(r -> r.get(sort) == null);
 
             writeJson(resp, paginate(rows, page, size));
         }
@@ -998,6 +1049,7 @@ public class AdminApiServlet extends HttpServlet
             String filterClubId   = req.getParameter("clubId");
             String filterSeriesId = req.getParameter("seriesId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+            boolean excludeNulls = "true".equals(req.getParameter("excludeNulls"));
             // Enrich all filtered rows — needed to allow sort by seriesName or finishers
             List<Map<String, Object>> enriched = store.races().values().stream()
                 .filter(r -> filterBoatId   == null || raceContainsBoat(r, filterBoatId))
@@ -1012,6 +1064,9 @@ public class AdminApiServlet extends HttpServlet
 
             if (sort != null && !sort.isBlank())
                 enriched.sort(mapComparator(sort, asc));
+
+            if (excludeNulls && sort != null && !sort.isBlank())
+                enriched.removeIf(r -> r.get(sort) == null);
 
             writeJson(resp, paginate(enriched, page, size));
         }
@@ -1093,7 +1148,7 @@ public class AdminApiServlet extends HttpServlet
         row.put("date", r.date());
         row.put("seriesName", seriesName);
         row.put("seriesId", firstSeriesId);
-        row.put("name", r.name());
+        row.put("name", raceName(r));
         row.put("finishers", finishers);
         row.put("excluded", store.isRaceExcluded(r.id()) || isRaceAllExcluded(r));
 
@@ -1188,6 +1243,7 @@ public class AdminApiServlet extends HttpServlet
         result.put("schedule", importerService.globalSchedule());
         result.put("targetIrcYear", importerService.targetIrcYear());
         result.put("outlierSigma", importerService.outlierSigma());
+        result.put("minAnalysisR2", importerService.minAnalysisR2());
         Map<String, Object> hpfConfig = new LinkedHashMap<>();
         hpfConfig.put("lambda", importerService.hpfLambda());
         hpfConfig.put("convergenceThreshold", importerService.hpfConvergenceThreshold());
@@ -1199,6 +1255,7 @@ public class AdminApiServlet extends HttpServlet
         hpfConfig.put("outerConvergenceThreshold", importerService.hpfOuterConvergenceThreshold());
         result.put("hpfConfig", hpfConfig);
         result.put("slidingAverageCount", importerService.slidingAverageCount());
+        result.put("slidingAverageDrops", importerService.slidingAverageDrops());
         writeJson(resp, result);
     }
 
@@ -1308,6 +1365,15 @@ public class AdminApiServlet extends HttpServlet
             resp.setStatus(400);
             writeJson(resp, Map.of("error", e.getMessage()));
         }
+    }
+
+    /** Returns the race name, falling back to the ISO date string for unnamed races. */
+    private static String raceName(Race race)
+    {
+        if (race == null) return null;
+        String n = race.name();
+        return (n != null && !n.isBlank()) ? n
+            : race.date() != null ? race.date().toString() : null;
     }
 
     @SuppressWarnings("unchecked")
@@ -1491,7 +1557,7 @@ public class AdminApiServlet extends HttpServlet
                 pt.put("y",          medianOf(aElapsed));
                 pt.put("date",       race.date() != null ? race.date().toString() : null);
                 pt.put("raceId",     raceId);
-                pt.put("raceName",   race.name());
+                pt.put("raceName",   raceName(race));
                 pt.put("seriesName", seriesName);
                 pt.put("division",   div.name());
                 pt.put("aBoats",     aNames);

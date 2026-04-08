@@ -7,9 +7,13 @@ importers:
   mode: "api"
   includeInSchedule: true
   runAtStartup: false
+- name: "rshyr"
+  mode: "api"
+  includeInSchedule: false
+  runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "topyacht"
   mode: "api"
@@ -36,20 +40,22 @@ importers:
   includeInSchedule: true
   runAtStartup: true
 schedule:
-  days:
-  - "SATURDAY"
-  time: "19:33:00"
+  days: []
+  time: "17:17:00"
 nextSailSysRaceId: 32639
 targetIrcYear: 2025
-outlierSigma: null
+outlierSigma: 2.5
+minAnalysisR2: 0.5
 mergeCandidateThreshold: 0.5
 fuzzyMatchThreshold: 0.9
+recentRaceReimportDays: 30
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
 sailsysHttpDelayMs: 200
 sailsysRecentRaceDays: 14
 sailsysNotFoundThreshold: 1000
+orcListMaxAgeDays: 1
 clubCertificateWeight: 0.9
 hpfLambda: 1.0
 hpfOutlierK: 0.5
@@ -60,6 +66,7 @@ hpfConvergenceThreshold: 1.0E-4
 hpfMaxInnerIterations: 100
 hpfMaxOuterIterations: 100
 slidingAverageCount: 8
+slidingAverageDrops: 0
 googleClientId: null
 googleClientSecret: null
 authBaseUrl: null

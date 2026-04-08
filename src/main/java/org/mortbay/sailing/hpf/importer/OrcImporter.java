@@ -2,9 +2,11 @@ package org.mortbay.sailing.hpf.importer;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -81,7 +83,8 @@ public class OrcImporter
         client.start();
         try
         {
-            new OrcImporter(dataStore, client).run();
+            Path cacheDir = dataRoot.resolve("orc");
+            new OrcImporter(dataStore, client).run(cacheDir, 1);
         }
         finally
         {
@@ -90,18 +93,25 @@ public class OrcImporter
         }
     }
 
-    // --- Fetch layer (HTTP) ---
+    // --- Run ---
 
-    public void run() throws Exception
+    /**
+     * Fetches the ORC Australian certificate list and imports all new certificates.
+     *
+     * @param cacheDir       directory for caching list XML and cert HTML pages, or null to disable caching
+     * @param listMaxAgeDays re-fetch the list if the cached copy is older than this many days (ignored if cacheDir is null)
+     */
+    public void run(Path cacheDir, int listMaxAgeDays) throws Exception
     {
-        LOG.info("Fetching ORC certificate list from {}", LIST_URL);
-        String listXml = fetch(LIST_URL);
+        String listXml = fetchList(cacheDir, listMaxAgeDays);
         Document listDoc = parseXml(listXml);
 
         NodeList certNodes = listDoc.getElementsByTagName("ROW");
         if (certNodes.getLength() == 0)
             LOG.warn("No ROW nodes found — check XML for correct tag name");
         LOG.info("Processing {} certificate entries", certNodes.getLength());
+
+        Path certsDir = cacheDir != null ? cacheDir.resolve("certs") : null;
 
         for (int i = 0; i < certNodes.getLength(); i++)
         {
@@ -128,8 +138,7 @@ public class OrcImporter
             String certHtml;
             try
             {
-                Thread.sleep(100); // be gentle on the server
-                certHtml = fetch(CERT_URL_PREFIX + dxtId);
+                certHtml = fetchCert(dxtId, certsDir);
             }
             catch (Exception e)
             {
@@ -142,6 +151,64 @@ public class OrcImporter
 
         store.save();
         LOG.info("Done.");
+    }
+
+    /**
+     * Fetches (or loads from cache) the ORC active-certs list XML.
+     * Cached at {@code cacheDir/list-AUS.xml}; re-fetched if the cached copy is older than
+     * {@code listMaxAgeDays} days, or if no cache dir is provided.
+     */
+    private String fetchList(Path cacheDir, int listMaxAgeDays) throws Exception
+    {
+        if (cacheDir != null)
+        {
+            Files.createDirectories(cacheDir);
+            Path listFile = cacheDir.resolve("list-AUS.xml");
+            if (Files.exists(listFile))
+            {
+                long agedays = ChronoUnit.DAYS.between(
+                    Files.getLastModifiedTime(listFile).toInstant(), Instant.now());
+                if (agedays < listMaxAgeDays)
+                {
+                    LOG.info("Using cached ORC list (age={}d, max={}d)", agedays, listMaxAgeDays);
+                    return Files.readString(listFile, StandardCharsets.UTF_8);
+                }
+                LOG.info("ORC list cache is stale (age={}d >= max={}d) — re-fetching", agedays, listMaxAgeDays);
+            }
+            else
+            {
+                LOG.info("No cached ORC list found — fetching from {}", LIST_URL);
+            }
+            String xml = fetch(LIST_URL);
+            Files.writeString(listFile, xml, StandardCharsets.UTF_8);
+            return xml;
+        }
+        LOG.info("Fetching ORC certificate list from {} (no cache)", LIST_URL);
+        return fetch(LIST_URL);
+    }
+
+    /**
+     * Fetches (or loads from cache) the HTML page for one ORC certificate.
+     * Cached at {@code certsDir/{dxtId}.html}; individual cert pages are immutable
+     * once issued so cached copies are used indefinitely.
+     */
+    private String fetchCert(String dxtId, Path certsDir) throws Exception
+    {
+        if (certsDir != null)
+        {
+            Files.createDirectories(certsDir);
+            Path certFile = certsDir.resolve(dxtId + ".html");
+            if (Files.exists(certFile))
+            {
+                LOG.debug("Using cached cert page for dxtID={}", dxtId);
+                return Files.readString(certFile, StandardCharsets.UTF_8);
+            }
+        }
+        Thread.sleep(100); // be gentle on the server
+        String html = fetch(CERT_URL_PREFIX + dxtId);
+        if (certsDir != null)
+            Files.writeString(certsDir.resolve(dxtId + ".html"), html, StandardCharsets.UTF_8);
+        return html;
     }
 
     private String fetch(String url) throws Exception

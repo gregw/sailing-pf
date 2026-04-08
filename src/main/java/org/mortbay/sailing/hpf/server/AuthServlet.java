@@ -38,11 +38,6 @@ class AuthServlet extends HttpServlet
     private void handleStatus(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         resp.setContentType("application/json");
-        if (authConfig.devMode())
-        {
-            resp.getWriter().write("{\"authenticated\":true,\"email\":\"dev@localhost\",\"devMode\":true}");
-            return;
-        }
         if (authConfig.isAdminConnector(req))
         {
             resp.getWriter().write("{\"authenticated\":true,\"email\":\"admin@local\",\"adminConnector\":true}");

@@ -22,18 +22,18 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class SailSysRaceImporterTest
+class SailSysImporterTest
 {
     @TempDir Path tempDir;
     private DataStore store;
-    private SailSysRaceImporter importer;
+    private SailSysImporter importer;
 
     @BeforeEach
     void setUp()
     {
         store = new DataStore(tempDir);
         store.start();
-        importer = new SailSysRaceImporter(store, null);
+        importer = new SailSysImporter(store, null);
     }
 
     @AfterEach
@@ -80,7 +80,6 @@ class SailSysRaceImporterTest
     @Test
     void phsRaceImportedWithoutCertificateNumber()
     {
-        // Seed the club so it can be resolved
         Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
@@ -123,7 +122,6 @@ class SailSysRaceImporterTest
         assertTrue(finisher.certificateNumber().startsWith("irc-inferred-"),
             "Unknown cert should be inferred");
 
-        // The inferred certificate should be stored on the boat
         Boat boat = store.boats().values().stream()
             .filter(b -> "AUS1234".equals(b.sailNumber()))
             .findFirst().orElseThrow();
@@ -140,7 +138,6 @@ class SailSysRaceImporterTest
         Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
-        // Pre-populate the boat with a known cert
         Certificate existingCert = new Certificate("IRC", 2020, 1.071, false, false, false, false, "CERT-12345", null);
         Boat boat = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, "myc.com.au",
             List.of(), List.of(), List.of(existingCert), List.of(), null, null);
@@ -160,7 +157,6 @@ class SailSysRaceImporterTest
     @Test
     void unknownClubLeavesClubIdNull()
     {
-        // No club seeded — club cannot be resolved
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
             "2020-09-13T15:00:00.000", 1, "XYZ", "Unknown Yacht Club",
             "Some Series", "PHS", false,
@@ -232,33 +228,6 @@ class SailSysRaceImporterTest
     }
 
     @Test
-    void resolveBoatIdFetchesFromCacheWhenNotInStore() throws Exception
-    {
-        Path boatsDir = tempDir.resolve("boats-cache");
-        Files.createDirectories(boatsDir);
-
-        // Pre-write a valid boat JSON for boat id=42 (fresh — not stale)
-        Files.writeString(boatsDir.resolve("boat-000042.json"),
-            boatJsonForCache(42, "Foo", "AUS1", "Archambault", "40"));
-
-        importer.setBoatCacheParams(boatsDir, 7, 0);
-
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false,
-            List.of(), List.of(), List.of(), null);
-        store.putClub(myc);
-
-        importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
-            "2020-09-13T15:00:00.000", 1, "MYC", "Manly Yacht Club",
-            "Club Championship", "PHS", false,
-            List.of(entryWithBoatId(42, "Foo", "AUS1", "1:09:42", false, null))));
-
-        Boat boat = store.boats().values().stream()
-            .filter(b -> "AUS1".equals(b.sailNumber()))
-            .findFirst().orElseThrow();
-        assertNotNull(boat.designId(), "Boat should have been enriched with design from cache");
-    }
-
-    @Test
     void runFromDirectoryProcessesAllEligibleFiles() throws IOException
     {
         Path racesDir = tempDir.resolve("races-input");
@@ -285,7 +254,7 @@ class SailSysRaceImporterTest
         testStore.start();
         Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         testStore.putClub(myc2);
-        SailSysRaceImporter testImporter = new SailSysRaceImporter(testStore, null);
+        SailSysImporter testImporter = new SailSysImporter(testStore, null);
 
         testImporter.runFromDirectory(racesDir);
 
@@ -293,7 +262,7 @@ class SailSysRaceImporterTest
         testStore.stop();
     }
 
-    // --- peekRaceDate / recentRaceDays logic ---
+    // --- peekRaceDate ---
 
     @Test
     void peekRaceDateReturnsCorrectDate()
@@ -305,6 +274,8 @@ class SailSysRaceImporterTest
 
         assertEquals(LocalDate.of(2020, 9, 13), date);
     }
+
+    // --- run() ---
 
     @Test
     void runReturnsMinRecentIdFromCachedFiles() throws Exception
@@ -328,7 +299,7 @@ class SailSysRaceImporterTest
 
         int[] count = {0};
         int minRecentId = importer.run(1, id -> {}, () -> ++count[0] >= 3,
-            racesDir, null, 7, 352, 365, 0, 30, 1000);
+            racesDir, 7, 352, 365, 0, 30, 1000);
 
         assertEquals(1, minRecentId, "Should return the lowest recent ID");
     }
@@ -355,7 +326,7 @@ class SailSysRaceImporterTest
 
         int[] count = {0};
         int minRecentId = importer.run(1, id -> {}, () -> ++count[0] >= 3,
-            racesDir, null, 7, 352, 365, 0, 30, 1000);
+            racesDir, 7, 352, 365, 0, 30, 1000);
 
         assertEquals(0, minRecentId, "No recent races: should return 0");
     }
@@ -418,26 +389,5 @@ class SailSysRaceImporterTest
              "elapsedTime":null,"nonSpinnaker":false,
              "calculations":[]}
             """.formatted(name, sailNo);
-    }
-
-    private String entryWithBoatId(int boatId, String name, String sailNo, String elapsed,
-                                    boolean nonSpin, Double handicapCreatedFrom)
-    {
-        String hcFrom = handicapCreatedFrom != null ? handicapCreatedFrom.toString() : "null";
-        return """
-            {"boat":{"id":%d,"name":"%s","sailNumber":"%s"},
-             "elapsedTime":"%s","nonSpinnaker":%b,
-             "calculations":[{"handicapCreatedFrom":%s}]}
-            """.formatted(boatId, name, sailNo, elapsed, nonSpin, hcFrom);
-    }
-
-    private String boatJsonForCache(int id, String name, String sailNo, String make, String model)
-    {
-        return """
-            {"data":{"id":%d,"name":"%s","sailNumber":"%s",
-             "clubShortName":"","clubLongName":"","make":"%s","model":"%s",
-             "handicaps":[]},
-             "result":"success","errorMessage":null}
-            """.formatted(id, name, sailNo, make, model);
     }
 }

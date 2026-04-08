@@ -11,12 +11,17 @@
 
   <main class="landing">
     <h1>Historical Performance Factors</h1>
-<!-- INCLUDE _intro.md -->
+      <p>The HPF project provides an online database of elapsed times and time corrected factors from
+          Australian sail racing, with statistical analysis and graphical presentation.
+          It is primarily for keel boats, but OTB and multihulls may also be included.
+          <a href="docs.html">Read more...</a>
+      </p>
 
     <div class="stats">
-      <div class="stat"><strong id="stat-boats">–</strong>Boats</div>
-      <div class="stat"><strong id="stat-designs">–</strong>Designs</div>
-      <div class="stat"><strong id="stat-races">–</strong>Races</div>
+      <div class="stat"><a href="data.html?tab=boats"><strong id="stat-boats">–</strong></a>Boats</div>
+      <div class="stat"><a href="data.html?tab=designs"><strong id="stat-designs">–</strong></a>Designs</div>
+      <div class="stat"><a href="data.html?tab=clubs"><strong id="stat-clubs">–</strong></a>Clubs</div>
+      <div class="stat"><a href="data.html?tab=races"><strong id="stat-races">–</strong></a>Races</div>
     </div>
 
     <div class="landing-links">
@@ -33,8 +38,16 @@
         <span>Compare handicap systems across years, view scatter plots with regression fits, and review HPF run quality.</span>
       </a>
       <a class="landing-card" href="comparison.html">
-        <strong>Comparison</strong>
-        <span>Compare boats and designs side-by-side by HPF and reference factor.</span>
+        <strong>Boat Comparison</strong>
+        <span>Compare boats by HPF and reference factor and calculate handicaps.</span>
+      </a>
+      <a class="landing-card" href="design-comparison.html">
+          <strong>Design Comparison</strong>
+          <span>Compare designs by reference factor and calculate handicaps.</span>
+      </a>
+      <a class="landing-card" href="docs.html">
+          <strong>Documentation</strong>
+          <span>Detailed documentation of the algorithms and usage.</span>
       </a>
     </div>
   </main>
@@ -46,6 +59,7 @@
         if (!data) return;
         document.getElementById('stat-boats').textContent = data.boats.toLocaleString();
         document.getElementById('stat-designs').textContent = data.designs.toLocaleString();
+        document.getElementById('stat-clubs').textContent = data.clubs.toLocaleString();
         document.getElementById('stat-races').textContent = data.races.toLocaleString();
     }
     loadStats();

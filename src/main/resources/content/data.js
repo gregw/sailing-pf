@@ -50,8 +50,13 @@ const COLUMNS = {
           render: v => v && v.value != null
             ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
             : '<span style="color:#bbb">—</span>' },
+        { label: 'Overall', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
+          tip: 'Performance profile overall score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, NonChaotic and Stability spokes (last 12 months).',
+          render: v => v != null
+            ? `<span style="color:${weightColor(v)}">${v.toFixed(3)}</span>`
+            : '<span style="color:#bbb">—</span>' },
         { label: 'Club',     key: 'clubId', anchor: 'col-boat-club',   tip: 'Home club identifier.' },
-        { label: 'Finishes', type: 'action', anchor: 'col-boat-finishes',
+        { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
           tip: 'Number of recorded finishes; click to view this boat\'s races.',
           render: item => item.finishes ? String(item.finishes) : '',
           action: item => { setFilter('races', 'boatId', item.id,
@@ -67,7 +72,7 @@ const COLUMNS = {
           render: v => v && v.value != null
             ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
             : '<span style="color:#bbb">—</span>' },
-        { label: 'Boats',  type: 'action', anchor: 'col-design-boats',
+        { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
           render: item => item.boats ? String(item.boats) : '',
           action: item => { setFilter('boats', 'designId', item.id,
@@ -80,7 +85,12 @@ const COLUMNS = {
         { label: 'Short',     key: 'shortName', anchor: 'col-club-short', tip: 'Short name used in source data.' },
         { label: 'Name',      key: 'longName',  anchor: 'col-club-name',  tip: 'Full club name.' },
         { label: 'State',     key: 'state',     anchor: 'col-club-state', tip: 'Australian state or territory.' },
-        { label: 'Races',     type: 'action',   anchor: 'col-club-races',
+        { label: 'Boats',     type: 'action', sortKey: 'boats', anchor: 'col-club-boats',
+          tip: 'Number of boats registered at this club; click to show these boats in the boats table.',
+          render: item => item.boats != null ? String(item.boats) : '',
+          action: item => { setFilter('boats', 'clubId', item.id,
+                            'Boats at ' + (item.shortName || item.id)); switchTab('boats'); } },
+        { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-club-races',
           tip: 'Number of races imported from this club; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
           action: item => { setFilter('races', 'clubId', item.id,
@@ -168,7 +178,7 @@ function updateFilterBanner(entity) {
 
 function updateFilterControls(entity) {
     const active = !!state.filter[entity];
-    ['show-excluded-' + entity, 'filter-dupe-sails'].forEach(id => {
+    ['show-excluded-' + entity, 'exclude-nulls-' + entity, 'filter-dupe-sails'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = active;
@@ -209,6 +219,8 @@ async function loadList(entity, page) {
         if (document.getElementById('filter-dupe-sails').checked) url += '&dupeSails=true';
     }
     if (!f && document.getElementById('show-excluded-' + entity).checked) url += '&showExcluded=true';
+    const excludeNullsEl = document.getElementById('exclude-nulls-' + entity);
+    if (!f && excludeNullsEl && excludeNullsEl.checked) url += '&excludeNulls=true';
     const data = await fetchJson(url);
     if (!data) return;
 
@@ -226,11 +238,13 @@ function renderHeaders(entity) {
     if (entity === 'boats' || entity === 'designs') html += '<th style="width:2rem"></th>';
     html += cols.map(col => {
         const info = col.anchor ? infoBtn(col.anchor, col.tip || '') : '';
-        if (col.type === 'toggle' || col.type === 'action') return `<th>${esc(col.label)}${info}</th>`;
-        const isActive = col.key === active;
+        if (col.type === 'toggle') return `<th>${esc(col.label)}${info}</th>`;
+        const sortKey  = col.sortKey || col.key;
+        if (col.type === 'action' && !col.sortKey) return `<th>${esc(col.label)}${info}</th>`;
+        const isActive = sortKey === active;
         const arrow    = isActive ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
         return `<th class="sortable${isActive ? ' sort-active' : ''}"
-                    onclick="sortBy('${entity}', '${col.key}')">${esc(col.label)}${arrow}${info}</th>`;
+                    onclick="sortBy('${entity}', '${sortKey}')">${esc(col.label)}${arrow}${info}</th>`;
     }).join('');
     thead.innerHTML = html;
 }
@@ -351,6 +365,10 @@ async function loadDetail(entity, id) {
 }
 
 function renderBoatHpf(data) {
+    const boatHeading = data.boatName
+        ? `<div style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;">${esc(data.boatName)}</div>`
+        : '';
+
     function row(label, hpf, rf) {
         if (!hpf && !rf) return `<tr><td>${label}</td><td colspan="6" style="color:#999">—</td></tr>`;
         const rfVal    = rf  ? rf.value.toFixed(4)   : '—';
@@ -371,7 +389,7 @@ function renderBoatHpf(data) {
         </tr>`;
     }
 
-    let html = `<strong>Performance factors (${data.currentYear})</strong>
+    let html = boatHeading + `<strong>Performance factors (${data.currentYear})</strong>
       <table style="width:auto;margin-top:0.4rem;">
         <thead><tr>
           <th>Variant${infoBtn('col-hpf-variant','Spin, Non-Spin, or Two-Handed handicap variant.')}</th>
@@ -389,6 +407,15 @@ function renderBoatHpf(data) {
         </tbody>
       </table>`;
 
+    if (data.profile) {
+        const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile','Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. NonChaotic: whether inconsistency correlates with fleet-wide conditions. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
+        html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
+        html += `  <div id="hpf-profile-chart"></div>`;
+        html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">Overall: ${score}</div>`;
+        html += `</div>`;
+        setTimeout(() => renderProfileChart(data.profile), 0);
+    }
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the HPF optimiser. Points close to zero indicate the boat raced close to its HPF.')}</div>`;
         html += '<div id="hpf-residual-chart"></div>';
@@ -437,6 +464,43 @@ function renderResidualChart(residuals) {
     };
 
     Plotly.newPlot(container, traces, layout, { responsive: true });
+}
+
+function renderProfileChart(profile) {
+    const container = document.getElementById('hpf-profile-chart');
+    if (!container || typeof Plotly === 'undefined') return;
+
+    // Spoke order matches polygon area calculation: Frequency, Consistency, Diversity, NonChaotic, Stability
+    const labels = ['Frequency', 'Consistency', 'Diversity', 'NonChaotic', 'Stability'];
+    const keys   = ['frequency', 'consistency', 'diversity', 'nonChaotic', 'stability'];
+    const values = keys.map(k => profile[k] ?? 0);
+
+    // Close the polygon
+    const theta = [...labels, labels[0]];
+    const r     = [...values, values[0]];
+
+    const trace = {
+        type: 'scatterpolar',
+        r,
+        theta,
+        fill: 'toself',
+        fillcolor: 'rgba(31,119,180,0.15)',
+        line: { color: 'rgba(31,119,180,0.8)', width: 2 },
+        hovertemplate: '%{theta}: %{r:.2f}<extra></extra>'
+    };
+
+    const layout = {
+        polar: {
+            radialaxis: { visible: true, range: [0, 1], tickvals: [0.25, 0.5, 0.75, 1.0] },
+            angularaxis: { direction: 'clockwise' }
+        },
+        showlegend: false,
+        width: 360,
+        height: 320,
+        margin: { t: 30, b: 30, l: 70, r: 70 }
+    };
+
+    Plotly.newPlot(container, [trace], layout, { responsive: false });
 }
 
 // ---- Selection and merge (boats and designs) ----
@@ -552,17 +616,28 @@ function setupRaceDivisionChart(raceId, raceJson) {
     currentDivRaceId = raceId;
     updateRaceNav();
 
-    const divisions = (raceJson.divisions || []).map(d => d.name).filter(Boolean);
-    const select = document.getElementById('race-division-select');
-    select.innerHTML = '';
-    if (divisions.length === 0) {
+    const rawDivisions = (raceJson.divisions || []);
+    if (rawDivisions.length === 0) {
         document.getElementById('division-section-races').style.display = 'none';
         return;
     }
-    divisions.forEach(name => {
+    // Map null/blank division names to "" (sentinel for API) and display as handicapSystem or "Results".
+    // Deduplicate by value so multiple null-named divisions collapse to one "" option.
+    const fallbackLabel = raceJson.handicapSystem || 'Results';
+    const seen = new Set();
+    const divisions = [];
+    for (const d of rawDivisions) {
+        const value = (d.name != null && d.name !== '') ? d.name : '';
+        if (seen.has(value)) continue;
+        seen.add(value);
+        divisions.push({ value, label: value !== '' ? value : fallbackLabel });
+    }
+    const select = document.getElementById('race-division-select');
+    select.innerHTML = '';
+    divisions.forEach(({ value, label }) => {
         const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
+        opt.value = value;
+        opt.textContent = label;
         select.appendChild(opt);
     });
 
@@ -572,11 +647,11 @@ function setupRaceDivisionChart(raceId, raceJson) {
     if (raceJson.name)       parts.push(raceJson.name);
     document.getElementById('race-div-title').textContent = parts.join(' — ');
 
-    const initialDiv = (preferredDivision && divisions.includes(preferredDivision))
-        ? preferredDivision : divisions[0];
+    const preferred = preferredDivision && divisions.some(d => d.value === preferredDivision)
+        ? preferredDivision : divisions[0].value;
     preferredDivision = null;
-    select.value = initialDiv;
-    loadRaceDivChart(raceId, initialDiv);
+    select.value = preferred;
+    loadRaceDivChart(raceId, preferred);
 }
 
 function updateRaceNav() {
@@ -612,7 +687,7 @@ function onRaceErrorBarsChange() {
 }
 
 async function loadRaceDivChart(raceId, divisionName) {
-    if (!raceId || !divisionName) return;
+    if (!raceId || divisionName == null) return;
     const params = new URLSearchParams({ raceId, divisionName });
     const data = await fetchJson('/api/comparison/division?' + params);
     if (!data || !data.finishers || data.finishers.length === 0) {

@@ -91,6 +91,7 @@ public class TopYachtImporter
     private final HttpClient httpClient;
     /** Lazily resolved on first parse error; null until run() sets it. */
     private Path errorFile;
+    private int recentRaceReimportDays = 30;
 
     public TopYachtImporter(DataStore store, HttpClient httpClient)
     {
@@ -119,8 +120,11 @@ public class TopYachtImporter
 
     // --- Entry point ---
 
-    public void run() throws Exception
+    public void run() throws Exception { run(30); }
+
+    public void run(int recentRaceReimportDays) throws Exception
     {
+        this.recentRaceReimportDays = recentRaceReimportDays;
         errorFile = store.dataRoot().resolve("topyacht-errors.txt");
         // topyachtUrls are configured in the seed (clubs.yaml); merge seed + persisted
         // so we don't miss clubs that haven't been imported yet.
@@ -237,7 +241,7 @@ public class TopYachtImporter
         String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
         String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
 
-        if (store.races().containsKey(raceId))
+        if (store.races().containsKey(raceId) && !isRecentRace(date))
         {
             LOG.debug("TopYacht: race {} already imported, updating series membership only", raceId);
             updateClubSeries(club.id(), seriesId, seriesName, raceId);
@@ -279,7 +283,7 @@ public class TopYachtImporter
         String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
         String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
 
-        if (store.races().containsKey(raceId))
+        if (store.races().containsKey(raceId) && !isRecentRace(date))
         {
             LOG.debug("TopYacht: race {} already imported, updating series membership only", raceId);
             updateClubSeries(club.id(), seriesId, seriesName, raceId);
@@ -385,7 +389,7 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, handicapSystem, false, List.of(new Division(null, List.copyOf(finishers))), SOURCE, Instant.now(), null));
+            null, handicapSystem, false, List.of(new Division(handicapSystem, List.copyOf(finishers))), SOURCE, Instant.now(), null));
         LOG.info("TopYacht: imported race {} ({} finishers, system={})",
             raceId, finishers.size(), handicapSystem);
 
@@ -864,6 +868,11 @@ public class TopYachtImporter
         List<String> updated = new ArrayList<>(existing);
         updated.add(source);
         return List.copyOf(updated);
+    }
+
+    private boolean isRecentRace(LocalDate date)
+    {
+        return date != null && !date.isBefore(LocalDate.now().minusDays(recentRaceReimportDays));
     }
 
     private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)

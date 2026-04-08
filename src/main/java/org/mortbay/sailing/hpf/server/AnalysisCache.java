@@ -11,6 +11,8 @@ import org.mortbay.sailing.hpf.analysis.HpfConfig;
 import org.mortbay.sailing.hpf.analysis.HpfOptimiser;
 import org.mortbay.sailing.hpf.analysis.HpfQuality;
 import org.mortbay.sailing.hpf.analysis.HpfResult;
+import org.mortbay.sailing.hpf.analysis.PerformanceProfile;
+import org.mortbay.sailing.hpf.analysis.PerformanceProfileBuilder;
 import org.mortbay.sailing.hpf.analysis.RaceDerived;
 import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.analysis.HandicapAnalyser;
@@ -51,12 +53,14 @@ public class AnalysisCache implements DataStore.InvalidationListener
 
     private volatile List<ComparisonResult> comparisons = List.of();
     private volatile int targetYear = LocalDate.now().getYear();
+    private volatile double minAnalysisR2 = ConversionGraph.DEFAULT_MIN_R2;
 
     // Consolidated per-entity derived data
     private volatile Map<String, BoatDerived> boatDerived = Map.of();
     private volatile Map<String, DesignDerived> designDerived = Map.of();
     private volatile Map<String, RaceDerived> raceDerived = Map.of();
     private volatile Map<String, List<EntryResidual>> residualsByBoatId = Map.of();
+    private volatile Map<String, PerformanceProfile> profilesByBoatId = Map.of();
     private volatile HpfQuality lastHpfQuality;  // null until first run
 
     public AnalysisCache(DataStore store)
@@ -70,39 +74,43 @@ public class AnalysisCache implements DataStore.InvalidationListener
      *
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
      * @param outlierSigma  outlier trimming threshold in units of SE, or null to use default (2.5)
+     * @param minR2         minimum R² for a conversion edge to be included in the graph
      */
-    public void refresh(Integer targetIrcYear, Double outlierSigma, double clubCertificateWeight)
+    public void refresh(Integer targetIrcYear, Double outlierSigma, double clubCertificateWeight, double minR2)
     {
         LOG.info("AnalysisCache: refreshing...");
         double sigma = outlierSigma != null ? outlierSigma : 2.5;
         List<ComparisonResult> newComparisons = new HandicapAnalyser(store, sigma).analyseAll();
-        ConversionGraph graph = ConversionGraph.from(newComparisons);
+        ConversionGraph graph = ConversionGraph.from(newComparisons, minR2);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
 
         comparisons = newComparisons;
         targetYear  = year;
+        minAnalysisR2 = minR2;
         mergeReferenceFactors(built);
-        LOG.info("AnalysisCache: {} comparisons, {} boat derived, {} design derived (targetYear={})",
-            newComparisons.size(), boatDerived.size(), designDerived.size(), year);
+        LOG.info("AnalysisCache: {} comparisons, {} boat derived, {} design derived (targetYear={}, minR2={})",
+            newComparisons.size(), boatDerived.size(), designDerived.size(), year, minR2);
     }
 
     /**
      * Recomputes reference factors only, using the existing comparisons and conversion graph.
-     * Faster than {@link #refresh(Integer, Double, double)} when only the boat certificate data has changed.
+     * Faster than {@link #refresh(Integer, Double, double, double)} when only the boat certificate data has changed.
      *
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
+     * @param minR2         minimum R² for a conversion edge to be included in the graph
      */
-    public void refreshReferenceFactors(Integer targetIrcYear, double clubCertificateWeight)
+    public void refreshReferenceFactors(Integer targetIrcYear, double clubCertificateWeight, double minR2)
     {
         LOG.info("AnalysisCache: refreshing reference factors...");
-        ConversionGraph graph = ConversionGraph.from(comparisons);
+        ConversionGraph graph = ConversionGraph.from(comparisons, minR2);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
         targetYear = year;
+        minAnalysisR2 = minR2;
         mergeReferenceFactors(built);
-        LOG.info("AnalysisCache: {} boat derived, {} design derived (targetYear={})",
-            boatDerived.size(), designDerived.size(), year);
+        LOG.info("AnalysisCache: {} boat derived, {} design derived (targetYear={}, minR2={})",
+            boatDerived.size(), designDerived.size(), year, minR2);
     }
 
     /**
@@ -310,6 +318,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         this.designDerived = Map.of();
         this.raceDerived = Map.of();
         this.residualsByBoatId = Map.of();
+        this.profilesByBoatId = Map.of();
     }
 
     // --- Accessors ---
@@ -317,6 +326,11 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public int targetYear()
     {
         return targetYear;
+    }
+
+    public double minAnalysisR2()
+    {
+        return minAnalysisR2;
     }
 
     public List<ComparisonResult> comparisons()
@@ -342,6 +356,11 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public Map<String, List<EntryResidual>> residualsByBoatId()
     {
         return residualsByBoatId;
+    }
+
+    public Map<String, PerformanceProfile> profilesByBoatId()
+    {
+        return profilesByBoatId;
     }
 
     public HpfQuality hpfQuality()
@@ -401,5 +420,31 @@ public class AnalysisCache implements DataStore.InvalidationListener
         // Store quality summary
         if (result.quality() != null)
             this.lastHpfQuality = result.quality();
+
+        // Recompute fleet-relative performance profiles
+        refreshProfiles();
+    }
+
+    /**
+     * Computes fleet-relative performance profiles for all boats using the last 12 months
+     * of residual data. Called automatically after each HPF run.
+     */
+    private void refreshProfiles()
+    {
+        // Build raceId → divisionName → dispersion lookup from current raceDerived
+        Map<String, Map<String, Double>> dispersionMap = new LinkedHashMap<>();
+        for (RaceDerived rd : raceDerived.values())
+        {
+            if (rd.divisionHpfs() == null) continue;
+            Map<String, Double> divMap = new LinkedHashMap<>();
+            for (DivisionHpf dh : rd.divisionHpfs())
+                divMap.put(dh.divisionName(), dh.dispersion());
+            if (!divMap.isEmpty())
+                dispersionMap.put(rd.race().id(), divMap);
+        }
+
+        this.profilesByBoatId = new PerformanceProfileBuilder()
+            .buildAll(residualsByBoatId, dispersionMap, store.races());
+        LOG.info("AnalysisCache: computed performance profiles for {} boats", profilesByBoatId.size());
     }
 }

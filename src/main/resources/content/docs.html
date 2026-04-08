@@ -80,9 +80,6 @@
 
 <div class="docs-section">
     <h1 id="page-home">HPF Documentation</h1>
-    <p>This page is the reference for the HPF admin interface. Click any ⓘ icon in the UI
-        to jump directly to the relevant section. Sections are also listed in the navigation
-        at the top of this page.</p>
 
 <!-- INCLUDE _intro.md -->
     <h2 id="the-problem">The Problem with Elapsed-Time Analysis</h2>
@@ -161,6 +158,7 @@
             <li><a href="guide/data-sources-and-formats.md">Data Sources &amp; Formats</a> — field-level detail for SailSys,
                 TopYacht, ORC, AMS, BWPS
             </li>
+            <li><a href="guide/performance_profile.md">Performance Rank</a> — How to rate a boats performance</li>
             <li><a href="guide/error-bars.md">Error Bars</a> — weight-to-confidence-interval math and σ₀ calibration</li>
         </ul>
     </div>
@@ -252,6 +250,17 @@
         quality of contributing races; a boat with few races or highly variable results will have
         low HPF weight. Colour scale matches RF.</p>
 
+    <h3 id="col-boat-profile">Boats › Overall (Performance Profile Score)</h3>
+    <p>The normalised area of the performance profile pentagon — a single number in [0, 1]
+        summarising how the boat compares to the active fleet across five dimensions over the
+        last 12 months. A score of 1.0 would mean the boat ranks first in the fleet on every
+        spoke simultaneously; 0.0 means last on every spoke. In practice most boats sit between
+        0.1 and 0.5. Click the boat row to see the full pentagon chart and per-spoke details.
+        See <a href="#chart-profile">Performance Profile</a> for spoke definitions.</p>
+    <p>Only boats with at least 3 distinct races in the last 12 months receive a profile score.
+        Boats with fewer races are excluded from the ranking pool entirely, so the score reflects
+        only the regularly active fleet.</p>
+
     <h3 id="col-boat-club">Boats › Club</h3>
     <p>The home club identifier (website domain). A boat may be associated with multiple clubs
         across different source systems; the value shown is the primary club from the most
@@ -316,6 +325,10 @@
 
     <h3 id="col-club-state">Clubs › State</h3>
     <p>Australian state or territory: NSW, VIC, QLD, WA, SA, ACT, TAS, or NT.</p>
+
+    <h3 id="col-club-boats">Clubs › Boats</h3>
+    <p>Number of boats in the database whose home club is this club. Click to filter the Boats tab
+        to show only those boats.</p>
 
     <h3 id="col-club-races">Clubs › Races</h3>
     <p>Total races imported from this club. Click to filter the Races tab.</p>
@@ -488,6 +501,66 @@
     <h3 id="col-hpf-races">HPF Detail › Races</h3>
     <p>Number of race division entries contributing to this HPF estimate. More races generally
         means higher confidence, but consistency across races matters more than sheer count.</p>
+
+    <h3 id="chart-profile">Performance Profile</h3>
+    <p>A pentagon radar chart showing how this boat compares to the active fleet across five
+        fleet-relative percentile scores, each computed from the last 12 months of race data.
+        Each spoke ranges from 0 (worst in fleet) to 1 (best in fleet), where rank is relative
+        to all boats with at least 3 distinct recent races. The overall score shown below the
+        chart is the normalised polygon area of the pentagon (see
+        <a href="#col-boat-profile">Boats › Overall</a>).</p>
+    <p>The five spokes, in pentagon order:</p>
+    <table class="docs-table">
+        <tr>
+            <th>Spoke</th>
+            <th>What it measures</th>
+            <th>How it is scored</th>
+        </tr>
+        <tr>
+            <td><strong>Frequency</strong></td>
+            <td>How regularly the boat races</td>
+            <td>Percentile rank of distinct race count in the last 12 months. Higher race count
+                = better rank. A boat racing once a fortnight will outrank one racing only a
+                handful of times.</td>
+        </tr>
+        <tr>
+            <td><strong>Consistency</strong></td>
+            <td>How tightly the residuals cluster around zero</td>
+            <td>Percentile rank of the weighted sum of squared residuals (lower raw value =
+                better rank). A boat with small, stable residuals scores well; wide scatter
+                scores poorly. Scores "how predictable is this boat race to race".</td>
+        </tr>
+        <tr>
+            <td><strong>Diversity</strong></td>
+            <td>How broadly the boat races across the fleet</td>
+            <td>Percentile rank of distinct opponents raced against in the last 12 months.
+                A boat that competes in large, varied fleets scores higher than one racing
+                only against the same small group each week.</td>
+        </tr>
+        <tr>
+            <td><strong>NonChaotic</strong></td>
+            <td>Whether performance variation is weather-driven rather than boat/crew-driven</td>
+            <td>Percentile rank of the Pearson correlation between |residual| and the race's
+                fleet dispersion (weighted IQR of residuals across the whole fleet that day).
+                High correlation means the boat goes wide when the whole fleet goes wide —
+                its inconsistency is due to variable conditions, not intrinsic unreliability.
+                Boats with insufficient dispersion data (fewer than 5 paired observations)
+                receive a score of 0.</td>
+        </tr>
+        <tr>
+            <td><strong>Stability</strong></td>
+            <td>Whether the boat's trend is level or declining</td>
+            <td>Percentile rank of an asymmetric slope penalty computed from a weighted linear
+                regression of residuals against race date. A level trend (slope ≈ 0) incurs no
+                penalty and ranks best. An improving trend (negative slope — boat getting
+                faster relative to the fleet) incurs half the penalty of an equivalent declining
+                trend. A declining trend (positive slope — boat getting slower) is penalised
+                most heavily, since it suggests the current HPF may already be out of date.</td>
+        </tr>
+    </table>
+    <p>The polygon area formula normalises the area so that a perfect pentagon (all spokes = 1)
+        gives an overall score of 1.0 and a degenerate case (any spoke = 0) collapses the
+        adjacent triangles, reducing the score.</p>
 
     <h3 id="chart-residuals">Per-Race Residuals Chart</h3>
     <p>Scatter plot of per-race residuals in log space over time. The residual for one race entry is:</p>

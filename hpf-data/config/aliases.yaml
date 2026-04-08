@@ -235,6 +235,15 @@ designs:
     aliases:
     - "MUMM 36"
     - "mumm36"
+  sydney36:
+    canonicalName: "Sydney 36"
+    aliases:
+    - "Sydney36mkI"
+  sydney36mkII:
+    canonicalName: "Sydney 36 mkII"
+    aliases:
+      - "Sydney36mk2"
+
 boats:
   day_dreaming:
     canonicalName: "Day Dreaming"
@@ -523,4 +532,179 @@ boats:
       from: null
       until: null
     altSailNumbers: []
+  solace-jeanneauso409:
+    canonicalName: "Solace"
+    canonicalSailNumber: "MYC409"
+    aliases:
+    - name: "Manly Sailing SOLACE"
+      from: null
+      until: null
+    altSailNumbers: []
+  alive:
+    canonicalName: "Alive"
+    canonicalSailNumber: "AUS52566"
+    aliases:
+    - name: "Alive"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "52566"
+      from: null
+      until: null
+  absolut-archambaulta35:
+    canonicalName: "Absolut"
+    canonicalSailNumber: "R350"
+    aliases:
+    - name: "Absolut"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "A350"
+      from: null
+      until: null
+  okavango_delta-j24:
+    canonicalName: "Okavango Delta"
+    canonicalSailNumber: "JAUS44361AUS4788"
+    aliases:
+    - name: "Okavango Delta"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "4436"
+      from: null
+      until: null
+    - number: "AUS4437"
+      from: null
+      until: null
+    - number: "JAUS44361"
+      from: null
+      until: null
+    - number: "JAUS44364437"
+      from: null
+      until: null
+    - number: "JAUS4788"
+      from: null
+      until: null
+    - number: "JAUS443614437"
+      from: null
+      until: null
+  stock_car-j24:
+    canonicalName: "Stock Car"
+    canonicalSailNumber: "AUS4475"
+    aliases:
+    - name: "Stock Car"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS144"
+      from: null
+      until: null
+    - number: "JAUS154"
+      from: null
+      until: null
+    - number: "JAUS4475"
+      from: null
+      until: null
+  kaotic-j24:
+    canonicalName: "Kaotic"
+    canonicalSailNumber: "AUS4770"
+    aliases:
+    - name: "Kaotic"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "JAUS4770"
+      from: null
+      until: null
+  daybreak-palmerjohnsonnewyork40:
+    canonicalName: "Daybreak"
+    canonicalSailNumber: "MYC9"
+    aliases:
+    - name: "Daybreak"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "26996"
+      from: null
+      until: null
+  sirius-adams10:
+    canonicalName: "Sirius"
+    canonicalSailNumber: "MH118"
+    aliases:
+    - name: "Sirius"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "B363"
+      from: null
+      until: null
+    - number: "MYC9"
+      from: null
+      until: null
+  waterhound-j24:
+    canonicalName: "Waterhound"
+    canonicalSailNumber: "JAUS4434"
+    aliases:
+    - name: "Waterhound"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "4434"
+      from: null
+      until: null
+  savannah_girl-swan46:
+    canonicalName: "Savannah Girl"
+    canonicalSailNumber: "46075"
+    aliases:
+    - name: "Savannah Girl"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "40675"
+      from: null
+      until: null
+  philosopher-sydney36cr:
+    canonicalName: "Philosopher"
+    canonicalSailNumber: "020"
+    aliases:
+    - name: "Philosopher"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "20"
+      from: null
+      until: null
+  aileron-sydney36cr:
+    canonicalName: "Aileron"
+    canonicalSailNumber: "R6785"
+    aliases:
+    - name: "Aileron"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "6785"
+      from: null
+      until: null
+  impulse-sydney36cr:
+    canonicalName: "Impulse"
+    canonicalSailNumber: "8777"
+    aliases:
+    - name: "Impulse"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "002"
+      from: null
+      until: null
+  sea_change-sydney36cr:
+    canonicalName: "Sea Change"
+    canonicalSailNumber: "5879"
+    aliases:
+    - name: "Sea Change"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "SEA"
+      from: null
+      until: null
 sailNumberRedirects: {}

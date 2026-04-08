@@ -16,6 +16,7 @@ let showTrendLinear  = true;
 let showTrendSliding = true;
 let hideLegend       = false;
 let slidingAverageCount = 8;
+let slidingAverageDrops = 0;
 let candidateBoats  = [];
 let focusedBoatId   = null;
 let boatDebounce    = null;
@@ -171,14 +172,18 @@ function weightedOlsTrend(entries) {
              y: [slope * x0 + intercept, slope * x1 + intercept] };
 }
 
-function slidingAverage(entries, n) {
+function slidingAverage(entries, n, drops) {
     if (entries.length < 2) return null;
     const pts = [...entries].sort((a, b) => a.date.localeCompare(b.date));
     const xs = [], ys = [];
+    const keep = Math.max(1, n - (drops || 0));
     for (let i = 0; i < pts.length; i++) {
         const window = pts.slice(Math.max(0, i - n + 1), i + 1);
+        // Sort window by backCalcFactor ascending, drop the worst (highest) values
+        const sorted = [...window].sort((a, b) => a.backCalcFactor - b.backCalcFactor);
+        const used = sorted.slice(0, Math.min(keep, sorted.length));
         xs.push(pts[i].date);
-        ys.push(window.reduce((a, p) => a + p.backCalcFactor, 0) / window.length);
+        ys.push(used.reduce((a, p) => a + p.backCalcFactor, 0) / used.length);
     }
     return xs.length >= 2 ? { x: xs, y: ys } : null;
 }
@@ -319,8 +324,11 @@ function renderChart(data) {
                 });
             }
             if (showTrendSliding) {
-                const s = slidingAverage(entries, slidingAverageCount);
-                const avgLabel = `${slidingAverageCount}-finish avg`;
+                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops);
+                const best = slidingAverageCount - slidingAverageDrops;
+                const avgLabel = slidingAverageDrops > 0
+                    ? `best ${best} of ${slidingAverageCount} avg`
+                    : `${slidingAverageCount}-finish avg`;
                 if (s) traces.push({
                     x: s.x, y: s.y, type: 'scatter', mode: 'lines',
                     name: `${name} ${avgLabel}`,
@@ -438,6 +446,7 @@ function onCalcInput(changedInput, calcBoats) {
 async function loadConfig() {
     const data = await fetchJson('/api/importers');
     if (data && data.slidingAverageCount) slidingAverageCount = data.slidingAverageCount;
+    if (data && data.slidingAverageDrops != null) slidingAverageDrops = data.slidingAverageDrops;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

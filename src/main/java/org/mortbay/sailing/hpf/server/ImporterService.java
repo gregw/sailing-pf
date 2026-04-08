@@ -5,12 +5,13 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.eclipse.jetty.client.HttpClient;
+import org.mortbay.sailing.hpf.analysis.ConversionGraph;
 import org.mortbay.sailing.hpf.analysis.HpfConfig;
 import org.mortbay.sailing.hpf.importer.AmsImporter;
 import org.mortbay.sailing.hpf.importer.BwpsImporter;
+import org.mortbay.sailing.hpf.importer.RshyrImporter;
 import org.mortbay.sailing.hpf.importer.OrcImporter;
-import org.mortbay.sailing.hpf.importer.SailSysBoatImporter;
-import org.mortbay.sailing.hpf.importer.SailSysRaceImporter;
+import org.mortbay.sailing.hpf.importer.SailSysImporter;
 import org.mortbay.sailing.hpf.importer.TopYachtImporter;
 import org.mortbay.sailing.hpf.store.DataStore;
 import org.slf4j.Logger;
@@ -71,12 +72,15 @@ public class ImporterService
                                Integer nextSailSysRaceId, Integer targetIrcYear,
                                Double outlierSigma, Double mergeCandidateThreshold,
                                Double fuzzyMatchThreshold,
+                               Integer recentRaceReimportDays,      // null → default 90
                                Integer sailsysYoungCacheMaxAgeDays, // null → default 7
                                Integer sailsysOldCacheMaxAgeDays,   // null → default 352
                                Integer sailsysYoungRaceMaxAgeDays,  // null → default 365
                                Integer sailsysHttpDelayMs,          // null → default 200
                                Integer sailsysRecentRaceDays,       // null → default 14
                                Integer sailsysNotFoundThreshold,    // null → default 1000
+                               Integer orcListMaxAgeDays,           // null → default 1
+                               Double minAnalysisR2,             // null → default 0.50
                                Double clubCertificateWeight,     // null → default 0.9
                                Double hpfLambda,                 // null → default 1.0
                                Double hpfOutlierK,               // null → default 2.0
@@ -87,6 +91,7 @@ public class ImporterService
                                Integer hpfMaxInnerIterations,    // null → default 100
                                Integer hpfMaxOuterIterations,    // null → default 5
                                Integer slidingAverageCount,       // null → default 8
+                               Integer slidingAverageDrops,       // null → default 0
                                String googleClientId,            // null → fall back to env/devMode
                                String googleClientSecret,        // null → fall back to env
                                String authBaseUrl,               // null → fall back to env, then localhost
@@ -102,6 +107,7 @@ public class ImporterService
         new ImporterEntry("ams",                "api",  false, false),
         new ImporterEntry("topyacht",           "api",  false, false),
         new ImporterEntry("bwps",               "api",  false, false),
+        new ImporterEntry("rshyr",              "api",  false, false),
         new ImporterEntry("analysis",           "run",  false, false),
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
@@ -116,12 +122,15 @@ public class ImporterService
     private volatile Double outlierSigma = null;            // null = use default (2.5)
     private volatile double mergeCandidateThreshold = 0.50; // JW threshold for similar-name merge candidate filter
     private volatile double fuzzyMatchThreshold = 0.90;     // JW threshold for boat/design name matching in DataStore
+    private volatile int recentRaceReimportDays = 30;
     private volatile int sailsysYoungCacheMaxAgeDays = 7;
     private volatile int sailsysOldCacheMaxAgeDays = 352;
     private volatile int sailsysYoungRaceMaxAgeDays = 365;
     private volatile int sailsysHttpDelayMs = 200;
     private volatile int sailsysRecentRaceDays = 14;
     private volatile int sailsysNotFoundThreshold = 1000;
+    private volatile int orcListMaxAgeDays = 1;
+    private volatile double minAnalysisR2 = ConversionGraph.DEFAULT_MIN_R2;
     private volatile double clubCertificateWeight = 0.9;
     private volatile double hpfLambda = 1.0;
     private volatile double hpfOutlierK = 2.0;
@@ -132,6 +141,7 @@ public class ImporterService
     private volatile int hpfMaxInnerIterations = 100;
     private volatile int hpfMaxOuterIterations = 5;
     private volatile int slidingAverageCount = 8;
+    private volatile int slidingAverageDrops = 0;
     private volatile String googleClientId = null;
     private volatile String googleClientSecret = null;
     private volatile String authBaseUrl = null;
@@ -181,12 +191,15 @@ public class ImporterService
                 fuzzyMatchThreshold = config.fuzzyMatchThreshold();
                 store.setFuzzyThreshold(fuzzyMatchThreshold);
             }
+            if (config.recentRaceReimportDays() != null) recentRaceReimportDays = config.recentRaceReimportDays();
             if (config.sailsysYoungCacheMaxAgeDays() != null) sailsysYoungCacheMaxAgeDays = config.sailsysYoungCacheMaxAgeDays();
             if (config.sailsysOldCacheMaxAgeDays() != null) sailsysOldCacheMaxAgeDays = config.sailsysOldCacheMaxAgeDays();
             if (config.sailsysYoungRaceMaxAgeDays() != null) sailsysYoungRaceMaxAgeDays = config.sailsysYoungRaceMaxAgeDays();
             if (config.sailsysHttpDelayMs() != null) sailsysHttpDelayMs = config.sailsysHttpDelayMs();
             if (config.sailsysRecentRaceDays() != null) sailsysRecentRaceDays = config.sailsysRecentRaceDays();
             if (config.sailsysNotFoundThreshold() != null) sailsysNotFoundThreshold = config.sailsysNotFoundThreshold();
+            if (config.orcListMaxAgeDays() != null) orcListMaxAgeDays = config.orcListMaxAgeDays();
+            if (config.minAnalysisR2() != null) minAnalysisR2 = config.minAnalysisR2();
             if (config.clubCertificateWeight() != null) clubCertificateWeight = config.clubCertificateWeight();
             if (config.hpfLambda() != null) hpfLambda = config.hpfLambda();
             if (config.hpfOutlierK() != null) hpfOutlierK = config.hpfOutlierK();
@@ -197,6 +210,7 @@ public class ImporterService
             if (config.hpfMaxInnerIterations() != null) hpfMaxInnerIterations = config.hpfMaxInnerIterations();
             if (config.hpfMaxOuterIterations() != null) hpfMaxOuterIterations = config.hpfMaxOuterIterations();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
+            if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             googleClientId     = config.googleClientId();
             googleClientSecret = config.googleClientSecret();
             authBaseUrl        = config.authBaseUrl();
@@ -353,6 +367,11 @@ public void stop()
         return fuzzyMatchThreshold;
     }
 
+    public double minAnalysisR2()
+    {
+        return minAnalysisR2;
+    }
+
     public double clubCertificateWeight()
     {
         return clubCertificateWeight;
@@ -364,6 +383,7 @@ public void stop()
     public double hpfOuterDampingFactor() { return hpfOuterDampingFactor; }
     public double hpfOuterConvergenceThreshold() { return hpfOuterConvergenceThreshold; }
     public int slidingAverageCount() { return slidingAverageCount; }
+    public int slidingAverageDrops() { return slidingAverageDrops; }
     public double hpfConvergenceThreshold() { return hpfConvergenceThreshold; }
     public int hpfMaxInnerIterations() { return hpfMaxInnerIterations; }
     public int hpfMaxOuterIterations() { return hpfMaxOuterIterations; }
@@ -519,30 +539,30 @@ public void stop()
             case "sailsys-races" ->
             {
                 Path racesDir = dataRoot.resolve("sailsys/races");
-                Path boatsDir = dataRoot.resolve("sailsys/boats");
-                int minRecentId = new SailSysRaceImporter(store, httpClient).run(
+                int minRecentId = new SailSysImporter(store, httpClient).run(
                     startId, id -> currentSailSysId = id, stopRequested::get,
-                    racesDir, boatsDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
+                    racesDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
                     sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs,
                     sailsysRecentRaceDays, sailsysNotFoundThreshold);
                 if (minRecentId > 0)
                     currentSailSysId = minRecentId - 1;
             }
-            case "orc" -> new OrcImporter(store, httpClient).run();
+            case "orc" -> new OrcImporter(store, httpClient).run(dataRoot.resolve("orc"), orcListMaxAgeDays);
             case "ams" -> new AmsImporter(store, httpClient).run();
-            case "topyacht" -> new TopYachtImporter(store, httpClient).run();
-            case "bwps"     -> new BwpsImporter(store, httpClient).run();
+            case "topyacht" -> new TopYachtImporter(store, httpClient).run(recentRaceReimportDays);
+            case "bwps"     -> new BwpsImporter(store, httpClient).run(recentRaceReimportDays);
+            case "rshyr"    -> new RshyrImporter(store, httpClient).run(recentRaceReimportDays);
             case "analysis" ->
             {
                 if (cache != null)
-                    cache.refresh(targetIrcYear, outlierSigma, clubCertificateWeight);
+                    cache.refresh(targetIrcYear, outlierSigma, clubCertificateWeight, minAnalysisR2);
                 else
                     LOG.warn("Analysis requested but cache is not configured");
             }
             case "reference-factors" ->
             {
                 if (cache != null)
-                    cache.refreshReferenceFactors(targetIrcYear, clubCertificateWeight);
+                    cache.refreshReferenceFactors(targetIrcYear, clubCertificateWeight, minAnalysisR2);
                 else
                     LOG.warn("Reference factors requested but cache is not configured");
             }
@@ -589,11 +609,13 @@ public void stop()
                 configFile.toFile(),
                 new AdminConfig(importerEntries, globalSchedule, nextSailSysRaceId,
                     targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold,
+                    recentRaceReimportDays,
                     sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
                     sailsysHttpDelayMs, sailsysRecentRaceDays, sailsysNotFoundThreshold,
-                    clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
+                    orcListMaxAgeDays,
+                    minAnalysisR2, clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
                     hpfOuterDampingFactor, hpfOuterConvergenceThreshold, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
-                    slidingAverageCount, googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
+                    slidingAverageCount, slidingAverageDrops, googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
                     adminPort, userPort, natGatewayIp));
         }
         catch (IOException e)

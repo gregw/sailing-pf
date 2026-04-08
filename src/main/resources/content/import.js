@@ -9,6 +9,7 @@ const DISPLAY_NAMES = {
     'ams':              'Import AMS Certificates',
     'topyacht':         'Import TopYacht Races',
     'bwps':             'Import BWPS Races',
+    'rshyr':            'Import RSHYR Races',
     'analysis':         'Analyse Certificates',
     'reference-factors':'Calculate Reference Factors',
     'build-indexes':    'Build Indexes',

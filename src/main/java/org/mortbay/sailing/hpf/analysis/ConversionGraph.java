@@ -13,7 +13,13 @@ import java.util.Map;
  * (e.g. ORC spin 2023, IRC nonspin 2025). Each directed edge carries a {@link LinearFit}
  * that maps a certificate value at the source node to an equivalent value at the target node.
  * <p>
- * Only edges whose fit has R² ≥ {@link #MIN_R2} are included.
+ * Only edges whose fit has R² ≥ the configured minimum (default {@link #DEFAULT_MIN_R2}) are included.
+ * <p>
+ * Year-transition edges are bidirectional: both the forward (yearN → yearN+1) and inverse
+ * (yearN+1 → yearN) edges are stored.  This allows the Step-12 cross-variant fill to reach
+ * the target year even when the cross-variant edge only exists for an adjacent year — e.g.
+ * IRC-NS-2025 → IRC-spin-2025 → IRC-spin-2026 when currentYear=2026 but allNsVsSpin only
+ * has data for 2025.
  * <p>
  * Use {@link #adjacencies} for all outgoing edges from a node, or
  * {@link #sameVariantAdjacencies} to restrict to edges that stay within the same
@@ -21,8 +27,8 @@ import java.util.Map;
  */
 public class ConversionGraph
 {
-    /** Minimum R² for a LinearFit to be included as a conversion edge. */
-    public static final double MIN_R2 = 0.75;
+    /** Default minimum R² for a LinearFit to be included as a conversion edge. */
+    public static final double DEFAULT_MIN_R2 = 0.50;
 
     private final Map<ConversionNode, List<ConversionEdge>> adjacency;
 
@@ -32,22 +38,44 @@ public class ConversionGraph
     }
 
     /**
-     * Builds a ConversionGraph from a list of comparison results.
-     * Results with no fit or R² below {@link #MIN_R2} are ignored.
+     * Builds a ConversionGraph from a list of comparison results using {@link #DEFAULT_MIN_R2}.
      */
     public static ConversionGraph from(List<ComparisonResult> results)
+    {
+        return from(results, DEFAULT_MIN_R2);
+    }
+
+    /**
+     * Builds a ConversionGraph from a list of comparison results.
+     * Results with no fit or R² below {@code minR2} are ignored.
+     * <p>
+     * Year-transition edges (same system, same variant, consecutive years) have their
+     * inverse also added, enabling backward-year traversal in the DFS.  This lets Step 12
+     * derive a spin RF for currentYear even when the cross-variant (NS→spin) edge only exists
+     * for a prior year: IRC-NS-currentYear ←(inv)← IRC-NS-priorYear →(cross)→ IRC-spin-priorYear
+     * →(forward)→ IRC-spin-currentYear.
+     */
+    public static ConversionGraph from(List<ComparisonResult> results, double minR2)
     {
         Map<ConversionNode, List<ConversionEdge>> adj = new LinkedHashMap<>();
         for (ComparisonResult r : results)
         {
             LinearFit fit = r.fit();
-            if (fit == null || fit.r2() < MIN_R2)
+            if (fit == null || fit.r2() < minR2)
                 continue;
 
             ComparisonKey k = r.key();
             ConversionNode from = new ConversionNode(k.systemA(), k.yearA(), k.nonSpinA(), k.twoHandedA());
             ConversionNode to   = new ConversionNode(k.systemB(), k.yearB(), k.nonSpinB(), k.twoHandedB());
             adj.computeIfAbsent(from, n -> new ArrayList<>()).add(new ConversionEdge(from, to, fit));
+
+            // Year-transition edges: add the inverse so the DFS can also traverse backwards.
+            boolean isYearTransition = k.yearA() != k.yearB()
+                && k.systemA().equals(k.systemB())
+                && k.nonSpinA() == k.nonSpinB()
+                && k.twoHandedA() == k.twoHandedB();
+            if (isYearTransition)
+                adj.computeIfAbsent(to, n -> new ArrayList<>()).add(new ConversionEdge(to, from, fit.inverse()));
 
             // For pooled ALL-system variant comparisons (e.g. NS→spin), also add per-system
             // forward+inverse edges so the reference-factor DFS can reach cross-variant targets

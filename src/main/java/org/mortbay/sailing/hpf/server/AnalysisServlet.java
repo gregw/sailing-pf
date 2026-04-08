@@ -166,7 +166,7 @@ public class AnalysisServlet extends HttpServlet
         for (ComparisonResult r : results)
         {
             LinearFit fit = r.fit();
-            boolean weak = (fit == null || fit.r2() < ConversionGraph.MIN_R2);
+            boolean weak = (fit == null || fit.r2() < cache.minAnalysisR2());
 
             ComparisonKey k = r.key();
             String fromId = nodeId(k.systemA(), k.yearA(), k.nonSpinA(), k.twoHandedA());

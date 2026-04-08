@@ -64,6 +64,7 @@ public class BwpsImporter
 
     private final DataStore store;
     private final HttpClient httpClient;
+    private int recentRaceReimportDays = 30;
 
     public BwpsImporter(DataStore store, HttpClient httpClient)
     {
@@ -92,8 +93,11 @@ public class BwpsImporter
 
     // --- Entry point ---
 
-    public void run() throws Exception
+    public void run() throws Exception { run(30); }
+
+    public void run(int recentRaceReimportDays) throws Exception
     {
+        this.recentRaceReimportDays = recentRaceReimportDays;
         LOG.info("BWPS: fetching race list from {}/standings/", BASE_URL);
         String mainHtml = fetchHtml(BASE_URL + "/standings/");
         List<RaceOption> races = parseRaceSelector(mainHtml);
@@ -136,6 +140,12 @@ public class BwpsImporter
 
     void processRaceEdition(String raceName, int year, String standingsUrl) throws Exception
     {
+        // Sydney Hobart is imported by RshyrImporter with higher-quality elapsed times
+        if (raceName.toUpperCase(Locale.ENGLISH).contains("SYDNEY HOBART"))
+        {
+            LOG.debug("BWPS: skipping '{}' {} — handled by RshyrImporter", raceName, year);
+            return;
+        }
         String standingsHtml = fetchHtml(BASE_URL + standingsUrl);
         Map<String, String> tabs = parseCategoryTabs(standingsHtml);
 
@@ -173,7 +183,7 @@ public class BwpsImporter
         String seriesId = IdGenerator.generateSeriesId(CLUB_ID, raceName);
         String raceId   = IdGenerator.generateRaceId(CLUB_ID, raceDate, 1);
 
-        if (store.races().containsKey(raceId))
+        if (store.races().containsKey(raceId) && !isRecentRace(raceDate))
         {
             LOG.debug("BWPS: race {} already imported, updating series membership only", raceId);
             updateClubSeries(CLUB_ID, seriesId, raceName, raceId);
@@ -212,14 +222,26 @@ public class BwpsImporter
                 continue;
             }
 
+            // CYCA appends "(TH)" or "(DH)" (Two Handed / Double Handed) to entries
+            // in the two-handed division.  Strip the suffix before creating the boat so
+            // that the same physical boat is not stored under two different identities,
+            // and record the flag so the certificate is correctly marked twoHanded.
+            String rawName = detail.yachtName();
+            boolean twoHanded = rawName != null
+                && (rawName.toUpperCase(Locale.ENGLISH).contains("(TH)")
+                    || rawName.toUpperCase(Locale.ENGLISH).contains("(DH)"));
+            String boatName = twoHanded
+                ? rawName.replaceAll("(?i)\\((TH|DH)\\)", "").trim()
+                : rawName;
+
             Design design = (detail.type() != null && !detail.type().isBlank())
                 ? store.findOrCreateDesign(detail.type(), SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(detail.sailNumber(), detail.yachtName(), design);
+            Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, design);
 
             if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null)
             {
                 Club fromClub = store.findUniqueClubByShortName(detail.club(), null,
-                    "BWPS boat sailNumber=" + detail.sailNumber() + " name=" + detail.yachtName());
+                    "BWPS boat sailNumber=" + detail.sailNumber() + " name=" + boatName);
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
@@ -230,7 +252,7 @@ public class BwpsImporter
 
             // Re-read boat after potential club update
             boat = store.boats().get(boat.id());
-            String certNum = inferCertificate(boat, row.system(), year, row.hcap());
+            String certNum = inferCertificate(boat, row.system(), year, row.hcap(), twoHanded);
 
             Duration lhElapsed = lh.elapsed();
             if (lhElapsed == null || lhElapsed.isNegative() || lhElapsed.isZero())
@@ -577,29 +599,31 @@ public class BwpsImporter
     }
 
     /**
-     * Checks if the boat already holds a certificate matching the given system, year, and TCF.
-     * If not, creates an inferred certificate and adds it to the boat.
+     * Checks if the boat already holds a certificate matching the given system, year, TCF,
+     * and twoHanded flag.  If not, creates an inferred certificate and adds it to the boat.
      *
      * @return the certificateNumber of the matching or newly created certificate
      */
-    private String inferCertificate(Boat boat, String system, int year, double tcf)
+    private String inferCertificate(Boat boat, String system, int year, double tcf, boolean twoHanded)
     {
         for (Certificate cert : boat.certificates())
         {
             if (cert.system().equalsIgnoreCase(system)
                     && Math.abs(cert.year() - year) <= 1
-                    && Math.abs(cert.value() - tcf) < 0.001)
+                    && Math.abs(cert.value() - tcf) < 0.001
+                    && cert.twoHanded() == twoHanded)
                 return cert.certificateNumber();
         }
 
-        String certNumber = String.format("bwps-%s-%d-%.4f", system.toLowerCase(Locale.ENGLISH), year, tcf);
-        Certificate inferred = new Certificate(system, year, tcf, false, false, false, false, certNumber, null);
+        String certNumber = String.format("bwps-%s-%d-%.4f%s",
+            system.toLowerCase(Locale.ENGLISH), year, tcf, twoHanded ? "-dh" : "");
+        Certificate inferred = new Certificate(system, year, tcf, false, twoHanded, false, false, certNumber, null);
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(), List.copyOf(certs),
             addSource(boat.sources(), SOURCE), Instant.now(), null));
-        LOG.debug("BWPS: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
+        LOG.debug("BWPS: inferred {} cert {} (TCF={} twoHanded={}) for boat {}", system, certNumber, tcf, twoHanded, boat.id());
         return certNumber;
     }
 
@@ -656,6 +680,11 @@ public class BwpsImporter
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
             club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+    }
+
+    private boolean isRecentRace(LocalDate date)
+    {
+        return date != null && !date.isBefore(LocalDate.now().minusDays(recentRaceReimportDays));
     }
 
     /**
