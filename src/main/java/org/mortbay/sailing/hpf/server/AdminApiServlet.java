@@ -1018,7 +1018,6 @@ public class AdminApiServlet extends HttpServlet
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id",            d.id());
                 row.put("canonicalName", d.canonicalName());
-                row.put("makerIds",      d.makerIds());
                 DesignDerived dd = cache.designDerived().get(d.id());
                 Factor dspin = (dd != null && dd.referenceFactors() != null) ? dd.referenceFactors().spin() : null;
                 row.put("spinRef",       dspin != null ? factorMap(dspin) : null);

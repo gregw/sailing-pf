@@ -151,8 +151,8 @@ independently: spinnaker, non-spinnaker, and two-handed.
 
 For boats without reference factors, scan all races where they competed against boats that
 do have factors. Estimate an implied factor from elapsed time ratios, weighted by the
-reference boats' factor weights. Propagation weight is scaled by `PROPAGATION_FACTOR_WEIGHT`
-(0.7).
+reference boat's RF weight. All implied factors across all races are aggregated with
+`Factor.aggregate`.
 
 ---
 
@@ -165,19 +165,18 @@ every boat reachable via race co-participation has spin and/or nonSpin factors.
 
 ### Step 12: Aggregate to Design Factors
 
-After race propagation converges, aggregate all boat-level RFs to design level using a
-weighted log-space mean (`computeDesignFactors()`). This produces a `ReferenceFactors` per
-design from all boats of that class that have a factor. Design-level factor weight is capped
-at `DESIGN_FACTOR_WEIGHT` (0.85). Running this once after convergence (rather than inside the
+After race propagation converges, aggregate all boat-level RFs to design level using
+`Factor.aggregate`. This produces a `ReferenceFactors` per design from all boats of that
+class that have a factor. Running this once after convergence (rather than inside the
 loop) ensures the design factors reflect a stable, fully-propagated set of boat RFs.
 
 ---
 
-### Step 13: Combine Design Reference Factors
+### Step 13: Aggregate with Design Reference Factors
 
-For every boat whose design has a Reference Factor, blend the boat's own per-variant RF with
-the design's RF using log-space weighted aggregation (`combineWithDesignFactors()`). The blend
-is proportional to each factor's weight:
+For every boat whose design has a Reference Factor, aggregate the boat's own per-variant RF
+with the design's RF using `Factor.aggregate` (`combineWithDesignFactors()`). Evidence
+accumulation increases confidence while disagreement penalises weight:
 
 - A boat with a **low-weight inferred RF** (race propagation only) is pulled strongly toward
   the design norm — correcting outliers caused by small or unrepresentative race samples.

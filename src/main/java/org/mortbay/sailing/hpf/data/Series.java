@@ -20,4 +20,15 @@ public record Series(
     String name,        // human-readable name, e.g. "Wednesday Twilight"
     boolean isCatchAll, // true for the pseudo-series holding standalone races
     List<String> raceIds // IDs of races belonging to this series
-) {}
+) {
+    @Override
+    public String toString()
+    {
+        return "Series{" +
+            "id='" + id + '\'' +
+            ", name='" + name + '\'' +
+            ", isCatchAll=" + isCatchAll +
+            ", raceIds=" + raceIds +
+            '}';
+    }
+}

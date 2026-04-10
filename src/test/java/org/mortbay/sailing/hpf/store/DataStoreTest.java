@@ -251,16 +251,16 @@ class DataStoreTest {
         assertEquals(club, loaded);
     }
 
-    // --- findOrCreateBoat / findOrCreateDesign ---
+    // --- findOrCreateBoat ---
 
     @Test
     void findOrCreateBoatCreatesNewBoat(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design design = new Design("j24", "J/24", List.of(), List.of(), List.of(), null, null);
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null, null);
         store.putDesign(design);
 
-        Boat boat = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+        Boat boat = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
         assertEquals("AUS1234-raging_bull-j24", boat.id());
         assertEquals("AUS1234", boat.sailNumber());
@@ -273,13 +273,13 @@ class DataStoreTest {
     void findOrCreateBoatReturnsSameBoatOnExactId(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design design = new Design("j24", "J/24", List.of(), List.of(), List.of(), null, null);
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null, null);
         store.putDesign(design);
 
-        Boat boat1 = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
-        Boat boat2 = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+        Boat boat1 = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
+        Boat boat2 = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
-        assertSame(boat1, boat2);
+        assertEquals(boat1.id(), boat2.id());
         assertEquals(1, store.boats().size());
     }
 
@@ -305,10 +305,10 @@ class DataStoreTest {
                 List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(noDesign);
 
-        Design design = new Design("j24", "J/24", List.of(), List.of(), List.of(), null, null);
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null, null);
         store.putDesign(design);
 
-        Boat upgraded = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+        Boat upgraded = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
         assertEquals("AUS1234-raging_bull-j24", upgraded.id());
         assertEquals("j24", upgraded.designId());
@@ -317,72 +317,73 @@ class DataStoreTest {
     }
 
     @Test
-    void findOrCreateDesignCreatesNewDesign(@TempDir Path tempDir) {
+    void findOrCreateBoatCreatesNewDesign(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design design = store.findOrCreateDesign("J/24");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "J/24");
 
-        assertEquals("j24", design.id());
+        assertEquals("j24", boat.designId());
+        Design design = store.designs().get("j24");
+        assertNotNull(design);
         assertEquals("J/24", design.canonicalName());
-        assertEquals(1, store.designs().size());
     }
 
     @Test
-    void findOrCreateDesignMatchesAlias(@TempDir Path tempDir) {
+    void findOrCreateBoatMatchesDesignAlias(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design existing = new Design("j24", "J/24", List.of(), List.of("J 24"), List.of(), null, null);
+        Design existing = new Design("j24", "J/24", List.of("J 24"), List.of(), null, null);
         store.putDesign(existing);
 
-        Design found = store.findOrCreateDesign("J 24");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "J 24");
 
-        assertEquals("j24", found.id());
+        assertEquals("j24", boat.designId());
         assertEquals(1, store.designs().size());
     }
 
     @Test
-    void findOrCreateDesignFuzzyMatchesTypoInName(@TempDir Path tempDir) {
+    void findOrCreateBoatFuzzyMatchesDesignTypo(@TempDir Path tempDir) {
         // "Sydney 38" → "sydney38"; "Sydeny 38" (transposed n/e) → "sydeny38" — same digits,
         // JW score ~0.97, above threshold.
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design existing = new Design("sydney38", "Sydney 38", List.of(), List.of(), List.of(), null, null);
+        Design existing = new Design("sydney38", "Sydney 38", List.of(), List.of(), null, null);
         store.putDesign(existing);
 
-        Design found = store.findOrCreateDesign("Sydeny 38");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydeny 38");
 
-        assertEquals("sydney38", found.id());
+        assertEquals("sydney38", boat.designId());
         assertEquals(1, store.designs().size());
     }
 
     @Test
-    void findOrCreateDesignDoesNotFuzzyMatchAdjacentModelNumber(@TempDir Path tempDir) {
+    void findOrCreateBoatDoesNotFuzzyMatchAdjacentModelNumber(@TempDir Path tempDir) {
         // "Sydney 38" → "sydney38" and "Sydney 39" → "sydney39": digits differ so must not match
         // even though the JW score is high.
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design existing = new Design("sydney38", "Sydney 38", List.of(), List.of(), List.of(), null, null);
+        Design existing = new Design("sydney38", "Sydney 38", List.of(), List.of(), null, null);
         store.putDesign(existing);
 
-        Design found = store.findOrCreateDesign("Sydney 39");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydney 39");
 
-        assertEquals("sydney39", found.id());
+        assertEquals("sydney39", boat.designId());
         assertEquals(2, store.designs().size());
     }
 
     @Test
-    void findOrCreateDesignFuzzyMatchesTransposedName(@TempDir Path tempDir) {
+    void findOrCreateBoatFuzzyMatchesTransposedDesignName(@TempDir Path tempDir) {
         // "Radford 1060" → "radford1060"; "Radfrod 1060" (transposed r/o) → "radfrod1060" —
         // same digits, JW score ~0.98, above threshold.
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design existing = new Design("radford1060", "Radford 1060", List.of(), List.of(), List.of(), null, null);
+        Design existing = new Design("radford1060", "Radford 1060", List.of(), List.of(), null, null);
         store.putDesign(existing);
 
-        Design found = store.findOrCreateDesign("Radfrod 1060");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Radfrod 1060");
 
-        assertEquals("radford1060", found.id());
+        assertEquals("radford1060", boat.designId());
         assertEquals(1, store.designs().size());
     }
 
@@ -417,32 +418,33 @@ class DataStoreTest {
     // --- Alias seed integration ---
 
     @Test
-    void findOrCreateDesignResolvesAliasFromSeed(@TempDir Path tempDir) {
+    void findOrCreateBoatResolvesDesignAliasFromSeed(@TempDir Path tempDir) {
         // aliases.yaml maps "Sydney 36 OD" → sydney36cr
         DataStore store = new DataStore(tempDir);
         store.start();
         // Pre-populate the canonical design
-        Design canonical = new Design("sydney36cr", "Sydney 36 CR", List.of(), List.of(), List.of(), null, null);
+        Design canonical = new Design("sydney36cr", "Sydney 36 CR", List.of(), List.of(), null, null);
         store.putDesign(canonical);
 
-        Design found = store.findOrCreateDesign("Sydney 36 OD");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydney 36 OD");
 
-        assertEquals("sydney36cr", found.id());
+        assertEquals("sydney36cr", boat.designId());
         assertEquals(1, store.designs().size());
     }
 
     @Test
-    void findOrCreateDesignCreatesCanonicalDesignViaSeedWhenAbsent(@TempDir Path tempDir) {
+    void findOrCreateBoatCreatesCanonicalDesignViaSeedWhenAbsent(@TempDir Path tempDir) {
         // aliases.yaml maps "Sydney 36 OD" → sydney36cr with canonicalName "Sydney 36 CR"
         // If sydney36cr doesn't exist yet, it should be created with the seed's canonical name
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design found = store.findOrCreateDesign("Sydney 36 OD");
+        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydney 36 OD");
 
-        assertEquals("sydney36cr", found.id());
-        assertEquals("Sydney 36 CR", found.canonicalName());
-        assertEquals(1, store.designs().size());
+        assertEquals("sydney36cr", boat.designId());
+        Design created = store.designs().get("sydney36cr");
+        assertNotNull(created);
+        assertEquals("Sydney 36 CR", created.canonicalName());
     }
 
     @Test
@@ -582,8 +584,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design oldDesign  = new Design("old",  "Old Class",  List.of(), List.of(), List.of(), null, null);
-        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), List.of(), null, null);
+        Design oldDesign  = new Design("old",  "Old Class", List.of(), List.of(), null, null);
+        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), null, null);
         store.putDesign(oldDesign);
         store.putDesign(keepDesign);
 
@@ -618,8 +620,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design oldDesign  = new Design("old",  "Old Class",  List.of(), List.of(), List.of(), null, null);
-        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), List.of(), null, null);
+        Design oldDesign  = new Design("old",  "Old Class", List.of(), List.of(), null, null);
+        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), null, null);
         store.putDesign(oldDesign);
         store.putDesign(keepDesign);
 
@@ -669,8 +671,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design d1 = new Design("d1", "D1", List.of(), List.of(), List.of(), null, null);
-        Design d2 = new Design("d2", "D2", List.of(), List.of(), List.of(), null, null);
+        Design d1 = new Design("d1", "D1", List.of(), List.of(), null, null);
+        Design d2 = new Design("d2", "D2", List.of(), List.of(), null, null);
         store.putDesign(d1);
         store.putDesign(d2);
 

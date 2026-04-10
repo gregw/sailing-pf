@@ -60,4 +60,22 @@ public record Race(
     {
         return Objects.hash(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions, source, lastUpdated);
     }
+
+    @Override
+    public String toString()
+    {
+        return "Race{" +
+            "id='" + id + '\'' +
+            ", clubId='" + clubId + '\'' +
+            ", seriesIds=" + seriesIds +
+            ", date=" + date +
+            ", number=" + number +
+            ", name='" + name + '\'' +
+            ", handicapSystem='" + handicapSystem + '\'' +
+            ", offsetPursuit=" + offsetPursuit +
+            ", divisions=" + divisions +
+            ", source='" + source + '\'' +
+            ", lastUpdated=" + lastUpdated +
+            '}';
+    }
 }

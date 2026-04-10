@@ -71,4 +71,21 @@ public record Boat(
     {
         return Objects.hash(id, sailNumber, name, designId, clubId, aliases, altSailNumbers, certificates, sources, lastUpdated);
     }
+
+    @Override
+    public String toString()
+    {
+        return "Boat{" +
+            "id='" + id + '\'' +
+            ", sailNumber='" + sailNumber + '\'' +
+            ", name='" + name + '\'' +
+            ", designId='" + designId + '\'' +
+            ", clubId='" + clubId + '\'' +
+            ", aliases=" + aliases +
+            ", altSailNumbers=" + altSailNumbers +
+            ", certificates=" + certificates +
+            ", sources=" + sources +
+            ", lastUpdated=" + lastUpdated +
+            '}';
+    }
 }

@@ -9,7 +9,6 @@ import org.jsoup.select.Elements;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Club;
-import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Race;
@@ -352,9 +351,7 @@ public class TopYachtImporter
             String sailNo = e.getKey();
             MergeEntry me = e.getValue();
 
-            Design design = me.designName != null
-                ? store.findOrCreateDesign(me.designName, SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, design, SOURCE);
+            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, SOURCE);
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null)
             {
@@ -719,9 +716,7 @@ public class TopYachtImporter
         List<Finisher> finishers = new ArrayList<>();
         for (ParsedRow row : rows)
         {
-            Design design = row.designName() != null
-                ? store.findOrCreateDesign(row.designName(), SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), design, SOURCE);
+            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), SOURCE);
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null)
             {

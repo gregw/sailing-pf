@@ -26,4 +26,14 @@ public record TimedAlias(
             return false;
         return true;
     }
+
+    @Override
+    public String toString()
+    {
+        return "TimedAlias{" +
+            "name='" + name + '\'' +
+            ", from=" + from +
+            ", until=" + until +
+            '}';
+    }
 }

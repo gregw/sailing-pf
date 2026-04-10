@@ -153,7 +153,7 @@ public class AmsImporter
         else if (store.findClubByShortName(club, state, "AMS boat=" + boatName) == null)
             LOG.error("Unknown club shortName={} state={} for boat={}", club, state, boatName);
 
-        Boat boat = store.findOrCreateBoat(sailNo.trim(), boatName.trim(), null, SOURCE);
+        Boat boat = store.findOrCreateBoat(sailNo.trim(), boatName.trim(), (String) null, SOURCE);
 
         // Upsert: remove all existing AMS certs whose certNo starts with this base number
         // (covers the bare certNo plus the -ns and -2h suffixed variants)

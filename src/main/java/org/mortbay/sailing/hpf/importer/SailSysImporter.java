@@ -571,10 +571,10 @@ public class SailSysImporter
         String model = boatSummary.model != null ? boatSummary.model.trim() : "";
         String designName = (!make.isBlank() && !model.isBlank()) ? make + " " + model
             : (!make.isBlank() ? make : (!model.isBlank() ? model : null));
-        Design design = designName != null && !isGenericBoatClass(designName)
-            ? store.findOrCreateDesign(designName, SOURCE) : null;
+        if (designName != null && isGenericBoatClass(designName))
+            designName = null;
 
-        Boat boat = store.findOrCreateBoat(sailNo, name, design, SOURCE);
+        Boat boat = store.findOrCreateBoat(sailNo, name, designName, SOURCE);
 
         // Assign club if missing
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);

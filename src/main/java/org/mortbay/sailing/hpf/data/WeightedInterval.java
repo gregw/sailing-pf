@@ -21,4 +21,13 @@ public record WeightedInterval(
         if (weight < 0 || weight > 1)
             throw new IllegalArgumentException("weight must be in [0, 1], got: " + weight);
     }
+
+    @Override
+    public String toString()
+    {
+        return "WeightedInterval{" +
+            "duration=" + duration +
+            ", weight=" + weight +
+            '}';
+    }
 }

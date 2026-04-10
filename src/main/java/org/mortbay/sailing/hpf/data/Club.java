@@ -61,4 +61,19 @@ public record Club(
     {
         return Objects.hash(id, shortName, longName, state, excluded, aliases, topyachtUrls, series);
     }
+
+    @Override
+    public String toString()
+    {
+        return "Club{" +
+            "id='" + id + '\'' +
+            ", shortName='" + shortName + '\'' +
+            ", longName='" + longName + '\'' +
+            ", state='" + state + '\'' +
+            ", excluded=" + excluded +
+            ", aliases=" + aliases +
+            ", topyachtUrls=" + topyachtUrls +
+            ", series=" + series +
+            '}';
+    }
 }

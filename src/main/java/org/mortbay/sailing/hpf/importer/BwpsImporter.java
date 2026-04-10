@@ -9,7 +9,6 @@ import org.jsoup.select.Elements;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Club;
-import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Race;
@@ -234,9 +233,9 @@ public class BwpsImporter
                 ? rawName.replaceAll("(?i)\\((TH|DH)\\)", "").trim()
                 : rawName;
 
-            Design design = (detail.type() != null && !detail.type().isBlank())
-                ? store.findOrCreateDesign(detail.type(), SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, design, SOURCE);
+            String designName = (detail.type() != null && !detail.type().isBlank())
+                ? detail.type() : null;
+            Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, designName, SOURCE);
 
             if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null)
             {

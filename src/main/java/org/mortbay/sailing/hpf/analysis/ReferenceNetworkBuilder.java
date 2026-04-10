@@ -38,18 +38,18 @@ import org.slf4j.LoggerFactory;
  * <ul>
  *   <li><b>Step 10</b>: For boats that still lack a factor, propagate from race
  *       co-participants: for each race in which the boat competed alongside reference
- *       boats, estimate its implied factor from elapsed-time ratios, then aggregate
- *       across all qualifying races. Weight capped at {@link #PROPAGATION_FACTOR_WEIGHT}.</li>
+ *       boats, estimate its implied factor from elapsed-time ratios weighted by the
+ *       reference boat's RF weight, then {@link Factor#aggregate} across all races.</li>
  *   <li><b>Step 11</b>: Repeat step 10 until no new factors are assigned.</li>
  * </ul>
  *
  * <h2>Step 12 — Design-level aggregation (once, after convergence)</h2>
- * Aggregate all boat-level RFs by design into design-level factors using a weighted
- * log-space mean. Weight capped at {@link #DESIGN_FACTOR_WEIGHT}.
+ * Aggregate all boat-level RFs by design into design-level factors using
+ * {@link Factor#aggregate}.
  *
- * <h2>Step 13 — Combine with design RF</h2>
- * For every boat whose design has a Reference Factor, blend the boat's own per-variant
- * RF with the design's RF via log-space weighted aggregation. Boats with low-weight
+ * <h2>Step 13 — Aggregate with design RF</h2>
+ * For every boat whose design has a Reference Factor, aggregate the boat's own per-variant
+ * RF with the design's RF via {@link Factor#aggregate}. Boats with low-weight
  * inferred RFs are pulled toward the design norm; boats with high-weight direct
  * certificates are barely affected. When a boat has no RF for a variant but the design
  * does, the design factor is adopted directly.
@@ -87,31 +87,8 @@ public class ReferenceNetworkBuilder
     /** Maximum DFS depth (number of conversion hops) to prevent runaway traversal. */
     private static final int MAX_DEPTH = 8;
 
-    /** Maximum weight for design-level reference factors (step 12). */
-    public static final double DESIGN_FACTOR_WEIGHT = 0.85;
-
-    /** Maximum weight for race co-participation propagated factors (step 10). */
-    public static final double PROPAGATION_FACTOR_WEIGHT = 0.7;
-
     /** Maximum propagation iterations before declaring non-convergence (step 11). */
     public static final int MAX_ITERATIONS = 20;
-
-    /**
-     * Weight discount applied per year a certificate predates the target IRC year.
-     * Matches {@link #RACE_AGE_WEIGHT_STEP}: both decay at 0.2 per year.
-     * A certificate from one year before the target starts at base weight × 0.8;
-     * two years before → 0.6; five years before → 0.0 (excluded by {@link #MAX_CERT_AGE_YEARS}).
-     * Certificates from the target year or later receive no discount.
-     */
-    public static final double CERT_AGE_WEIGHT_STEP = 0.2;
-
-    /**
-     * Age discount step for race co-participation propagation: weight is reduced by this
-     * amount for each year the race predates {@code currentYear}.
-     * Races from {@code currentYear} → 1.0, one year old → 0.8, two → 0.6,
-     * three → 0.4, four → 0.2, five or more → 0.0 (excluded).
-     */
-    public static final double RACE_AGE_WEIGHT_STEP = 0.2;
 
     /** Actual club certificate weight multiplier used by this instance. */
     private final double clubBaseWeight;
@@ -127,7 +104,7 @@ public class ReferenceNetworkBuilder
     }
 
     // Per-boat race participation entry: one per (race, division) containing this boat.
-    private record DivisionEntry(Duration elapsed, boolean nonSpinnaker, List<Finisher> peers, double ageWeight) {}
+    private record DivisionEntry(Duration elapsed, boolean nonSpinnaker, List<Finisher> peers) {}
 
     // ==========================================================================
     // Public API
@@ -318,9 +295,9 @@ public class ReferenceNetworkBuilder
             List<Factor> s  = spinByDesign.getOrDefault(designId, List.of());
             List<Factor> ns = nonSpinByDesign.getOrDefault(designId, List.of());
             List<Factor> th = twoHByDesign.getOrDefault(designId, List.of());
-            Factor spinF = !s.isEmpty()  ? logAggregate(s,  DESIGN_FACTOR_WEIGHT) : null;
-            Factor nsF   = !ns.isEmpty() ? logAggregate(ns, DESIGN_FACTOR_WEIGHT) : null;
-            Factor thF   = !th.isEmpty() ? logAggregate(th, DESIGN_FACTOR_WEIGHT) : null;
+            Factor spinF = !s.isEmpty()  ? Factor.aggregate(s.toArray(new Factor[0]))  : null;
+            Factor nsF   = !ns.isEmpty() ? Factor.aggregate(ns.toArray(new Factor[0])) : null;
+            Factor thF   = !th.isEmpty() ? Factor.aggregate(th.toArray(new Factor[0])) : null;
             int spinGen = ceilAvgGen(spinGenByDesign.getOrDefault(designId, List.of()));
             int nsGen   = ceilAvgGen(nonSpinGenByDesign.getOrDefault(designId, List.of()));
             int thGen   = ceilAvgGen(twoHGenByDesign.getOrDefault(designId, List.of()));
@@ -342,12 +319,8 @@ public class ReferenceNetworkBuilder
 
 
     /**
-     * Builds an index from boatId to all (elapsed, nonSpinnaker, peers, ageWeight) entries —
+     * Builds an index from boatId to all (elapsed, nonSpinnaker, peers) entries —
      * one per (race, division) in which the boat appeared.
-     *
-     * <p>The {@code ageWeight} is {@code max(0, 1 - age × RACE_AGE_WEIGHT_STEP)} where
-     * {@code age = currentYear - race.date().getYear()}.  Entries with ageWeight == 0
-     * (i.e. five or more years old) are omitted entirely.
      */
     private static Map<String, List<DivisionEntry>> buildBoatDivisionIndex(
         DataStore store, int currentYear)
@@ -356,9 +329,6 @@ public class ReferenceNetworkBuilder
         for (Race race : store.races().values())
         {
             if (race.date() == null) continue;
-            int age = Math.abs(currentYear - race.date().getYear());
-            double ageWeight = Math.max(0.0, 1.0 - age * RACE_AGE_WEIGHT_STEP);
-            if (ageWeight == 0.0) continue;
 
             for (Division div : race.divisions())
             {
@@ -373,7 +343,7 @@ public class ReferenceNetworkBuilder
                             peers.add(peer);
                     }
                     index.computeIfAbsent(f.boatId(), k -> new ArrayList<>())
-                         .add(new DivisionEntry(f.elapsedTime(), f.nonSpinnaker(), peers, ageWeight));
+                         .add(new DivisionEntry(f.elapsedTime(), f.nonSpinnaker(), peers));
                 }
             }
         }
@@ -385,11 +355,11 @@ public class ReferenceNetworkBuilder
      * using elapsed-time ratios relative to reference boats present in the same
      * race divisions. Returns the count of boats updated.
      *
-     * <p>For each qualifying (race, division) the implied factor is computed as:
+     * <p>For each qualifying (race, division) the implied factor for each reference
+     * co-finisher is:
      * <pre>implied_j = factor_i × (elapsed_j / elapsed_i)</pre>
-     * across all reference co-finishers {@code i} of the same variant, then aggregated
-     * with a log-space weighted mean. The per-division estimates are further aggregated
-     * across all races, with the result capped at {@link #PROPAGATION_FACTOR_WEIGHT}.
+     * weighted by the reference boat's RF weight. All implied factors across all races
+     * are aggregated with {@link Factor#aggregate}.
      *
      * <p>Modifying existing map entries while iterating is safe because all keys are
      * present (step 8 pre-populates every boat), so no structural changes occur.
@@ -413,7 +383,6 @@ public class ReferenceNetworkBuilder
             List<DivisionEntry> entries = boatDivIndex.getOrDefault(boatId, List.of());
             if (entries.isEmpty()) continue;
 
-            // Accumulate per-division implied factors across all relevant race divisions
             List<Factor> impliedSpin    = needSpin    ? new ArrayList<>() : null;
             List<Factor> impliedNonSpin = needNonSpin ? new ArrayList<>() : null;
 
@@ -426,8 +395,6 @@ public class ReferenceNetworkBuilder
                 long myNanos = entry.elapsed().toNanos();
                 if (myNanos <= 0) continue;
 
-                // Implied factor per reference co-finisher of the same variant
-                List<Factor> divImplied = new ArrayList<>();
                 for (Finisher peer : entry.peers())
                 {
                     if (peer.nonSpinnaker() != isNS) continue;
@@ -443,28 +410,17 @@ public class ReferenceNetworkBuilder
                     double implied = peerFactor.value() * peerNanos / (double) myNanos;
                     if (implied <= 0 || implied > 3.0) continue;
 
-                    divImplied.add(new Factor(implied, peerFactor.weight()));
-                }
-
-                if (divImplied.isEmpty()) continue;
-                // Per pipeline spec: per-race weight = total reference weight of co-finishers.
-                // Use a simple linear weighted mean here — no variance penalty within one race.
-                // The cross-race logAggregate below applies the variance penalty where it belongs.
-                // Scale the division weight by the race age weight before cross-race aggregation.
-                Factor divFactor = linearMeanAggregate(divImplied);
-                if (divFactor != null)
-                {
-                    Factor aged = new Factor(divFactor.value(), divFactor.weight() * entry.ageWeight());
-                    if (isNS) impliedNonSpin.add(aged);
-                    else      impliedSpin.add(aged);
+                    Factor impliedFactor = new Factor(implied, peerFactor.weight());
+                    if (isNS) impliedNonSpin.add(impliedFactor);
+                    else      impliedSpin.add(impliedFactor);
                 }
             }
 
             Factor newSpin = null, newNonSpin = null;
             if (needSpin    && !impliedSpin.isEmpty())
-                newSpin    = logAggregate(impliedSpin,    PROPAGATION_FACTOR_WEIGHT);
+                newSpin    = Factor.aggregate(impliedSpin.toArray(new Factor[0]));
             if (needNonSpin && !impliedNonSpin.isEmpty())
-                newNonSpin = logAggregate(impliedNonSpin, PROPAGATION_FACTOR_WEIGHT);
+                newNonSpin = Factor.aggregate(impliedNonSpin.toArray(new Factor[0]));
 
             if (newSpin != null || newNonSpin != null)
             {
@@ -483,16 +439,15 @@ public class ReferenceNetworkBuilder
     }
 
     // ==========================================================================
-    // Step 13: combine with design RF
+    // Step 13: aggregate with design RF
     // ==========================================================================
 
     /**
-     * For every boat whose design has a Reference Factor, blends the boat's own per-variant
-     * RF with the design-level RF using log-space weighted aggregation.
+     * For every boat whose design has a Reference Factor, aggregates the boat's own per-variant
+     * RF with the design-level RF using {@link Factor#aggregate}.
      * <p>
-     * When the boat already has its own RF, the two factors are blended: a boat with a
-     * low-weight inferred RF is pulled toward the design norm; a boat with a high-weight
-     * direct certificate is barely affected (the blend is proportional to each factor's weight).
+     * When the boat already has its own RF, the two factors are aggregated: evidence
+     * accumulation increases confidence while disagreement penalises weight.
      * <p>
      * When the boat has no RF for a variant but the design does, the design factor is adopted
      * directly (subsumes the former design-fallback step).
@@ -514,9 +469,9 @@ public class ReferenceNetworkBuilder
 
             ReferenceFactors current = e.getValue();
 
-            Factor newSpin    = combineFactors(current.spin(),      df.spin());
-            Factor newNonSpin = combineFactors(current.nonSpin(),   df.nonSpin());
-            Factor newTwoH    = combineFactors(current.twoHanded(), df.twoHanded());
+            Factor newSpin    = aggregateFactors(current.spin(),      df.spin());
+            Factor newNonSpin = aggregateFactors(current.nonSpin(),   df.nonSpin());
+            Factor newTwoH    = aggregateFactors(current.twoHanded(), df.twoHanded());
 
             boolean changed = newSpin    != current.spin()
                            || newNonSpin != current.nonSpin()
@@ -549,11 +504,16 @@ public class ReferenceNetworkBuilder
         LOG.info("ReferenceNetworkBuilder step 13: {} boats combined with design RF", updated);
     }
 
-    // combineFactors is now Factor.combine — see that method's Javadoc for the rationale.
-    // Kept as a thin wrapper so combineWithDesignFactors reads clearly.
-    private static Factor combineFactors(Factor boatFactor, Factor designFactor)
+    /**
+     * Aggregates a boat's own RF with the design-level RF. If either is null, returns
+     * the other unchanged. When both are present, {@link Factor#aggregate} blends them
+     * with evidence accumulation.
+     */
+    private static Factor aggregateFactors(Factor boatFactor, Factor designFactor)
     {
-        return Factor.combine(boatFactor, designFactor);
+        if (boatFactor == null) return designFactor;
+        if (designFactor == null) return boatFactor;
+        return Factor.aggregate(boatFactor, designFactor);
     }
 
     // ==========================================================================
@@ -654,87 +614,6 @@ public class ReferenceNetworkBuilder
     }
 
     // ==========================================================================
-    // Log-space aggregation
-    // ==========================================================================
-
-    /**
-     * Weighted mean in log space with a variance-based confidence penalty.
-     * Equivalent to the pipeline specification:
-     * <pre>log(result.value) = Σ(wᵢ × log(vᵢ)) / Σwᵢ</pre>
-     * with combined weight penalised by spread:
-     * <pre>combinedWeight = meanInputWeight / (1 + logVariance / σ₀²)</pre>
-     * where σ₀ = log(1 + {@link Factor#SIGMA_0}) ≈ 0.0488.
-     *
-     * @param factors   one or more factor estimates; zero-weight entries are skipped
-     * @param maxWeight ceiling applied to the returned weight
-     * @return aggregated factor, or null if all inputs have zero weight
-     */
-    private static Factor logAggregate(List<Factor> factors, double maxWeight)
-    {
-        double sumW = 0, sumWLogV = 0;
-        int n = 0;
-        for (Factor f : factors)
-        {
-            if (f.weight() > 0)
-            {
-                sumW     += f.weight();
-                sumWLogV += f.weight() * Math.log(f.value());
-                n++;
-            }
-        }
-        if (n == 0) return null;
-
-        double logMeanV  = sumWLogV / sumW;
-        double meanValue = Math.exp(logMeanV);
-
-        double sumWLogVar = 0;
-        for (Factor f : factors)
-        {
-            if (f.weight() > 0)
-            {
-                double d = Math.log(f.value()) - logMeanV;
-                sumWLogVar += f.weight() * d * d;
-            }
-        }
-        double logVariance     = sumWLogVar / sumW;
-        double sigma0Log       = Math.log(1.0 + Factor.SIGMA_0);  // ≈ 0.0488 for SIGMA_0=0.05
-        double meanInputWeight = sumW / n;
-        double combinedWeight  = meanInputWeight / (1.0 + logVariance / (sigma0Log * sigma0Log));
-        combinedWeight = Math.min(Math.min(combinedWeight, maxWeight), 1.0);
-
-        return new Factor(meanValue, combinedWeight);
-    }
-
-    /**
-     * Simple weighted mean (linear space) of multiple implied-factor estimates from one
-     * race division.  The returned weight is {@code min(Σwᵢ, 1.0)} — proportional to the
-     * total reference factor weight of all contributing boats, capped at 1.
-     *
-     * <p>No variance penalty is applied here; that belongs only in the cross-race aggregation
-     * step (see {@link #logAggregate}).
-     *
-     * @param factors  per-boat implied factors; zero-weight entries are skipped
-     * @return aggregated factor, or null if all inputs have zero weight
-     */
-    private static Factor linearMeanAggregate(List<Factor> factors)
-    {
-        double sumW = 0, sumWV = 0;
-        for (Factor f : factors)
-        {
-            if (f.weight() > 0)
-            {
-                sumW  += f.weight();
-                sumWV += f.weight() * f.value();
-            }
-        }
-        if (sumW == 0) return null;
-
-        double meanValue   = sumWV / sumW;
-        double totalWeight = Math.min(sumW, 1.0);
-        return new Factor(meanValue, totalWeight);
-    }
-
-    // ==========================================================================
     // Step 8 internals
     // ==========================================================================
 
@@ -801,23 +680,13 @@ public class ReferenceNetworkBuilder
             if (cert.club()) baseWeight *= clubBaseWeight;
             if (cert.windwardLeeward()) baseWeight *= ORC_WL_BASE_WEIGHT;
 
-            // Discount certs that predate the target year: −CERT_AGE_WEIGHT_STEP per year.
-            // Certs from the target year or later receive no discount.
-            int yearDiff = Math.max(0, currentYear - cert.year());
-            baseWeight *= Math.max(0.0, 1.0 - yearDiff * CERT_AGE_WEIGHT_STEP);
-            if (baseWeight <= 0) continue;
-
             dfsAllPaths(start, cert.value(), baseWeight, target,
                 graph, allowCrossVariant, new HashSet<>(), 0, allFactors);
         }
 
         if (allFactors.isEmpty())
             return null;
-        // Factor.combine: log-space weighted mean, max weight.
-        // Using combine rather than aggregate because paths from different cert systems
-        // (IRC, ORC, AMS) may disagree structurally — that disagreement is not a sign of
-        // uncertainty about the boat's speed; adding more paths should never reduce confidence.
-        return Factor.combine(allFactors.toArray(new Factor[0]));
+        return Factor.aggregate(allFactors.toArray(new Factor[0]));
     }
 
     /**

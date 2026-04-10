@@ -7,6 +7,7 @@ import java.time.Duration;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -171,7 +172,7 @@ class FactorTest
     @Test
     void aggregateIdenticalInputsReturnsSameValueNoVariancePenalty()
     {
-        // All identical → weightedVariance = 0 → no penalty → combinedWeight = meanInputWeight
+        // All identical → weightedVariance = 0 → pooledWeight = 1 - (1-0.8)^3 = 0.992
         Factor f1 = new Factor(1.05, 0.8);
         Factor f2 = new Factor(1.05, 0.8);
         Factor f3 = new Factor(1.05, 0.8);
@@ -179,7 +180,7 @@ class FactorTest
         Factor result = Factor.aggregate(f1, f2, f3);
 
         assertThat(result.value(), closeTo(1.05, 1e-10));
-        assertThat(result.weight(), closeTo(0.8, 1e-10));  // no penalty
+        assertThat(result.weight(), closeTo(1.0 - 0.2 * 0.2 * 0.2, 1e-10));
     }
 
     @Test
@@ -195,20 +196,61 @@ class FactorTest
     }
 
     @Test
-    void aggregateSpreadReducesWeight()
+    void aggregateRepeatIncreasesWeight()
     {
-        // Two identical → no spread → combinedWeight = meanInputWeight
-        Factor same1 = new Factor(1.0, 0.8);
-        Factor same2 = new Factor(1.0, 0.8);
-        double noSpreadWeight = Factor.aggregate(same1, same2).weight();
-
-        // Two spread apart → variance penalty → lower weight
-        Factor spread1 = new Factor(0.9, 0.8);
-        Factor spread2 = new Factor(1.1, 0.8);
-        double spreadWeight = Factor.aggregate(spread1, spread2).weight();
-
-        assertThat(spreadWeight, lessThan(noSpreadWeight));
+        Factor factor1 = new Factor(1.0, 0.8);
+        Factor factor2 = new Factor(1.0, 0.8);
+        Factor aggregate = Factor.aggregate(factor1, factor2);
+        assertThat(aggregate.value(), closeTo(1.0, 1e-9));
+        assertThat(aggregate.weight(), greaterThan(0.8));
+        assertThat(aggregate.weight(), lessThan(1.0));
     }
+
+    @Test
+    void aggregateCloseIncreasesWeight()
+    {
+        Factor factor1 = new Factor(1.005, 0.8);
+        Factor factor2 = new Factor(0.995, 0.8);
+        Factor aggregate = Factor.aggregate(factor1, factor2);
+        assertThat(aggregate.value(), closeTo(1.0, 1e-9));
+        assertThat(aggregate.weight(), greaterThan(0.8));
+        assertThat(aggregate.weight(), lessThan(Factor.aggregate(new Factor(1.0, 0.8), new Factor(1.0, 0.8)).weight()));
+    }
+
+    @Test
+    void aggregateSpreadLargeWeightReducesWeight()
+    {
+        Factor factor1 = new Factor(0.9, 0.8);
+        Factor factor2 = new Factor(1.1, 0.8);
+        Factor aggregate = Factor.aggregate(factor1, factor2);
+        assertThat(aggregate.value(), closeTo(1.0, 1e-9));
+        assertThat(aggregate.weight(), lessThan(0.8));
+        assertThat(aggregate.weight(), greaterThan(0.0));
+    }
+
+    @Test
+    void aggregateSpreadSmallWeightIncreasesWeight()
+    {
+        Factor factor1 = new Factor(0.9, 0.1);
+        Factor factor2 = new Factor(1.1, 0.1);
+        Factor aggregate = Factor.aggregate(factor1, factor2);
+        assertThat(aggregate.value(), closeTo(1.0, 1e-9));
+        assertThat(aggregate.weight(), lessThan(0.5));
+        assertThat(aggregate.weight(), greaterThan(0.1));
+    }
+
+    @Test
+    void aggregateSpreadSplitWeightReducesWeight()
+    {
+        Factor factor1 = new Factor(0.9999, 0.9);
+        Factor factor2 = new Factor(1.1000, 0.1);
+        Factor aggregate = Factor.aggregate(factor1, factor2);
+        assertThat(aggregate.value(), closeTo(1.0, 0.01));
+        assertThat(aggregate.weight(), lessThan(0.9));
+        assertThat(aggregate.weight(), greaterThan((0.9 + 0.1)/2.0));
+    }
+
+
 
     @Test
     void aggregateSkipsZeroWeightInputs()
@@ -241,18 +283,18 @@ class FactorTest
     void aggregateHighSpreadAtSigma0HalvesWeight()
     {
         // When spread equals SIGMA_0, weightedVariance = SIGMA_0², denominator = 2,
-        // so combinedWeight = meanInputWeight / 2 (i.e., halved).
-        // Two equal-weight inputs symmetric around mean: v = mean ± SIGMA_0 / sqrt(weight-norm)
-        // Simplest: two inputs at 1.0 - σ₀ and 1.0 + σ₀ with equal weights.
-        // weightedMean = 1.0
-        // weightedVariance = Σ(wᵢ × (vᵢ - 1.0)²) / Σwᵢ = (w×σ₀² + w×σ₀²) / 2w = σ₀²
+        // so combinedWeight = pooledWeight / 2.
+        // Two inputs at 1.0 ± σ₀ with equal weights:
+        // pooledWeight = 1 - (1-0.5)² = 0.75
+        // weightedVariance = σ₀² → combinedWeight = 0.75 / 2 = 0.375
         double sigma = Factor.SIGMA_0;
         Factor f1 = new Factor(1.0 - sigma, 0.5);
         Factor f2 = new Factor(1.0 + sigma, 0.5);
 
         Factor result = Factor.aggregate(f1, f2);
 
-        double expectedWeight = 0.5 / (1.0 + 1.0);  // meanInputWeight / 2 = 0.25
+        double pooledWeight = 1.0 - 0.5 * 0.5;  // 0.75
+        double expectedWeight = pooledWeight / 2.0;  // 0.375
         assertThat(result.weight(), closeTo(expectedWeight, 1e-10));
     }
 

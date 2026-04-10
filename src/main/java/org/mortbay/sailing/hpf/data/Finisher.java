@@ -15,4 +15,15 @@ public record Finisher(
     Duration elapsedTime,
     boolean nonSpinnaker,
     String certificateNumber  // nullable; cert number of the Certificate used for scoring
-) {}
+) {
+    @Override
+    public String toString()
+    {
+        return "Finisher{" +
+            "boatId='" + boatId + '\'' +
+            ", elapsedTime=" + elapsedTime +
+            ", nonSpinnaker=" + nonSpinnaker +
+            ", certificateNumber='" + certificateNumber + '\'' +
+            '}';
+    }
+}

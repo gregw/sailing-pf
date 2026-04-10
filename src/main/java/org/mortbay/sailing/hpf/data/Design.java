@@ -15,7 +15,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 public record Design(
     String id,            // normalised name, e.g. "j24", "farr40"
     String canonicalName, // display name, e.g. "J/24", "Farr 40"
-    List<String> makerIds, // normalised maker IDs; usually one
     List<String> aliases,  // alternate design names, e.g. "Mumm 30" for "Farr 30"
     List<String> sources,  // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
     Instant lastUpdated,   // when this record was last written by an importer; nullable
@@ -32,7 +31,7 @@ public record Design(
     @Override
     public Design withLoadedAt(Instant t)
     {
-        return new Design(id, canonicalName, makerIds, aliases, sources, lastUpdated, t);
+        return new Design(id, canonicalName, aliases, sources, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -44,13 +43,25 @@ public record Design(
         if (!(o instanceof Design d))
             return false;
         return Objects.equals(id, d.id) && Objects.equals(canonicalName, d.canonicalName)
-            && Objects.equals(makerIds, d.makerIds) && Objects.equals(aliases, d.aliases)
+            && Objects.equals(aliases, d.aliases)
             && Objects.equals(sources, d.sources) && Objects.equals(lastUpdated, d.lastUpdated);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, canonicalName, makerIds, aliases, sources, lastUpdated);
+        return Objects.hash(id, canonicalName, aliases, sources, lastUpdated);
+    }
+
+    @Override
+    public String toString()
+    {
+        return "Design{" +
+            "id='" + id + '\'' +
+            ", canonicalName='" + canonicalName + '\'' +
+            ", aliases=" + aliases +
+            ", sources=" + sources +
+            ", lastUpdated=" + lastUpdated +
+            '}';
     }
 }

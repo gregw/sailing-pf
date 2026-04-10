@@ -56,4 +56,20 @@ public record Certificate(
             isClub, windwardLeeward != null && windwardLeeward,
             certificateNumber, expiryDate);
     }
+
+    @Override
+    public String toString()
+    {
+        return "Certificate{" +
+            "system='" + system + '\'' +
+            ", year=" + year +
+            ", value=" + value +
+            ", nonSpinnaker=" + nonSpinnaker +
+            ", twoHanded=" + twoHanded +
+            ", club=" + club +
+            ", windwardLeeward=" + windwardLeeward +
+            ", certificateNumber='" + certificateNumber + '\'' +
+            ", expiryDate=" + expiryDate +
+            '}';
+    }
 }

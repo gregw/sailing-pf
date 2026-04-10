@@ -56,8 +56,9 @@ because independent uncertainties compound.
 ### `aggregate(Factor[] factors) → Factor`
 
 Combines multiple **independent estimates of the same quantity** — for example, a boat's
-HPF estimated from 8 different races. This is not a simple average: the combined weight
-must reflect both the mean quality of the inputs and the consistency among them.
+HPF estimated from 8 different races, or certificate-based factors from multiple
+conversion paths. This is the primary combiner: it accumulates evidence (more agreeing
+observations increase confidence) while penalising disagreement.
 
 #### Combined value
 
@@ -69,31 +70,34 @@ combinedValue = Σ(wᵢ × vᵢ) / Σwᵢ
 
 #### Combined weight
 
-Weighted mean input weight, penalised by the spread of values:
+Pooled evidence, penalised by the spread of values:
 
 ```
-meanInputWeight  = Σwᵢ / n
+pooledWeight     = 1 − ∏(1 − wᵢ)
 
 weightedVariance = Σ(wᵢ × (vᵢ − combinedValue)²) / Σwᵢ
 
-combinedWeight   = meanInputWeight / (1 + weightedVariance / σ₀²)
+combinedWeight   = pooledWeight / (1 + weightedVariance / σ₀²)
 ```
 
-Where `σ₀` is a tunable scale parameter representing "how much variance halves
-confidence?" Suggested starting value: **`σ₀ = 0.05`** (a standard deviation of 5% in
-factor value space halves the combined weight).
+The `pooledWeight` formula (`1 − ∏(1 − wᵢ)`) is the "at least one good measurement"
+accumulator — it always increases with more inputs, is bounded [0, 1], and adding a
+zero-weight input is a no-op. This ensures that repeated, agreeing evidence always
+increases confidence.
+
+`σ₀` is a tunable scale parameter representing "how much variance halves confidence?"
+Value: **`σ₀ = 0.15`** (a standard deviation of 15% in factor value space halves the
+combined weight).
 
 #### Behaviour
 
 | Input spread | Effect on `combinedWeight` |
 |---|---|
-| All inputs identical → `weightedVariance = 0` | `combinedWeight = meanInputWeight` (no penalty) |
-| Inputs moderately scattered | `combinedWeight < meanInputWeight` |
+| All inputs identical → `weightedVariance = 0` | `combinedWeight = pooledWeight` (no penalty, always ≥ max input weight) |
+| Inputs close together | `combinedWeight` increases above max input weight, but less than identical case |
+| Inputs moderately scattered (large weights) | `combinedWeight` reduced below individual input weights |
+| Inputs moderately scattered (small weights) | Evidence accumulation still wins; weight increases above inputs |
 | Inputs highly scattered | `combinedWeight` substantially reduced |
-
-The "more samples → higher weight" effect is implicit: more races feeding `aggregate`
-tends to produce a lower `weightedVariance` and a higher `meanInputWeight`, both of which
-push `combinedWeight` upward. No separate sample-count multiplier is needed.
 
 ---
 
@@ -113,8 +117,8 @@ push `combinedWeight` upward. No separate sample-count multiplier is needed.
   layer. They belong on the `Factor` record as static methods, or in a companion
   `Factors` utility class.
 
-- `aggregate` requires the tuning constant `σ₀`. This must be a named constant or
-  configuration parameter — not a magic number buried in the implementation.
+- `aggregate` requires the tuning constant `σ₀` (currently 0.15). This must be a named
+  constant or configuration parameter — not a magic number buried in the implementation.
 
 - `WeightedInterval` is structurally parallel to `Factor` but holds a `Duration` instead
   of a dimensionless ratio. Both carry `weight` in [0, 1] by the same convention.

@@ -168,4 +168,9 @@ boatDesignOverrides:
         name: "Asterix"
       - sailNumber: "1919"
         name: "Lost Horizon"
+  - designId: "archambaultsurprise"
+    canonicalName: "Archambault Surprise"
+    boats:
+      - sailNumber: "6750"
+        name: "Asterix"
 

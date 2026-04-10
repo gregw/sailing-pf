@@ -291,16 +291,8 @@ public class OrcImporter
             }
         }
 
-        // Find-or-create Design
-        Design design = store.findOrCreateDesign(className, SOURCE);
-
-        // Resolve sail number: ORC feed gives bare numeric numbers (e.g. "933") while boats
-        // imported from SailSys carry the country prefix (e.g. "AUS933").  Prefer existing
-        // bare-number boats; otherwise use the country-prefixed form when creating.
-        String resolvedSailNo = store.resolveCountrySailNumber(sailNo, countryId, yachtName.trim(), design);
-
-        // Find-or-create Boat
-        Boat boat = store.findOrCreateBoat(resolvedSailNo, yachtName.trim(), design, SOURCE);
+        // Find-or-create Boat (design resolved inside findOrCreateBoat)
+        Boat boat = store.findOrCreateBoat(sailNo, yachtName.trim(), className, SOURCE);
 
         // Upsert certificate: remove old cert with same dxtId first, then add new one
         final String finalDxtId = dxtId;

@@ -9,4 +9,13 @@ import java.util.List;
 public record Division(
     String name,               // e.g. "Division 1", "Open"
     List<Finisher> finishers
-) {}
+) {
+    @Override
+    public String toString()
+    {
+        return "Division{" +
+            "name='" + name + '\'' +
+            ", finishers=" + finishers +
+            '}';
+    }
+}
