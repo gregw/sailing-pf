@@ -157,7 +157,7 @@ let preferredDivision = null;
 function isWriteAllowed() { return window.hpfAuth?.authenticated; }
 
 function switchTab(entity) {
-    ['boats', 'designs', 'clubs', 'races', 'series'].forEach(e => {
+    ['clubs', 'boats', 'designs', 'series', 'races'].forEach(e => {
         document.getElementById('tab-btn-' + e).classList.toggle('active', e === entity);
         document.getElementById('panel-' + e).classList.toggle('active', e === entity);
     });
@@ -220,7 +220,7 @@ function doSearch(entity) {
 
 function setPageSize(size) {
     state.pageSize = parseInt(size);
-    ['boats', 'designs', 'clubs', 'races', 'series'].forEach(e => {
+    ['clubs', 'boats', 'designs', 'series', 'races'].forEach(e => {
         const el = document.getElementById('page-size-' + e);
         if (el) el.value = state.pageSize;
     });
@@ -879,4 +879,4 @@ function renderDivisionChart(data) {
     }
 })();
 
-loadList('boats', 0);
+loadList('clubs', 0);
