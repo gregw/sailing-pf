@@ -28,31 +28,31 @@ import java.util.Optional;
  * <p>
  * The loaded seed is lookup-only and is never written back to disk.
  */
-public class AliasSeedLoader
+public class AliasLoader
 {
-    private static final Logger LOG = LoggerFactory.getLogger(AliasSeedLoader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AliasLoader.class);
     private static final String FILENAME = "aliases.yaml";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
             new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
         .registerModule(new JavaTimeModule());
 
-    static AliasSeed load(Path configDir)
+    static Aliases load(Path configDir)
     {
         InputStream stream = openStream(configDir, FILENAME);
         if (stream == null)
         {
             LOG.warn("No aliases.yaml found; alias seed not loaded");
-            return AliasSeed.EMPTY;
+            return Aliases.EMPTY;
         }
         try
         {
-            SeedFile seedFile = YAML_MAPPER.readValue(stream, SeedFile.class);
-            return new AliasSeed(seedFile);
+            Yaml yaml = YAML_MAPPER.readValue(stream, Yaml.class);
+            return new Aliases(yaml);
         }
         catch (Exception e)
         {
             LOG.error("Failed to load aliases.yaml: {}", e.getMessage(), e);
-            return AliasSeed.EMPTY;
+            return Aliases.EMPTY;
         }
     }
 
@@ -72,26 +72,26 @@ public class AliasSeedLoader
             }
         }
         // Fallback to classpath (test resources)
-        return AliasSeedLoader.class.getResourceAsStream("/" + filename);
+        return AliasLoader.class.getResourceAsStream("/" + filename);
     }
 
     // ---- YAML binding classes ----
 
-    static class SeedFile
+    static class Yaml
     {
-        public Map<String, DesignSeedEntry> designs;
-        public Map<String, BoatSeedEntry> boats;
+        public Map<String, DesignEntry> designs;
+        public Map<String, BoatEntry> boats;
         /** normSailNumber → normCanonicalSailNumber for boats with typo/old sail numbers. */
         public Map<String, String> sailNumberRedirects;
     }
 
-    static class DesignSeedEntry
+    static class DesignEntry
     {
         public String canonicalName;
         public List<String> aliases;
     }
 
-    static class BoatSeedEntry
+    static class BoatEntry
     {
         public String canonicalName;
         public String canonicalSailNumber;              // canonical sail number for this boat
@@ -122,9 +122,9 @@ public class AliasSeedLoader
     /**
      * Loaded alias data. Immutable after construction; all lookups are O(1).
      */
-    static class AliasSeed
+    static class Aliases
     {
-        static final AliasSeed EMPTY = new AliasSeed(null);
+        static final Aliases EMPTY = new Aliases(null);
 
         /** normAlias → canonical design ID */
         private final Map<String, String> designAliasIndex;
@@ -140,14 +140,14 @@ public class AliasSeedLoader
          * normalised sail number (canonical + all alternates) → entry.
          * Used to look up entries by any known sail number.
          */
-        private final Map<String, BoatSeedEntry> sailNumberIndex;
+        private final Map<String, BoatEntry> sailNumberIndex;
         /**
          * normName[-designId] → entry.
          * Used to look up entries by canonical name + design.
          */
-        private final Map<String, BoatSeedEntry> nameDesignIndex;
+        private final Map<String, BoatEntry> nameDesignIndex;
 
-        private AliasSeed(SeedFile seed)
+        private Aliases(Yaml seed)
         {
             if (seed == null || (seed.designs == null && seed.boats == null && seed.sailNumberRedirects == null))
             {
@@ -162,41 +162,45 @@ public class AliasSeedLoader
             }
 
             // Build design indexes
-            Map<String, String> aliasIdx = new HashMap<>();
-            Map<String, String> designNames = new HashMap<>();
+            Map<String, String> name2designId = new HashMap<>();
+            Map<String, String> designId2Name = new HashMap<>();
             if (seed.designs != null)
             {
-                for (Map.Entry<String, DesignSeedEntry> e : seed.designs.entrySet())
+                for (Map.Entry<String, DesignEntry> e : seed.designs.entrySet())
                 {
                     String canonicalId = e.getKey();
-                    DesignSeedEntry entry = e.getValue();
+                    DesignEntry entry = e.getValue();
                     if (entry.canonicalName != null)
-                        designNames.put(canonicalId, entry.canonicalName);
+                    {
+                        designId2Name.put(canonicalId, entry.canonicalName);
+                        name2designId.put(IdGenerator.normaliseDesignName(entry.canonicalName), canonicalId);
+                    }
                     if (entry.aliases != null)
                     {
                         for (String alias : entry.aliases)
                         {
                             String normAlias = IdGenerator.normaliseDesignName(alias);
-                            aliasIdx.put(normAlias, canonicalId);
+                            name2designId.put(alias, canonicalId);
+                            name2designId.put(normAlias, canonicalId);
                         }
                     }
                 }
             }
-            designAliasIndex = Collections.unmodifiableMap(aliasIdx);
-            designCanonicalNames = Collections.unmodifiableMap(designNames);
+            designAliasIndex = Collections.unmodifiableMap(name2designId);
+            designCanonicalNames = Collections.unmodifiableMap(designId2Name);
 
             // Build boat indexes
             Map<String, List<TimedAlias>> boatMap = new HashMap<>();
             Map<String, String> boatNames = new HashMap<>();
-            Map<String, BoatSeedEntry> sailIdx = new HashMap<>();
-            Map<String, BoatSeedEntry> nameDesignIdx = new HashMap<>();
+            Map<String, BoatEntry> sailIdx = new HashMap<>();
+            Map<String, BoatEntry> nameDesignIdx = new HashMap<>();
 
             if (seed.boats != null)
             {
-                for (Map.Entry<String, BoatSeedEntry> e : seed.boats.entrySet())
+                for (Map.Entry<String, BoatEntry> e : seed.boats.entrySet())
                 {
                     String yamlKey = e.getKey();
-                    BoatSeedEntry entry = e.getValue();
+                    BoatEntry entry = e.getValue();
 
                     // Determine the canonical sail number for boatAliasMap/boatCanonicalNames lookups.
                     // New schema: entry.canonicalSailNumber is explicit.
@@ -270,7 +274,7 @@ public class AliasSeedLoader
             sailNumberRedirects = Collections.unmodifiableMap(redirects);
 
             LOG.info("Loaded alias seed: {} design alias(es), {} boat entry(ies), {} sail number redirect(s)",
-                aliasIdx.size(), boatMap.size(), redirects.size());
+                name2designId.size(), boatMap.size(), redirects.size());
         }
 
         /**
@@ -317,15 +321,15 @@ public class AliasSeedLoader
         /**
          * Result of a boat seed lookup.
          */
-        public record BoatSeedMatch(String canonicalName, String canonicalSailNumber) {}
+        public record BoatMatch(String canonicalName, String canonicalSailNumber) {}
 
         /**
          * Looks up a boat entry by sail number or by name+design key.
          * Returns a BoatSeedMatch if found, empty if not.
          */
-        Optional<BoatSeedMatch> lookupBoat(String normSailNumber, String nameDesignKey)
+        Optional<BoatMatch> lookupBoat(String normSailNumber, String nameDesignKey)
         {
-            BoatSeedEntry e = sailNumberIndex.get(normSailNumber);
+            BoatEntry e = sailNumberIndex.get(normSailNumber);
             if (e == null)
                 e = nameDesignIndex.get(nameDesignKey);
             if (e == null)
@@ -333,7 +337,7 @@ public class AliasSeedLoader
             String canonicalSail = e.canonicalSailNumber != null
                 ? IdGenerator.normaliseSailNumber(e.canonicalSailNumber)
                 : normSailNumber;
-            return Optional.of(new BoatSeedMatch(e.canonicalName, canonicalSail));
+            return Optional.of(new BoatMatch(e.canonicalName, canonicalSail));
         }
     }
 
@@ -347,12 +351,12 @@ public class AliasSeedLoader
     public static void appendDesignMergeAliases(Path configDir, String keepId, String canonicalName, List<String> aliasNames)
     {
         Path file = configDir.resolve(FILENAME);
-        SeedFile seedFile = null;
+        Yaml yaml = null;
         if (Files.exists(file))
         {
             try
             {
-                seedFile = YAML_MAPPER.readValue(file.toFile(), SeedFile.class);
+                yaml = YAML_MAPPER.readValue(file.toFile(), Yaml.class);
             }
             catch (Exception e)
             {
@@ -360,12 +364,12 @@ public class AliasSeedLoader
                 return;
             }
         }
-        if (seedFile == null)
-            seedFile = new SeedFile();
-        if (seedFile.designs == null)
-            seedFile.designs = new LinkedHashMap<>();
+        if (yaml == null)
+            yaml = new Yaml();
+        if (yaml.designs == null)
+            yaml.designs = new LinkedHashMap<>();
 
-        DesignSeedEntry entry = seedFile.designs.computeIfAbsent(keepId, k -> new DesignSeedEntry());
+        DesignEntry entry = yaml.designs.computeIfAbsent(keepId, k -> new DesignEntry());
         if (entry.canonicalName == null && canonicalName != null)
             entry.canonicalName = canonicalName;
         if (entry.aliases == null)
@@ -380,7 +384,7 @@ public class AliasSeedLoader
         try
         {
             Files.createDirectories(file.getParent());
-            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), seedFile);
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
             LOG.info("Updated {} with design merge aliases for keepId={}", file, keepId);
         }
         catch (Exception e)
@@ -411,12 +415,12 @@ public class AliasSeedLoader
     public static void appendMergeAliases(Path configDir, List<MergeAliasSpec> specs)
     {
         Path file = configDir.resolve(FILENAME);
-        SeedFile seedFile = null;
+        Yaml yaml = null;
         if (Files.exists(file))
         {
             try
             {
-                seedFile = YAML_MAPPER.readValue(file.toFile(), SeedFile.class);
+                yaml = YAML_MAPPER.readValue(file.toFile(), Yaml.class);
             }
             catch (Exception e)
             {
@@ -424,12 +428,12 @@ public class AliasSeedLoader
                 return;
             }
         }
-        if (seedFile == null)
-            seedFile = new SeedFile();
-        if (seedFile.boats == null)
-            seedFile.boats = new LinkedHashMap<>();
-        if (seedFile.sailNumberRedirects == null)
-            seedFile.sailNumberRedirects = new LinkedHashMap<>();
+        if (yaml == null)
+            yaml = new Yaml();
+        if (yaml.boats == null)
+            yaml.boats = new LinkedHashMap<>();
+        if (yaml.sailNumberRedirects == null)
+            yaml.sailNumberRedirects = new LinkedHashMap<>();
 
         for (MergeAliasSpec spec : specs)
         {
@@ -440,9 +444,9 @@ public class AliasSeedLoader
                 : normName;
 
             // Find or create entry at the new key
-            BoatSeedEntry entry = seedFile.boats.computeIfAbsent(yamlKey, k ->
+            BoatEntry entry = yaml.boats.computeIfAbsent(yamlKey, k ->
             {
-                BoatSeedEntry e = new BoatSeedEntry();
+                BoatEntry e = new BoatEntry();
                 e.canonicalName = spec.canonicalName();
                 e.canonicalSailNumber = spec.canonicalSailNumber();
                 e.aliases = new ArrayList<>();
@@ -484,16 +488,16 @@ public class AliasSeedLoader
                 }
 
                 // Remove the old sail-number-keyed entry if it exists (cleanup legacy entries)
-                seedFile.boats.remove(spec.sailNumber());
+                yaml.boats.remove(spec.sailNumber());
                 // Remove the old sailNumberRedirect for this sail number
-                seedFile.sailNumberRedirects.remove(spec.sailNumber());
+                yaml.sailNumberRedirects.remove(spec.sailNumber());
             }
         }
 
         try
         {
             Files.createDirectories(file.getParent());
-            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), seedFile);
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
             LOG.info("Updated {} with {} merge alias spec(s)", file, specs.size());
         }
         catch (Exception e)
@@ -512,10 +516,10 @@ public class AliasSeedLoader
         if (!Files.exists(file))
             return;
 
-        SeedFile seedFile;
+        Yaml yaml;
         try
         {
-            seedFile = YAML_MAPPER.readValue(file.toFile(), SeedFile.class);
+            yaml = YAML_MAPPER.readValue(file.toFile(), Yaml.class);
         }
         catch (Exception e)
         {
@@ -523,14 +527,14 @@ public class AliasSeedLoader
             return;
         }
 
-        if (seedFile.boats == null || seedFile.boats.isEmpty())
+        if (yaml.boats == null || yaml.boats.isEmpty())
             return;
 
         String suffix = "-" + oldDesignId;
         String newSuffix = "-" + newDesignId;
-        Map<String, BoatSeedEntry> updated = new LinkedHashMap<>();
+        Map<String, BoatEntry> updated = new LinkedHashMap<>();
         boolean changed = false;
-        for (Map.Entry<String, BoatSeedEntry> e : seedFile.boats.entrySet())
+        for (Map.Entry<String, BoatEntry> e : yaml.boats.entrySet())
         {
             String key = e.getKey();
             if (key.endsWith(suffix))
@@ -549,10 +553,10 @@ public class AliasSeedLoader
         if (!changed)
             return;
 
-        seedFile.boats = updated;
+        yaml.boats = updated;
         try
         {
-            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), seedFile);
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
             LOG.info("Updated {} boat alias key(s) for design merge {} → {}", file, oldDesignId, newDesignId);
         }
         catch (Exception e)

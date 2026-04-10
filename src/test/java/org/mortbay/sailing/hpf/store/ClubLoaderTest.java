@@ -9,19 +9,19 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ClubSeedLoaderTest
+class ClubLoaderTest
 {
     @Test
     void loadsWithoutError()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
         assertFalse(clubs.isEmpty(), "clubs.yaml should produce at least one entry");
     }
 
     @Test
     void placeholderDomainsAreExcluded()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
         clubs.keySet().forEach(domain ->
             assertFalse(domain.startsWith("unknown.domain."),
                 "Placeholder domain should not appear in loaded clubs: " + domain));
@@ -30,7 +30,7 @@ class ClubSeedLoaderTest
     @Test
     void allLoadedClubsHaveNonBlankShortNameAndState()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
         clubs.forEach((domain, club) ->
         {
             assertFalse(club.shortName() == null || club.shortName().isBlank(),
@@ -43,7 +43,7 @@ class ClubSeedLoaderTest
     @Test
     void noTwoLoadedClubsShareShortNameAndState()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
         // Group by (shortName, state) — any group with >1 entry is a duplicate
         Map<String, Long> counts = clubs.values().stream()
             .collect(Collectors.groupingBy(
@@ -57,7 +57,7 @@ class ClubSeedLoaderTest
     @Test
     void domainIsUsedAsClubId()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
         clubs.forEach((domain, club) ->
             assertEquals(domain, club.id(),
                 "Club id should equal its domain key"));
@@ -66,7 +66,7 @@ class ClubSeedLoaderTest
     @Test
     void spotCheckKnownClubs()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
 
         Club cyca = clubs.get("cyca.com.au");
         assertNotNull(cyca, "cyca.com.au should be in seed");
@@ -99,7 +99,7 @@ class ClubSeedLoaderTest
     @Test
     void spotCheckMissingPlaceholders()
     {
-        Map<String, Club> clubs = ClubSeedLoader.load(Path.of("nonexistent"));
+        Map<String, Club> clubs = ClubLoader.load(Path.of("nonexistent"));
         // These three remain as unknowns in the file — they must NOT appear
         assertNull(clubs.get("unknown.domain.14"), "RBYC/TAS placeholder should be absent");
         assertNull(clubs.get("unknown.domain.22"), "RYCV/SA placeholder should be absent");

@@ -93,8 +93,8 @@ public class DataStore
     private Map<String, Design> designs;
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
-    private AliasSeedLoader.AliasSeed aliasSeed; // lookup-only alias data from aliases.yaml; never written to disk
-    private DesignCatalogueLoader.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
+    private AliasLoader.Aliases aliases; // lookup-only alias data from aliases.yaml; never written to disk
+    private DesignLoader.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
     private List<Maker> makers;
     private boolean makersDirty;
 
@@ -302,7 +302,7 @@ public class DataStore
             String normDesign = rawDesign != null && !rawDesign.isBlank()
                 ? IdGenerator.normaliseDesignName(rawDesign) : null;
             String ndk = normName + (normDesign != null ? "-" + normDesign : "");
-            var seedCheck = aliasSeed.lookupBoat(normSail, ndk);
+            var seedCheck = aliases.lookupBoat(normSail, ndk);
             if (seedCheck.isPresent() && seedCheck.get().canonicalName() != null)
             {
                 String canonNorm = IdGenerator.normaliseName(seedCheck.get().canonicalName());
@@ -381,8 +381,8 @@ public class DataStore
         String normDesignId = rawDesign != null && !rawDesign.isBlank()
             ? IdGenerator.normaliseDesignName(rawDesign) : null;
         String nameDesignKey = normName + (normDesignId != null ? "-" + normDesignId : "");
-        Optional<AliasSeedLoader.AliasSeed.BoatSeedMatch> seedMatch =
-            aliasSeed.lookupBoat(normSail, nameDesignKey);
+        Optional<AliasLoader.Aliases.BoatMatch> seedMatch =
+            aliases.lookupBoat(normSail, nameDesignKey);
         if (seedMatch.isPresent())
         {
             String seedCanonicalName = seedMatch.get().canonicalName();
@@ -429,8 +429,8 @@ public class DataStore
         }
 
         // Fallback: check old boatAliases/boatCanonicalName for legacy compatibility
-        List<org.mortbay.sailing.hpf.data.TimedAlias> seedAliases = aliasSeed.boatAliases(normSail);
-        String seedCanonicalName = aliasSeed.boatCanonicalName(normSail);
+        List<org.mortbay.sailing.hpf.data.TimedAlias> seedAliases = aliases.boatAliases(normSail);
+        String seedCanonicalName = aliases.boatCanonicalName(normSail);
         boolean nameMatchesSeedAlias = !seedAliases.isEmpty() && seedAliases.stream()
             .anyMatch(a -> IdGenerator.normaliseName(a.name()).equals(normName)
                 || a.name().equalsIgnoreCase(name));
@@ -471,7 +471,7 @@ public class DataStore
 
         // Check sail number redirect: if this sail number is a known typo/alias for another,
         // retry with the canonical sail number so the boats are not re-duplicated.
-        String redirectSail = aliasSeed.sailNumberRedirect(normSail);
+        String redirectSail = aliases.sailNumberRedirect(normSail);
         if (redirectSail != null && !redirectSail.equals(normSail))
         {
             LOG.info("Sail number {} redirected to {} via alias seed", normSail, redirectSail);
@@ -507,7 +507,7 @@ public class DataStore
         Design boatDesign = designs.get(boatDesignId);
         if (boatDesign != null && designNameMatches(boatDesign, normRaw))
             return true;
-        String canonicalId = aliasSeed.resolveDesignAlias(normRaw);
+        String canonicalId = aliases.resolveDesignAlias(normRaw);
         return canonicalId != null && canonicalId.equals(boatDesignId);
     }
 
@@ -579,14 +579,14 @@ public class DataStore
         }
 
         // Check the alias seed for a known equivalence
-        String canonicalId = aliasSeed.resolveDesignAlias(designId);
+        String canonicalId = aliases.resolveDesignAlias(designId);
         if (canonicalId != null)
         {
             Design existing = designs.get(canonicalId);
             if (existing != null)
                 return existing;
             // Canonical design not yet in store — create it using the seed's canonical name
-            String seedName = aliasSeed.designCanonicalName(canonicalId);
+            String seedName = aliases.designCanonicalName(canonicalId);
             design = new Design(canonicalId, seedName != null ? seedName : className.trim(), List.of(), List.of(), null, null);
             putDesign(design);
             if (designCatalogue.isExcluded(canonicalId))
@@ -1093,7 +1093,7 @@ public class DataStore
     public void reloadAliasSeed()
     {
         requireStarted();
-        aliasSeed = AliasSeedLoader.load(configDir);
+        aliases = AliasLoader.load(configDir);
     }
 
     /**
@@ -1264,9 +1264,9 @@ public class DataStore
         });
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
-        clubSeed = ClubSeedLoader.load(configDir);
-        aliasSeed = AliasSeedLoader.load(configDir);
-        designCatalogue = DesignCatalogueLoader.load(configDir);
+        clubSeed = ClubLoader.load(configDir);
+        aliases = AliasLoader.load(configDir);
+        designCatalogue = DesignLoader.load(configDir);
         designCatalogue.overrideDesigns().forEach((normId, canonicalName) ->
         {
             Design existing = designs.get(normId);
@@ -1300,7 +1300,7 @@ public class DataStore
             {
                 String normName = IdGenerator.normaliseName(b.name());
                 String ndk = normName + (b.designId() != null ? "-" + b.designId() : "");
-                var match = aliasSeed.lookupBoat(b.sailNumber(), ndk);
+                var match = aliases.lookupBoat(b.sailNumber(), ndk);
                 if (match.isPresent() && match.get().canonicalName() != null)
                 {
                     String canonNorm = IdGenerator.normaliseName(match.get().canonicalName());
@@ -1378,7 +1378,7 @@ public class DataStore
         designs = null;
         clubs = null;
         clubSeed = null;
-        aliasSeed = null;
+        aliases = null;
         designCatalogue = null;
         makers = null;
         makersDirty = false;

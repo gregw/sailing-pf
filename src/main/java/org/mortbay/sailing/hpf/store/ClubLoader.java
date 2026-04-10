@@ -20,9 +20,9 @@ import java.util.Map;
  * Entries whose domain key starts with {@code "unknown.domain."} are skipped with a
  * warning — they are placeholders pending manual completion by the user.
  */
-class ClubSeedLoader
+class ClubLoader
 {
-    private static final Logger LOG = LoggerFactory.getLogger(ClubSeedLoader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ClubLoader.class);
     private static final String FILENAME = "clubs.yaml";
     private static final String PLACEHOLDER_PREFIX = "unknown.domain.";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
@@ -83,7 +83,7 @@ class ClubSeedLoader
             }
         }
         // Fallback to classpath (test resources)
-        return ClubSeedLoader.class.getResourceAsStream("/" + filename);
+        return ClubLoader.class.getResourceAsStream("/" + filename);
     }
 
     static class SeedFile

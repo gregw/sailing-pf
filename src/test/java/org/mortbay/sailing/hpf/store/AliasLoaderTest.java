@@ -11,20 +11,20 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class AliasSeedLoaderTest
+class AliasLoaderTest
 {
     @Test
     void loadsSeedFromClasspath()
     {
         // aliases.yaml is on the classpath under src/main/resources
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertNotNull(seed);
     }
 
     @Test
     void designAliasResolvesToCanonicalId()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         // "Sydney 36 OD" normalises to "sydney36od" → should resolve to "sydney36cr"
         assertEquals("sydney36cr", seed.resolveDesignAlias("sydney36od"));
     }
@@ -32,28 +32,28 @@ class AliasSeedLoaderTest
     @Test
     void unknownDesignAliasReturnsNull()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertNull(seed.resolveDesignAlias("unknowndesign99"));
     }
 
     @Test
     void designCanonicalNameReturned()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertEquals("Sydney 36 CR", seed.designCanonicalName("sydney36cr"));
     }
 
     @Test
     void unknownDesignCanonicalNameReturnsNull()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertNull(seed.designCanonicalName("notinseednever"));
     }
 
     @Test
     void boatAliasesReturnedForKnownSailNumber()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         // MYC7 is in aliases.yaml with aliases "1060" and "TenSixty"
         List<TimedAlias> aliases = seed.boatAliases("MYC7");
         assertFalse(aliases.isEmpty());
@@ -64,21 +64,21 @@ class AliasSeedLoaderTest
     @Test
     void unknownSailNumberReturnsEmptyList()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertTrue(seed.boatAliases("NOSUCHSAIL999").isEmpty());
     }
 
     @Test
     void boatCanonicalNameReturned()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertEquals("Day Dreaming", seed.boatCanonicalName("MYC7"));
     }
 
     @Test
     void unknownBoatCanonicalNameReturnsNull()
     {
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(Path.of("nonexistent"));
+        AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertNull(seed.boatCanonicalName("NOSUCHSAIL999"));
     }
 
@@ -122,7 +122,7 @@ class AliasSeedLoaderTest
     void missingFileReturnsEmptySeedWithoutThrowing()
     {
         // The EMPTY sentinel should return nulls/empty lists without throwing
-        AliasSeedLoader.AliasSeed empty = AliasSeedLoader.AliasSeed.EMPTY;
+        AliasLoader.Aliases empty = AliasLoader.Aliases.EMPTY;
         assertNull(empty.resolveDesignAlias("anything"));
         assertNull(empty.designCanonicalName("anything"));
         assertTrue(empty.boatAliases("anything").isEmpty());
@@ -132,9 +132,9 @@ class AliasSeedLoaderTest
     @Test
     void appendDesignMergeAliasesSetsCanonicalName(@TempDir Path tempDir) throws Exception
     {
-        AliasSeedLoader.appendDesignMergeAliases(tempDir, "mydesign", "My Design Name", List.of("Alt Name"));
+        AliasLoader.appendDesignMergeAliases(tempDir, "mydesign", "My Design Name", List.of("Alt Name"));
 
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(tempDir);
+        AliasLoader.Aliases seed = AliasLoader.load(tempDir);
         assertEquals("My Design Name", seed.designCanonicalName("mydesign"));
         assertEquals("mydesign", seed.resolveDesignAlias("altname"));
     }
@@ -142,10 +142,10 @@ class AliasSeedLoaderTest
     @Test
     void appendDesignMergeAliasesDoesNotOverwriteExistingCanonicalName(@TempDir Path tempDir) throws Exception
     {
-        AliasSeedLoader.appendDesignMergeAliases(tempDir, "mydesign", "First Name", List.of());
-        AliasSeedLoader.appendDesignMergeAliases(tempDir, "mydesign", "Second Name", List.of());
+        AliasLoader.appendDesignMergeAliases(tempDir, "mydesign", "First Name", List.of());
+        AliasLoader.appendDesignMergeAliases(tempDir, "mydesign", "Second Name", List.of());
 
-        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(tempDir);
+        AliasLoader.Aliases seed = AliasLoader.load(tempDir);
         assertEquals("First Name", seed.designCanonicalName("mydesign"));
     }
 }
