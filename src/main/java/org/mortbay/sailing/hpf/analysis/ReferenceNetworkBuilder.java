@@ -19,7 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Builds a map of boatId → {@link ReferenceFactors} implementing pipeline steps 8–12.
+ * Builds a map of boatId → {@link ReferenceFactors} implementing pipeline steps 8–13.
  *
  * <h2>Step 8 — Certificate-based factors (generation 0)</h2>
  * For each boat and each target variant (spin, non-spin, two-handed):
@@ -33,20 +33,28 @@ import org.slf4j.LoggerFactory;
  *       disagree are penalised by the variance term.</li>
  * </ol>
  *
- * <h2>Steps 9–12 — Iterative propagation</h2>
- * After step 8, the algorithm iterates until convergence (or {@link #MAX_ITERATIONS}):
- * <ol>
- *   <li><b>Step 9</b>: Aggregate all certificated boats of the same design into a
- *       design-level reference factor using a weighted mean in log space.
- *       Weight capped at {@link #DESIGN_FACTOR_WEIGHT}.</li>
+ * <h2>Steps 10–11 — Iterative race propagation</h2>
+ * After step 8, propagate via race co-participation until convergence (or {@link #MAX_ITERATIONS}):
+ * <ul>
  *   <li><b>Step 10</b>: For boats that still lack a factor, propagate from race
  *       co-participants: for each race in which the boat competed alongside reference
  *       boats, estimate its implied factor from elapsed-time ratios, then aggregate
  *       across all qualifying races. Weight capped at {@link #PROPAGATION_FACTOR_WEIGHT}.</li>
- *   <li><b>Step 11</b>: For boats that still lack a factor, fall back to the design-level
- *       factor (if their design has one).</li>
- * </ol>
- * Each iteration's generation number is recorded on every {@link ReferenceFactors}
+ *   <li><b>Step 11</b>: Repeat step 10 until no new factors are assigned.</li>
+ * </ul>
+ *
+ * <h2>Step 12 — Design-level aggregation (once, after convergence)</h2>
+ * Aggregate all boat-level RFs by design into design-level factors using a weighted
+ * log-space mean. Weight capped at {@link #DESIGN_FACTOR_WEIGHT}.
+ *
+ * <h2>Step 13 — Combine with design RF</h2>
+ * For every boat whose design has a Reference Factor, blend the boat's own per-variant
+ * RF with the design's RF via log-space weighted aggregation. Boats with low-weight
+ * inferred RFs are pulled toward the design norm; boats with high-weight direct
+ * certificates are barely affected. When a boat has no RF for a variant but the design
+ * does, the design factor is adopted directly.
+ *
+ * <p>Each step's generation number is recorded on every {@link ReferenceFactors}
  * record it modifies; generation 0 = step 8 only.
  *
  * <h2>Certificate base weights</h2>
@@ -79,14 +87,23 @@ public class ReferenceNetworkBuilder
     /** Maximum DFS depth (number of conversion hops) to prevent runaway traversal. */
     private static final int MAX_DEPTH = 8;
 
-    /** Maximum weight for design-level reference factors (step 9). */
+    /** Maximum weight for design-level reference factors (step 12). */
     public static final double DESIGN_FACTOR_WEIGHT = 0.85;
 
     /** Maximum weight for race co-participation propagated factors (step 10). */
     public static final double PROPAGATION_FACTOR_WEIGHT = 0.7;
 
-    /** Maximum propagation iterations before declaring non-convergence (step 12). */
+    /** Maximum propagation iterations before declaring non-convergence (step 11). */
     public static final int MAX_ITERATIONS = 20;
+
+    /**
+     * Weight discount applied per year a certificate predates the target IRC year.
+     * Matches {@link #RACE_AGE_WEIGHT_STEP}: both decay at 0.2 per year.
+     * A certificate from one year before the target starts at base weight × 0.8;
+     * two years before → 0.6; five years before → 0.0 (excluded by {@link #MAX_CERT_AGE_YEARS}).
+     * Certificates from the target year or later receive no discount.
+     */
+    public static final double CERT_AGE_WEIGHT_STEP = 0.2;
 
     /**
      * Age discount step for race co-participation propagation: weight is reduced by this
@@ -196,21 +213,16 @@ public class ReferenceNetworkBuilder
         long withSpin = result.values().stream().filter(r -> r.spin() != null).count();
         LOG.info("ReferenceNetworkBuilder step 8: {} boats, {} with spin factor", result.size(), withSpin);
 
-        // Steps 9–12: iterative design and race propagation
+        // Steps 10–11: iterative race co-participation propagation.
+        // Run for at least 2 generations before considering convergence, so that boats added in
+        // generation 1 can themselves serve as references for others in generation 2.
         Map<String, List<DivisionEntry>> boatDivIndex = buildBoatDivisionIndex(store, currentYear);
         Map<String, Boat> boats = store.boats();
 
-        // Steps 9–10: race co-participation propagation only (no design fallback during the loop).
-        // Run for at least 2 generations before considering convergence, so that boats added in
-        // generation 1 can themselves serve as references for others in generation 2.
         int lastGen = 1;
-        Map<String, ReferenceFactors> convergenceDesignFactors = Map.of();
         for (int gen = 1; gen <= MAX_ITERATIONS; gen++)
         {
             lastGen = gen;
-            // Step 9: aggregate to design level (used only as reference for race propagation)
-            convergenceDesignFactors = computeDesignFactors(result, boats);
-
             // Step 10: propagate via race co-participation (spin and nonSpin variants only)
             int fromRaces = propagateViaRaces(result, boatDivIndex, gen);
             LOG.info("ReferenceNetworkBuilder iteration {}: {} from races", gen, fromRaces);
@@ -227,28 +239,31 @@ public class ReferenceNetworkBuilder
                     + " measurement certificate network");
         }
 
-        // Step 11: design fallback — applied once, only for boats that race propagation could not
-        // reach.  Uses the design factors computed at convergence (cert-based + race-propagated
-        // boats only), so the design factors returned in BuildResult are not polluted by
-        // circular fallback-derived values.
-        int fromDesign = applyDesignFallback(result, convergenceDesignFactors, boats, lastGen + 1);
-        LOG.info("ReferenceNetworkBuilder design fallback: {} boats", fromDesign);
+        // Step 12: aggregate boat RFs to design level — applied once after propagation converges,
+        // so the design factors reflect a stable, fully-propagated set of boat RFs.
+        Map<String, ReferenceFactors> designFactors = computeDesignFactors(result, boats);
+        LOG.info("ReferenceNetworkBuilder step 12: {} designs with RF", designFactors.size());
 
-        // Step 12: cross-variant fill — for any boat that has one variant but is missing another,
+        // Step 13: combine each boat's RF with its design RF — pulls low-weight outlier boats
+        // toward the design norm; high-weight cert-based boats are barely affected.
+        // Also adopts the design factor for boats that race propagation could not reach.
+        combineWithDesignFactors(result, designFactors, boats);
+
+        // Step 14: cross-variant fill — for any boat that has one variant but is missing another,
         // derive the missing variant via the graph's cross-variant edges (e.g. NS → spin).
-        // This covers boats whose RF came entirely from race propagation or design fallback and
+        // This covers boats whose RF came entirely from race propagation or design combination and
         // therefore never had the cert-based cross-variant pass applied to them.
         int fromCrossVariant = fillMissingVariantsFromExisting(result, graph, currentYear, lastGen + 2);
-        LOG.info("ReferenceNetworkBuilder cross-variant fill: {} boats", fromCrossVariant);
+        LOG.info("ReferenceNetworkBuilder step 14 cross-variant fill: {} boats", fromCrossVariant);
 
         long withSpinFinal = result.values().stream().filter(r -> r.spin() != null).count();
         LOG.info("ReferenceNetworkBuilder complete: {} boats, {} with spin factor",
             result.size(), withSpinFinal);
-        return new BuildResult(result, convergenceDesignFactors);
+        return new BuildResult(result, designFactors);
     }
 
     // ==========================================================================
-    // Step 9: design-level aggregation
+    // Step 12: design-level aggregation
     // ==========================================================================
 
     /**
@@ -324,6 +339,7 @@ public class ReferenceNetworkBuilder
     // ==========================================================================
     // Step 10: race co-participation propagation
     // ==========================================================================
+
 
     /**
      * Builds an index from boatId to all (elapsed, nonSpinnaker, peers, ageWeight) entries —
@@ -467,57 +483,81 @@ public class ReferenceNetworkBuilder
     }
 
     // ==========================================================================
-    // Step 11: design fallback
+    // Step 13: combine with design RF
     // ==========================================================================
 
     /**
-     * Assigns the design-level reference factor to any boat that still has a null
-     * variant and whose design has a computed factor. Returns the count updated.
+     * For every boat whose design has a Reference Factor, blends the boat's own per-variant
+     * RF with the design-level RF using log-space weighted aggregation.
+     * <p>
+     * When the boat already has its own RF, the two factors are blended: a boat with a
+     * low-weight inferred RF is pulled toward the design norm; a boat with a high-weight
+     * direct certificate is barely affected (the blend is proportional to each factor's weight).
+     * <p>
+     * When the boat has no RF for a variant but the design does, the design factor is adopted
+     * directly (subsumes the former design-fallback step).
      */
-    private static int applyDesignFallback(
+    private static void combineWithDesignFactors(
         Map<String, ReferenceFactors> brf,
         Map<String, ReferenceFactors> designFactors,
-        Map<String, Boat> boats,
-        int generation)
+        Map<String, Boat> boats)
     {
-        int newCount = 0;
-        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : new ArrayList<>(brf.entrySet()))
         {
             String boatId = e.getKey();
-            ReferenceFactors current = e.getValue();
-            if (current.spin() != null && current.nonSpin() != null && current.twoHanded() != null)
-                continue;
-
             Boat boat = boats.get(boatId);
             if (boat == null || boat.designId() == null) continue;
 
             ReferenceFactors df = designFactors.get(boat.designId());
             if (df == null) continue;
 
-            Factor newSpin    = current.spin()      != null ? current.spin()      : df.spin();
-            Factor newNonSpin = current.nonSpin()   != null ? current.nonSpin()   : df.nonSpin();
-            Factor newTwoH    = current.twoHanded() != null ? current.twoHanded() : df.twoHanded();
+            ReferenceFactors current = e.getValue();
 
-            boolean changed = newSpin != current.spin()
-                || newNonSpin != current.nonSpin()
-                || newTwoH != current.twoHanded();
+            Factor newSpin    = combineFactors(current.spin(),      df.spin());
+            Factor newNonSpin = combineFactors(current.nonSpin(),   df.nonSpin());
+            Factor newTwoH    = combineFactors(current.twoHanded(), df.twoHanded());
 
-            if (changed)
-            {
-                brf.put(boatId, new ReferenceFactors(
-                    newSpin, newNonSpin, newTwoH,
-                    newSpin    != current.spin()      ? generation : current.spinGeneration(),
-                    newNonSpin != current.nonSpin()   ? generation : current.nonSpinGeneration(),
-                    newTwoH    != current.twoHanded() ? generation : current.twoHandedGeneration()
-                ));
-                newCount++;
-            }
+            boolean changed = newSpin    != current.spin()
+                           || newNonSpin != current.nonSpin()
+                           || newTwoH    != current.twoHanded();
+            if (!changed) continue;
+
+            // Generation semantics: adopting a design factor when the boat had none → use the
+            // design's generation unchanged (no extra hop). Blending an existing boat RF with the
+            // design RF → use min(boatGen, designGen) so a gen-6 boat pulled toward a gen-1
+            // design is recorded as gen-1, not gen-7.
+            int newSpinGen    = newSpin    != current.spin()
+                ? (current.spin()      == null ? df.spinGeneration()
+                                               : Math.min(current.spinGeneration(),    df.spinGeneration()))
+                : current.spinGeneration();
+            int newNonSpinGen = newNonSpin != current.nonSpin()
+                ? (current.nonSpin()   == null ? df.nonSpinGeneration()
+                                               : Math.min(current.nonSpinGeneration(), df.nonSpinGeneration()))
+                : current.nonSpinGeneration();
+            int newTwoHGen    = newTwoH    != current.twoHanded()
+                ? (current.twoHanded() == null ? df.twoHandedGeneration()
+                                               : Math.min(current.twoHandedGeneration(), df.twoHandedGeneration()))
+                : current.twoHandedGeneration();
+
+            brf.put(boatId, new ReferenceFactors(
+                newSpin, newNonSpin, newTwoH,
+                newSpinGen, newNonSpinGen, newTwoHGen
+            ));
+            updated++;
         }
-        return newCount;
+        LOG.info("ReferenceNetworkBuilder step 13: {} boats combined with design RF", updated);
+    }
+
+    // combineFactors is now Factor.combine — see that method's Javadoc for the rationale.
+    // Kept as a thin wrapper so combineWithDesignFactors reads clearly.
+    private static Factor combineFactors(Factor boatFactor, Factor designFactor)
+    {
+        return Factor.combine(boatFactor, designFactor);
     }
 
     // ==========================================================================
-    // Step 12: cross-variant fill
+    // Step 14: cross-variant fill
     // ==========================================================================
 
     /**
@@ -761,13 +801,23 @@ public class ReferenceNetworkBuilder
             if (cert.club()) baseWeight *= clubBaseWeight;
             if (cert.windwardLeeward()) baseWeight *= ORC_WL_BASE_WEIGHT;
 
+            // Discount certs that predate the target year: −CERT_AGE_WEIGHT_STEP per year.
+            // Certs from the target year or later receive no discount.
+            int yearDiff = Math.max(0, currentYear - cert.year());
+            baseWeight *= Math.max(0.0, 1.0 - yearDiff * CERT_AGE_WEIGHT_STEP);
+            if (baseWeight <= 0) continue;
+
             dfsAllPaths(start, cert.value(), baseWeight, target,
                 graph, allowCrossVariant, new HashSet<>(), 0, allFactors);
         }
 
         if (allFactors.isEmpty())
             return null;
-        return Factor.aggregate(allFactors.toArray(new Factor[0]));
+        // Factor.combine: log-space weighted mean, max weight.
+        // Using combine rather than aggregate because paths from different cert systems
+        // (IRC, ORC, AMS) may disagree structurally — that disagreement is not a sign of
+        // uncertainty about the boat's speed; adding more paths should never reduce confidence.
+        return Factor.combine(allFactors.toArray(new Factor[0]));
     }
 
     /**
@@ -817,7 +867,11 @@ public class ReferenceNetworkBuilder
             double nextValue = edge.fit().predict(value);
             if (nextValue <= 0)
                 continue;
-            double nextWeight = weight * edge.fit().weight(value);
+            // Use R² as the edge weight: it measures global fit quality across the fleet.
+            // fit.weight(value) would also fold in the per-boat prediction interval (se/SIGMA_REF)²,
+            // but inferred SailSys/TopYacht certs have se ≈ 0.05 vs SIGMA_REF = 0.02, which
+            // crushed all cert-based RFs to ~0.1 regardless of R². R² alone is the right signal.
+            double nextWeight = weight * edge.fit().r2();
 
             dfsAllPaths(edge.to(), nextValue, nextWeight, target,
                 graph, allowCrossVariant, visited, depth + 1, results);

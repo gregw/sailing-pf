@@ -17,6 +17,7 @@
     <maven.compiler.target>21</maven.compiler.target>
     <jackson.version>2.21.1</jackson.version>
     <junit.version>5.13.4</junit.version>
+    <hamcrest.version>3.0</hamcrest.version>
     <jetty.version>12.1.6</jetty.version>
     <hpf-data>hpf-data</hpf-data>
   </properties>
@@ -86,6 +87,12 @@
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest</artifactId>
+      <version>${hamcrest.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

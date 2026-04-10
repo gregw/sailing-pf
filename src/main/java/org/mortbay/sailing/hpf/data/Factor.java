@@ -102,6 +102,50 @@ public record Factor(
     }
 
     /**
+     * Blends two or more factors where adding more evidence should never reduce confidence.
+     * This is the right combiner when the inputs are estimates from different sources
+     * (e.g. cert paths from different systems, or a boat RF vs its design-class RF) and
+     * disagreement between sources is expected and structural, not a sign of uncertainty.
+     *
+     * <p>Compare with {@link #aggregate}: {@code aggregate} uses {@code meanInputWeight / n}
+     * so adding a second, lower-weight path always reduces the combined weight — wrong here.
+     * {@code combine} uses {@code max(wᵢ)} so additional evidence never hurts.
+     *
+     * <p>Value: log-space weighted mean (appropriate for multiplicative TCF ratios).
+     * <pre>
+     *   combinedValue = exp( Σ(wᵢ × log(vᵢ)) / Σwᵢ )
+     * </pre>
+     * Weight: maximum of all input weights (more evidence ≥ best single evidence).
+     * <pre>
+     *   combinedWeight = max(wᵢ)
+     * </pre>
+     * Zero-weight inputs are skipped; returns {@code null} if all inputs are null or zero-weight.
+     *
+     * <p><b>Typical uses:</b>
+     * <ul>
+     *   <li>Step 8 — combining cert-path factors from IRC, ORC, and AMS into one RF estimate</li>
+     *   <li>Step 13 — blending a boat's cert-based RF with the design-class RF as a prior</li>
+     * </ul>
+     */
+    public static Factor combine(Factor... factors)
+    {
+        double sumW = 0, sumWLogV = 0, maxW = 0;
+        int n = 0;
+        for (Factor f : factors)
+        {
+            if (f != null && f.weight() > 0)
+            {
+                sumW     += f.weight();
+                sumWLogV += f.weight() * Math.log(f.value());
+                if (f.weight() > maxW) maxW = f.weight();
+                n++;
+            }
+        }
+        if (n == 0) return null;
+        return new Factor(Math.exp(sumWLogV / sumW), maxW);
+    }
+
+    /**
      * Combines multiple independent estimates of the same quantity into a single factor.
      * <p>
      * Combined value: weighted mean of input values.
@@ -115,6 +159,11 @@ public record Factor(
      *   combinedWeight   = meanInputWeight / (1 + weightedVariance / σ₀²)
      * </pre>
      * Where {@code σ₀} is {@link #SIGMA_0}. Zero-weight inputs are skipped.
+     *
+     * <p>Use this when inputs are N independent noisy observations of the <em>same</em> quantity
+     * and disagreement between them reflects genuine uncertainty (e.g. cross-race HPF estimates
+     * for one boat). When inputs come from different sources and structural disagreement is
+     * expected, use {@link #combine} instead.
      *
      * @param factors one or more factor estimates; zero-weight entries are ignored
      * @return the aggregated factor

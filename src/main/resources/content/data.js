@@ -72,6 +72,11 @@ const COLUMNS = {
           render: v => v && v.value != null
             ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
             : '<span style="color:#bbb">—</span>' },
+        { label: 'RF Weight', key: 'spinRef', anchor: 'col-design-rf-weight',
+          tip: 'Statistical weight of the design-level RF: higher means more race data and tighter confidence.',
+          render: v => v && v.weight != null
+            ? `<span style="color:${weightColor(v.weight)}">${v.weight.toFixed(1)}</span>`
+            : '<span style="color:#bbb">—</span>' },
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
           render: item => item.boats ? String(item.boats) : '',

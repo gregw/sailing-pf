@@ -4,7 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.closeTo;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.lessThan;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FactorTest
 {
@@ -18,7 +22,7 @@ class FactorTest
 
         WeightedInterval result = Factor.apply(f, t);
 
-        assertEquals(Duration.ofMinutes(66), result.duration());
+        assertThat(result.duration(), equalTo(Duration.ofMinutes(66)));
     }
 
     @Test
@@ -29,7 +33,7 @@ class FactorTest
 
         WeightedInterval result = Factor.apply(f, t);
 
-        assertEquals(0.4, result.weight(), 1e-10);
+        assertThat(result.weight(), closeTo(0.4, 1e-10));
     }
 
     @Test
@@ -40,8 +44,8 @@ class FactorTest
 
         WeightedInterval result = Factor.apply(f, t);
 
-        assertEquals(t.duration(), result.duration());
-        assertEquals(t.weight(), result.weight(), 1e-10);
+        assertThat(result.duration(), equalTo(t.duration()));
+        assertThat(result.weight(), closeTo(t.weight(), 1e-10));
     }
 
     @Test
@@ -52,7 +56,7 @@ class FactorTest
 
         WeightedInterval result = Factor.apply(f, t);
 
-        assertEquals(0.0, result.weight(), 1e-10);
+        assertThat(result.weight(), closeTo(0.0, 1e-10));
     }
 
     @Test
@@ -62,7 +66,7 @@ class FactorTest
 
         WeightedInterval result = Factor.apply(f, Duration.ofMinutes(60));
 
-        assertEquals(Duration.ofMinutes(66), result.duration());
+        assertThat(result.duration(), equalTo(Duration.ofMinutes(66)));
     }
 
     @Test
@@ -72,7 +76,7 @@ class FactorTest
 
         WeightedInterval result = Factor.apply(f, Duration.ofMinutes(60));
 
-        assertEquals(0.75, result.weight(), 1e-10);
+        assertThat(result.weight(), closeTo(0.75, 1e-10));
     }
 
     // --- compose ---
@@ -85,7 +89,7 @@ class FactorTest
 
         Factor result = Factor.compose(a, b);
 
-        assertEquals(1.08, result.value(), 1e-10);
+        assertThat(result.value(), closeTo(1.08, 1e-10));
     }
 
     @Test
@@ -96,7 +100,7 @@ class FactorTest
 
         Factor result = Factor.compose(a, b);
 
-        assertEquals(0.72, result.weight(), 1e-10);
+        assertThat(result.weight(), closeTo(0.72, 1e-10));
     }
 
     @Test
@@ -105,7 +109,7 @@ class FactorTest
         Factor a = new Factor(1.2, 0.9);
         Factor b = new Factor(0.8, 0.7);
 
-        assertEquals(Factor.compose(a, b).value(), Factor.compose(b, a).value(), 1e-10);
+        assertThat(Factor.compose(a, b).value(), closeTo(Factor.compose(b, a).value(), 1e-10));
     }
 
     @Test
@@ -118,7 +122,7 @@ class FactorTest
         double twoStep = Factor.compose(Factor.compose(a, b), c).value();
         double oneStep = Factor.compose(a, b, c).value();
 
-        assertEquals(twoStep, oneStep, 1e-10);
+        assertThat(twoStep, closeTo(oneStep, 1e-10));
     }
 
     @Test
@@ -128,8 +132,8 @@ class FactorTest
 
         Factor result = Factor.compose(f);
 
-        assertEquals(1.05, result.value(), 1e-10);
-        assertEquals(0.8, result.weight(), 1e-10);
+        assertThat(result.value(), closeTo(1.05, 1e-10));
+        assertThat(result.weight(), closeTo(0.8, 1e-10));
     }
 
     @Test
@@ -141,8 +145,8 @@ class FactorTest
 
         Factor result = Factor.compose(a, b, c);
 
-        assertEquals(1.2 * 0.8 * 1.1, result.value(), 1e-10);
-        assertEquals(0.9 * 0.8 * 0.7, result.weight(), 1e-10);
+        assertThat(result.value(), closeTo(1.2 * 0.8 * 1.1, 1e-10));
+        assertThat(result.weight(), closeTo(0.9 * 0.8 * 0.7, 1e-10));
     }
 
     @Test
@@ -160,8 +164,8 @@ class FactorTest
 
         Factor result = Factor.aggregate(f);
 
-        assertEquals(1.05, result.value(), 1e-10);
-        assertEquals(0.8, result.weight(), 1e-10);
+        assertThat(result.value(), closeTo(1.05, 1e-10));
+        assertThat(result.weight(), closeTo(0.8, 1e-10));
     }
 
     @Test
@@ -174,8 +178,8 @@ class FactorTest
 
         Factor result = Factor.aggregate(f1, f2, f3);
 
-        assertEquals(1.05, result.value(), 1e-10);
-        assertEquals(0.8, result.weight(), 1e-10);  // no penalty
+        assertThat(result.value(), closeTo(1.05, 1e-10));
+        assertThat(result.weight(), closeTo(0.8, 1e-10));  // no penalty
     }
 
     @Test
@@ -187,7 +191,7 @@ class FactorTest
 
         Factor result = Factor.aggregate(f1, f2);
 
-        assertEquals(1.08, result.value(), 1e-10);
+        assertThat(result.value(), closeTo(1.08, 1e-10));
     }
 
     @Test
@@ -203,8 +207,7 @@ class FactorTest
         Factor spread2 = new Factor(1.1, 0.8);
         double spreadWeight = Factor.aggregate(spread1, spread2).weight();
 
-        assertTrue(spreadWeight < noSpreadWeight,
-            "spread inputs should have lower combined weight than identical inputs");
+        assertThat(spreadWeight, lessThan(noSpreadWeight));
     }
 
     @Test
@@ -215,8 +218,8 @@ class FactorTest
 
         Factor result = Factor.aggregate(active, zero);
 
-        assertEquals(1.05, result.value(), 1e-10);
-        assertEquals(0.8, result.weight(), 1e-10);
+        assertThat(result.value(), closeTo(1.05, 1e-10));
+        assertThat(result.weight(), closeTo(0.8, 1e-10));
     }
 
     @Test
@@ -250,7 +253,7 @@ class FactorTest
         Factor result = Factor.aggregate(f1, f2);
 
         double expectedWeight = 0.5 / (1.0 + 1.0);  // meanInputWeight / 2 = 0.25
-        assertEquals(expectedWeight, result.weight(), 1e-10);
+        assertThat(result.weight(), closeTo(expectedWeight, 1e-10));
     }
 
     // --- constructor validation ---

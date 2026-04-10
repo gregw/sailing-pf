@@ -18,6 +18,7 @@ import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.analysis.HandicapAnalyser;
 import org.mortbay.sailing.hpf.analysis.ReferenceNetworkBuilder;
 import org.mortbay.sailing.hpf.data.Boat;
+import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.stream.Collectors;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -179,16 +181,41 @@ public class AnalysisCache implements DataStore.InvalidationListener
     }
 
     /**
-     * Returns the maximum year among real (issued) IRC certificates in the store,
-     * falling back to the current calendar year if none exist.
+     * Minimum number of IRC certificates required in a year for it to be considered
+     * as the target IRC year. Years with fewer certs lack the paired data needed to
+     * build robust conversion-graph edges, so they are excluded in favour of the
+     * most recent year that does meet the threshold.
+     */
+    private static final int MIN_IRC_CERT_COUNT = 100;
+
+    /**
+     * Returns the most recent IRC certificate year that has at least
+     * {@link #MIN_IRC_CERT_COUNT} certificates in the store, falling back to the
+     * absolute maximum IRC cert year, then to the current calendar year.
+     *
+     * <p>The threshold is needed because the early weeks of a new racing season
+     * may already contain a handful of certs for the coming year (e.g. 59 certs
+     * in 2026 vs 334 in 2025). Using that low-count year as the target would
+     * require conversion-graph edges built from very few paired observations,
+     * which typically fail the minimum-R² gate and break gen-0 RF computation
+     * for the majority of boats that hold only the previous year's certs.
      */
     private int maxIrcCertYear()
     {
-        OptionalInt max = store.boats().values().stream()
+        Map<Integer, Long> yearCounts = store.boats().values().stream()
             .flatMap(b -> b.certificates().stream())
-            .filter(c -> "IRC".equals(c.system()) && c.expiryDate() != null)
-            .mapToInt(c -> c.year())
+            .filter(c -> "IRC".equals(c.system()))
+            .collect(Collectors.groupingBy(Certificate::year, Collectors.counting()));
+
+        // Latest year with enough data to anchor the conversion graph
+        OptionalInt max = yearCounts.entrySet().stream()
+            .filter(e -> e.getValue() >= MIN_IRC_CERT_COUNT)
+            .mapToInt(Map.Entry::getKey)
             .max();
+
+        if (max.isEmpty())
+            max = yearCounts.keySet().stream().mapToInt(Integer::intValue).max();
+
         int year = max.orElse(LocalDate.now().getYear());
         LOG.info("AnalysisCache: using currentYear={} for reference factor target", year);
         return year;

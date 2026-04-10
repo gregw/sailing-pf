@@ -450,12 +450,16 @@
             <td>× 0.80</td>
         </tr>
         <tr>
-            <td>Design-level aggregate</td>
-            <td>× 0.85</td>
+            <td>Design-level aggregate (step 12)</td>
+            <td>× 0.85 (max)</td>
         </tr>
         <tr>
             <td>Race co-participation propagation</td>
-            <td>× 0.70</td>
+            <td>× 0.70 (max)</td>
+        </tr>
+        <tr>
+            <td>Design combination (step 13)</td>
+            <td>natural blend — high agreement → higher combined weight</td>
         </tr>
         <tr>
             <td>Each year from target (certificate age)</td>
@@ -470,10 +474,10 @@
         <a href="guide/error-bars.md">Error Bars</a> for the full derivation.</p>
 
     <h3 id="col-ref-gen">Reference Factors › Gen</h3>
-    <p>Generation: how many propagation steps removed from a direct certificate.
+    <p>Generation: how many propagation or combination steps removed from a direct certificate.
         Generation 0 = direct certificate (or one-hop graph conversion from a direct certificate).
-        Generation 1 = design-level aggregate of gen-0 boats.
-        Generation 2+ = race co-participation propagation from gen-1 boats, and so on.
+        Generation 1+ = race co-participation propagation, design combination, or cross-variant
+        derivation; each step increments the generation by 1.
         Higher generations carry more uncertainty and lower weights.</p>
 
     <h3 id="table-hpf-detail">HPF Detail Table</h3>

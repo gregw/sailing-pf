@@ -614,9 +614,6 @@ boats:
     - number: "B363"
       from: null
       until: null
-    - number: "MYC9"
-      from: null
-      until: null
   waterhound-j24:
     canonicalName: "Waterhound"
     canonicalSailNumber: "JAUS4434"
@@ -969,6 +966,14 @@ boats:
     canonicalSailNumber: "MYC7"
     aliases:
     - name: "Tensixty"
+      from: null
+      until: null
+    altSailNumbers: []
+  jambo-summitking40:
+    canonicalName: "Jambo"
+    canonicalSailNumber: "MH66"
+    aliases:
+    - name: "Jambo"
       from: null
       until: null
     altSailNumbers: []

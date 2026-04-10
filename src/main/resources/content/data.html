@@ -23,7 +23,7 @@
     <div class="tab" id="tab-btn-races" onclick="switchTab('races')">Races <a href="docs.html#table-races" class="info-btn" data-tip="Individual race results imported from SailSys, TopYacht, and BWPS." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
   </div>
 
-  <div id="panel-boats" class="tab-panel active">
+  <div id="panel-boats" class="tab-panel">
     <div id="filter-banner-boats" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-boats" placeholder="Search by id or name…" oninput="debounceSearch('boats')">
@@ -104,7 +104,7 @@
     <div class="detail-panel" id="detail-designs"><div id="pre-designs" class="json-tree"></div></div>
   </div>
 
-  <div id="panel-clubs" class="tab-panel">
+  <div id="panel-clubs" class="tab-panel active">
     <div id="filter-banner-clubs" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-clubs" placeholder="Search by id, short name or long name…" oninput="debounceSearch('clubs')">

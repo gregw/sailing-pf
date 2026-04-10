@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the full processing pipeline for the Australian Yacht Racing Elapsed Time Database. The pipeline is divided into two phases: **Data Preparation and Reference Network Construction** (steps 1–12) and **HPF Calculation** (steps 13–19).
+This document describes the full processing pipeline for the Australian Yacht Racing Elapsed Time Database. The pipeline is divided into two phases: **Data Preparation and Reference Network Construction** (steps 1–14) and **HPF Calculation** (steps 15–21).
 
 ---
 
@@ -147,15 +147,7 @@ independently: spinnaker, non-spinnaker, and two-handed.
 
 ---
 
-### Step 10: Aggregate to Design Level
-
-For each design with multiple boats having reference factors, aggregate into a design-level
-factor using `Factor.aggregate()` (weighted mean). Design-level factor weight is scaled by
-`DESIGN_FACTOR_WEIGHT` (0.85).
-
----
-
-### Step 11: Propagate via Race Co-participation
+### Step 10: Propagate via Race Co-participation
 
 For boats without reference factors, scan all races where they competed against boats that
 do have factors. Estimate an implied factor from elapsed time ratios, weighted by the
@@ -164,18 +156,50 @@ reference boats' factor weights. Propagation weight is scaled by `PROPAGATION_FA
 
 ---
 
-### Step 12: Iterate Until Convergence
+### Step 11: Iterate Until Convergence
 
-Repeat steps 10 and 11 until no new factors are assigned (max 20 iterations). Each iteration
-may produce new design-level factors and new boat-level propagated factors. At convergence,
-every reachable boat has a `BoatReferenceFactors` with spin, nonSpin, and/or twoHanded
-factors and associated weights.
+Repeat step 10 until no new factors are assigned (max 20 iterations). At convergence,
+every boat reachable via race co-participation has spin and/or nonSpin factors.
 
 ---
 
-## Phase 2: HPF Calculation
+### Step 12: Aggregate to Design Factors
 
-### Step 13: Compute Initial Reference Time per Race
+After race propagation converges, aggregate all boat-level RFs to design level using a
+weighted log-space mean (`computeDesignFactors()`). This produces a `ReferenceFactors` per
+design from all boats of that class that have a factor. Design-level factor weight is capped
+at `DESIGN_FACTOR_WEIGHT` (0.85). Running this once after convergence (rather than inside the
+loop) ensures the design factors reflect a stable, fully-propagated set of boat RFs.
+
+---
+
+### Step 13: Combine Design Reference Factors
+
+For every boat whose design has a Reference Factor, blend the boat's own per-variant RF with
+the design's RF using log-space weighted aggregation (`combineWithDesignFactors()`). The blend
+is proportional to each factor's weight:
+
+- A boat with a **low-weight inferred RF** (race propagation only) is pulled strongly toward
+  the design norm — correcting outliers caused by small or unrepresentative race samples.
+- A boat with a **high-weight direct certificate** is barely affected — its own data is
+  authoritative.
+- A boat with **no RF** for a variant but whose design has one adopts the design factor
+  directly (replacing the former design-fallback step).
+
+---
+
+### Step 14: Cross-Variant Fill
+
+For any boat that has one variant's IRC-equivalent RF but is missing another, derive the
+missing variant by traversing the ConversionGraph's cross-variant edges (e.g. nonSpin → spin,
+spin → twoHanded). Covers boats whose RF came entirely from race propagation or design
+combination and therefore never had the cert-based cross-variant pass applied to them.
+
+---
+
+## Phase 2: HPF Calculation (Steps 15–21)
+
+### Step 15: Compute Initial Reference Time per Race
 
 For each race, for each boat entry, compute a **factor-corrected elapsed time**:
 
@@ -191,7 +215,7 @@ Record the **weighted IQR** of the corrected times as a first-pass measure of ra
 
 ---
 
-### Step 14: Compute Initial Per-Boat HPF Estimates
+### Step 16: Compute Initial Per-Boat HPF Estimates
 
 For each race entry, compute the boat's initial HPF estimate for that race:
 
@@ -205,11 +229,11 @@ This is the handicap the boat would have needed to equal the median corrected ti
 log(HPF_boat) = Σ( w_r × log(HPF_race) ) / Σ(w_r)
 ```
 
-Where w_r is the race's aggregate reference weight — the sum of reference factor weights of all boats in that race. Working in log space ensures that being 10% fast and 10% slow are treated symmetrically, which is the correct prior before asymmetric weighting is applied in Step 15.
+Where w_r is the race's aggregate reference weight — the sum of reference factor weights of all boats in that race. Working in log space ensures that being 10% fast and 10% slow are treated symmetrically, which is the correct prior before asymmetric weighting is applied in Step 17.
 
 ---
 
-### Step 15: Assign Initial Race and Entry Weights
+### Step 17: Assign Initial Race and Entry Weights
 
 For each race, compute a **race weight** based on:
 
@@ -224,7 +248,7 @@ For each boat entry within a race, compute an **entry weight** based on:
 
 ---
 
-### Step 16: Alternating Least Squares Optimisation (Log Space)
+### Step 18: Alternating Least Squares Optimisation (Log Space)
 
 The two unknowns are:
 
@@ -261,9 +285,9 @@ Iterate A and B until convergence — defined as the maximum change in any HPF v
 
 ---
 
-### Step 17: Recompute Weights and Iterate
+### Step 19: Recompute Weights and Iterate
 
-After convergence of Step 16, recompute entry weights using the residuals from the fitted model:
+After convergence of Step 18, recompute entry weights using the residuals from the fitted model:
 
 ```
 residual = log(elapsedTime) + log(HPF_boat) - log(T_race)
@@ -273,11 +297,11 @@ A positive residual means the boat was slower than expected; a negative residual
 
 Flag races where a large fraction of entries have high absolute residuals — this signals a weather/tide gate or other race-level anomaly. In this case, down-weight the entire race rather than individual entries.
 
-Return to Step 16 with the updated weights and re-run to convergence. Repeat until weights stabilise across outer iterations (typically 3–5 outer iterations are sufficient).
+Return to Step 18 with the updated weights and re-run to convergence. Repeat until weights stabilise across outer iterations (typically 3–5 outer iterations are sufficient).
 
 ---
 
-### Step 18: Scope of Optimisation
+### Step 20: Scope of Optimisation
 
 The optimisation can be run at several scopes, from narrowest to broadest:
 
@@ -290,7 +314,7 @@ The regularisation term is essential for full-fleet scope: without it, the solut
 
 ---
 
-### Step 19: Output
+### Step 21: Output
 
 For each boat in the optimisation scope, emit:
 
