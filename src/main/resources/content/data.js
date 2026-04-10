@@ -90,6 +90,11 @@ const COLUMNS = {
           render: item => item.boats != null ? String(item.boats) : '',
           action: item => { setFilter('boats', 'clubId', item.id,
                             'Boats at ' + (item.shortName || item.id)); switchTab('boats'); } },
+        { label: 'Series',    type: 'action', sortKey: 'series', anchor: 'col-club-series',
+          tip: 'Number of series run by this club; click to show these series in the series table.',
+          render: item => item.series != null ? String(item.series) : '',
+          action: item => { setFilter('series', 'clubId', item.id,
+                            'Series at ' + (item.shortName || item.id)); switchTab('series'); } },
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-club-races',
           tip: 'Number of races imported from this club; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
@@ -98,11 +103,24 @@ const COLUMNS = {
         { label: 'Excl',      key: 'excluded', type: 'toggle', anchor: 'col-club-excl',
           tip: 'Excluded clubs are hidden from analysis.' },
     ],
+    series: [
+        { label: 'Club',      type: 'action', sortKey: 'club', anchor: 'col-series-club',
+          tip: 'Club that runs this series; click to show only series from this club.',
+          render: item => item.club || item.clubId || '',
+          action: item => setFilter('series', 'clubId', item.clubId, 'Series at ' + (item.club || item.clubId)) },
+        { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.' },
+        { label: 'First',     key: 'firstDate', anchor: 'col-series-first',   tip: 'Date of the first race in this series.' },
+        { label: 'Last',      key: 'lastDate',  anchor: 'col-series-last',    tip: 'Date of the last race in this series.' },
+        { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-series-races',
+          tip: 'Number of races in this series; click to show these races in the races table.',
+          render: item => item.races != null ? String(item.races) : '',
+          action: item => { setFilter('races', 'seriesId', item.id, 'Series: ' + (item.name || item.id)); switchTab('races'); } },
+    ],
     races: [
         { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.' },
-        { label: 'Club',      key: 'clubId',    anchor: 'col-race-club',      tip: 'Club that ran this race.' },
         { label: 'Date',      key: 'date',      anchor: 'col-race-date',      tip: 'Race date.' },
-        { label: 'Series',    type: 'action',   anchor: 'col-race-series',
+        { label: 'Club',      key: 'clubId',    anchor: 'col-race-club',      tip: 'Club that ran this race.' },
+        { label: 'Series',    type: 'action', sortKey: 'seriesName', anchor: 'col-race-series',
           tip: 'Series this race belongs to; click to show the races of this series.',
           render: item => item.seriesName || '',
           action: item => item.seriesId
@@ -117,17 +135,19 @@ const COLUMNS = {
 };
 
 const state = {
-    pages:    { boats: 0, designs: 0, clubs: 0, races: 0 },
-    sort:     { boats: 'id', designs: 'id', clubs: 'shortName', races: 'date' },
-    dir:      { boats: 'asc', designs: 'asc', clubs: 'asc', races: 'desc' },
+    pages:    { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
+    sort:     { boats: 'id', designs: 'id', clubs: 'shortName', races: 'date', series: 'firstDate' },
+    dir:      { boats: 'asc', designs: 'asc', clubs: 'asc', races: 'desc', series: 'desc' },
     pageSize: 25,
     searchTimers: {},
     activeTab: 'boats',
     selected:     { boats: new Set(), designs: new Set() },   // IDs of checked rows
     selectedData: { boats: new Map(), designs: new Map() },   // id → item for merge panel
-    filter: { boats: null, designs: null, clubs: null, races: null },
+    filter: { boats: null, designs: null, clubs: null, races: null, series: null },
     raceItems:       [],   // current page's race rows for prev/next navigation
     currentRaceIdx:  -1,   // index into raceItems of the currently shown race
+    boatItems:       [],   // current page's boat rows for prev/next navigation
+    currentBoatIdx:  -1,   // index into boatItems of the currently shown boat
 };
 
 let currentDivRaceId = null;
@@ -137,7 +157,7 @@ let preferredDivision = null;
 function isWriteAllowed() { return window.hpfAuth?.authenticated; }
 
 function switchTab(entity) {
-    ['boats', 'designs', 'clubs', 'races'].forEach(e => {
+    ['boats', 'designs', 'clubs', 'races', 'series'].forEach(e => {
         document.getElementById('tab-btn-' + e).classList.toggle('active', e === entity);
         document.getElementById('panel-' + e).classList.toggle('active', e === entity);
     });
@@ -178,7 +198,7 @@ function updateFilterBanner(entity) {
 
 function updateFilterControls(entity) {
     const active = !!state.filter[entity];
-    ['show-excluded-' + entity, 'exclude-nulls-' + entity, 'filter-dupe-sails'].forEach(id => {
+    ['show-excluded-' + entity, 'exclude-nulls-' + entity, 'exclude-empty-' + entity, 'filter-dupe-sails'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = active;
@@ -200,7 +220,7 @@ function doSearch(entity) {
 
 function setPageSize(size) {
     state.pageSize = parseInt(size);
-    ['boats', 'designs', 'clubs', 'races'].forEach(e => {
+    ['boats', 'designs', 'clubs', 'races', 'series'].forEach(e => {
         const el = document.getElementById('page-size-' + e);
         if (el) el.value = state.pageSize;
     });
@@ -218,9 +238,12 @@ async function loadList(entity, page) {
     if (entity === 'boats' && !f) {
         if (document.getElementById('filter-dupe-sails').checked) url += '&dupeSails=true';
     }
-    if (!f && document.getElementById('show-excluded-' + entity).checked) url += '&showExcluded=true';
+    const showExcludedEl = document.getElementById('show-excluded-' + entity);
+    if (!f && showExcludedEl && showExcludedEl.checked) url += '&showExcluded=true';
     const excludeNullsEl = document.getElementById('exclude-nulls-' + entity);
     if (!f && excludeNullsEl && excludeNullsEl.checked) url += '&excludeNulls=true';
+    const excludeEmptyEl = document.getElementById('exclude-empty-' + entity);
+    if (!f && excludeEmptyEl && excludeEmptyEl.checked) url += '&excludeEmpty=true';
     const data = await fetchJson(url);
     if (!data) return;
 
@@ -265,6 +288,7 @@ function renderTable(entity, items) {
     const cols = COLUMNS[entity];
 
     if (entity === 'races') state.raceItems = items;
+    if (entity === 'boats') state.boatItems = items;
 
     items.forEach((item, itemIdx) => {
         const tr = document.createElement('tr');
@@ -283,6 +307,7 @@ function renderTable(entity, items) {
         }
         tr.onclick = () => {
             if (entity === 'races') state.currentRaceIdx = itemIdx;
+            if (entity === 'boats') { state.currentBoatIdx = itemIdx; }
             loadDetail(entity, item.id);
         };
         cols.forEach(col => {
@@ -355,24 +380,28 @@ async function loadDetail(entity, id) {
         hpfDiv.innerHTML = '<em>Loading…</em>';
         const hpfData = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/hpf');
         hpfDiv.innerHTML = hpfData ? renderBoatHpf(hpfData) : '<em>No HPF data available</em>';
+        updateBoatNav();
     }
 
     panel.classList.add('visible');
-    const scrollTarget = entity === 'races'
-        ? document.getElementById('division-section-races')
-        : panel;
-    scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (entity === 'races') {
+        document.getElementById('division-section-races').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (entity === 'boats') {
+        const heading = document.getElementById('hpf-boat-heading');
+        if (heading) window.scrollTo(0, heading.getBoundingClientRect().top + window.scrollY);
+    } else {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 function renderBoatHpf(data) {
-    const boatHeading = data.boatName
-        ? `<div style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;">${esc(data.boatName)}</div>`
-        : '';
+    const boatHeading = `<div id="hpf-boat-heading" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;">${data.boatName ? esc(data.boatName) : ''}</div>`;
 
     function row(label, hpf, rf) {
-        if (!hpf && !rf) return `<tr><td>${label}</td><td colspan="6" style="color:#999">—</td></tr>`;
+        if (!hpf && !rf) return `<tr><td>${label}</td><td colspan="7" style="color:#999">—</td></tr>`;
         const rfVal    = rf  ? rf.value.toFixed(4)   : '—';
         const rfWt     = rf  ? rf.weight.toFixed(3)  : '—';
+        const rfGen    = rf  && rf.generation != null ? rf.generation : '—';
         const hpfVal   = hpf ? hpf.value.toFixed(4)  : '—';
         const hpfWt    = hpf ? hpf.weight.toFixed(3) : '—';
         const delta    = hpf && hpf.referenceDelta != null
@@ -382,6 +411,7 @@ function renderBoatHpf(data) {
           <td>${label}</td>
           <td>${rfVal}</td>
           <td>${rfWt}</td>
+          <td>${rfGen}</td>
           <td>${hpfVal}</td>
           <td>${hpfWt}</td>
           <td>${delta}</td>
@@ -395,6 +425,7 @@ function renderBoatHpf(data) {
           <th>Variant${infoBtn('col-hpf-variant','Spin, Non-Spin, or Two-Handed handicap variant.')}</th>
           <th>RF${infoBtn('col-hpf-rf','Reference Factor — IRC-equivalent handicap derived from certificates.')}</th>
           <th>RF Wt${infoBtn('col-ref-weight','RF confidence weight: 1.0 = direct certificate, lower = inferred or multi-hop conversion.')}</th>
+          <th>Gen${infoBtn('col-rf-gen','RF generation — the pipeline step that assigned this factor. Lower = earlier/more-direct; higher = later propagation or cross-variant fill.')}</th>
           <th>HPF${infoBtn('col-hpf-value','Historical Performance Factor — back-calculated handicap averaged across this boat\'s race history.')}</th>
           <th>HPF Wt${infoBtn('col-hpf-weight','HPF confidence weight — proportional to number of informative races.')}</th>
           <th>Delta${infoBtn('col-hpf-delta','HPF minus RF. Near zero = race history is consistent with the certificate.')}</th>
@@ -416,10 +447,23 @@ function renderBoatHpf(data) {
         html += `</div>`;
         setTimeout(() => renderProfileChart(data.profile), 0);
     }
+    html += `<div class="division-nav" id="boat-nav" style="margin:0.75rem 0;">
+      <button id="boat-prev-btn" onclick="prevBoat()" disabled>&#8592; Prev</button>
+      <span id="boat-nav-label" style="flex:1;text-align:center;font-weight:bold;font-size:1rem;"></span>
+      <button id="boat-next-btn" onclick="nextBoat()" disabled>Next &#8594;</button>
+    </div>`;
+
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the HPF optimiser. Points close to zero indicate the boat raced close to its HPF.')}</div>`;
+        html += `<label style="font-size:0.85rem;font-weight:normal;"><input type="checkbox" id="residual-last12" onchange="window._residualLast12=this.checked; renderResidualChart(window._lastResiduals)"> Last 12 months only</label>`;
         html += '<div id="hpf-residual-chart"></div>';
-        setTimeout(() => renderResidualChart(data.residuals), 0);
+        setTimeout(() => {
+            // Restore checkbox state across prev/next navigation
+            const cb = document.getElementById('residual-last12');
+            if (cb && window._residualLast12) cb.checked = true;
+            window._lastResiduals = data.residuals;
+            renderResidualChart(data.residuals);
+        }, 0);
     }
     return html;
 }
@@ -428,38 +472,58 @@ function renderResidualChart(residuals) {
     const container = document.getElementById('hpf-residual-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
+    const cb = document.getElementById('residual-last12');
+    if (cb && cb.checked) {
+        const cutoff = new Date();
+        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        residuals = residuals.filter(r => r.date >= cutoffStr);
+    }
+
     const spin = residuals.filter(r => !r.nonSpinnaker);
     const nonSpin = residuals.filter(r => r.nonSpinnaker);
 
+    // Negate residuals so faster/better results plot above the zero line.
+    // Raw residual = log(elapsed) + log(HPF) - log(T_div); positive means slower than reference.
     function makeTrace(entries, name, baseColor) {
         return {
             x: entries.map(e => e.date),
-            y: entries.map(e => e.residual),
+            y: entries.map(e => -e.residual),
             mode: 'markers',
             type: 'scatter',
             name: name,
             marker: {
                 color: entries.map(e => {
-                    const a = Math.max(0.2, Math.min(1.0, e.weight));
+                    const a = Math.max(0.6, Math.min(1.0, e.weight));
                     return baseColor.replace('1)', a + ')');
                 }),
-                size: 6
+                size: 8
             },
-            text: entries.map(e => `${e.division}<br>w=${e.weight.toFixed(2)}<br>r=${e.residual.toFixed(4)}`),
+            text: entries.map(e => `${e.division}<br>w=${e.weight.toFixed(2)}<br>r=${(-e.residual).toFixed(4)}`),
             hoverinfo: 'text+x'
         };
     }
 
     const traces = [];
-    if (spin.length > 0) traces.push(makeTrace(spin, 'Spin', 'rgba(31,119,180,1)'));
-    if (nonSpin.length > 0) traces.push(makeTrace(nonSpin, 'Non-spin', 'rgba(255,127,14,1)'));
+    if (spin.length > 0) traces.push(makeTrace(spin, 'Spin', 'rgba(0,100,255,1)'));
+    if (nonSpin.length > 0) traces.push(makeTrace(nonSpin, 'Non-spin', 'rgba(255,75,0,1)'));
+
+    // Use a fixed ±0.2 axis so graphs are comparable across boats.
+    // If any value falls outside that range, double the height and let Plotly auto-scale.
+    const allY = residuals.map(e => -e.residual);
+    const maxAbs = allY.length > 0 ? Math.max(...allY.map(v => Math.abs(v))) : 0;
+    const overflow = maxAbs > 0.2;
 
     const layout = {
-        title: 'Per-race residuals (log space)',
+        title: 'Per-race residuals — faster above zero',
         xaxis: { title: 'Race date' },
-        yaxis: { title: 'Residual', zeroline: true },
+        yaxis: {
+            title: 'Performance (+ = faster)',
+            zeroline: true,
+            ...(overflow ? {} : { range: [-0.2, 0.2] })
+        },
         shapes: [{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 0, y1: 0, line: { color: '#888', width: 1, dash: 'dash' } }],
-        height: 300,
+        height: overflow ? 600 : 300,
         margin: { t: 40, b: 50, l: 60, r: 20 }
     };
 
@@ -647,6 +711,14 @@ function setupRaceDivisionChart(raceId, raceJson) {
     if (raceJson.name)       parts.push(raceJson.name);
     document.getElementById('race-div-title').textContent = parts.join(' — ');
 
+    const raceItem = state.currentRaceIdx >= 0 ? state.raceItems[state.currentRaceIdx] : null;
+    const seriesName = raceItem?.seriesName || '';
+    const raceName   = raceJson.name || '';
+    const labelParts = [];
+    if (seriesName) labelParts.push(seriesName);
+    if (raceName)   labelParts.push(raceName);
+    document.getElementById('race-series-race-label').textContent = labelParts.join(' — ');
+
     const preferred = preferredDivision && divisions.some(d => d.value === preferredDivision)
         ? preferredDivision : divisions[0].value;
     preferredDivision = null;
@@ -673,6 +745,35 @@ function nextRace() {
         preferredDivision = document.getElementById('race-division-select').value || null;
         state.currentRaceIdx++;
         loadDetail('races', state.raceItems[state.currentRaceIdx].id);
+    }
+}
+
+function updateBoatNav() {
+    const idx = state.currentBoatIdx;
+    const n   = state.boatItems.length;
+    const prevBtn = document.getElementById('boat-prev-btn');
+    const nextBtn = document.getElementById('boat-next-btn');
+    const label   = document.getElementById('boat-nav-label');
+    if (!prevBtn) return;
+    prevBtn.disabled = idx <= 0;
+    nextBtn.disabled = idx < 0 || idx >= n - 1;
+    if (idx >= 0 && idx < n) {
+        const boat = state.boatItems[idx];
+        label.textContent = `${boat.name || boat.id}  (${idx + 1} / ${n})`;
+    }
+}
+
+function prevBoat() {
+    if (state.currentBoatIdx > 0) {
+        state.currentBoatIdx--;
+        loadDetail('boats', state.boatItems[state.currentBoatIdx].id);
+    }
+}
+
+function nextBoat() {
+    if (state.currentBoatIdx < state.boatItems.length - 1) {
+        state.currentBoatIdx++;
+        loadDetail('boats', state.boatItems[state.currentBoatIdx].id);
     }
 }
 

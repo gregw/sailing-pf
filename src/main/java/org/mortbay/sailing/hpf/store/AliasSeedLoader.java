@@ -253,6 +253,8 @@ public class AliasSeedLoader
             boatCanonicalNames = Collections.unmodifiableMap(boatNames);
             sailNumberIndex = Collections.unmodifiableMap(sailIdx);
             nameDesignIndex = Collections.unmodifiableMap(nameDesignIdx);
+            LOG.debug("Boat alias sailNumberIndex keys: {}", sailIdx.keySet());
+            LOG.debug("Boat alias nameDesignIndex keys: {}", nameDesignIdx.keySet());
 
             // Build sail number redirect index
             Map<String, String> redirects = new HashMap<>();

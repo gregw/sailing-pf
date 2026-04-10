@@ -46,13 +46,13 @@ public class AdminApiServlet extends HttpServlet
     private static final int DEFAULT_PAGE_SIZE = 50;
 
     private final DataStore store;
-    private final ImporterService importerService;
+    private final TaskService _taskService;
     private final AnalysisCache cache;
 
-    public AdminApiServlet(DataStore store, ImporterService importerService, AnalysisCache cache)
+    public AdminApiServlet(DataStore store, TaskService taskService, AnalysisCache cache)
     {
         this.store = store;
-        this.importerService = importerService;
+        this._taskService = taskService;
         this.cache = cache;
     }
 
@@ -80,6 +80,8 @@ public class AdminApiServlet extends HttpServlet
             handleClubs(path.substring("/clubs".length()), req, resp);
         else if (path.startsWith("/races"))
             handleRaces(path.substring("/races".length()), req, resp);
+        else if (path.startsWith("/series"))
+            handleSeries(path.substring("/series".length()), req, resp);
         else if ("/hpf/quality".equals(path))
             handleHpfQuality(resp);
         else if ("/comparison/candidates".equals(path))
@@ -128,7 +130,7 @@ public class AdminApiServlet extends HttpServlet
         }
         else if ("/importers/stop".equals(path))
         {
-            importerService.requestStop();
+            _taskService.requestStop();
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }
@@ -186,11 +188,17 @@ public class AdminApiServlet extends HttpServlet
         // Merge seed + persisted to get total club count
         Map<String, Club> allClubs = new LinkedHashMap<>(store.clubSeed());
         allClubs.putAll(store.clubs());
+        long seriesCount = store.clubs().values().stream()
+            .filter(c -> c.series() != null)
+            .flatMap(c -> c.series().stream())
+            .filter(s -> !s.isCatchAll())
+            .count();
         writeJson(resp, Map.of(
             "races", store.races().size(),
             "boats", store.boats().size(),
             "designs", store.designs().size(),
-            "clubs", allClubs.size()
+            "clubs", allClubs.size(),
+            "series", seriesCount
         ));
     }
 
@@ -348,10 +356,10 @@ public class AdminApiServlet extends HttpServlet
             hpf != null ? hpf.referenceDeltaTwoHanded() : 0.0,
             hpf != null ? hpf.twoHandedRaceCount() : 0));
 
-        // Reference factors for comparison
-        result.put("rfSpin", rf != null ? factorMap(rf.spin()) : null);
-        result.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
-        result.put("rfTwoHanded", rf != null ? factorMap(rf.twoHanded()) : null);
+        // Reference factors for comparison (include generation for display)
+        result.put("rfSpin",      rf != null ? factorMap(rf.spin(),      rf.spinGeneration())      : null);
+        result.put("rfNonSpin",   rf != null ? factorMap(rf.nonSpin(),   rf.nonSpinGeneration())   : null);
+        result.put("rfTwoHanded", rf != null ? factorMap(rf.twoHanded(), rf.twoHandedGeneration()) : null);
 
         // Residuals
         List<EntryResidual> residuals = cache.residualsByBoatId().get(id);
@@ -447,7 +455,10 @@ public class AdminApiServlet extends HttpServlet
                     row.put("shortName", c.shortName());
                     row.put("longName", c.longName());
                     row.put("state", c.state());
+                    long seriesCount = c.series() == null ? 0
+                        : c.series().stream().filter(s -> !s.isCatchAll()).count();
                     row.put("boats", boatCount > 0 ? boatCount : null);
+                    row.put("series", seriesCount > 0 ? seriesCount : null);
                     row.put("races", raceCount);
                     row.put("excluded", c.excluded());
                     return row;
@@ -1065,7 +1076,9 @@ public class AdminApiServlet extends HttpServlet
             if (sort != null && !sort.isBlank())
                 enriched.sort(mapComparator(sort, asc));
 
-            if (excludeNulls && sort != null && !sort.isBlank())
+            if (excludeNulls)
+                enriched.removeIf(r -> r.get("finishers") == null || ((Number) r.get("finishers")).intValue() == 0);
+            else if (sort != null && !sort.isBlank())
                 enriched.removeIf(r -> r.get(sort) == null);
 
             writeJson(resp, paginate(enriched, page, size));
@@ -1081,6 +1094,69 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJson(resp, race);
         }
+    }
+
+    private void handleSeries(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        if (!sub.isEmpty() && !"/".equals(sub)) { resp.sendError(404); return; }
+
+        int page = parseIntParam(req, "page", 0);
+        int size = parseIntParam(req, "size", DEFAULT_PAGE_SIZE);
+        String q = req.getParameter("q");
+        String sort = req.getParameter("sort");
+        boolean asc = !"desc".equals(req.getParameter("dir"));
+        String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
+        String filterClubId = req.getParameter("clubId");
+        boolean excludeEmpty = "true".equals(req.getParameter("excludeEmpty"));
+
+        // Index races by seriesId for fast lookup
+        Map<String, List<Race>> racesBySeries = new java.util.HashMap<>();
+        for (Race r : store.races().values())
+        {
+            if (r.seriesIds() == null) continue;
+            for (String sid : r.seriesIds())
+                racesBySeries.computeIfAbsent(sid, k -> new ArrayList<>()).add(r);
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Club club : store.clubs().values())
+        {
+            if (club.series() == null) continue;
+            if (filterClubId != null && !filterClubId.equals(club.id())) continue;
+            String clubShort = club.shortName() != null ? club.shortName() : club.id();
+            for (var s : club.series())
+            {
+                if (s.isCatchAll()) continue;
+                if (lower != null
+                    && !s.name().toLowerCase().contains(lower)
+                    && !clubShort.toLowerCase().contains(lower)
+                    && !club.id().toLowerCase().contains(lower)) continue;
+
+                List<Race> seriesRaces = racesBySeries.getOrDefault(s.id(), List.of());
+                if (excludeEmpty && seriesRaces.isEmpty()) continue;
+                LocalDate firstDate = seriesRaces.stream()
+                    .map(Race::date).filter(java.util.Objects::nonNull)
+                    .min(Comparator.naturalOrder()).orElse(null);
+                LocalDate lastDate = seriesRaces.stream()
+                    .map(Race::date).filter(java.util.Objects::nonNull)
+                    .max(Comparator.naturalOrder()).orElse(null);
+
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id",        s.id());
+                row.put("clubId",    club.id());
+                row.put("club",      clubShort);
+                row.put("name",      s.name());
+                row.put("firstDate", firstDate);
+                row.put("lastDate",  lastDate);
+                row.put("races",     seriesRaces.size());
+                rows.add(row);
+            }
+        }
+
+        if (sort != null && !sort.isBlank())
+            rows.sort(mapComparator(sort, asc));
+
+        writeJson(resp, paginate(rows, page, size));
     }
 
     private static boolean raceContainsBoat(Race r, String boatId)
@@ -1129,8 +1205,6 @@ public class AdminApiServlet extends HttpServlet
                     }
                 }
             }
-            if (seriesName == null)
-                seriesName = firstSeriesId;
         }
 
         // Finisher count: sum across all divisions
@@ -1221,10 +1295,10 @@ public class AdminApiServlet extends HttpServlet
 
     private void handleImporters(HttpServletResponse resp) throws IOException
     {
-        ImporterService.ImportStatus status = importerService.currentStatus();
-        Integer nextSailSysRaceId = importerService.nextSailSysRaceId();
+        TaskService.ImportStatus status = _taskService.currentStatus();
+        Integer nextSailSysRaceId = _taskService.nextSailSysRaceId();
         List<Map<String, Object>> entries = new ArrayList<>();
-        for (ImporterService.ImporterEntry e : importerService.importerEntries())
+        for (TaskService.ImporterEntry e : _taskService.importerEntries())
         {
             boolean isRunning = status != null
                 && e.name().equals(status.importerName())
@@ -1240,28 +1314,28 @@ public class AdminApiServlet extends HttpServlet
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("entries", entries);
-        result.put("schedule", importerService.globalSchedule());
-        result.put("targetIrcYear", importerService.targetIrcYear());
-        result.put("outlierSigma", importerService.outlierSigma());
-        result.put("minAnalysisR2", importerService.minAnalysisR2());
+        result.put("schedule", _taskService.globalSchedule());
+        result.put("targetIrcYear", _taskService.targetIrcYear());
+        result.put("outlierSigma", _taskService.outlierSigma());
+        result.put("minAnalysisR2", _taskService.minAnalysisR2());
         Map<String, Object> hpfConfig = new LinkedHashMap<>();
-        hpfConfig.put("lambda", importerService.hpfLambda());
-        hpfConfig.put("convergenceThreshold", importerService.hpfConvergenceThreshold());
-        hpfConfig.put("maxInnerIterations", importerService.hpfMaxInnerIterations());
-        hpfConfig.put("maxOuterIterations", importerService.hpfMaxOuterIterations());
-        hpfConfig.put("outlierK", importerService.hpfOutlierK());
-        hpfConfig.put("asymmetryFactor", importerService.hpfAsymmetryFactor());
-        hpfConfig.put("outerDampingFactor", importerService.hpfOuterDampingFactor());
-        hpfConfig.put("outerConvergenceThreshold", importerService.hpfOuterConvergenceThreshold());
+        hpfConfig.put("lambda", _taskService.hpfLambda());
+        hpfConfig.put("convergenceThreshold", _taskService.hpfConvergenceThreshold());
+        hpfConfig.put("maxInnerIterations", _taskService.hpfMaxInnerIterations());
+        hpfConfig.put("maxOuterIterations", _taskService.hpfMaxOuterIterations());
+        hpfConfig.put("outlierK", _taskService.hpfOutlierK());
+        hpfConfig.put("asymmetryFactor", _taskService.hpfAsymmetryFactor());
+        hpfConfig.put("outerDampingFactor", _taskService.hpfOuterDampingFactor());
+        hpfConfig.put("outerConvergenceThreshold", _taskService.hpfOuterConvergenceThreshold());
         result.put("hpfConfig", hpfConfig);
-        result.put("slidingAverageCount", importerService.slidingAverageCount());
-        result.put("slidingAverageDrops", importerService.slidingAverageDrops());
+        result.put("slidingAverageCount", _taskService.slidingAverageCount());
+        result.put("slidingAverageDrops", _taskService.slidingAverageDrops());
         writeJson(resp, result);
     }
 
     private void handleImporterStatus(HttpServletResponse resp) throws IOException
     {
-        ImporterService.ImportStatus status = importerService.currentStatus();
+        TaskService.ImportStatus status = _taskService.currentStatus();
         if (status == null)
         {
             writeJson(resp, Map.of("running", false));
@@ -1273,8 +1347,8 @@ public class AdminApiServlet extends HttpServlet
             m.put("name", status.importerName());
             m.put("mode", status.mode());
             m.put("startedAt", status.startedAt().toString());
-            m.put("scheduledRun", importerService.isScheduledRunActive());
-            int sailSysId = importerService.currentSailSysId();
+            m.put("scheduledRun", _taskService.isScheduledRunActive());
+            int sailSysId = _taskService.currentSailSysId();
             if (sailSysId > 0)
                 m.put("currentId", sailSysId);
             writeJson(resp, m);
@@ -1284,7 +1358,7 @@ public class AdminApiServlet extends HttpServlet
     private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         int startId = parseIntParam(req, "startId", 1);
-        boolean accepted = importerService.submit(name, mode, startId);
+        boolean accepted = _taskService.submit(name, mode, startId);
         if (accepted)
         {
             resp.setStatus(202);
@@ -1311,8 +1385,8 @@ public class AdminApiServlet extends HttpServlet
 
             List<Map<String, Object>> importerMaps =
                 (List<Map<String, Object>>) body.getOrDefault("importers", List.of());
-            List<ImporterService.ImporterEntry> entries = importerMaps.stream()
-                .map(m -> new ImporterService.ImporterEntry(
+            List<TaskService.ImporterEntry> entries = importerMaps.stream()
+                .map(m -> new TaskService.ImporterEntry(
                     (String) m.get("name"),
                     (String) m.get("mode"),
                     Boolean.TRUE.equals(m.get("includeInSchedule")),
@@ -1352,11 +1426,15 @@ public class AdminApiServlet extends HttpServlet
             Object rawOuterConvergence = body.get("hpfOuterConvergenceThreshold");
             Double hpfOuterConvergenceThreshold = (rawOuterConvergence instanceof Number n9 && n9.doubleValue() > 0)
                 ? n9.doubleValue() : null;
+            Object rawCrossVariant = body.get("hpfCrossVariantLambda");
+            Double hpfCrossVariantLambda = (rawCrossVariant instanceof Number n10 && n10.doubleValue() >= 0)
+                ? n10.doubleValue() : null;
 
-            importerService.setConfig(entries, new ImporterService.GlobalSchedule(days, time),
+            _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
                 targetIrcYear, outlierSigma,
                 hpfLambda, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
-                hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold);
+                hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold,
+                hpfCrossVariantLambda);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }

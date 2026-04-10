@@ -51,6 +51,27 @@ public class DataStore
 {
     private static final Logger LOG = LoggerFactory.getLogger(DataStore.class);
     private static final JaroWinklerSimilarity JARO_WINKLER = new JaroWinklerSimilarity();
+
+    /** Australian country/fleet sail-number prefixes. "AUS5656" and "5656" are the same boat. */
+    private static final List<String> AUS_PREFIXES = List.of("JAUS", "EAUS", "VAUS", "SAUS", "AUS");
+
+    /**
+     * Strip a known Australian country/fleet prefix from a normalised sail number.
+     * "AUS5656" → "5656", "JAUS103" → "103", "5656" → "5656".
+     * Only strips when the prefix is immediately followed by a digit.
+     * "JAUS" is listed before "AUS" so that "JAUS103" → "103", not "US103".
+     */
+    private static String stripAusPrefix(String normSail)
+    {
+        for (String prefix : AUS_PREFIXES)
+        {
+            if (normSail.startsWith(prefix) && normSail.length() > prefix.length()
+                && Character.isDigit(normSail.charAt(prefix.length())))
+                return normSail.substring(prefix.length());
+        }
+        return normSail;
+    }
+
     private double fuzzyThreshold = 0.90;
     private static final JsonMapper MAPPER = JsonMapper.builder()
         .addModule(new JavaTimeModule())
@@ -107,10 +128,10 @@ public class DataStore
     {
         this.root = root;
         this.configDir = root.resolve("config");
-        this.racesDir = root.resolve("races");
-        this.boatsDir = root.resolve("boats");
-        this.designsDir = root.resolve("designs");
-        this.clubsDir = root.resolve("clubs");
+        this.racesDir = root.resolve("imported/races");
+        this.boatsDir = root.resolve("imported/boats");
+        this.designsDir = root.resolve("imported/designs");
+        this.clubsDir = root.resolve("imported/clubs");
         this.catalogueDir = root.resolve("catalogue");
     }
 
@@ -225,38 +246,127 @@ public class DataStore
         return Collections.unmodifiableMap(designs);
     }
 
+    /** Convenience overload for tests. */
     public Boat findOrCreateBoat(String sailNo, String name, Design design)
+    {
+        return findOrCreateBoat(sailNo, name, design, "test");
+    }
+
+    /**
+     * Resolves a sail number that may arrive without a country prefix (e.g. ORC feed gives "933"
+     * while the boat is stored as "AUS933").
+     *
+     * <p>If {@code sailNo} is purely numeric and {@code countryId} is non-null:
+     * <ol>
+     *   <li>If a boat already exists whose ID would be generated from the bare numeric
+     *       {@code sailNo} + {@code name} + {@code design}, return {@code sailNo} unchanged
+     *       (the existing boat uses the bare form).</li>
+     *   <li>Otherwise return {@code countryId + sailNo} — used both for lookup and for any
+     *       newly created boat, ensuring the country prefix is canonical.</li>
+     * </ol>
+     * If {@code sailNo} already contains non-digit characters (e.g. "AUS933", "GB53") it is
+     * returned unchanged regardless of {@code countryId}.
+     *
+     * <p>All importers that receive country-code-separated sail numbers should call this before
+     * {@link #findOrCreateBoat(String, String, Design, String)}.
+     */
+    public String resolveCountrySailNumber(String sailNo, String countryId, String name, Design design)
+    {
+        if (sailNo == null || countryId == null || countryId.isBlank())
+            return sailNo;
+        String norm = IdGenerator.normaliseSailNumber(sailNo);
+        if (!norm.matches("[0-9]+"))
+            return sailNo;   // already has letter prefix — use as-is
+        // Prefer bare numeric form: bidirectional AUS matching in findOrCreateBoat
+        // will locate any existing AUS-prefixed boat, so the prefix is not needed here.
+        return sailNo;
+    }
+
+    public Boat findOrCreateBoat(String sailNo, String name, Design design, String source)
     {
         // Apply design override from design.yaml config, if any
         String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name);
         if (overrideDesignId != null)
         {
             Design overrideDesign = designs.get(overrideDesignId);
-            if (overrideDesign != null)
+            if (overrideDesign == null)
             {
-                if (design == null || !overrideDesignId.equals(design.id()))
-                    LOG.info("Boat {}/{}: design overridden {} → {}", sailNo, name,
-                        design == null ? "null" : design.id(), overrideDesignId);
-                design = overrideDesign;
+                // Design doesn't exist yet — create it using the raw config string as canonical name
+                String rawDesignId = designCatalogue.resolveRawDesignOverride(sailNo, name);
+                overrideDesign = findOrCreateDesign(rawDesignId != null ? rawDesignId : overrideDesignId);
+                LOG.info("Boat {}/{}: design override '{}' not in store, created it", sailNo, name, overrideDesignId);
             }
-            else
-            {
-                LOG.warn("Boat {}/{}: design override designId='{}' not found in store", sailNo, name, overrideDesignId);
-            }
+            if (design == null || !overrideDesignId.equals(design.id()))
+                LOG.info("Boat {}/{}: design overridden {} → {}", sailNo, name,
+                    design == null ? "null" : design.id(), overrideDesignId);
+            design = overrideDesign;
         }
-
-        String boatId = IdGenerator.generateBoatId(sailNo, name, design);
-
-        Boat boat = boats.get(boatId);
-        if (boat != null)
-            return boat;
 
         String normSail = IdGenerator.normaliseSailNumber(sailNo);
         String normName = IdGenerator.normaliseName(name);
+        String bareSail = stripAusPrefix(normSail);   // "AUS5656"→"5656", else unchanged
+        String boatId = IdGenerator.generateBoatId(sailNo, name, design);
+
+        // Alias seed pre-check: if the incoming name is an alias for a different canonical name,
+        // redirect to the canonical boat — creating it if necessary — so the stale-named boat is
+        // never returned or created.  This is the primary guard against alias-named re-creation.
+        {
+            String ndk = normName + (design != null ? "-" + design.id() : "");
+            var seedCheck = aliasSeed.lookupBoat(normSail, ndk);
+            if (seedCheck.isPresent() && seedCheck.get().canonicalName() != null)
+            {
+                String canonNorm = IdGenerator.normaliseName(seedCheck.get().canonicalName());
+                if (!canonNorm.equals(normName))
+                {
+                    String canonSail = seedCheck.get().canonicalSailNumber() != null
+                        ? IdGenerator.normaliseSailNumber(seedCheck.get().canonicalSailNumber())
+                        : normSail;
+                    String canonId = IdGenerator.generateBoatId(canonSail, seedCheck.get().canonicalName(), design);
+                    Boat canonBoat = boats.get(canonId);
+                    if (canonBoat != null)
+                    {
+                        LOG.debug("Alias seed redirecting stale lookup {} → canonical {}", boatId, canonId);
+                        return addBoatSource(canonBoat, source);
+                    }
+                    // Canonical boat not yet in memory — create it with the canonical name rather
+                    // than falling through to find/create the stale alias-named boat.
+                    List<String> initAliases = List.of(name);
+                    List<String> initSources = source != null ? List.of(source) : List.of();
+                    Boat newCanon = new Boat(canonId, canonSail, seedCheck.get().canonicalName(),
+                        design == null ? null : design.id(), null,
+                        initAliases, List.of(), List.of(), initSources, null, null);
+                    putBoat(newCanon);
+                    LOG.info("Alias seed pre-check: created canonical boat {} (alias name was {})", canonId, name);
+                    return newCanon;
+                }
+            }
+        }
+
+        Boat boat = boats.get(boatId);
+        if (boat == null && !bareSail.equals(normSail))
+        {
+            // Incoming sail has AUS prefix (e.g. "AUS5656") — also try bare-number boatId
+            String bareBoatId = IdGenerator.generateBoatId(bareSail, name, design);
+            Boat bareBoat = boats.get(bareBoatId);
+            if (bareBoat != null)
+            {
+                LOG.debug("AUS prefix direct match: {} → {}", boatId, bareBoatId);
+                boat = bareBoat;
+            }
+        }
+        if (boat != null)
+            return addBoatSource(boat, source);
 
         for (Boat candidate : boats.values())
         {
-            if (!candidate.sailNumber().equals(normSail) && !candidate.altSailNumbers().contains(normSail))
+            String candidateBare = stripAusPrefix(candidate.sailNumber());
+            // AUS-aware sail match: direct match OR at least one side has an AUS variant prefix
+            // and the bare (stripped) numbers agree. This lets "AUS5656" find "5656" and vice versa.
+            boolean ausVariant = !bareSail.equals(normSail) || !candidateBare.equals(candidate.sailNumber());
+            boolean sailMatch = candidate.sailNumber().equals(normSail)
+                || candidate.altSailNumbers().contains(normSail)
+                || (ausVariant && !bareSail.isEmpty() && candidateBare.equals(bareSail));
+            if (!sailMatch)
                 continue;
             if (design != null && candidate.designId() != null && !candidate.designId().equals(design.id()))
                 continue;
@@ -269,9 +379,9 @@ public class DataStore
                     Boat upgraded = new Boat(boatId, normSail, name, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
                     putBoat(upgraded);
                     LOG.info("Upgraded boat {} → {}", candidate.id(), boatId);
-                    return upgraded;
+                    return addBoatSource(upgraded, source);
                 }
-                return candidate;
+                return addBoatSource(candidate, source);
             }
         }
 
@@ -294,7 +404,12 @@ public class DataStore
                 String normCanonical = IdGenerator.normaliseName(seedCanonicalName);
                 for (Boat candidate : boats.values())
                 {
-                    if (!candidate.sailNumber().equals(normSail) && !candidate.altSailNumbers().contains(normSail))
+                    String candidateBare2 = stripAusPrefix(candidate.sailNumber());
+                    boolean ausVariant2 = !bareSail.equals(normSail) || !candidateBare2.equals(candidate.sailNumber());
+                    boolean sailMatch2 = candidate.sailNumber().equals(normSail)
+                        || candidate.altSailNumbers().contains(normSail)
+                        || (ausVariant2 && !bareSail.isEmpty() && candidateBare2.equals(bareSail));
+                    if (!sailMatch2)
                         continue;
                     if (design != null && candidate.designId() != null && !candidate.designId().equals(design.id()))
                         continue;
@@ -307,15 +422,16 @@ public class DataStore
                             Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
                             putBoat(upgraded);
                             LOG.info("Upgraded boat (via alias seed) {} → {}", candidate.id(), canonicalBoatId);
-                            return upgraded;
+                            return addBoatSource(upgraded, source);
                         }
-                        return candidate;
+                        return addBoatSource(candidate, source);
                     }
                 }
                 // No existing boat found — create with the canonical name, recording the incoming name as an alias
                 String canonicalBoatId = IdGenerator.generateBoatId(normSail, seedCanonicalName, design);
                 List<String> aliases = normName.equals(normCanonical) ? List.of() : List.of(name);
-                Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), List.of(), null, null);
+                List<String> initSources = source != null ? List.of(source) : List.of();
+                Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), initSources, null, null);
                 putBoat(newBoat);
                 LOG.info("Created new boat (via alias seed) {}", newBoat);
                 return newBoat;
@@ -346,15 +462,16 @@ public class DataStore
                         Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
                         putBoat(upgraded);
                         LOG.info("Upgraded boat (via alias seed legacy) {} → {}", candidate.id(), canonicalBoatId);
-                        return upgraded;
+                        return addBoatSource(upgraded, source);
                     }
-                    return candidate;
+                    return addBoatSource(candidate, source);
                 }
             }
             // No existing boat found — create with the canonical name, recording the incoming name as an alias
             String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
             List<String> aliases = normName.equals(normCanonical) ? List.of() : List.of(name);
-            Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), List.of(), null, null);
+            List<String> initSources = source != null ? List.of(source) : List.of();
+            Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design == null ? null : design.id(), null, aliases, List.of(), List.of(), initSources, null, null);
             putBoat(newBoat);
             LOG.info("Created new boat (via alias seed legacy) {}", newBoat);
             return newBoat;
@@ -366,13 +483,47 @@ public class DataStore
         if (redirectSail != null && !redirectSail.equals(normSail))
         {
             LOG.info("Sail number {} redirected to {} via alias seed", normSail, redirectSail);
-            return findOrCreateBoat(redirectSail, name, design);
+            return findOrCreateBoat(redirectSail, name, design, source);
         }
 
-        Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), List.of(), List.of(), null, null);
+        // If a design override is active, the normal candidate loop may have skipped a boat
+        // that has the same sail + name but an older design (design mismatch check).
+        // Migrate that boat to the override design rather than creating a duplicate.
+        if (overrideDesignId != null && design != null)
+        {
+            for (Boat candidate : boats.values())
+            {
+                if (!candidate.sailNumber().equals(normSail) && !candidate.altSailNumbers().contains(normSail))
+                    continue;
+                if (!boatNameMatches(candidate, name, normName))
+                    continue;
+                // Found a boat with same sail+name but different design — migrate it
+                removeBoat(candidate.id());
+                Boat migrated = new Boat(boatId, normSail, candidate.name(), design.id(),
+                    candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(),
+                    candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
+                putBoat(migrated);
+                LOG.info("Migrated boat {} → {} (design override)", candidate.id(), boatId);
+                return addBoatSource(migrated, source);
+            }
+        }
+
+        List<String> initSources = source != null ? List.of(source) : List.of();
+        Boat newBoat = new Boat(boatId, normSail, name, design == null ? null : design.id(), null, List.of(), List.of(), List.of(), initSources, null, null);
         putBoat(newBoat);
         LOG.info("Created new boat {}", newBoat);
         return newBoat;
+    }
+
+    private Boat addBoatSource(Boat boat, String source)
+    {
+        if (source == null || boat.sources().contains(source))
+            return boat;
+        Boat updated = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
+            boat.clubId(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
+            addSource(boat.sources(), source), boat.lastUpdated(), null);
+        putBoat(updated);
+        return updated;
     }
 
     public Design findOrCreateDesign(String className)
@@ -1090,17 +1241,111 @@ public class DataStore
         LOG.info("Start DataStore root={}", root.toAbsolutePath());
 
         boats = new LinkedHashMap<>();
-        loadDir(boatsDir, Boat.class).forEach(b -> boats.put(b.id(), b));
+        loadDir(boatsDir, Boat.class).forEach(b ->
+        {
+            boats.put(b.id(), b);
+            if (b.sources().isEmpty())
+                LOG.warn("Boat {} has no sources — likely a stale entry, consider deleting {}", b.id(), b.id() + ".json");
+        });
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
         clubSeed = ClubSeedLoader.load(configDir);
         aliasSeed = AliasSeedLoader.load(configDir);
         designCatalogue = DesignCatalogueLoader.load(configDir);
+        designCatalogue.overrideDesigns().forEach((normId, canonicalName) ->
+        {
+            Design existing = designs.get(normId);
+            if (existing == null)
+            {
+                Design d = new Design(normId, canonicalName, List.of(), List.of(),
+                    List.of("DesignOverride"), Instant.now(), null);
+                putDesign(d);
+                LOG.info("Created design {} ('{}') from boatDesignOverrides in design.yaml", normId, canonicalName);
+            }
+            else if (!existing.sources().contains("DesignOverride"))
+            {
+                putDesign(new Design(existing.id(), existing.canonicalName(), existing.makerIds(),
+                    existing.aliases(), addSource(existing.sources(), "DesignOverride"),
+                    existing.lastUpdated(), null));
+            }
+        });
         loadExclusions();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
+
+        // Auto-fix stale boats: if the alias seed maps a boat's name to a different canonical
+        // name and the canonical boat already exists, merge the stale boat into it.
+        // This repairs boats that were created before the alias entry was added and prevents
+        // them from persisting across imports via the direct boats.get(boatId) fast path.
+        {
+            List<Map.Entry<String, String>> staleBoatPairs = new ArrayList<>();
+            for (Boat b : new ArrayList<>(boats.values()))
+            {
+                String normName = IdGenerator.normaliseName(b.name());
+                String ndk = normName + (b.designId() != null ? "-" + b.designId() : "");
+                var match = aliasSeed.lookupBoat(b.sailNumber(), ndk);
+                if (match.isPresent() && match.get().canonicalName() != null)
+                {
+                    String canonNorm = IdGenerator.normaliseName(match.get().canonicalName());
+                    if (!canonNorm.equals(normName))
+                    {
+                        String canonSail = match.get().canonicalSailNumber() != null
+                            ? match.get().canonicalSailNumber() : b.sailNumber();
+                        Design d = b.designId() != null ? designs.get(b.designId()) : null;
+                        String canonId = IdGenerator.generateBoatId(canonSail, match.get().canonicalName(), d);
+                        if (boats.containsKey(canonId))
+                            staleBoatPairs.add(Map.entry(b.id(), canonId));
+                        else
+                            LOG.warn("Stale boat {} (name '{}') should map to canonical '{}' per alias seed but canonical boat {} not found; will be renamed on next import",
+                                b.id(), b.name(), match.get().canonicalName(), canonId);
+                    }
+                }
+            }
+            if (!staleBoatPairs.isEmpty())
+            {
+                LOG.info("Auto-fixing {} stale boat(s) at startup", staleBoatPairs.size());
+                for (Map.Entry<String, String> pair : staleBoatPairs)
+                {
+                    LOG.info("Auto-merging stale boat {} into canonical {}", pair.getKey(), pair.getValue());
+                    mergeBoats(pair.getValue(), List.of(pair.getKey()));
+                }
+            }
+        }
+
+        // Design upgrade: merge design-less boats into a design-bearing boat with the same
+        // sail number and name.  These arise when one importer (e.g. TopYacht) creates a boat
+        // without design information and another (e.g. SailSys) later creates the same boat
+        // with a design, resulting in two separate records on disk.
+        {
+            List<Map.Entry<String, String>> designUpgradePairs = new ArrayList<>();
+            for (Boat b : new ArrayList<>(boats.values()))
+            {
+                if (b.designId() != null) continue;  // already has design
+                String normSail = b.sailNumber();    // already normalised in stored form
+                String normName = IdGenerator.normaliseName(b.name());
+                for (Boat other : boats.values())
+                {
+                    if (other == b || other.designId() == null) continue;
+                    if (!other.sailNumber().equals(normSail)) continue;
+                    if (!IdGenerator.normaliseName(other.name()).equals(normName)) continue;
+                    designUpgradePairs.add(Map.entry(other.id(), b.id()));
+                    break;
+                }
+            }
+            if (!designUpgradePairs.isEmpty())
+            {
+                LOG.info("Auto-merging {} design-less boat(s) into design-bearing counterpart(s) at startup",
+                    designUpgradePairs.size());
+                for (Map.Entry<String, String> pair : designUpgradePairs)
+                {
+                    LOG.info("Design upgrade: merging {} into {}", pair.getValue(), pair.getKey());
+                    mergeBoats(pair.getKey(), List.of(pair.getValue()));
+                }
+            }
+        }
+
         makers = new ArrayList<>(loadList(catalogueDir.resolve("makers.json"), Maker.class));
         makersDirty = false;
     }

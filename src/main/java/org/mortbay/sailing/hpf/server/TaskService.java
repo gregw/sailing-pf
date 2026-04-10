@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -37,15 +39,58 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ImporterService
+public class TaskService
 {
-    private static final Logger LOG = LoggerFactory.getLogger(ImporterService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TaskService.class);
     private static final YAMLMapper MAPPER = YAMLMapper.builder()
         .addModule(new JavaTimeModule())
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
         .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .build();
+
+    private static final String CONFIG_FILE_HEADER =
+        """
+            # IMPORTANT: This file is managed by the server.
+            # It is overwritten whenever settings are saved via the admin UI.
+            # Only edit manually when the server is NOT running.
+            
+            # --- Server Import and Analysis tasks ---
+            """;
+
+    /** Comments inserted above specific keys in the serialized YAML. */
+    private static final Map<String, String> CONFIG_COMMENTS = new LinkedHashMap<>();
+    static
+    {
+        CONFIG_COMMENTS.put("sailsysYoungCacheMaxAgeDays:", "# --- SailSys importer ---");
+        CONFIG_COMMENTS.put("orcListMaxAgeDays:",           "# --- ORC importer ---");
+        CONFIG_COMMENTS.put("minAnalysisR2:",               "# --- Analysis ---");
+        CONFIG_COMMENTS.put("hpfLambda:",                   "# --- HPF optimiser ---");
+        CONFIG_COMMENTS.put("slidingAverageCount:",         "# --- Sliding average / consistency ---");
+        CONFIG_COMMENTS.put("diversityNonSpinWeight:",      "# --- Diversity weights (multi-variant HPF) ---");
+        CONFIG_COMMENTS.put("googleClientId:",              "# --- Authentication ---");
+        CONFIG_COMMENTS.put("adminPort:",                   "# --- Server ports ---");
+    }
+
+    /** Post-processes a serialized YAML string to insert section comments. */
+    private static String addConfigComments(String yaml)
+    {
+        StringBuilder sb = new StringBuilder(CONFIG_FILE_HEADER);
+        for (String line : yaml.split("\n", -1))
+        {
+            String trimmed = line.stripLeading();
+            for (Map.Entry<String, String> e : CONFIG_COMMENTS.entrySet())
+            {
+                if (trimmed.startsWith(e.getKey()))
+                {
+                    sb.append('\n').append(e.getValue()).append('\n');
+                    break;
+                }
+            }
+            sb.append(line).append('\n');
+        }
+        return sb.toString();
+    }
 
     private final DataStore store;
     private final HttpClient httpClient;
@@ -90,8 +135,13 @@ public class ImporterService
                                Double hpfConvergenceThreshold,         // null → default 0.0001
                                Integer hpfMaxInnerIterations,    // null → default 100
                                Integer hpfMaxOuterIterations,    // null → default 5
+                               Double hpfCrossVariantLambda,     // null → default 0.0
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
+                               Double diversityNonSpinWeight,     // null → default 0.8
+                               Double diversitySpinWeight,        // null → default 1.0
+                               Double diversityTwoHandedWeight,   // null → default 1.2
+                               Integer consistencyDropInterval,   // null → default 11
                                String googleClientId,            // null → fall back to env/devMode
                                String googleClientSecret,        // null → fall back to env
                                String authBaseUrl,               // null → fall back to env, then localhost
@@ -140,8 +190,13 @@ public class ImporterService
     private volatile double hpfConvergenceThreshold = 0.0001;
     private volatile int hpfMaxInnerIterations = 100;
     private volatile int hpfMaxOuterIterations = 5;
+    private volatile double hpfCrossVariantLambda = 0.0;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
+    private volatile double diversityNonSpinWeight   = 0.8;
+    private volatile double diversitySpinWeight      = 1.0;
+    private volatile double diversityTwoHandedWeight = 1.2;
+    private volatile int    consistencyDropInterval  = 11;
     private volatile String googleClientId = null;
     private volatile String googleClientSecret = null;
     private volatile String authBaseUrl = null;
@@ -150,7 +205,7 @@ public class ImporterService
     private volatile int userPort = 8080;
     private volatile String natGatewayIp = null;
 
-    public ImporterService(DataStore store, HttpClient httpClient, Path dataRoot)
+    public TaskService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
         this.store = store;
         this.httpClient = httpClient;
@@ -209,8 +264,13 @@ public class ImporterService
             if (config.hpfConvergenceThreshold() != null) hpfConvergenceThreshold = config.hpfConvergenceThreshold();
             if (config.hpfMaxInnerIterations() != null) hpfMaxInnerIterations = config.hpfMaxInnerIterations();
             if (config.hpfMaxOuterIterations() != null) hpfMaxOuterIterations = config.hpfMaxOuterIterations();
+            if (config.hpfCrossVariantLambda() != null) hpfCrossVariantLambda = config.hpfCrossVariantLambda();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
+            if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
+            if (config.diversitySpinWeight()      != null) diversitySpinWeight      = config.diversitySpinWeight();
+            if (config.diversityTwoHandedWeight() != null) diversityTwoHandedWeight = config.diversityTwoHandedWeight();
+            if (config.consistencyDropInterval()  != null) consistencyDropInterval  = config.consistencyDropInterval();
             googleClientId     = config.googleClientId();
             googleClientSecret = config.googleClientSecret();
             authBaseUrl        = config.authBaseUrl();
@@ -283,7 +343,8 @@ public void stop()
                                        Double hpfLambda, Double hpfConvergenceThreshold,
                                        Integer hpfMaxInnerIterations, Integer hpfMaxOuterIterations,
                                        Double hpfOutlierK, Double hpfAsymmetryFactor,
-                                       Double hpfOuterDampingFactor, Double hpfOuterConvergenceThreshold)
+                                       Double hpfOuterDampingFactor, Double hpfOuterConvergenceThreshold,
+                                       Double hpfCrossVariantLambda)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
@@ -297,6 +358,7 @@ public void stop()
         if (hpfAsymmetryFactor != null) this.hpfAsymmetryFactor = hpfAsymmetryFactor;
         if (hpfOuterDampingFactor != null) this.hpfOuterDampingFactor = hpfOuterDampingFactor;
         if (hpfOuterConvergenceThreshold != null) this.hpfOuterConvergenceThreshold = hpfOuterConvergenceThreshold;
+        if (hpfCrossVariantLambda != null) this.hpfCrossVariantLambda = hpfCrossVariantLambda;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -310,6 +372,8 @@ public void stop()
     public void setCache(AnalysisCache cache)
     {
         this.cache = cache;
+        cache.setDiversityWeights(diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight);
+        cache.setConsistencyDropInterval(consistencyDropInterval);
     }
 
     public ImportStatus currentStatus()
@@ -538,7 +602,7 @@ public void stop()
         {
             case "sailsys-races" ->
             {
-                Path racesDir = dataRoot.resolve("sailsys/races");
+                Path racesDir = dataRoot.resolve("cache/sailsys/races");
                 int minRecentId = new SailSysImporter(store, httpClient).run(
                     startId, id -> currentSailSysId = id, stopRequested::get,
                     racesDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
@@ -547,7 +611,7 @@ public void stop()
                 if (minRecentId > 0)
                     currentSailSysId = minRecentId - 1;
             }
-            case "orc" -> new OrcImporter(store, httpClient).run(dataRoot.resolve("orc"), orcListMaxAgeDays);
+            case "orc" -> new OrcImporter(store, httpClient).run(dataRoot.resolve("cache/orc"), orcListMaxAgeDays);
             case "ams" -> new AmsImporter(store, httpClient).run();
             case "topyacht" -> new TopYachtImporter(store, httpClient).run(recentRaceReimportDays);
             case "bwps"     -> new BwpsImporter(store, httpClient).run(recentRaceReimportDays);
@@ -597,7 +661,8 @@ public void stop()
     {
         return new HpfConfig(hpfLambda, hpfConvergenceThreshold,
             hpfMaxInnerIterations, hpfMaxOuterIterations,
-            hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold);
+            hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold,
+            hpfCrossVariantLambda);
     }
 
     private void persistConfig()
@@ -605,8 +670,7 @@ public void stop()
         try
         {
             Files.createDirectories(configFile.getParent());
-            MAPPER.writerWithDefaultPrettyPrinter().writeValue(
-                configFile.toFile(),
+            String yaml = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(
                 new AdminConfig(importerEntries, globalSchedule, nextSailSysRaceId,
                     targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold,
                     recentRaceReimportDays,
@@ -615,8 +679,13 @@ public void stop()
                     orcListMaxAgeDays,
                     minAnalysisR2, clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
                     hpfOuterDampingFactor, hpfOuterConvergenceThreshold, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
-                    slidingAverageCount, slidingAverageDrops, googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
+                    hpfCrossVariantLambda,
+                    slidingAverageCount, slidingAverageDrops,
+                    diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
+                    consistencyDropInterval,
+                    googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
                     adminPort, userPort, natGatewayIp));
+            Files.writeString(configFile, addConfigComments(yaml));
         }
         catch (IOException e)
         {

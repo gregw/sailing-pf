@@ -588,7 +588,12 @@ public class ReferenceNetworkBuilder
 
     /**
      * Converts {@code source} factor to the {@code target} variant node using DFS over
-     * cross-variant edges.  The source factor's value and weight seed the traversal.
+     * cross-variant edges.
+     *
+     * <p>The DFS is seeded with {@code max(source.weight(), MIN_PATH_WEIGHT)} so that graph
+     * edges are explored even when the source confidence is zero.  The final aggregated
+     * factor's weight is then scaled back by {@code source.weight()}, preserving the
+     * semantics that a zero-confidence source produces a zero-confidence derived factor.
      *
      * @return the best aggregated factor, or null if no path was found
      */
@@ -596,11 +601,16 @@ public class ReferenceNetworkBuilder
         Factor source, ConversionNode from, ConversionNode target, ConversionGraph graph)
     {
         List<Factor> out = new ArrayList<>();
-        dfsAllPaths(from, source.value(), source.weight(), target,
+        // Use at least MIN_PATH_WEIGHT as the seed so the DFS explores conversion edges
+        // even when source.weight() == 0; the result is scaled back by source.weight() below.
+        double seedWeight = Math.max(source.weight(), MIN_PATH_WEIGHT);
+        dfsAllPaths(from, source.value(), seedWeight, target,
             graph, true, new HashSet<>(), 0, out);
         if (out.isEmpty())
             return null;
-        return Factor.aggregate(out.toArray(new Factor[0]));
+        Factor pathFactor = Factor.aggregate(out.toArray(new Factor[0]));
+        // Scale by source confidence: a zero-weight source produces a zero-weight derived factor.
+        return new Factor(pathFactor.value(), pathFactor.weight() * source.weight());
     }
 
     // ==========================================================================

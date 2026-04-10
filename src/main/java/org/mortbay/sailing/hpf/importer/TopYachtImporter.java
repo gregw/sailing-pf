@@ -125,7 +125,9 @@ public class TopYachtImporter
     public void run(int recentRaceReimportDays) throws Exception
     {
         this.recentRaceReimportDays = recentRaceReimportDays;
-        errorFile = store.dataRoot().resolve("topyacht-errors.txt");
+        Path logDir = store.dataRoot().resolve("log");
+        Files.createDirectories(logDir);
+        errorFile = logDir.resolve("topyacht-errors.txt");
         // topyachtUrls are configured in the seed (clubs.yaml); merge seed + persisted
         // so we don't miss clubs that haven't been imported yet.
         List<Club> allClubs = Stream.concat(
@@ -352,7 +354,7 @@ public class TopYachtImporter
 
             Design design = me.designName != null
                 ? store.findOrCreateDesign(me.designName, SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, design);
+            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, design, SOURCE);
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null)
             {
@@ -719,7 +721,7 @@ public class TopYachtImporter
         {
             Design design = row.designName() != null
                 ? store.findOrCreateDesign(row.designName(), SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), design);
+            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), design, SOURCE);
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null)
             {

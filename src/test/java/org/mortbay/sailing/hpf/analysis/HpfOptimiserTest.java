@@ -55,7 +55,7 @@ class HpfOptimiserTest
     {
         // Boat with strong RF (weight=1.0) but only 1 race entry
         Scenario s = buildScenarioWithFewRaces();
-        HpfConfig strongReg = new HpfConfig(5.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01);
+        HpfConfig strongReg = new HpfConfig(5.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0);
         HpfResult result = new HpfOptimiser().optimise(s.store, s.boatDerived, strongReg, () -> false);
 
         // "b5-echo-design" has only 1 race but RF = 1.15
@@ -73,10 +73,10 @@ class HpfOptimiserTest
         // Build a scenario with one fast outlier, run with and without asymmetry
         Scenario s = buildScenarioWithOutlier(true);  // fast outlier
 
-        HpfConfig withAsym = new HpfConfig(1.0, 0.0001, 100, 5, 2.0, 3.0, 0.5, 0.01);
+        HpfConfig withAsym = new HpfConfig(1.0, 0.0001, 100, 5, 2.0, 3.0, 0.5, 0.01, 0.0);
         HpfResult resultAsym = new HpfOptimiser().optimise(s.store, s.boatDerived, withAsym, () -> false);
 
-        HpfConfig noAsym = new HpfConfig(1.0, 0.0001, 100, 5, 2.0, 1.0, 0.5, 0.01);
+        HpfConfig noAsym = new HpfConfig(1.0, 0.0001, 100, 5, 2.0, 1.0, 0.5, 0.01, 0.0);
         HpfResult resultNoAsym = new HpfOptimiser().optimise(s.store, s.boatDerived, noAsym, () -> false);
 
         // The outlier boat's HPF should differ more from RF with asymmetry=1 (less down-weighting of the fast result)

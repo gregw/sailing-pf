@@ -518,7 +518,7 @@ public class RshyrImporter
                 ? entry.nameRace().replaceAll("(?i)\\((DH|TH)\\)", "").trim()
                 : entry.nameRace();
 
-            Boat boat = store.findOrCreateBoat(entry.sailNumber(), cleanName, null);
+            Boat boat = store.findOrCreateBoat(entry.sailNumber(), cleanName, null, SOURCE);
             String certNum = inferCertificate(boat, system, year, entry.tcf(), dh);
 
             // Division key: "IRC Div 3", "ORC", etc.

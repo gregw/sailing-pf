@@ -139,9 +139,10 @@ ignored:
 
 # Boat-to-design overrides: assign a specific designId to boats identified by sail number + name.
 # Use this for boats that import without a design (e.g. PHS-only boats) or with the wrong design.
-# designId must match an existing normalised design ID in the store (e.g. from ORC import).
+# canonicalName sets the display name used when the design is auto-created (optional; defaults to designId).
 boatDesignOverrides:
   - designId: "sydney36mkII"
+    canonicalName: "Sydney 36 MkII"
     boats:
       - sailNumber: "5915"
         name: "Stormaway"
@@ -149,8 +150,22 @@ boatDesignOverrides:
         name: "Supernova"
       - sailNumber: "RF360"
         name: "This Way Up"
-  - designId: "sydney36"
+  - designId: "bashfordsydney36"
+    canonicalName: "Bashford Sydney 36"
     boats:
       - sailNumber: "1236"
         name: "LOCAL HERO"
+  - designId: "archambaultgrandsurprise"
+    canonicalName: "Archambault Grand Surprise"
+    boats:
+      - sailNumber: "MYC32"
+        name: "Esprit"
+      - sailNumber: "M2"
+        name: "Remedy"
+      - sailNumber: "N16"
+        name: "Bazinga"
+      - sailNumber: "6750"
+        name: "Asterix"
+      - sailNumber: "1919"
+        name: "Lost Horizon"
 

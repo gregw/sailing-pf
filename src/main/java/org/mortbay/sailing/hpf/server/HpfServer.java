@@ -34,15 +34,15 @@ public class HpfServer
         HttpClient httpClient = new HttpClient();
         httpClient.start();
 
-        ImporterService importerService = new ImporterService(store, httpClient, dataRoot);
-        importerService.start();
+        TaskService taskService = new TaskService(store, httpClient, dataRoot);
+        taskService.start();
 
         AnalysisCache cache = new AnalysisCache(store);
-        cache.refresh(importerService.targetIrcYear(), importerService.outlierSigma(), importerService.clubCertificateWeight(), importerService.minAnalysisR2());
-        importerService.setCache(cache);
-        importerService.runStartupTasks();
+        cache.refresh(taskService.targetIrcYear(), taskService.outlierSigma(), taskService.clubCertificateWeight(), taskService.minAnalysisR2());
+        taskService.setCache(cache);
+        taskService.runStartupTasks();
 
-        AuthConfig authConfig = importerService.authConfig();
+        AuthConfig authConfig = taskService.authConfig();
 
         Server server = new Server();
 
@@ -89,7 +89,7 @@ public class HpfServer
         FilterHolder waf = new FilterHolder(new WriteAuthFilter(authConfig));
         context.addFilter(waf, "/api/*", EnumSet.of(DispatcherType.REQUEST));
 
-        context.addServlet(new ServletHolder(new AdminApiServlet(store, importerService, cache)), "/api/*");
+        context.addServlet(new ServletHolder(new AdminApiServlet(store, taskService, cache)), "/api/*");
         context.addServlet(new ServletHolder(new AnalysisServlet(store, cache)), "/api/analyse/*");
         context.addServlet(new ServletHolder(new StaticResourceServlet()), "/*");
         server.setHandler(context);
@@ -100,7 +100,7 @@ public class HpfServer
             LOG.info("Shutting down");
             try
             {
-                importerService.stop();
+                taskService.stop();
                 store.stop();
                 httpClient.stop();
             }

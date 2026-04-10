@@ -157,8 +157,8 @@ function renderChart(data) {
         return;
     }
 
-    const xs = points.map(p => p.x);
-    const ys = points.map(p => p.y);
+    const xs = points.map(p => p.x / 3600);
+    const ys = points.map(p => p.y / 3600);
 
     const texts = points.map(p =>
         `${esc(p.date || '')}<br>` +
@@ -222,9 +222,9 @@ function renderChart(data) {
     const yPad = (yMax - yMin) * 0.05 || yMin * 0.05;
 
     const layout = {
-        xaxis: { title: `${esc(data.designB.canonicalName)} elapsed (s)`,
+        xaxis: { title: `${esc(data.designB.canonicalName)} elapsed (h)`,
                  range: [xMax + xPad, xMin - xPad] },
-        yaxis: { title: `${esc(data.designA.canonicalName)} elapsed (s)`,
+        yaxis: { title: `${esc(data.designA.canonicalName)} elapsed (h)`,
                  range: [yMax + yPad, yMin - yPad] },
         legend: { orientation: 'v', xanchor: 'right', x: 1 },
         margin: { t: 20, b: 70, l: 80, r: 20 },

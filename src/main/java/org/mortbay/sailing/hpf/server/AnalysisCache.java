@@ -62,6 +62,22 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile Map<String, List<EntryResidual>> residualsByBoatId = Map.of();
     private volatile Map<String, PerformanceProfile> profilesByBoatId = Map.of();
     private volatile HpfQuality lastHpfQuality;  // null until first run
+    private volatile double diversityNonSpinWeight   = 0.8;
+    private volatile double diversitySpinWeight      = 1.0;
+    private volatile double diversityTwoHandedWeight = 1.2;
+    private volatile int    consistencyDropInterval  = 11;
+
+    public void setDiversityWeights(double nonSpin, double spin, double twoHanded)
+    {
+        this.diversityNonSpinWeight   = nonSpin;
+        this.diversitySpinWeight      = spin;
+        this.diversityTwoHandedWeight = twoHanded;
+    }
+
+    public void setConsistencyDropInterval(int interval)
+    {
+        this.consistencyDropInterval = interval;
+    }
 
     public AnalysisCache(DataStore store)
     {
@@ -443,7 +459,9 @@ public class AnalysisCache implements DataStore.InvalidationListener
                 dispersionMap.put(rd.race().id(), divMap);
         }
 
-        this.profilesByBoatId = new PerformanceProfileBuilder()
+        this.profilesByBoatId = new PerformanceProfileBuilder(
+                diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
+                consistencyDropInterval)
             .buildAll(residualsByBoatId, dispersionMap, store.races());
         LOG.info("AnalysisCache: computed performance profiles for {} boats", profilesByBoatId.size());
     }

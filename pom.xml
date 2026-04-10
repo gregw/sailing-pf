@@ -18,6 +18,7 @@
     <jackson.version>2.21.1</jackson.version>
     <junit.version>5.13.4</junit.version>
     <jetty.version>12.1.6</jetty.version>
+    <hpf-data>hpf-data</hpf-data>
   </properties>
 
   <dependencies>
@@ -95,6 +96,15 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.5</version>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.5.0</version>
+        <configuration>
+          <mainClass>org.mortbay.sailing.hpf.server.HpfServer</mainClass>
+          <commandlineArgs>${hpf-data}</commandlineArgs>
+        </configuration>
       </plugin>
     </plugins>
   </build>

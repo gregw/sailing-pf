@@ -220,6 +220,7 @@ designs:
     aliases:
     - "Bashford Howison 36"
     - "bashfordhowison36"
+    - "bh36"
   flyingtiger10:
     canonicalName: "FLYING TIGER 10"
     aliases:
@@ -242,8 +243,7 @@ designs:
   sydney36mkII:
     canonicalName: "Sydney 36 mkII"
     aliases:
-      - "Sydney36mk2"
-
+    - "Sydney36mk2"
 boats:
   day_dreaming:
     canonicalName: "Day Dreaming"
@@ -508,30 +508,6 @@ boats:
     - number: "7001"
       from: null
       until: null
-  esprit-archambaultgrandsurprise:
-    canonicalName: "Esprit"
-    canonicalSailNumber: "MYC32"
-    aliases:
-    - name: "Esprit"
-      from: null
-      until: null
-    altSailNumbers: []
-  bazinga-archambaultgrandsurprise:
-    canonicalName: "Bazinga"
-    canonicalSailNumber: "N16"
-    aliases:
-    - name: "Bazinga"
-      from: null
-      until: null
-    altSailNumbers: []
-  remedy-archambaultgrandsurprise:
-    canonicalName: "Remedy"
-    canonicalSailNumber: "M2"
-    aliases:
-    - name: "Remedy"
-      from: null
-      until: null
-    altSailNumbers: []
   solace-jeanneauso409:
     canonicalName: "Solace"
     canonicalSailNumber: "MYC409"
@@ -707,4 +683,293 @@ boats:
     - number: "SEA"
       from: null
       until: null
+  kookaburra-magic25:
+    canonicalName: "KOOKABURRA"
+    canonicalSailNumber: "025"
+    aliases:
+    - name: "KOOKABURRA"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "015"
+      from: null
+      until: null
+  asterix-archambaultgrandsurprise:
+    canonicalName: "Asterix"
+    canonicalSailNumber: "6750"
+    aliases:
+    - name: "Asterix"
+      from: null
+      until: null
+    altSailNumbers: []
+  lost_horizon-archambaultgrandsurprise:
+    canonicalName: "Lost Horizon"
+    canonicalSailNumber: "1919"
+    aliases:
+    - name: "Lost Horizon"
+      from: null
+      until: null
+    altSailNumbers: []
+  birubi-j24:
+    canonicalName: "Birubi"
+    canonicalSailNumber: "JAUS4787"
+    aliases:
+    - name: "Birubi"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4787"
+      from: null
+      until: null
+  checkmate-j24:
+    canonicalName: "Checkmate"
+    canonicalSailNumber: "JAUS5086"
+    aliases:
+    - name: "Checkmate"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "5086"
+      from: null
+      until: null
+    - number: "AUS5086"
+      from: null
+      until: null
+    - number: "5806"
+      from: null
+      until: null
+  bandit-j24:
+    canonicalName: "Bandit"
+    canonicalSailNumber: "JAUS1301"
+    aliases:
+    - name: "Bandit"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "1301"
+      from: null
+      until: null
+  death_star-j24:
+    canonicalName: "Death Star"
+    canonicalSailNumber: "JAUS4483"
+    aliases:
+    - name: "Death Star"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4483"
+      from: null
+      until: null
+  innamincka-j24:
+    canonicalName: "Innamincka"
+    canonicalSailNumber: "JAUS4793"
+    aliases:
+    - name: "Innamincka"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4793"
+      from: null
+      until: null
+  katiki_katanga-j24:
+    canonicalName: "Katiki Katanga"
+    canonicalSailNumber: "JAUS1309"
+    aliases:
+    - name: "Katiki katanga"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "TBA"
+      from: null
+      until: null
+  jen_z-j24:
+    canonicalName: "Jen Z"
+    canonicalSailNumber: "JAUS103"
+    aliases:
+    - name: "Jen Z"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS103"
+      from: null
+      until: null
+  non_stop-j24:
+    canonicalName: "Non Stop"
+    canonicalSailNumber: "JKA150"
+    aliases:
+    - name: "Non Stop"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "KA150"
+      from: null
+      until: null
+  jagged_edge-j24:
+    canonicalName: "Jagged Edge"
+    canonicalSailNumber: "JAUS4439"
+    aliases:
+    - name: "Jagged Edge"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "4439"
+      from: null
+      until: null
+  only_a_journey-j24:
+    canonicalName: "Only a Journey"
+    canonicalSailNumber: "JAUS44371309"
+    aliases:
+    - name: "Only a Journey"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "JAUS1309"
+      from: null
+      until: null
+  pinstripe-j24:
+    canonicalName: "Pinstripe"
+    canonicalSailNumber: "JAUS133"
+    aliases:
+    - name: "Pinstripe"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "NONE"
+      from: null
+      until: null
+    - number: "AUS133"
+      from: null
+      until: null
+  phoenix-j24:
+    canonicalName: "Phoenix"
+    canonicalSailNumber: "JAUS4791"
+    aliases:
+    - name: "Phoenix"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4791"
+      from: null
+      until: null
+  waterborne_again-j24:
+    canonicalName: "Waterborne Again"
+    canonicalSailNumber: "JAUS4764"
+    aliases:
+    - name: "Waterborne Again"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4764"
+      from: null
+      until: null
+    - number: "AUS47764"
+      from: null
+      until: null
+  starpac-j24:
+    canonicalName: "Starpac"
+    canonicalSailNumber: "JAUS5247"
+    aliases:
+    - name: "Starpac"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "5247"
+      from: null
+      until: null
+  single_malt-j24:
+    canonicalName: "Single Malt"
+    canonicalSailNumber: "JAUS142"
+    aliases:
+    - name: "Single Malt"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS142"
+      from: null
+      until: null
+  trinity-j24:
+    canonicalName: "Trinity"
+    canonicalSailNumber: "4860"
+    aliases:
+    - name: "Trinity"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "4806"
+      from: null
+      until: null
+  jaytripper-j24:
+    canonicalName: "Jaytripper"
+    canonicalSailNumber: "JAUS19"
+    aliases:
+    - name: "JAYTRIPPER"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS19"
+      from: null
+      until: null
+  jayded-j24:
+    canonicalName: "Jayded"
+    canonicalSailNumber: "JAUS158"
+    aliases:
+    - name: "JAYDED"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS158"
+      from: null
+      until: null
+  sail_mates-j24:
+    canonicalName: "Sail Mates"
+    canonicalSailNumber: "JAUS4436"
+    aliases:
+    - name: "Sail Mates"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4436"
+      from: null
+      until: null
+  hi-j24:
+    canonicalName: "Hi"
+    canonicalSailNumber: "JAUS4790"
+    aliases:
+    - name: "Hi"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS4790"
+      from: null
+      until: null
+  pea_jay-j24:
+    canonicalName: "Pea Jay"
+    canonicalSailNumber: "JKA125"
+    aliases:
+    - name: "PEA JAY"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "KA125"
+      from: null
+      until: null
+  crux-ss34:
+    canonicalName: "Crux"
+    canonicalSailNumber: "MYC8"
+    aliases:
+    - name: "Crux"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "177"
+      from: null
+      until: null
+  day_dreaming-radford106:
+    canonicalName: "Day Dreaming"
+    canonicalSailNumber: "MYC7"
+    aliases:
+    - name: "Tensixty"
+      from: null
+      until: null
+    altSailNumbers: []
 sailNumberRedirects: {}

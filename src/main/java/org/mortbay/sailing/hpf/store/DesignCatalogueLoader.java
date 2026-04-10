@@ -78,6 +78,7 @@ class DesignCatalogueLoader
     static class DesignOverride
     {
         public String designId;
+        public String canonicalName;
         public List<BoatOverrideEntry> boats;
     }
 
@@ -96,8 +97,12 @@ class DesignCatalogueLoader
 
         private final Set<String> excludedIds;
         private final Set<String> ignoredIds;
-        /** "normSail|normName" → designId */
+        /** "normSail|normName" → normalised designId */
         private final Map<String, String> overridesByKey;
+        /** "normSail|normName" → raw designId as written in config (for canonical name on auto-create) */
+        private final Map<String, String> rawOverridesByKey;
+        /** normDesignId → canonical name to use when creating the design (explicit canonicalName or raw designId) */
+        private final Map<String, String> overrideDesigns;
 
         private DesignCatalogue(CatalogueFile file)
         {
@@ -106,6 +111,8 @@ class DesignCatalogueLoader
                 excludedIds = Set.of();
                 ignoredIds = Set.of();
                 overridesByKey = Map.of();
+                rawOverridesByKey = Map.of();
+                overrideDesigns = Map.of();
                 return;
             }
 
@@ -135,7 +142,9 @@ class DesignCatalogueLoader
             if (!ign.isEmpty())
                 LOG.info("Loaded design catalogue: {} ignored design name(s)", ign.size());
 
-            Map<String, String> overrides = new HashMap<>();
+            Map<String, String> overrides    = new HashMap<>();
+            Map<String, String> rawOverrides = new HashMap<>();
+            Map<String, String> designs      = new HashMap<>();
             if (file.boatDesignOverrides != null)
             {
                 for (DesignOverride override : file.boatDesignOverrides)
@@ -143,6 +152,9 @@ class DesignCatalogueLoader
                     if (override.designId == null || override.boats == null)
                         continue;
                     String normDesignId = IdGenerator.normaliseDesignName(override.designId);
+                    String canonName = override.canonicalName != null && !override.canonicalName.isBlank()
+                        ? override.canonicalName.trim() : override.designId;
+                    designs.put(normDesignId, canonName);
                     for (BoatOverrideEntry boat : override.boats)
                     {
                         if (boat.sailNumber == null || boat.name == null)
@@ -150,10 +162,13 @@ class DesignCatalogueLoader
                         String key = IdGenerator.normaliseSailNumber(boat.sailNumber)
                             + "|" + IdGenerator.normaliseName(boat.name);
                         overrides.put(key, normDesignId);
+                        rawOverrides.put(key, canonName);
                     }
                 }
             }
-            overridesByKey = Collections.unmodifiableMap(overrides);
+            overridesByKey    = Collections.unmodifiableMap(overrides);
+            rawOverridesByKey = Collections.unmodifiableMap(rawOverrides);
+            overrideDesigns   = Collections.unmodifiableMap(designs);
             if (!overrides.isEmpty())
                 LOG.info("Loaded design catalogue: {} boat design override(s)", overrides.size());
         }
@@ -173,7 +188,7 @@ class DesignCatalogueLoader
         }
 
         /**
-         * Returns the override designId for the given sail number and boat name, or null if none.
+         * Returns the normalised override designId for the given sail number and boat name, or null if none.
          */
         String resolveDesignOverride(String sailNumber, String name)
         {
@@ -181,6 +196,27 @@ class DesignCatalogueLoader
                 return null;
             String key = IdGenerator.normaliseSailNumber(sailNumber) + "|" + IdGenerator.normaliseName(name);
             return overridesByKey.get(key);
+        }
+
+        /**
+         * Returns the canonical name for the given sail number and boat name's override,
+         * or null if no override exists. Used when auto-creating a missing design.
+         */
+        String resolveRawDesignOverride(String sailNumber, String name)
+        {
+            if (rawOverridesByKey.isEmpty() || sailNumber == null || name == null)
+                return null;
+            String key = IdGenerator.normaliseSailNumber(sailNumber) + "|" + IdGenerator.normaliseName(name);
+            return rawOverridesByKey.get(key);
+        }
+
+        /**
+         * Returns the normDesignId → canonical name map for all boatDesignOverride entries.
+         * Used by DataStore to eagerly create designs on startup.
+         */
+        Map<String, String> overrideDesigns()
+        {
+            return overrideDesigns;
         }
     }
 }

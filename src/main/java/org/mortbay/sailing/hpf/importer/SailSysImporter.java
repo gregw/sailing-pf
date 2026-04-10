@@ -101,7 +101,7 @@ public class SailSysImporter
         dataStore.start();
 
         String mode = args.length > 1 ? args[1] : "--local";
-        Path defaultRacesDir = dataRoot.resolve("sailsys/races");
+        Path defaultRacesDir = dataRoot.resolve("cache/sailsys/races");
 
         if ("--api".equals(mode))
         {
@@ -534,9 +534,10 @@ public class SailSysImporter
             if (system != null && system.id != null)
             {
                 Double value = extractHandicapValue(entry.calculations, system.id);
-                if (value != null)
-                    certNumber = resolveCertificate(boat, normalizeSystem(system.shortName),
-                        value, raceYear, nonSpinnaker, false, isClubCert(system.shortName));
+                if (value == null)
+                    continue; // no handicap for this system — exclude from this division
+                certNumber = resolveCertificate(boat, normalizeSystem(system.shortName),
+                    value, raceYear, nonSpinnaker, false, isClubCert(system.shortName));
             }
 
             // Re-read boat after cert may have been added by resolveCertificate
@@ -573,7 +574,7 @@ public class SailSysImporter
         Design design = designName != null && !isGenericBoatClass(designName)
             ? store.findOrCreateDesign(designName, SOURCE) : null;
 
-        Boat boat = store.findOrCreateBoat(sailNo, name, design);
+        Boat boat = store.findOrCreateBoat(sailNo, name, design, SOURCE);
 
         // Assign club if missing
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);
@@ -649,7 +650,7 @@ public class SailSysImporter
         }
 
         // Create inferred certificate
-        String certNum = String.format("ss-%s-%d-%.4f%s%s%s",
+        String certNum = String.format("%s-inferred-%d-%.4f%s%s%s",
             system.toLowerCase(), year, value,
             nonSpinnaker ? "-ns" : "",
             twoHanded    ? "-dh" : "",
@@ -742,9 +743,11 @@ public class SailSysImporter
     {
         Club club = store.clubs().get(clubId);
         if (club == null)
+            club = store.clubSeed().get(clubId);
+        if (club == null)
             return;
 
-        List<Series> series = new ArrayList<>(club.series());
+        List<Series> series = new ArrayList<>(club.series() != null ? club.series() : List.of());
         int idx = -1;
         for (int i = 0; i < series.size(); i++)
         {
@@ -793,7 +796,7 @@ public class SailSysImporter
 
     private boolean isYoung(LocalDate date)
     {
-        return date == null || !date.isBefore(LocalDate.now().minusDays(youngRaceMaxAgeDays));
+        return date != null && !date.isBefore(LocalDate.now().minusDays(youngRaceMaxAgeDays));
     }
 
     /**

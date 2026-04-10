@@ -12,15 +12,20 @@
   <main class="landing">
     <h1>Historical Performance Factors</h1>
       <p>The HPF project provides an online database of elapsed times and time corrected factors from
-          Australian sail racing, with statistical analysis and graphical presentation.
-          It is primarily for keel boats, but OTB and multihulls may also be included.
-          <a href="docs.html">Read more...</a>
+          Australian sail racing, with statistical analysis and graphical presentation. Its goals include:</p>
+          <ul>
+            <li>Time correction factors that apply over the entire Australian keelboat racing fleet</li>
+            <li>Handicap calculators to support conversion between handicap systems</li>
+            <li>Experimentation with alternate ways to evaluate performance</li>
+          </ul>
+          <p><a href="docs.html">Read more...</a>
       </p>
 
     <div class="stats">
       <div class="stat"><a href="data.html?tab=boats"><strong id="stat-boats">–</strong></a>Boats</div>
       <div class="stat"><a href="data.html?tab=designs"><strong id="stat-designs">–</strong></a>Designs</div>
       <div class="stat"><a href="data.html?tab=clubs"><strong id="stat-clubs">–</strong></a>Clubs</div>
+      <div class="stat"><a href="data.html?tab=series"><strong id="stat-series">–</strong></a>Series</div>
       <div class="stat"><a href="data.html?tab=races"><strong id="stat-races">–</strong></a>Races</div>
     </div>
 
@@ -60,6 +65,7 @@
         document.getElementById('stat-boats').textContent = data.boats.toLocaleString();
         document.getElementById('stat-designs').textContent = data.designs.toLocaleString();
         document.getElementById('stat-clubs').textContent = data.clubs.toLocaleString();
+        document.getElementById('stat-series').textContent = data.series.toLocaleString();
         document.getElementById('stat-races').textContent = data.races.toLocaleString();
     }
     loadStats();

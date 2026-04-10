@@ -176,8 +176,8 @@ class DataStoreTest {
         store.putBoat(boat2);
         store.stop();
 
-        assertTrue(tempDir.resolve("boats/MYC100-shear_magic-adams10.json").toFile().exists());
-        assertTrue(tempDir.resolve("boats/MYC7-tensixty-radford1060.json").toFile().exists());
+        assertTrue(tempDir.resolve("imported/boats/MYC100-shear_magic-adams10.json").toFile().exists());
+        assertTrue(tempDir.resolve("imported/boats/MYC7-tensixty-radford1060.json").toFile().exists());
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
@@ -242,7 +242,7 @@ class DataStoreTest {
         store.stop();
 
         // File should use '--' as filesystem separator
-        assertTrue(tempDir.resolve("clubs/rycv.com.au--ppnyc.json").toFile().exists());
+        assertTrue(tempDir.resolve("imported/clubs/rycv.com.au--ppnyc.json").toFile().exists());
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();

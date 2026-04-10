@@ -8,9 +8,10 @@ hypothetical 1.000 reference boat. The hypothetical reference boat is a boat is 
 of measurement handicaps and performance against boats with measurement handicaps. 
 
 The **HPF** is a historical performance measure — not a handicap system. A Handicap can also be a
-time correction factor, but one which often includes policy decisions of how to age handicaps race to race
-and possibly proprietary algorithms to: normalise values: clip and/or exclude results and sometimes have
-punitive intent for good performances. HPF has none of these. 
+time correction factor, but one which often includes: policy decisions of how to age handicaps race to race,
+and possibly proprietary algorithms to: normalise values: clip and/or exclude results; ensure fairness for 
+calculations throughout a season; and sometimes have punitive intent for good performances. HPF has none of 
+these, so is unsuitable to use as a handicap that is not constant throughout a season.
 
 The HPF calculation uses measurement based handicaps to establish Reference Factors (RFs) for most boats. 
 Boats are assigned a RF based on either their own measurement handicaps or their performance against boats 

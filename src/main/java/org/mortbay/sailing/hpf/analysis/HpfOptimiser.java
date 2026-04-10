@@ -107,7 +107,10 @@ public class HpfOptimiser
                     ReferenceFactors rf = bd.referenceFactors();
                     int variant = determineVariant(f, div, raceForceNonSpin);
                     Factor rfFactor = variantFactor(rf, variant);
-                    if (rfFactor == null || rfFactor.weight() <= 0) continue;
+                    // Allow rfFactor.weight() == 0: the Step-B formula degenerates cleanly to a
+                    // pure race-derived HPF (no regularisation toward RF) when rfW = 0, so these
+                    // boats still contribute to division time calibration and receive an HPF.
+                    if (rfFactor == null) continue;
 
                     // Ensure boat has an ordinal
                     int boatOrd = boatOrdinals.computeIfAbsent(f.boatId(), k -> boatOrdinals.size());
@@ -263,22 +266,39 @@ public class HpfOptimiser
                         if (bEntries.isEmpty()) continue;
 
                         String boatId = ordinalToBoatId[b];
-                        double rfW = boatRfWeight.get(boatId)[v];
-                        double rfLog = boatLogRf.get(boatId)[v];
-                        if (Double.isNaN(rfLog)) rfLog = 0.0;
+                        double rfW   = boatRfWeight.get(boatId)[v];
+                        double rfLog = boatLogRf.get(boatId)[v];           // raw, may be NaN
+                        double rfLogForReg = Double.isNaN(rfLog) ? 0.0 : rfLog;
 
                         double sumW = 0, sumWX = 0;
                         for (int idx : bEntries)
                         {
                             Entry e = entries.get(idx);
                             double w = entryWeights[idx];
-                            sumW += w;
+                            sumW  += w;
                             sumWX += w * (logT[e.divOrdinal()] - e.logElapsed());
                         }
 
                         double denom = sumW + config.lambda() * rfW;
+                        double numer = sumWX + config.lambda() * rfW * rfLogForReg;
+
+                        // Cross-variant coupling: pull ratio toward RF-implied ratio
+                        double mu = config.crossVariantLambda();
+                        if (mu > 0 && !Double.isNaN(rfLog))
+                        {
+                            double[] rfLogs = boatLogRf.get(boatId);
+                            for (int v2 = 0; v2 < 3; v2++)
+                            {
+                                if (v2 == v) continue;
+                                double rfLog2 = rfLogs[v2];
+                                if (Double.isNaN(rfLog2)) continue;
+                                numer += mu * (logHpf[v2][b] + (rfLog - rfLog2));
+                                denom += mu;
+                            }
+                        }
+
                         if (denom <= 0) continue; // all weights zero — keep current value
-                        double newLogHpf = (sumWX + config.lambda() * rfW * rfLog) / denom;
+                        double newLogHpf = numer / denom;
                         if (Double.isNaN(newLogHpf) || Double.isInfinite(newLogHpf)) continue;
                         double delta = Math.abs(newLogHpf - logHpf[v][b]);
                         if (delta > maxDelta)

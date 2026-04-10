@@ -16,9 +16,10 @@
   <h1>Data Browser</h1>
 
   <div class="tabs">
-    <div class="tab active" id="tab-btn-boats" onclick="switchTab('boats')">Boats <a href="docs.html#table-boats" class="info-btn" data-tip="All boats in the database: sail number, name, design, reference factor and HPF." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
+    <div class="tab active" id="tab-btn-clubs" onclick="switchTab('clubs')">Clubs <a href="docs.html#table-clubs" class="info-btn" data-tip="Sailing clubs: source of race data; club ID is the club's website domain." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
+    <div class="tab" id="tab-btn-boats" onclick="switchTab('boats')">Boats <a href="docs.html#table-boats" class="info-btn" data-tip="All boats in the database: sail number, name, design, reference factor and HPF." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
     <div class="tab" id="tab-btn-designs" onclick="switchTab('designs')">Designs <a href="docs.html#table-designs" class="info-btn" data-tip="Boat designs (classes): canonical name, design-level reference factor, and maker." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
-    <div class="tab" id="tab-btn-clubs" onclick="switchTab('clubs')">Clubs <a href="docs.html#table-clubs" class="info-btn" data-tip="Sailing clubs: source of race data; club ID is the club's website domain." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
+    <div class="tab" id="tab-btn-series" onclick="switchTab('series')">Series <a href="docs.html#table-series" class="info-btn" data-tip="Named series of races: club, name, date range and race count." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
     <div class="tab" id="tab-btn-races" onclick="switchTab('races')">Races <a href="docs.html#table-races" class="info-btn" data-tip="Individual race results imported from SailSys, TopYacht, and BWPS." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
   </div>
 
@@ -132,7 +133,7 @@
       <input type="text" id="q-races" placeholder="Search by id or club…" oninput="debounceSearch('races')">
       <button onclick="doSearch('races')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
-      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-races" onchange="doSearch('races')"> Exclude nulls</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-races" onchange="doSearch('races')"> Exclude empty</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-races" onchange="setPageSize(this.value)">
         <option value="10">10</option>
         <option value="25" selected>25</option>
@@ -148,6 +149,7 @@
     <div class="pagination" id="pager-races"></div>
 
     <div id="division-section-races" style="display:none; margin-top:1rem;">
+      <div id="race-series-race-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
       <div style="font-weight:bold;margin-bottom:0.25rem;">Division Chart <a href="docs.html#chart-division" class="info-btn" data-tip="Bar chart of elapsed and  RF/HPF corrected times for each finisher in the selected division against the HPF.  Elapsed time line should slope up with higher HPF; the corrected time lines should be level if the Factor was correct for this race." target="_blank">ⓘ</a></div>
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
         <label>Division: <select id="race-division-select" onchange="onRaceDivisionChange()"></select></label>
@@ -163,6 +165,28 @@
     </div>
 
     <div class="detail-panel" id="detail-races"><div id="pre-races" class="json-tree"></div></div>
+  </div>
+
+  <div id="panel-series" class="tab-panel">
+    <div id="filter-banner-series" class="filter-banner" style="display:none"></div>
+    <div class="search-row">
+      <input type="text" id="q-series" placeholder="Search by club or series name…" oninput="debounceSearch('series')">
+      <button onclick="doSearch('series')">Search</button>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-empty-series" checked onchange="doSearch('series')"> Exclude empty</label>
+      <label style="margin-left:auto;">Rows: <select id="page-size-series" onchange="setPageSize(this.value)">
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select></label>
+    </div>
+    <div class="pagination" id="pager-top-series"></div>
+    <table>
+      <thead><tr id="thead-series"></tr></thead>
+      <tbody id="tbody-series"></tbody>
+    </table>
+    <div class="pagination" id="pager-series"></div>
+    <div class="detail-panel" id="detail-series"></div>
   </div>
 
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>

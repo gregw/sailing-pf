@@ -1,0 +1,8 @@
+add RF generation to the Performance factors table
+
+modify the consistency spoke of the performance profile graph, so that the weights of the boats HPFs are included somehow?
+
+Make the club id in the boats databrowser a link to races tab with all only the races for that club displayed
+
+
+

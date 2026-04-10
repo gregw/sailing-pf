@@ -1,19 +1,24 @@
+# IMPORTANT: This file is managed by the server.
+# It is overwritten whenever settings are saved via the admin UI.
+# Only edit manually when the server is NOT running.
+
+# --- Server Import and Analysis tasks ---
 importers:
-- name: "ams"
+- name: "orc"
   mode: "api"
   includeInSchedule: true
   runAtStartup: false
-- name: "orc"
+- name: "ams"
   mode: "api"
   includeInSchedule: true
   runAtStartup: false
 - name: "rshyr"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "topyacht"
   mode: "api"
@@ -41,36 +46,58 @@ importers:
   runAtStartup: true
 schedule:
   days: []
-  time: "17:17:00"
-nextSailSysRaceId: 32639
+  time: "11:27:00"
+nextSailSysRaceId: 32640
 targetIrcYear: 2025
-outlierSigma: 2.5
-minAnalysisR2: 0.5
+outlierSigma: null
 mergeCandidateThreshold: 0.5
 fuzzyMatchThreshold: 0.9
 recentRaceReimportDays: 30
+
+# --- SailSys importer ---
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
 sailsysHttpDelayMs: 200
 sailsysRecentRaceDays: 14
 sailsysNotFoundThreshold: 1000
+
+# --- ORC importer ---
 orcListMaxAgeDays: 1
+
+# --- Analysis ---
+minAnalysisR2: 0.5
 clubCertificateWeight: 0.9
+
+# --- HPF optimiser ---
 hpfLambda: 1.0
 hpfOutlierK: 0.5
 hpfAsymmetryFactor: 2.5
 hpfOuterDampingFactor: 0.3
-hpfOuterConvergenceThreshold: 0.27
+hpfOuterConvergenceThreshold: 0.25
 hpfConvergenceThreshold: 1.0E-4
 hpfMaxInnerIterations: 100
 hpfMaxOuterIterations: 100
+hpfCrossVariantLambda: 0.0
+
+# --- Sliding average / consistency ---
 slidingAverageCount: 8
-slidingAverageDrops: 0
+slidingAverageDrops: 1
+
+# --- Diversity weights (multi-variant HPF) ---
+diversityNonSpinWeight: 0.8
+diversitySpinWeight: 1.0
+diversityTwoHandedWeight: 1.2
+consistencyDropInterval: 11
+
+# --- Authentication ---
 googleClientId: null
 googleClientSecret: null
 authBaseUrl: null
 authAllowedDomain: null
+
+# --- Server ports ---
 adminPort: 8888
 userPort: 8080
 natGatewayIp: null
+

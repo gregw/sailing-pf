@@ -7,7 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <style>
         .docs-section {
-            max-width: 860px;
+            min-width: 860px;
+            max-width: 85%;
         }
 
         .docs-section h2 {
@@ -22,9 +23,10 @@
         }
 
         .docs-section h4 {
-            margin-top: 1rem;
-            color: #555;
-            font-size: 0.95rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0;
+            color: #666;
+            font-size: 1rem;
         }
 
         .docs-section p {
@@ -206,6 +208,35 @@
     <!-- ═══════════════════════════════════ DATA BROWSER ══════════════════════════════════ -->
     <h2 id="data-browser">Data Browser</h2>
 
+    <h3 id="table-clubs">Clubs Table</h3>
+    <p>Sailing clubs from which data has been imported. The club ID is the club's website domain,
+        chosen because it is stable and unique. Click the race count to filter the Races tab to
+        that club's races.</p>
+
+    <h4 id="col-club-id">Clubs › ID</h4>
+    <p>Website domain (e.g. <code>myc.com.au</code>, <code>cyca.com.au</code>). Used as the
+        stable identifier and as the prefix in race IDs.</p>
+
+    <h4 id="col-club-short">Clubs › Short Name</h4>
+    <p>Abbreviation used in result headers and source data (e.g. MYC, CYCA, RBYC).</p>
+
+    <h4 id="col-club-name">Clubs › Full Name</h4>
+    <p>The club's full official name.</p>
+
+    <h4 id="col-club-state">Clubs › State</h4>
+    <p>Australian state or territory: NSW, VIC, QLD, WA, SA, ACT, TAS, or NT.</p>
+
+    <h4 id="col-club-boats">Clubs › Boats</h4>
+    <p>Number of boats in the database whose home club is this club. Click to filter the Boats tab
+        to show only those boats.</p>
+
+    <h4 id="col-club-races">Clubs › Races</h4>
+    <p>Total races imported from this club. Click to filter the Races tab.</p>
+
+    <h4 id="col-club-excl">Clubs › Excluded</h4>
+    <p>Excluded clubs are hidden from analysis. Individual races from an excluded club can
+        still be included if explicitly unexcluded.</p>
+
     <h3 id="table-boats">Boats Table</h3>
     <p>Lists all boats in the database. Boats are identified by sail number and name; because
         neither is guaranteed unique, two source records for the same physical boat may appear as
@@ -214,28 +245,28 @@
         high confidence (weight close to 1.0), red indicates low confidence. A dash (—) means no
         value has been computed for this variant.</p>
 
-    <h3 id="col-boat-id">Boats › ID</h3>
+    <h4 id="col-boat-id">Boats › ID</h4>
     <p>A unique stable identifier constructed from the normalised sail number, boat name, and
         design ID. The format is <code>sailnum-name-designid</code> (e.g. <code>AUS1234-raging-tp52</code>).
         IDs are never derived from SailSys or TopYacht internal IDs, which are stored only in
         alias tables for ingestion purposes.</p>
 
-    <h3 id="col-boat-sail">Boats › Sail Number</h3>
+    <h4 id="col-boat-sail">Boats › Sail Number</h4>
     <p>The sail number as recorded in the primary source. Country prefixes (e.g. AUS, GBR) are
         preserved. Sail numbers are not unique — different boats may share the same number, and
         the same boat may have its number recorded differently across sources.</p>
 
-    <h3 id="col-boat-name">Boats › Name</h3>
+    <h4 id="col-boat-name">Boats › Name</h4>
     <p>Boat name from the primary source. Aliases and name variations are reconciled during
         import using configurable fuzzy-matching; the canonical name shown here is whichever
         was first recorded or promoted by an admin merge.</p>
 
-    <h3 id="col-boat-design">Boats › Design</h3>
+    <h4 id="col-boat-design">Boats › Design</h4>
     <p>The design (class) ID linking this boat to a Design record. Derived from the ORC
         <code>Class</code> field where available, or from the SailSys <code>make</code>/<code>model</code>
         fields otherwise. Click to see the associated design record in the Designs tab.</p>
 
-    <h3 id="col-boat-rf">Boats › Reference Factor (RF)</h3>
+    <h4 id="col-boat-rf">Boats › Reference Factor (RF)</h4>
     <p>The IRC-equivalent handicap derived from this boat's measurement certificates
         (IRC, ORC, AMS) via the conversion network. Three variants are computed independently:
         spinnaker (spin), non-spinnaker (NS), and two-handed. The value shown in the table is
@@ -244,13 +275,13 @@
         lower = inferred via multi-hop conversion, design-level aggregation, or race co-participation
         propagation. See the colour scale: green = weight close to 1.0, red = low weight.</p>
 
-    <h3 id="col-boat-hpf">Boats › HPF</h3>
+    <h4 id="col-boat-hpf">Boats › HPF</h4>
     <p>The Historical Performance Factor — the back-calculated handicap from the ALS optimisation
         averaged over all recorded race entries for this boat. The weight reflects the quantity and
         quality of contributing races; a boat with few races or highly variable results will have
         low HPF weight. Colour scale matches RF.</p>
 
-    <h3 id="col-boat-profile">Boats › Overall (Performance Profile Score)</h3>
+    <h4 id="col-boat-profile">Boats › Overall (Performance Profile Score)</h4>
     <p>The normalised area of the performance profile pentagon — a single number in [0, 1]
         summarising how the boat compares to the active fleet across five dimensions over the
         last 12 months. A score of 1.0 would mean the boat ranks first in the fleet on every
@@ -261,16 +292,16 @@
         Boats with fewer races are excluded from the ranking pool entirely, so the score reflects
         only the regularly active fleet.</p>
 
-    <h3 id="col-boat-club">Boats › Club</h3>
+    <h4 id="col-boat-club">Boats › Club</h4>
     <p>The home club identifier (website domain). A boat may be associated with multiple clubs
         across different source systems; the value shown is the primary club from the most
         authoritative source.</p>
 
-    <h3 id="col-boat-finishes">Boats › Finishes</h3>
+    <h4 id="col-boat-finishes">Boats › Finishes</h4>
     <p>Total race finishes recorded in the database across all clubs and series. Click the number
         to switch to the Races tab filtered to show only races for this boat.</p>
 
-    <h3 id="col-boat-excl">Boats › Excluded</h3>
+    <h4 id="col-boat-excl">Boats › Excluded</h4>
     <p>Tick to exclude this boat from all analysis, charts, and HPF calculations. Use for test
         entries, ghost boats, or data errors. Excluded boats are still visible in the data browser
         (greyed out) unless "Show excluded" is unticked.</p>
@@ -282,91 +313,67 @@
         Design-level factors are used as fallback anchors for boats in the same class that lack
         individual certificates.</p>
 
-    <h3 id="col-design-id">Designs › ID</h3>
+    <h4 id="col-design-id">Designs › ID</h4>
     <p>Normalised design name used as the primary key (e.g. <code>j24</code>, <code>farr40</code>).
         Derived from the ORC <code>Class</code> field where available. Normalisation strips spaces,
         punctuation, and case differences.</p>
 
-    <h3 id="col-design-name">Designs › Canonical Name</h3>
+    <h4 id="col-design-name">Designs › Canonical Name</h4>
     <p>The design name used in all reports and charts — typically the ORC class name or the
         most common name found across source systems.</p>
 
-    <h3 id="col-design-rf">Designs › Reference Factor (RF)</h3>
+    <h4 id="col-design-rf">Designs › Reference Factor (RF)</h4>
     <p>Design-level IRC-equivalent RF aggregated across all certificated boats of this class.
         See <a href="#col-boat-rf">Boats › RF</a> for weight interpretation. A design RF is only
         as reliable as the certificate data available for boats of this class.</p>
 
-    <h3 id="col-design-makers">Designs › Makers</h3>
+    <h4 id="col-design-makers">Designs › Makers</h4>
     <p>The yacht designer or manufacturer associated with this design, as recorded in the
         makers catalogue.</p>
 
-    <h3 id="col-design-boats">Designs › Boats</h3>
+    <h4 id="col-design-boats">Designs › Boats</h4>
     <p>Number of boats of this design in the database. Click to filter the Boats tab to show
         only boats of this class.</p>
 
-    <h3 id="col-design-excl">Designs › Excluded</h3>
+    <h4 id="col-design-excl">Designs › Excluded</h4>
     <p>Excluded designs are hidden from analysis and charts. All boats of an excluded design
         are effectively excluded as well, unless individually overridden.</p>
 
-    <h3 id="table-clubs">Clubs Table</h3>
-    <p>Sailing clubs from which data has been imported. The club ID is the club's website domain,
-        chosen because it is stable and unique. Click the race count to filter the Races tab to
-        that club's races.</p>
+    <h3 id="table-series">Series Table</h3>
+    <p>Individual race series imported from SailSys, TopYacht, and BWPS. A single series may
+        have multiple races.</p>
 
-    <h3 id="col-club-id">Clubs › ID</h3>
-    <p>Website domain (e.g. <code>myc.com.au</code>, <code>cyca.com.au</code>). Used as the
-        stable identifier and as the prefix in race IDs.</p>
-
-    <h3 id="col-club-short">Clubs › Short Name</h3>
-    <p>Abbreviation used in result headers and source data (e.g. MYC, CYCA, RBYC).</p>
-
-    <h3 id="col-club-name">Clubs › Full Name</h3>
-    <p>The club's full official name.</p>
-
-    <h3 id="col-club-state">Clubs › State</h3>
-    <p>Australian state or territory: NSW, VIC, QLD, WA, SA, ACT, TAS, or NT.</p>
-
-    <h3 id="col-club-boats">Clubs › Boats</h3>
-    <p>Number of boats in the database whose home club is this club. Click to filter the Boats tab
-        to show only those boats.</p>
-
-    <h3 id="col-club-races">Clubs › Races</h3>
-    <p>Total races imported from this club. Click to filter the Races tab.</p>
-
-    <h3 id="col-club-excl">Clubs › Excluded</h3>
-    <p>Excluded clubs are hidden from analysis. Individual races from an excluded club can
-        still be included if explicitly unexcluded.</p>
 
     <h3 id="table-races">Races Table</h3>
     <p>Individual race results imported from SailSys, TopYacht, and BWPS. A single race may
         have multiple divisions (different handicap systems or fleet splits for the same start).
         Click a race row to see the full JSON record and the division chart.</p>
 
-    <h3 id="col-race-id">Races › ID</h3>
+    <h4 id="col-race-id">Races › ID</h4>
     <p>Unique race identifier: <code>clubDomain–date–nnnn</code> (e.g.
         <code>myc.com.au-2024-11-06-0001</code>). The four-digit suffix distinguishes multiple
         races at the same club on the same date. IDs are never reused and are independent of
         source system internal IDs.</p>
 
-    <h3 id="col-race-club">Races › Club</h3>
+    <h4 id="col-race-club">Races › Club</h4>
     <p>The club that ran this race. Click to filter the Races tab by this club.</p>
 
-    <h3 id="col-race-date">Races › Date</h3>
+    <h4 id="col-race-date">Races › Date</h4>
     <p>Race date in ISO format (YYYY-MM-DD).</p>
 
-    <h3 id="col-race-series">Races › Series</h3>
+    <h4 id="col-race-series">Races › Series</h4>
     <p>The series this race belongs to (e.g. Wednesday Night Racing, Autumn Series). Click to
         filter the Races tab to all races in this series — useful for browsing a season's results
         or navigating prev/next within a series.</p>
 
-    <h3 id="col-race-name">Races › Race Name</h3>
+    <h4 id="col-race-name">Races › Race Name</h4>
     <p>The race name or number within its series as recorded in the source system
         (e.g. "Race 3", "November 6").</p>
 
-    <h3 id="col-race-finishers">Races › Finishers</h3>
+    <h4 id="col-race-finishers">Races › Finishers</h4>
     <p>Total finishers across all divisions in this race.</p>
 
-    <h3 id="col-race-ref-time">Races › Ref Time</h3>
+    <h4 id="col-race-ref-time">Races › Ref Time</h4>
     <p>T₀ — the estimated elapsed time a 1.000 HPF boat would have taken to complete the
         course, computed as the weighted median of (elapsed ÷ HPF) across all boats with
         reference factors in this race. Only available after the HPF optimiser has run.
@@ -376,12 +383,12 @@
         are right-skewed — slow outliers from gear failure, bad wind holes, or tactical errors
         are common and should not distort the baseline.</p>
 
-    <h3 id="col-race-excl">Races › Excluded</h3>
+    <h4 id="col-race-excl">Races › Excluded</h4>
     <p>Excluded races are not used in HPF calculations. Individual races can be excluded
         where results are known to be unreliable (e.g. abandoned race, severe weather split
         affecting only part of the fleet).</p>
 
-    <h3 id="chart-division">Race Division Chart</h3>
+    <h4 id="chart-division">Race Division Chart</h4>
     <p>Shows the elapsed time and corrected times for each finisher in the selected division,
         plotted against their HPF on the x-axis. Three lines are shown:</p>
     <ul>
@@ -518,44 +525,59 @@
         </tr>
         <tr>
             <td><strong>Frequency</strong></td>
-            <td>How regularly the boat races</td>
-            <td>Percentile rank of distinct race count in the last 12 months. Higher race count
-                = better rank. A boat racing once a fortnight will outrank one racing only a
-                handful of times.</td>
+            <td>How much time the boat spends racing</td>
+            <td>Percentile rank of a duration-weighted race count in the last 12 months.
+                Each distinct race contributes <em>(race duration / fleet-median duration)<sup>α</sup></em>
+                to the score, where α ≈ 0.26 (a race twice as long counts 1.2× more).
+                A boat racing frequently, or in longer events, scores higher than one with
+                only token participation. Minimum 3 distinct races required to appear
+                in the fleet ranking at all.</td>
         </tr>
         <tr>
             <td><strong>Consistency</strong></td>
             <td>How tightly the residuals cluster around zero</td>
-            <td>Percentile rank of the weighted sum of squared residuals (lower raw value =
-                better rank). A boat with small, stable residuals scores well; wide scatter
-                scores poorly. Scores "how predictable is this boat race to race".</td>
+            <td>Percentile rank of the unweighted mean squared residual across recent race
+                entries (lower = better). Every race counts equally regardless of outlier status,
+                so a boat with large residuals is correctly penalised even if those races were
+                down-weighted in the HPF optimiser. A boat with small, stable residuals scores
+                well; wide scatter scores poorly.
+                <br><br>
+                <em>Discards:</em> similar to series scoring, a configurable number of
+                most-divergent results are excluded before computing the mean. One additional
+                result is dropped for every N distinct races sailed (default N = 11), so a
+                boat with 11 recent races gets 1 discard, 22 races gets 2, and so on. This
+                rewards boats with a long track record by forgiving occasional bad days.</td>
         </tr>
         <tr>
             <td><strong>Diversity</strong></td>
-            <td>How broadly the boat races across the fleet</td>
-            <td>Percentile rank of distinct opponents raced against in the last 12 months.
-                A boat that competes in large, varied fleets scores higher than one racing
-                only against the same small group each week.</td>
+            <td>How broadly the boat races, weighted by variant</td>
+            <td>Percentile rank of a variant-weighted opponent exposure score. For each
+                distinct (opponent, variant) pair encountered in recent races, the variant's
+                weight is added to the score: Non-spin = 0.8, Spin = 1.0, Two-handed = 1.2
+                (configurable). The same opponent met in two different variants counts twice.
+                Racing in broader or more demanding variants — and against a wider field —
+                scores higher.</td>
         </tr>
         <tr>
             <td><strong>NonChaotic</strong></td>
             <td>Whether performance variation is weather-driven rather than boat/crew-driven</td>
-            <td>Percentile rank of the Pearson correlation between |residual| and the race's
-                fleet dispersion (weighted IQR of residuals across the whole fleet that day).
-                High correlation means the boat goes wide when the whole fleet goes wide —
-                its inconsistency is due to variable conditions, not intrinsic unreliability.
-                Boats with insufficient dispersion data (fewer than 5 paired observations)
-                receive a score of 0.</td>
+            <td>Percentile rank of the weighted Pearson correlation between |residual| and the
+                race's fleet dispersion (weighted IQR of corrected times across the whole fleet
+                that day). High correlation means the boat's big residuals coincide with days
+                when the whole fleet was spread out — its inconsistency is conditions-driven,
+                not intrinsic unreliability. Low or negative correlation means the boat has
+                bad races on good days. Boats with fewer than 5 paired observations receive
+                a score of 0.</td>
         </tr>
         <tr>
             <td><strong>Stability</strong></td>
             <td>Whether the boat's trend is level or declining</td>
-            <td>Percentile rank of an asymmetric slope penalty computed from a weighted linear
-                regression of residuals against race date. A level trend (slope ≈ 0) incurs no
-                penalty and ranks best. An improving trend (negative slope — boat getting
-                faster relative to the fleet) incurs half the penalty of an equivalent declining
-                trend. A declining trend (positive slope — boat getting slower) is penalised
-                most heavily, since it suggests the current HPF may already be out of date.</td>
+            <td>Percentile rank of an asymmetric slope penalty from a weighted linear regression
+                of residuals against race date. A level trend (slope ≈ 0) incurs no penalty and
+                ranks best. An improving trend (negative slope — boat getting faster relative to
+                the fleet) incurs half the penalty of an equivalent declining trend. A declining
+                trend (positive slope — boat getting slower) is penalised most heavily, since it
+                suggests the current HPF may already be stale.</td>
         </tr>
     </table>
     <p>The polygon area formula normalises the area so that a perfect pentagon (all spokes = 1)

@@ -345,7 +345,7 @@ class SailSysImporterTest
               "number":%d,"name":null,"offsetPursuitRace":%b,
               "club":{"shortName":"%s","longName":"%s"},
               "series":{"name":"%s"},
-              "handicappings":[{"shortName":"%s"}],
+              "handicappings":[{"id":1,"shortName":"%s"}],
               "competitors":[{"parent":{"name":"Division 1"},"items":[%s]}]
             }}
             """.formatted(id, status, dateTime, lastProcessedTime, number, pursuit,
@@ -364,7 +364,7 @@ class SailSysImporterTest
               "number":%d,"name":null,"offsetPursuitRace":%b,
               "club":{"shortName":"%s","longName":"%s"},
               "series":{"name":"%s"},
-              "handicappings":[{"shortName":"%s"}],
+              "handicappings":[{"id":1,"shortName":"%s"}],
               "competitors":[{"parent":{"name":"Division 1"},"items":[%s]}]
             }}
             """.formatted(id, status, dateTime, number, pursuit,
@@ -378,7 +378,7 @@ class SailSysImporterTest
         return """
             {"boat":{"name":"%s","sailNumber":"%s"},
              "elapsedTime":"%s","nonSpinnaker":%b,
-             "calculations":[{"handicapCreatedFrom":%s}]}
+             "calculations":[{"handicapDefinitionId":1,"handicapCreatedFrom":%s}]}
             """.formatted(name, sailNo, elapsed, nonSpin, hcFrom);
     }
 

@@ -6,6 +6,8 @@ import org.mortbay.sailing.hpf.data.Race;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +38,37 @@ public class PerformanceProfileBuilder
     private static final int RECENT_DAYS = 365;
     private static final int MIN_NONCHAOTIC_PAIRS = 5;
 
+    /** A race 2× longer than the fleet median counts this many times more in the Frequency spoke. */
+    private static final double FREQUENCY_DURATION_SCALE = 1.2;
+    /** Derived power-law exponent: 2^α = FREQUENCY_DURATION_SCALE. */
+    private static final double FREQUENCY_DURATION_ALPHA =
+        Math.log(FREQUENCY_DURATION_SCALE) / Math.log(2.0);
+
+    private final double nonSpinDiversityWeight;
+    private final double spinDiversityWeight;
+    private final double twoHandedDiversityWeight;
+    /**
+     * Every {@code consistencyDropInterval} distinct races, one additional most-divergent result
+     * is excluded from the Consistency calculation. 0 disables drops entirely.
+     * E.g. interval=11 → 11 races: 1 drop, 22: 2 drops, 33: 3 drops, …
+     */
+    private final int consistencyDropInterval;
+
+    /** Uses default variant weights (nonSpin=0.8, spin=1.0, twoHanded=1.2) and drop interval 11. */
+    public PerformanceProfileBuilder()
+    {
+        this(0.8, 1.0, 1.2, 11);
+    }
+
+    public PerformanceProfileBuilder(double nonSpinDiversityWeight, double spinDiversityWeight,
+                                     double twoHandedDiversityWeight, int consistencyDropInterval)
+    {
+        this.nonSpinDiversityWeight   = nonSpinDiversityWeight;
+        this.spinDiversityWeight      = spinDiversityWeight;
+        this.twoHandedDiversityWeight = twoHandedDiversityWeight;
+        this.consistencyDropInterval  = consistencyDropInterval;
+    }
+
     /**
      * Computes profiles for all boats with residual data, returning a map from boatId to profile.
      * Boats with no finishes in the last {@value #RECENT_DAYS} days are excluded.
@@ -51,6 +84,41 @@ public class PerformanceProfileBuilder
     {
         LocalDate cutoff = LocalDate.now().minusDays(RECENT_DAYS);
 
+        // --- Pre-compute per-race-division median elapsed time (seconds) ---
+        // Used to weight the Frequency spoke by race duration (dampened power law).
+        Map<String, Map<String, Double>> raceDivMedianSecs = new LinkedHashMap<>();
+        for (Race race : races.values())
+        {
+            if (race.divisions() == null) continue;
+            Map<String, Double> divMap = new LinkedHashMap<>();
+            for (Division div : race.divisions())
+            {
+                if (div.finishers() == null || div.finishers().isEmpty()) continue;
+                List<Long> nanos = div.finishers().stream()
+                    .filter(f -> f.elapsedTime() != null)
+                    .map(f -> f.elapsedTime().toNanos())
+                    .sorted()
+                    .toList();
+                if (!nanos.isEmpty())
+                    divMap.put(div.name(), nanos.get(nanos.size() / 2) / 1e9);
+            }
+            if (!divMap.isEmpty()) raceDivMedianSecs.put(race.id(), divMap);
+        }
+
+        // Fleet-wide reference duration = median of all per-race-div medians within window
+        List<Double> allMedians = new ArrayList<>();
+        for (List<EntryResidual> residuals : residualsByBoatId.values())
+            for (EntryResidual r : residuals)
+            {
+                if (r.raceDate().isBefore(cutoff)) continue;
+                Map<String, Double> dm = raceDivMedianSecs.get(r.raceId());
+                if (dm == null) continue;
+                Double d = dm.get(r.divisionName());
+                if (d != null) allMedians.add(d);
+            }
+        Collections.sort(allMedians);
+        double refDurSecs = allMedians.isEmpty() ? 3600.0 : allMedians.get(allMedians.size() / 2);
+
         // --- Step 1: raw metrics per boat ---
         // [0] frequency (race count), [1] diversity (opponent count),
         // [2] sumSqAll (consistency), [3] slopePenalty (stability), [4] nonChaotic corr (NaN if insufficient)
@@ -64,29 +132,82 @@ public class PerformanceProfileBuilder
                 .toList();
             // Require at least 3 distinct races in the window; excludes boats with token activity
             // and prevents them from distorting the percentile rankings for active boats.
-            long freq = recent.stream().map(EntryResidual::raceId).distinct().count();
-            if (freq < 3) continue;
+            long distinctRaces = recent.stream().map(EntryResidual::raceId).distinct().count();
+            if (distinctRaces < 3) continue;
 
-            // Diversity: distinct opponents in those races
-            Set<String> raceIds = new HashSet<>();
-            for (EntryResidual r : recent) raceIds.add(r.raceId());
-            Set<String> opponents = new HashSet<>();
-            for (String raceId : raceIds)
+            // Duration-weighted frequency: each distinct race contributes (d/d_ref)^α.
+            // Races at the fleet-median duration contribute 1.0 (unchanged from plain count);
+            // longer races contribute slightly more, shorter ones slightly less.
+            Set<String> seenForFreq = new HashSet<>();
+            double freq = 0;
+            for (EntryResidual r : recent)
             {
+                if (!seenForFreq.add(r.raceId())) continue;
+                Map<String, Double> dm = raceDivMedianSecs.get(r.raceId());
+                double durSecs = (dm != null && dm.get(r.divisionName()) != null)
+                    ? dm.get(r.divisionName()) : refDurSecs;
+                freq += Math.pow(durSecs / refDurSecs, FREQUENCY_DURATION_ALPHA);
+            }
+
+            // Diversity: variant-weighted distinct (opponent, variant) pairs.
+            // Each distinct race contributes (variantWeight × opponents seen in that race);
+            // the same opponent seen in different variants counts separately.
+            // Variant weights: nonSpin < spin < twoHanded — racing harder/broader variants
+            // exposes the boat to a wider community of sailors.
+            Map<String, Integer> raceVariant = new LinkedHashMap<>();
+            for (EntryResidual r : recent)
+                raceVariant.putIfAbsent(r.raceId(),
+                    r.twoHanded() ? 2 : (r.nonSpinnaker() ? 1 : 0));
+
+            Set<String> seenPairs = new HashSet<>();
+            double diversity = 0;
+            for (Map.Entry<String, Integer> rve : raceVariant.entrySet())
+            {
+                String raceId = rve.getKey();
+                int variant   = rve.getValue();
+                double varWt  = variant == 2 ? twoHandedDiversityWeight
+                              : variant == 1 ? nonSpinDiversityWeight
+                              : spinDiversityWeight;
                 Race race = races.get(raceId);
                 if (race == null || race.divisions() == null) continue;
                 for (Division div : race.divisions())
                 {
                     if (div.finishers() == null) continue;
                     for (Finisher f : div.finishers())
-                        if (!boatId.equals(f.boatId())) opponents.add(f.boatId());
+                    {
+                        if (boatId.equals(f.boatId())) continue;
+                        if (seenPairs.add(f.boatId() + "|" + variant))
+                            diversity += varWt;
+                    }
                 }
             }
 
-            // Consistency: weighted sum of squared residuals
+            // Consistency: unweighted mean squared residual, with optional drops.
+            // IRLS weights are deliberately NOT used here: they down-weight large outlier
+            // residuals, which would perversely make inconsistent boats look more consistent
+            // (their big outlier races contribute very little to the sum).  Using the plain
+            // mean ensures every race counts equally and the result is independent of fleet size.
+            // Drops: every consistencyDropInterval distinct races, one additional most-divergent
+            // entry is excluded — rewarding boats with a long track record by ignoring their
+            // worst results, similar to a series scoring discard.
+            int drops = (consistencyDropInterval > 0) ? (int)(distinctRaces / consistencyDropInterval) : 0;
+            List<EntryResidual> forConsistency;
+            if (drops <= 0 || drops >= recent.size())
+            {
+                forConsistency = recent;
+            }
+            else
+            {
+                // Sort ascending by |residual|; drop the last `drops` (most divergent).
+                forConsistency = recent.stream()
+                    .sorted(Comparator.comparingDouble(r -> Math.abs(r.residual())))
+                    .toList();
+                forConsistency = forConsistency.subList(0, forConsistency.size() - drops);
+            }
             double sumSqAll = 0;
-            for (EntryResidual r : recent)
-                sumSqAll += r.weight() * r.residual() * r.residual();
+            for (EntryResidual r : forConsistency)
+                sumSqAll += r.residual() * r.residual();
+            sumSqAll /= forConsistency.size();
 
             // Stability: asymmetric slope penalty.
             // Declining (positive slope) is penalised 2× more than improving (negative slope).
@@ -96,7 +217,7 @@ public class PerformanceProfileBuilder
             // NonChaotic: Pearson corr(|residual|, race_dispersion)
             double nonChaotic = computeNonChaotic(recent, dispersionByRaceDivision);
 
-            raw.put(boatId, new double[]{freq, opponents.size(), sumSqAll, slopePenalty, nonChaotic});
+            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, nonChaotic});
         }
 
         if (raw.isEmpty()) return Map.of();

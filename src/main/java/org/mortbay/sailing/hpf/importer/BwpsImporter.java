@@ -236,7 +236,7 @@ public class BwpsImporter
 
             Design design = (detail.type() != null && !detail.type().isBlank())
                 ? store.findOrCreateDesign(detail.type(), SOURCE) : null;
-            Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, design);
+            Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, design, SOURCE);
 
             if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null)
             {
