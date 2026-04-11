@@ -10,7 +10,7 @@
   "divisions" : [ {
     "name" : "Division 1",
     "finishers" : [ {
-      "boatId" : "MYC100-shear_magic-adams10",
+      "boatId" : "MYC100-shearmagic-adams10",
       "elapsedTime" : "PT1H9M42S",
       "nonSpinnaker" : false
     }, {
@@ -18,7 +18,7 @@
       "elapsedTime" : "PT1H7M37S",
       "nonSpinnaker" : false
     }, {
-      "boatId" : "MYC12-san_toy",
+      "boatId" : "MYC12-santoy",
       "elapsedTime" : "PT1H7M22S",
       "nonSpinnaker" : true
     }, {
@@ -37,7 +37,7 @@
       "elapsedTime" : "PT1H17M32S",
       "nonSpinnaker" : false
     }, {
-      "boatId" : "6295-ratty_tooey",
+      "boatId" : "6295-rattytooey",
       "elapsedTime" : "PT1H17M59S",
       "nonSpinnaker" : false
     } ]

@@ -139,7 +139,7 @@ class SailSysImporterTest
         store.putClub(myc);
 
         Certificate existingCert = new Certificate("IRC", 2020, 1.071, false, false, false, false, "CERT-12345", null);
-        Boat boat = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, "myc.com.au",
+        Boat boat = new Boat("AUS1234-ragingbull", "AUS1234", "Raging Bull", null, "myc.com.au",
             List.of(), List.of(), List.of(existingCert), List.of(), null, null);
         store.putBoat(boat);
 

@@ -2,11 +2,7 @@ package org.mortbay.sailing.hpf.store;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mortbay.sailing.hpf.data.TimedAlias;
-
 import java.nio.file.Path;
-
-import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -55,10 +51,10 @@ class AliasLoaderTest
     {
         AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         // MYC7 is in aliases.yaml with aliases "1060" and "TenSixty"
-        List<TimedAlias> aliases = seed.boatAliases("MYC7");
+        List<String> aliases = seed.boatAliases("MYC7");
         assertFalse(aliases.isEmpty());
-        assertTrue(aliases.stream().anyMatch(a -> "1060".equals(a.name())));
-        assertTrue(aliases.stream().anyMatch(a -> "TenSixty".equals(a.name())));
+        assertTrue(aliases.contains("1060"));
+        assertTrue(aliases.contains("TenSixty"));
     }
 
     @Test
@@ -80,42 +76,6 @@ class AliasLoaderTest
     {
         AliasLoader.Aliases seed = AliasLoader.load(Path.of("nonexistent"));
         assertNull(seed.boatCanonicalName("NOSUCHSAIL999"));
-    }
-
-    @Test
-    void timedAliasActiveOnNullDateAlwaysTrue()
-    {
-        TimedAlias alias = new TimedAlias("OldName", LocalDate.of(2018, 1, 1), LocalDate.of(2019, 12, 31));
-        assertTrue(alias.activeOn(null));
-    }
-
-    @Test
-    void timedAliasActiveOnDateWithinBounds()
-    {
-        TimedAlias alias = new TimedAlias("OldName", LocalDate.of(2018, 1, 1), LocalDate.of(2019, 12, 31));
-        assertTrue(alias.activeOn(LocalDate.of(2019, 6, 1)));
-    }
-
-    @Test
-    void timedAliasInactiveBeforeFrom()
-    {
-        TimedAlias alias = new TimedAlias("NewName", LocalDate.of(2020, 1, 1), null);
-        assertFalse(alias.activeOn(LocalDate.of(2019, 12, 31)));
-    }
-
-    @Test
-    void timedAliasInactiveAfterUntil()
-    {
-        TimedAlias alias = new TimedAlias("OldName", null, LocalDate.of(2019, 12, 31));
-        assertFalse(alias.activeOn(LocalDate.of(2020, 1, 1)));
-    }
-
-    @Test
-    void timedAliasActiveWithNoBounds()
-    {
-        TimedAlias alias = new TimedAlias("AnyTimeName", null, null);
-        assertTrue(alias.activeOn(LocalDate.of(2010, 1, 1)));
-        assertTrue(alias.activeOn(LocalDate.of(2030, 1, 1)));
     }
 
     @Test

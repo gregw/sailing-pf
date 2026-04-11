@@ -62,7 +62,7 @@ The raw layer captures data exactly as ingested from source systems. It is persi
 - `Division` — name, finishers (List\<Finisher\>). Embedded in `Race`.
 - `Finisher` — boatId, elapsedTime (Duration), nonSpinnaker, certificateNumber. Embedded in `Division`.
 - `Series` — id, name, isCatchAll, raceIds. Embedded in `Club`.
-- `TimedAlias` — name, from (LocalDate), until (LocalDate). Embedded in `Boat`.
+- `TimedAlias` — name. Embedded in `Boat`.
 - `Maker` — id, canonicalName, aliases. Stored in `catalogue/makers.json`.
 
 **Supporting records:**

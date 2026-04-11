@@ -567,7 +567,6 @@ public class AdminApiServlet extends HttpServlet
                     IdGenerator.normaliseSailNumber(mb.sailNumber()),
                     IdGenerator.normaliseSailNumber(keepBoat.sailNumber()),
                     keepBoat.name(),
-                    keepBoat.designId(),
                     names
                 ));
             }
@@ -653,8 +652,6 @@ public class AdminApiServlet extends HttpServlet
             store.save();
 
             AliasLoader.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
-            for (String mergeId : mergeIds)
-                AliasLoader.updateBoatAliasKeysForDesignMerge(store.configDir(), mergeId, keepId);
             store.reloadAliasSeed();
 
             writeJson(resp, Map.of("ok", true,

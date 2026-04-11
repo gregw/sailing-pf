@@ -3,6 +3,7 @@ package org.mortbay.sailing.hpf.store;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.mortbay.sailing.hpf.importer.IdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,7 +29,8 @@ class DesignLoader
     private static final Logger LOG = LoggerFactory.getLogger(DesignLoader.class);
     private static final String FILENAME = "design.yaml";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
-            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER));
+            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
+            .registerModule(new JavaTimeModule());
 
     static DesignCatalogue load(Path configDir)
     {
@@ -73,6 +77,8 @@ class DesignLoader
     {
         public String sailNumber;
         public String name;
+        public LocalDate from;
+        public LocalDate until;
     }
 
     static class DesignOverride
@@ -91,16 +97,29 @@ class DesignLoader
 
     // ---- Catalogue result ----
 
+    /** A single design override entry with optional date range. */
+    record OverrideEntry(String normDesignId, String canonicalName, LocalDate from, LocalDate until)
+    {
+        boolean isActiveOn(LocalDate date)
+        {
+            if (date == null)
+                return from == null && until == null;
+            if (from != null && date.isBefore(from))
+                return false;
+            if (until != null && date.isAfter(until))
+                return false;
+            return true;
+        }
+    }
+
     static class DesignCatalogue
     {
         static final DesignCatalogue EMPTY = new DesignCatalogue(null);
 
         private final Set<String> excludedIds;
         private final Set<String> ignoredIds;
-        /** "normSail|normName" → normalised designId */
-        private final Map<String, String> overridesByKey;
-        /** "normSail|normName" → raw designId as written in config (for canonical name on auto-create) */
-        private final Map<String, String> rawOverridesByKey;
+        /** "normSail|normName" → list of override entries (possibly date-ranged) */
+        private final Map<String, List<OverrideEntry>> overridesByKey;
         /** normDesignId → canonical name to use when creating the design (explicit canonicalName or raw designId) */
         private final Map<String, String> overrideDesigns;
 
@@ -111,7 +130,6 @@ class DesignLoader
                 excludedIds = Set.of();
                 ignoredIds = Set.of();
                 overridesByKey = Map.of();
-                rawOverridesByKey = Map.of();
                 overrideDesigns = Map.of();
                 return;
             }
@@ -142,9 +160,8 @@ class DesignLoader
             if (!ign.isEmpty())
                 LOG.info("Loaded design catalogue: {} ignored design name(s)", ign.size());
 
-            Map<String, String> overrides    = new HashMap<>();
-            Map<String, String> rawOverrides = new HashMap<>();
-            Map<String, String> designs      = new HashMap<>();
+            Map<String, List<OverrideEntry>> overrides = new HashMap<>();
+            Map<String, String> designs = new HashMap<>();
             if (file.boatDesignOverrides != null)
             {
                 for (DesignOverride override : file.boatDesignOverrides)
@@ -161,16 +178,16 @@ class DesignLoader
                             continue;
                         String key = IdGenerator.normaliseSailNumber(boat.sailNumber)
                             + "|" + IdGenerator.normaliseName(boat.name);
-                        overrides.put(key, normDesignId);
-                        rawOverrides.put(key, canonName);
+                        overrides.computeIfAbsent(key, k -> new ArrayList<>())
+                            .add(new OverrideEntry(normDesignId, canonName, boat.from, boat.until));
                     }
                 }
             }
-            overridesByKey    = Collections.unmodifiableMap(overrides);
-            rawOverridesByKey = Collections.unmodifiableMap(rawOverrides);
-            overrideDesigns   = Collections.unmodifiableMap(designs);
-            if (!overrides.isEmpty())
-                LOG.info("Loaded design catalogue: {} boat design override(s)", overrides.size());
+            overridesByKey  = Collections.unmodifiableMap(overrides);
+            overrideDesigns = Collections.unmodifiableMap(designs);
+            int overrideCount = overrides.values().stream().mapToInt(List::size).sum();
+            if (overrideCount > 0)
+                LOG.info("Loaded design catalogue: {} boat design override(s)", overrideCount);
         }
 
         boolean isExcluded(String normalisedDesignId)
@@ -188,26 +205,43 @@ class DesignLoader
         }
 
         /**
-         * Returns the normalised override designId for the given sail number and boat name, or null if none.
+         * Returns the normalised override designId for the given sail number, boat name, and optional date.
+         * If date is null, only undated overrides match.
          */
-        String resolveDesignOverride(String sailNumber, String name)
+        String resolveDesignOverride(String sailNumber, String name, LocalDate date)
         {
-            if (overridesByKey.isEmpty() || sailNumber == null || name == null)
-                return null;
-            String key = IdGenerator.normaliseSailNumber(sailNumber) + "|" + IdGenerator.normaliseName(name);
-            return overridesByKey.get(key);
+            OverrideEntry entry = findOverride(sailNumber, name, date);
+            return entry != null ? entry.normDesignId() : null;
         }
 
         /**
          * Returns the canonical name for the given sail number and boat name's override,
          * or null if no override exists. Used when auto-creating a missing design.
          */
-        String resolveRawDesignOverride(String sailNumber, String name)
+        String resolveRawDesignOverride(String sailNumber, String name, LocalDate date)
         {
-            if (rawOverridesByKey.isEmpty() || sailNumber == null || name == null)
+            OverrideEntry entry = findOverride(sailNumber, name, date);
+            return entry != null ? entry.canonicalName() : null;
+        }
+
+        private OverrideEntry findOverride(String sailNumber, String name, LocalDate date)
+        {
+            if (overridesByKey.isEmpty() || sailNumber == null || name == null)
                 return null;
             String key = IdGenerator.normaliseSailNumber(sailNumber) + "|" + IdGenerator.normaliseName(name);
-            return rawOverridesByKey.get(key);
+            List<OverrideEntry> entries = overridesByKey.get(key);
+            if (entries == null)
+                return null;
+            // Prefer a date-specific match; fall back to undated
+            OverrideEntry undated = null;
+            for (OverrideEntry entry : entries)
+            {
+                if (entry.from() == null && entry.until() == null)
+                    undated = entry;
+                else if (entry.isActiveOn(date))
+                    return entry;
+            }
+            return undated;
         }
 
         /**

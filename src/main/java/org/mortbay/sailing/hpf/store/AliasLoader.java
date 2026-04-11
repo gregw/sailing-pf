@@ -1,11 +1,8 @@
 package org.mortbay.sailing.hpf.store;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.mortbay.sailing.hpf.data.TimedAlias;
 import org.mortbay.sailing.hpf.importer.IdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,8 +29,7 @@ public class AliasLoader
     private static final Logger LOG = LoggerFactory.getLogger(AliasLoader.class);
     private static final String FILENAME = "aliases.yaml";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
-            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
-        .registerModule(new JavaTimeModule());
+            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER));
 
     static Aliases load(Path configDir)
     {
@@ -81,8 +76,6 @@ public class AliasLoader
     {
         public Map<String, DesignEntry> designs;
         public Map<String, BoatEntry> boats;
-        /** normSailNumber → normCanonicalSailNumber for boats with typo/old sail numbers. */
-        public Map<String, String> sailNumberRedirects;
     }
 
     static class DesignEntry
@@ -94,27 +87,14 @@ public class AliasLoader
     static class BoatEntry
     {
         public String canonicalName;
-        public String canonicalSailNumber;              // canonical sail number for this boat
-        public List<AliasEntry> aliases;                // name aliases only
-        public List<AltSailNumberEntry> altSailNumbers; // alternate sail numbers
+        public String canonicalSailNumber;
+        public List<Alias> aliases;
     }
 
-    static class AliasEntry
+    static class Alias
     {
-        public String name;
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-        public LocalDate from;
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-        public LocalDate until;
-    }
-
-    static class AltSailNumberEntry
-    {
-        public String number;
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-        public LocalDate from;
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-        public LocalDate until;
+        public String name;           // null means use canonicalName
+        public String sailNumber;     // null means use canonicalSailNumber
     }
 
     // ---- Seed result ----
@@ -127,43 +107,41 @@ public class AliasLoader
         static final Aliases EMPTY = new Aliases(null);
 
         /** normAlias → canonical design ID */
-        private final Map<String, String> designAliasIndex;
+        private final Map<String, String> name2designId;
         /** canonical design ID → canonical display name */
-        private final Map<String, String> designCanonicalNames;
-        /** normalised sail number → timed aliases (keyed by canonicalSailNumber) */
-        private final Map<String, List<TimedAlias>> boatAliasMap;
+        private final Map<String, String> designId2Name;
+        /** normalised sail number → aliases (keyed by canonicalSailNumber) */
+        private final Map<String, List<String>> sailNo2Aliases;
         /** normalised sail number → canonical boat name (keyed by canonicalSailNumber) */
-        private final Map<String, String> boatCanonicalNames;
-        /** normalised typo/old sail number → normalised canonical sail number */
-        private final Map<String, String> sailNumberRedirects;
+        private final Map<String, String> boatName2CanonicalName;
         /**
          * normalised sail number (canonical + all alternates) → entry.
          * Used to look up entries by any known sail number.
          */
-        private final Map<String, BoatEntry> sailNumberIndex;
+        private final Map<String, BoatEntry> sail2boat;
         /**
-         * normName[-designId] → entry.
-         * Used to look up entries by canonical name + design.
+         * normName → entry.
+         * YAML keys may have a {@code -designId} suffix for disambiguation in the file;
+         * the suffix is stripped when building this index.
          */
-        private final Map<String, BoatEntry> nameDesignIndex;
+        private final Map<String, BoatEntry> nameIndex;
 
         private Aliases(Yaml seed)
         {
-            if (seed == null || (seed.designs == null && seed.boats == null && seed.sailNumberRedirects == null))
+            if (seed == null || (seed.designs == null && seed.boats == null))
             {
-                designAliasIndex = Map.of();
-                designCanonicalNames = Map.of();
-                boatAliasMap = Map.of();
-                boatCanonicalNames = Map.of();
-                sailNumberRedirects = Map.of();
-                sailNumberIndex = Map.of();
-                nameDesignIndex = Map.of();
+                name2designId = Map.of();
+                designId2Name = Map.of();
+                sailNo2Aliases = Map.of();
+                boatName2CanonicalName = Map.of();
+                sail2boat = Map.of();
+                nameIndex = Map.of();
                 return;
             }
 
             // Build design indexes
-            Map<String, String> name2designId = new HashMap<>();
-            Map<String, String> designId2Name = new HashMap<>();
+            Map<String, String> name2designIdMutable = new HashMap<>();
+            Map<String, String> designId2NameMutable = new HashMap<>();
             if (seed.designs != null)
             {
                 for (Map.Entry<String, DesignEntry> e : seed.designs.entrySet())
@@ -172,28 +150,28 @@ public class AliasLoader
                     DesignEntry entry = e.getValue();
                     if (entry.canonicalName != null)
                     {
-                        designId2Name.put(canonicalId, entry.canonicalName);
-                        name2designId.put(IdGenerator.normaliseDesignName(entry.canonicalName), canonicalId);
+                        designId2NameMutable.put(canonicalId, entry.canonicalName);
+                        name2designIdMutable.put(IdGenerator.normaliseDesignName(entry.canonicalName), canonicalId);
                     }
                     if (entry.aliases != null)
                     {
                         for (String alias : entry.aliases)
                         {
                             String normAlias = IdGenerator.normaliseDesignName(alias);
-                            name2designId.put(alias, canonicalId);
-                            name2designId.put(normAlias, canonicalId);
+                            name2designIdMutable.put(alias, canonicalId);
+                            name2designIdMutable.put(normAlias, canonicalId);
                         }
                     }
                 }
             }
-            designAliasIndex = Collections.unmodifiableMap(name2designId);
-            designCanonicalNames = Collections.unmodifiableMap(designId2Name);
+            name2designId = Collections.unmodifiableMap(name2designIdMutable);
+            designId2Name = Collections.unmodifiableMap(designId2NameMutable);
 
             // Build boat indexes
-            Map<String, List<TimedAlias>> boatMap = new HashMap<>();
+            Map<String, List<String>> boatMap = new HashMap<>();
             Map<String, String> boatNames = new HashMap<>();
-            Map<String, BoatEntry> sailIdx = new HashMap<>();
-            Map<String, BoatEntry> nameDesignIdx = new HashMap<>();
+            Map<String, BoatEntry> sail2boatMutable = new HashMap<>();
+            Map<String, BoatEntry> nameIdx = new HashMap<>();
 
             if (seed.boats != null)
             {
@@ -202,79 +180,54 @@ public class AliasLoader
                     String yamlKey = e.getKey();
                     BoatEntry entry = e.getValue();
 
-                    // Determine the canonical sail number for boatAliasMap/boatCanonicalNames lookups.
-                    // New schema: entry.canonicalSailNumber is explicit.
-                    // Legacy schema (key = sail number): use the key as the canonical sail number.
-                    String canonicalSail = entry.canonicalSailNumber != null
-                        ? IdGenerator.normaliseSailNumber(entry.canonicalSailNumber)
-                        : IdGenerator.normaliseSailNumber(yamlKey);
+                    // Key format: normSail-normName (e.g. "MYC7-daydreaming")
+                    int dash = yamlKey.indexOf('-');
+                    if (dash < 0)
+                    {
+                        LOG.warn("Skipping boat alias entry with invalid key (no dash): {}", yamlKey);
+                        continue;
+                    }
+                    String canonicalSail = yamlKey.substring(0, dash);
+                    String normName = yamlKey.substring(dash + 1);
 
                     if (entry.canonicalName != null)
                         boatNames.put(canonicalSail, entry.canonicalName);
 
                     if (entry.aliases != null)
                     {
-                        List<TimedAlias> timedAliases = entry.aliases.stream()
+                        List<String> nameAliases = entry.aliases.stream()
                             .filter(a -> a.name != null)
-                            .map(a -> new TimedAlias(a.name, a.from, a.until))
+                            .map(a -> a.name)
                             .toList();
-                        boatMap.put(canonicalSail, timedAliases);
+                        boatMap.put(canonicalSail, nameAliases);
                     }
 
                     // Index by canonical sail number
-                    sailIdx.put(canonicalSail, entry);
+                    sail2boatMutable.put(canonicalSail, entry);
 
-                    // Index by alternate sail numbers
-                    if (entry.altSailNumbers != null)
+                    // Index by alternate sail numbers from aliases with a sailNumber field
+                    if (entry.aliases != null)
                     {
-                        for (AltSailNumberEntry alt : entry.altSailNumbers)
+                        for (Alias alias : entry.aliases)
                         {
-                            if (alt.number != null)
-                                sailIdx.put(IdGenerator.normaliseSailNumber(alt.number), entry);
+                            if (alias.sailNumber != null)
+                                sail2boatMutable.put(IdGenerator.normaliseSailNumber(alias.sailNumber), entry);
                         }
                     }
 
-                    // Index by normName[-designId] derived from YAML key
-                    // New keys are already in normName or normName-designId form
-                    // Legacy keys (sail numbers) will produce a non-useful nameDesign key but that's harmless
-                    String normKey = yamlKey.toLowerCase().replace(' ', '_').replace('-', '_');
-                    // For new-style keys (not a sail number), use them as-is for nameDesign lookup
-                    // We detect new-style keys by checking if canonicalSailNumber is explicitly set
-                    if (entry.canonicalSailNumber != null)
-                    {
-                        // New-style key: use yamlKey as the nameDesign key
-                        nameDesignIdx.put(yamlKey, entry);
-                    }
-                    else if (entry.canonicalName != null)
-                    {
-                        // Legacy key (sail number): also index by normName so lookupBoat can find it
-                        String normName = IdGenerator.normaliseName(entry.canonicalName);
-                        nameDesignIdx.put(normName, entry);
-                    }
+                    // Index by normName for fallback lookups
+                    nameIdx.put(normName, entry);
                 }
             }
-            boatAliasMap = Collections.unmodifiableMap(boatMap);
-            boatCanonicalNames = Collections.unmodifiableMap(boatNames);
-            sailNumberIndex = Collections.unmodifiableMap(sailIdx);
-            nameDesignIndex = Collections.unmodifiableMap(nameDesignIdx);
-            LOG.debug("Boat alias sailNumberIndex keys: {}", sailIdx.keySet());
-            LOG.debug("Boat alias nameDesignIndex keys: {}", nameDesignIdx.keySet());
+            sailNo2Aliases = Collections.unmodifiableMap(boatMap);
+            boatName2CanonicalName = Collections.unmodifiableMap(boatNames);
+            sail2boat = Collections.unmodifiableMap(sail2boatMutable);
+            nameIndex = Collections.unmodifiableMap(nameIdx);
+            LOG.debug("Boat alias sailNumberIndex keys: {}", sail2boatMutable.keySet());
+            LOG.debug("Boat alias nameIndex keys: {}", nameIdx.keySet());
 
-            // Build sail number redirect index
-            Map<String, String> redirects = new HashMap<>();
-            if (seed.sailNumberRedirects != null)
-            {
-                for (Map.Entry<String, String> e : seed.sailNumberRedirects.entrySet())
-                {
-                    String from = IdGenerator.normaliseSailNumber(e.getKey());
-                    String to   = IdGenerator.normaliseSailNumber(e.getValue());
-                    redirects.put(from, to);
-                }
-            }
-            sailNumberRedirects = Collections.unmodifiableMap(redirects);
-
-            LOG.info("Loaded alias seed: {} design alias(es), {} boat entry(ies), {} sail number redirect(s)",
-                name2designId.size(), boatMap.size(), redirects.size());
+            LOG.info("Loaded alias seed: {} design alias(es), {} boat entry(ies)",
+                name2designIdMutable.size(), boatMap.size());
         }
 
         /**
@@ -282,7 +235,7 @@ public class AliasLoader
          */
         String resolveDesignAlias(String normalisedAlias)
         {
-            return designAliasIndex.get(normalisedAlias);
+            return name2designId.get(normalisedAlias);
         }
 
         /**
@@ -290,15 +243,15 @@ public class AliasLoader
          */
         String designCanonicalName(String designId)
         {
-            return designCanonicalNames.get(designId);
+            return designId2Name.get(designId);
         }
 
         /**
-         * Returns the timed aliases for a normalised sail number, or empty list if unknown.
+         * Returns the name aliases for a normalised sail number, or empty list if unknown.
          */
-        List<TimedAlias> boatAliases(String normalisedSailNumber)
+        List<String> boatAliases(String normalisedSailNumber)
         {
-            return boatAliasMap.getOrDefault(normalisedSailNumber, List.of());
+            return sailNo2Aliases.getOrDefault(normalisedSailNumber, List.of());
         }
 
         /**
@@ -306,16 +259,7 @@ public class AliasLoader
          */
         String boatCanonicalName(String normalisedSailNumber)
         {
-            return boatCanonicalNames.get(normalisedSailNumber);
-        }
-
-        /**
-         * Returns the canonical sail number for a typo/old sail number, or null if not in seed.
-         * Used to redirect boats whose sail numbers were corrected post-merge.
-         */
-        String sailNumberRedirect(String normalisedSailNumber)
-        {
-            return sailNumberRedirects.get(normalisedSailNumber);
+            return boatName2CanonicalName.get(normalisedSailNumber);
         }
 
         /**
@@ -324,16 +268,17 @@ public class AliasLoader
         public record BoatMatch(String canonicalName, String canonicalSailNumber) {}
 
         /**
-         * Looks up a boat entry by sail number or by name+design key.
-         * Returns a BoatSeedMatch if found, empty if not.
+         * Looks up a boat entry by sail number or by normalised name.
+         * Returns a BoatMatch if found, empty if not.
          */
-        Optional<BoatMatch> lookupBoat(String normSailNumber, String nameDesignKey)
+        Optional<BoatMatch> lookupBoat(String normSailNumber, String normName)
         {
-            BoatEntry e = sailNumberIndex.get(normSailNumber);
+            BoatEntry e = sail2boat.get(normSailNumber);
             if (e == null)
-                e = nameDesignIndex.get(nameDesignKey);
+                e = nameIndex.get(normName);
             if (e == null)
                 return Optional.empty();
+            // canonicalSailNumber is explicit in the entry; fall back to the queried sail number
             String canonicalSail = e.canonicalSailNumber != null
                 ? IdGenerator.normaliseSailNumber(e.canonicalSailNumber)
                 : normSailNumber;
@@ -400,7 +345,6 @@ public class AliasLoader
         String sailNumber,          // normalised sail number of the merged-away boat
         String canonicalSailNumber, // normalised sail number of the keep boat (may be equal)
         String canonicalName,       // canonical name of the keep boat
-        String designId,            // design ID of the keep boat (nullable)
         List<String> aliasNames     // names to record as aliases under sailNumber
     ) {}
 
@@ -410,7 +354,7 @@ public class AliasLoader
      * <p>
      * Uses the new name-design key scheme: entries are keyed by normName[-designId].
      * Alternate sail numbers (merged-away boat's sail number when different from canonical) are
-     * stored in altSailNumbers rather than sailNumberRedirects.
+     * stored as alias entries with a {@code sailNumber} field.
      */
     public static void appendMergeAliases(Path configDir, List<MergeAliasSpec> specs)
     {
@@ -432,25 +376,20 @@ public class AliasLoader
             yaml = new Yaml();
         if (yaml.boats == null)
             yaml.boats = new LinkedHashMap<>();
-        if (yaml.sailNumberRedirects == null)
-            yaml.sailNumberRedirects = new LinkedHashMap<>();
 
         for (MergeAliasSpec spec : specs)
         {
-            // Build the new-style YAML key: normName[-designId]
-            String normName = IdGenerator.normaliseName(spec.canonicalName());
-            String yamlKey = (spec.designId() != null && !spec.designId().isBlank())
-                ? normName + "-" + spec.designId()
-                : normName;
+            // YAML key is normSail-normName
+            String yamlKey = IdGenerator.normaliseSailNumber(spec.canonicalSailNumber())
+                + "-" + IdGenerator.normaliseName(spec.canonicalName());
 
-            // Find or create entry at the new key
+            // Find or create entry
             BoatEntry entry = yaml.boats.computeIfAbsent(yamlKey, k ->
             {
                 BoatEntry e = new BoatEntry();
                 e.canonicalName = spec.canonicalName();
                 e.canonicalSailNumber = spec.canonicalSailNumber();
                 e.aliases = new ArrayList<>();
-                e.altSailNumbers = new ArrayList<>();
                 return e;
             });
             if (entry.canonicalName == null)
@@ -459,8 +398,6 @@ public class AliasLoader
                 entry.canonicalSailNumber = spec.canonicalSailNumber();
             if (entry.aliases == null)
                 entry.aliases = new ArrayList<>();
-            if (entry.altSailNumbers == null)
-                entry.altSailNumbers = new ArrayList<>();
 
             // Add name aliases
             for (String name : spec.aliasNames())
@@ -468,7 +405,7 @@ public class AliasLoader
                 boolean present = entry.aliases.stream().anyMatch(a -> name.equalsIgnoreCase(a.name));
                 if (!present)
                 {
-                    AliasEntry ae = new AliasEntry();
+                    Alias ae = new Alias();
                     ae.name = name;
                     entry.aliases.add(ae);
                 }
@@ -477,20 +414,19 @@ public class AliasLoader
             // Add alt sail number if the merged-away sail differs from the canonical
             if (!spec.sailNumber().equals(spec.canonicalSailNumber()))
             {
-                boolean altPresent = entry.altSailNumbers.stream()
-                    .anyMatch(a -> spec.sailNumber().equalsIgnoreCase(
-                        a.number != null ? IdGenerator.normaliseSailNumber(a.number) : ""));
+                String normAltSail = IdGenerator.normaliseSailNumber(spec.sailNumber());
+                boolean altPresent = entry.aliases.stream()
+                    .anyMatch(a -> a.sailNumber != null
+                        && normAltSail.equalsIgnoreCase(IdGenerator.normaliseSailNumber(a.sailNumber)));
                 if (!altPresent)
                 {
-                    AltSailNumberEntry alt = new AltSailNumberEntry();
-                    alt.number = spec.sailNumber();
-                    entry.altSailNumbers.add(alt);
+                    Alias alt = new Alias();
+                    alt.sailNumber = spec.sailNumber();
+                    entry.aliases.add(alt);
                 }
 
                 // Remove the old sail-number-keyed entry if it exists (cleanup legacy entries)
                 yaml.boats.remove(spec.sailNumber());
-                // Remove the old sailNumberRedirect for this sail number
-                yaml.sailNumberRedirects.remove(spec.sailNumber());
             }
         }
 
@@ -506,62 +442,4 @@ public class AliasLoader
         }
     }
 
-    /**
-     * Renames all boat alias YAML keys ending in {@code -oldDesignId} to {@code -newDesignId}.
-     * Called after a design merge to keep YAML keys consistent with boat design IDs.
-     */
-    public static void updateBoatAliasKeysForDesignMerge(Path configDir, String oldDesignId, String newDesignId)
-    {
-        Path file = configDir.resolve(FILENAME);
-        if (!Files.exists(file))
-            return;
-
-        Yaml yaml;
-        try
-        {
-            yaml = YAML_MAPPER.readValue(file.toFile(), Yaml.class);
-        }
-        catch (Exception e)
-        {
-            LOG.error("Failed to read {} for design merge key update: {}", file, e.getMessage());
-            return;
-        }
-
-        if (yaml.boats == null || yaml.boats.isEmpty())
-            return;
-
-        String suffix = "-" + oldDesignId;
-        String newSuffix = "-" + newDesignId;
-        Map<String, BoatEntry> updated = new LinkedHashMap<>();
-        boolean changed = false;
-        for (Map.Entry<String, BoatEntry> e : yaml.boats.entrySet())
-        {
-            String key = e.getKey();
-            if (key.endsWith(suffix))
-            {
-                String newKey = key.substring(0, key.length() - suffix.length()) + newSuffix;
-                updated.put(newKey, e.getValue());
-                changed = true;
-                LOG.info("Renamed boat alias key {} → {} due to design merge", key, newKey);
-            }
-            else
-            {
-                updated.put(key, e.getValue());
-            }
-        }
-
-        if (!changed)
-            return;
-
-        yaml.boats = updated;
-        try
-        {
-            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
-            LOG.info("Updated {} boat alias key(s) for design merge {} → {}", file, oldDesignId, newDesignId);
-        }
-        catch (Exception e)
-        {
-            LOG.error("Failed to write {}: {}", file, e.getMessage());
-        }
-    }
 }

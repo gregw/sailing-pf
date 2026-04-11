@@ -27,23 +27,21 @@
 
 **Key format:** `{normalisedSailNumber}-{normalisedName}-{designId}`
 
-Examples: `AUS1234-raging-tp52`, `5656-mondo-sydney38`, `MYC7-tensixty-radford1060`
+Examples: `AUS1234-ragingbull-tp52`, `5656-mondo-sydney38`, `MYC7-tensixty-radford1060`
 
 **Construction rules** (see `IdGenerator.generateBoatId()`):
 
-- `normalisedSailNumber`: uppercase, strip all non-alphanumeric characters, collapse spaces. E.g. `AUS-1234` → `AUS1234`, `aus 1234` → `AUS1234`.
-- `normalisedName`: full name lowercased, non-alphanumeric stripped, spaces collapsed. E.g. `Raging Bull` → `raging_bull`, `TenSixty` → `tensixty`.
+- `normalisedSailNumber`: uppercase, strip all non-alphanumeric characters. E.g. `AUS-1234` → `AUS1234`, `aus 1234` → `AUS1234`.
+- `normalisedName`: lowercase, strip ALL non-alphanumeric characters (including spaces). E.g. `Raging Bull` → `ragingbull`, `TenSixty` → `tensixty`.
 - `designId`: the normalised design ID (e.g. `tp52`, `sydney38`). Omitted if design is unknown.
 
 **Rationale:** Sail numbers are mostly unique but not guaranteed so; the name and design add disambiguation. The result is compact, memorable, and source-system-independent.
 
-**Aliasing:** Each Boat has a list of `TimedAlias` records tracking name changes over time:
+**Aliasing:** Each Boat has a list of `TimedAlias` records tracking alternate names:
 
 ```java
-record TimedAlias(String name, LocalDate from, LocalDate until)
+record TimedAlias(String name)
 ```
-
-The `from`/`until` dates allow tracking when a boat changed names. `activeOn(date)` checks whether the alias was active at a given point.
 
 Additionally, `altSailNumbers` tracks alternative sail numbers seen for the same boat.
 

@@ -279,10 +279,10 @@ public class DataStore
         String sourceEntry = buildSourceEntry(source, rawDesign);
 
         // Apply design override from design.yaml config, if any
-        String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name);
+        String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name, null);
         if (overrideDesignId != null)
         {
-            String rawOverride = designCatalogue.resolveRawDesignOverride(sailNo, name);
+            String rawOverride = designCatalogue.resolveRawDesignOverride(sailNo, name, null);
             String effectiveOverride = rawOverride != null ? rawOverride : overrideDesignId;
             if (rawDesign == null || !overrideDesignId.equals(IdGenerator.normaliseDesignName(rawDesign)))
                 LOG.info("Boat {}/{}: design overridden {} → {}", sailNo, name,
@@ -299,10 +299,7 @@ public class DataStore
         // redirect to the canonical boat — creating it if necessary — so the stale-named boat is
         // never returned or created.  This is the primary guard against alias-named re-creation.
         {
-            String normDesign = rawDesign != null && !rawDesign.isBlank()
-                ? IdGenerator.normaliseDesignName(rawDesign) : null;
-            String ndk = normName + (normDesign != null ? "-" + normDesign : "");
-            var seedCheck = aliases.lookupBoat(normSail, ndk);
+            var seedCheck = aliases.lookupBoat(normSail, normName);
             if (seedCheck.isPresent() && seedCheck.get().canonicalName() != null)
             {
                 String canonNorm = IdGenerator.normaliseName(seedCheck.get().canonicalName());
@@ -378,11 +375,8 @@ public class DataStore
         }
 
         // Phase 2: Check the alias seed for canonical name mapping.
-        String normDesignId = rawDesign != null && !rawDesign.isBlank()
-            ? IdGenerator.normaliseDesignName(rawDesign) : null;
-        String nameDesignKey = normName + (normDesignId != null ? "-" + normDesignId : "");
         Optional<AliasLoader.Aliases.BoatMatch> seedMatch =
-            aliases.lookupBoat(normSail, nameDesignKey);
+            aliases.lookupBoat(normSail, normName);
         if (seedMatch.isPresent())
         {
             String seedCanonicalName = seedMatch.get().canonicalName();
@@ -429,11 +423,11 @@ public class DataStore
         }
 
         // Fallback: check old boatAliases/boatCanonicalName for legacy compatibility
-        List<org.mortbay.sailing.hpf.data.TimedAlias> seedAliases = aliases.boatAliases(normSail);
+        List<String> seedAliases = aliases.boatAliases(normSail);
         String seedCanonicalName = aliases.boatCanonicalName(normSail);
         boolean nameMatchesSeedAlias = !seedAliases.isEmpty() && seedAliases.stream()
-            .anyMatch(a -> IdGenerator.normaliseName(a.name()).equals(normName)
-                || a.name().equalsIgnoreCase(name));
+            .anyMatch(a -> IdGenerator.normaliseName(a).equals(normName)
+                || a.equalsIgnoreCase(name));
         if (nameMatchesSeedAlias && seedCanonicalName != null)
         {
             String normCanonical = IdGenerator.normaliseName(seedCanonicalName);
@@ -448,7 +442,7 @@ public class DataStore
                     Design design = resolveDesign(rawDesign, sourceEntry);
                     if (design != null)
                     {
-                        String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
+                        String canonicalBoatId = IdGenerator.generateBoatId(normSail, seedCanonicalName, design);
                         removeBoat(candidate.id());
                         Boat upgraded = new Boat(canonicalBoatId, normSail, seedCanonicalName, design.id(), candidate.clubId(), candidate.aliases(), candidate.altSailNumbers(), candidate.certificates(), candidate.sources(), candidate.lastUpdated(), null);
                         putBoat(upgraded);
@@ -460,22 +454,13 @@ public class DataStore
             }
             // No existing boat found — create with the canonical name
             Design design = resolveDesign(rawDesign, sourceEntry);
-            String canonicalBoatId = IdGenerator.generateBoatId(sailNo, seedCanonicalName, design);
+            String canonicalBoatId = IdGenerator.generateBoatId(normSail, seedCanonicalName, design);
             List<String> aliases = normName.equals(normCanonical) ? List.of() : List.of(name);
             List<String> initSources = sourceEntry != null ? List.of(sourceEntry) : List.of();
             Boat newBoat = new Boat(canonicalBoatId, normSail, seedCanonicalName, design != null ? design.id() : null, null, aliases, List.of(), List.of(), initSources, null, null);
             putBoat(newBoat);
             LOG.info("Created new boat (via alias seed legacy) {}", newBoat);
             return newBoat;
-        }
-
-        // Check sail number redirect: if this sail number is a known typo/alias for another,
-        // retry with the canonical sail number so the boats are not re-duplicated.
-        String redirectSail = aliases.sailNumberRedirect(normSail);
-        if (redirectSail != null && !redirectSail.equals(normSail))
-        {
-            LOG.info("Sail number {} redirected to {} via alias seed", normSail, redirectSail);
-            return findOrCreateBoat(redirectSail, name, rawDesign, source);
         }
 
         // Phase 3: Create new boat — resolve design first.

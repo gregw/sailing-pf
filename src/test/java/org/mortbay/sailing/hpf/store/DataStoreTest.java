@@ -42,12 +42,12 @@ class DataStoreTest {
         assertEquals(4, div1.finishers().size());
 
         Finisher shearMagic = div1.finishers().getFirst();
-        assertEquals("MYC100-shear_magic-adams10", shearMagic.boatId());
+        assertEquals("MYC100-shearmagic-adams10", shearMagic.boatId());
         assertEquals(Duration.ofMinutes(69).plusSeconds(42), shearMagic.elapsedTime());
         assertFalse(shearMagic.nonSpinnaker());
 
         Finisher sanToy = div1.finishers().get(2);
-        assertEquals("MYC12-san_toy", sanToy.boatId());
+        assertEquals("MYC12-santoy", sanToy.boatId());
         assertTrue(sanToy.nonSpinnaker());
     }
 
@@ -109,7 +109,7 @@ class DataStoreTest {
     @Test
     void roundTripCatalogue(@TempDir Path tempDir) {
         List<Boat> boats = List.of(
-                new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), List.of(), null, null),
+                new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), List.of(), null, null),
                 new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), List.of(), List.of(), null, null)
         );
 
@@ -167,7 +167,7 @@ class DataStoreTest {
 
     @Test
     void eachBoatInOwnFile(@TempDir Path tempDir) {
-        Boat boat1 = new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), List.of(), null, null);
+        Boat boat1 = new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), List.of(), List.of(), null, null);
         Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), List.of(), List.of(), null, null);
 
         DataStore store = new DataStore(tempDir);
@@ -176,7 +176,7 @@ class DataStoreTest {
         store.putBoat(boat2);
         store.stop();
 
-        assertTrue(tempDir.resolve("imported/boats/MYC100-shear_magic-adams10.json").toFile().exists());
+        assertTrue(tempDir.resolve("imported/boats/MYC100-shearmagic-adams10.json").toFile().exists());
         assertTrue(tempDir.resolve("imported/boats/MYC7-tensixty-radford1060.json").toFile().exists());
 
         DataStore store2 = new DataStore(tempDir);
@@ -262,7 +262,7 @@ class DataStoreTest {
 
         Boat boat = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
-        assertEquals("AUS1234-raging_bull-j24", boat.id());
+        assertEquals("AUS1234-ragingbull-j24", boat.id());
         assertEquals("AUS1234", boat.sailNumber());
         assertEquals("Raging Bull", boat.name());
         assertEquals("j24", boat.designId());
@@ -287,13 +287,13 @@ class DataStoreTest {
     void findOrCreateBoatFuzzyMatchesByAlias(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat existing = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, null,
+        Boat existing = new Boat("AUS1234-ragingbull", "AUS1234", "Raging Bull", null, null,
                 List.of("RagingBull"), List.of(), List.of(), List.of(), null, null);
         store.putBoat(existing);
 
         Boat found = store.findOrCreateBoat("AUS1234", "RagingBull", null);
 
-        assertEquals("AUS1234-raging_bull", found.id());
+        assertEquals("AUS1234-ragingbull", found.id());
         assertEquals(1, store.boats().size());
     }
 
@@ -301,7 +301,7 @@ class DataStoreTest {
     void findOrCreateBoatUpgradesNoDesignBoat(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat noDesign = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, null,
+        Boat noDesign = new Boat("AUS1234-ragingbull", "AUS1234", "Raging Bull", null, null,
                 List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(noDesign);
 
@@ -310,9 +310,9 @@ class DataStoreTest {
 
         Boat upgraded = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
-        assertEquals("AUS1234-raging_bull-j24", upgraded.id());
+        assertEquals("AUS1234-ragingbull-j24", upgraded.id());
         assertEquals("j24", upgraded.designId());
-        assertFalse(store.boats().containsKey("AUS1234-raging_bull"));
+        assertFalse(store.boats().containsKey("AUS1234-ragingbull"));
         assertEquals(1, store.boats().size());
     }
 
@@ -391,13 +391,13 @@ class DataStoreTest {
     void findOrCreateBoatFuzzyMatchesSimilarAlias(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat existing = new Boat("AUS1234-shear_magic", "AUS1234", "Shear Magic",
+        Boat existing = new Boat("AUS1234-shearmagic", "AUS1234", "Shear Magic",
                 null, null, List.of("ShearMagic"), List.of(), List.of(), List.of(), null, null);
         store.putBoat(existing);
 
         Boat found = store.findOrCreateBoat("AUS1234", "SheerMagic", null);
 
-        assertEquals("AUS1234-shear_magic", found.id());
+        assertEquals("AUS1234-shearmagic", found.id());
         assertEquals(1, store.boats().size());
     }
 
@@ -405,13 +405,13 @@ class DataStoreTest {
     void findOrCreateBoatFuzzyMatchesSimilarName(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat existing = new Boat("AUS1234-shear_magic", "AUS1234", "Shear Magic",
+        Boat existing = new Boat("AUS1234-shearmagic", "AUS1234", "Shear Magic",
                 null, null, List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(existing);
 
         Boat found = store.findOrCreateBoat("AUS1234", "Sheer Magic", null);
 
-        assertEquals("AUS1234-shear_magic", found.id());
+        assertEquals("AUS1234-shearmagic", found.id());
         assertEquals(1, store.boats().size());
     }
 
@@ -453,12 +453,12 @@ class DataStoreTest {
         // Pre-populate the canonical boat; searching by "1060" should find it
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat canonical = new Boat("MYC7-day_dreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), List.of(), List.of(), null, null);
+        Boat canonical = new Boat("MYC7-daydreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), List.of(), List.of(), null, null);
         store.putBoat(canonical);
 
         Boat found = store.findOrCreateBoat("MYC7", "1060", null);
 
-        assertEquals("MYC7-day_dreaming", found.id());
+        assertEquals("MYC7-daydreaming", found.id());
         assertEquals(1, store.boats().size());
     }
 
@@ -471,7 +471,7 @@ class DataStoreTest {
 
         Boat boat = store.findOrCreateBoat("MYC7", "1060", null);
 
-        assertEquals("MYC7-day_dreaming", boat.id());
+        assertEquals("MYC7-daydreaming", boat.id());
         assertEquals("Day Dreaming", boat.name());
         assertEquals(List.of("1060"), boat.aliases());
         assertEquals(1, store.boats().size());
@@ -705,15 +705,15 @@ class DataStoreTest {
                 false,
                 List.of(
                         new Division("Division 1", List.of(
-                                new Finisher("MYC100-shear_magic-adams10", Duration.ofMinutes(69).plusSeconds(42), false, null),
+                                new Finisher("MYC100-shearmagic-adams10", Duration.ofMinutes(69).plusSeconds(42), false, null),
                                 new Finisher("MYC7-tensixty-radford1060",  Duration.ofMinutes(67).plusSeconds(37), false, null),
-                                new Finisher("MYC12-san_toy",              Duration.ofMinutes(67).plusSeconds(22), true,  null),
+                                new Finisher("MYC12-santoy",              Duration.ofMinutes(67).plusSeconds(22), true,  null),
                                 new Finisher("5656-mondo-sydney38",        Duration.ofMinutes(67).plusSeconds(19), false, null)
                         )),
                         new Division("Division 2", List.of(
                                 new Finisher("1152-bokarra-santana22",     Duration.ofMinutes(80).plusSeconds(26), false, null),
                                 new Finisher("1255-melody",               Duration.ofMinutes(77).plusSeconds(32), false, null),
-                                new Finisher("6295-ratty_tooey",          Duration.ofMinutes(77).plusSeconds(59), false, null)
+                                new Finisher("6295-rattytooey",          Duration.ofMinutes(77).plusSeconds(59), false, null)
                         ))
                 ),
                 null, null, null

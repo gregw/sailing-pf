@@ -13,14 +13,14 @@ public class IdGenerator
 {
 
     /**
-     * Lowercase, strip non-alphanumeric except spaces (replaced with underscore).
-     * "Raging Bull" → "raging_bull"
+     * Lowercase, strip ALL non-[a-z0-9] characters (including spaces and punctuation).
+     * "Raging Bull" → "ragingbull"
      */
     public static String normaliseName(String raw)
     {
         if (raw == null)
             return "";
-        return raw.toLowerCase().replaceAll("[^a-z0-9 ]", "").replaceAll(" ", "_");
+        return raw.toLowerCase(Locale.ENGLISH).replaceAll("[^a-z0-9]", "");
     }
 
     /**
@@ -35,7 +35,8 @@ public class IdGenerator
     }
 
     /**
-     * Same normalisation as normaliseName; separate method for clarity at call sites.
+     * Uppercase, strip ALL non-[A-Z0-9] characters.
+     * "AUS-1234" → "AUS1234", "myc 7" → "MYC7"
      */
     public static String normaliseSailNumber(String raw)
     {
@@ -48,8 +49,8 @@ public class IdGenerator
      * Generate a boat ID from sail number, name, and optional design.
      * <p>
      * Examples:
-     * "AUS1234", "Raging Bull", null      → "AUS1234-raging_bull"
-     * "AUS1234", "Raging Bull", j24design → "AUS1234-raging_bull-j24"
+     * "AUS1234", "Raging Bull", null      → "AUS1234-ragingbull"
+     * "AUS1234", "Raging Bull", j24design → "AUS1234-ragingbull-j24"
      */
     public static String generateBoatId(String rawSail, String rawName, Design design)
     {
