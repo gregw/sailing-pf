@@ -234,7 +234,7 @@ public class RshyrImporter
         LOG.info("RSHYR: year {} — fetching IRC (cat {})", year, cats.ircCategoryId());
         List<Entry> ircEntries = fetchCategory(raceId, cats.ircCategoryId());
         LOG.info("RSHYR: year {} — {} IRC entries", year, ircEntries.size());
-        count += processEntries(ircEntries, "IRC", year, elapsedBySailNum, divMap);
+        count += processEntries(ircEntries, "IRC", raceDate, elapsedBySailNum, divMap);
 
         // ORC All (optional; includes DH boats with "(DH)" in NameRace).
         List<Entry> orcEntries = List.of();
@@ -243,7 +243,7 @@ public class RshyrImporter
             LOG.info("RSHYR: year {} — fetching ORC (cat {})", year, cats.orcCategoryId());
             orcEntries = fetchCategory(raceId, cats.orcCategoryId());
             LOG.info("RSHYR: year {} — {} ORC entries", year, orcEntries.size());
-            count += processEntries(orcEntries, "ORC", year, elapsedBySailNum, divMap);
+            count += processEntries(orcEntries, "ORC", raceDate, elapsedBySailNum, divMap);
         }
 
         if (divMap.isEmpty())
@@ -489,7 +489,7 @@ public class RshyrImporter
 
     // --- Entry processing ---
 
-    private int processEntries(List<Entry> entries, String system, int year,
+    private int processEntries(List<Entry> entries, String system, LocalDate date,
         Map<String, Duration> elapsedBySailNum, LinkedHashMap<String, List<Finisher>> divMap)
     {
         int count = 0;
@@ -518,8 +518,8 @@ public class RshyrImporter
                 ? entry.nameRace().replaceAll("(?i)\\((DH|TH)\\)", "").trim()
                 : entry.nameRace();
 
-            Boat boat = store.findOrCreateBoat(entry.sailNumber(), cleanName, (String) null, SOURCE);
-            String certNum = inferCertificate(boat, system, year, entry.tcf(), dh);
+            Boat boat = store.findOrCreateBoat(entry.sailNumber(), cleanName, null, date, SOURCE);
+            String certNum = inferCertificate(boat, system, date.getYear(), entry.tcf(), dh);
 
             // Division key: "IRC Div 3", "ORC", etc.
             String divKey;

@@ -12,7 +12,6 @@ designs:
 boats:
   MYC7-daydreaming:
     canonicalName: Day Dreaming
-    canonicalSailNumber: MYC7
     aliases:
       - name: "1060"
       - name: TenSixty

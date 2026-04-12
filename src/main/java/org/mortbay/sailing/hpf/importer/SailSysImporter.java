@@ -412,8 +412,8 @@ public class SailSysImporter
     {
         currentSailSysRaceId = data.id != null ? data.id : 0;
 
-        LocalDate date = parseDate(data.dateTime);
-        if (date == null)
+        LocalDate raceDate = parseDate(data.dateTime);
+        if (raceDate == null)
         {
             LOG.warn("Skipping race id={}: cannot parse dateTime={}", data.id, data.dateTime);
             return;
@@ -433,8 +433,8 @@ public class SailSysImporter
         String seriesId   = (clubId != null && seriesName != null)
             ? IdGenerator.generateSeriesId(clubId, seriesName) : null;
         String raceId     = clubId != null
-            ? IdGenerator.generateRaceId(clubId, date, number)
-            : "unknown-" + date + String.format("-%04d", number);
+            ? IdGenerator.generateRaceId(clubId, raceDate, number)
+            : "unknown-" + raceDate + String.format("-%04d", number);
 
         // Find all measurement systems.  Races commonly list PHS first then IRC/ORC;
         // we process every measurement system independently, creating separate divisions.
@@ -447,12 +447,12 @@ public class SailSysImporter
                 .map(h -> normalizeSystem(h.shortName)).distinct().toList());
 
         List<Division> divisions = buildDivisions(
-            data.competitors, measurementSystems, date.getYear(), organizingClub);
+            data.competitors, measurementSystems, raceDate, organizingClub);
 
         store.putRace(new Race(
             raceId, clubId,
             seriesId != null ? List.of(seriesId) : List.of(),
-            date, number, data.name, handicapSystem,
+            raceDate, number, data.name, handicapSystem,
             data.offsetPursuitRace != null && data.offsetPursuitRace,
             divisions,
             SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : ""),
@@ -466,7 +466,7 @@ public class SailSysImporter
 
     private List<Division> buildDivisions(List<DivisionData> competitors,
                                           List<HandicappingSummary> measurementSystems,
-                                          int raceYear, Club organizingClub)
+                                          LocalDate raceDate, Club organizingClub)
     {
         if (competitors == null)
             return List.of();
@@ -481,7 +481,7 @@ public class SailSysImporter
             if (measurementSystems.isEmpty())
             {
                 // PHS-only race: create the division without cert links
-                List<Finisher> finishers = buildFinishers(divData.items, null, raceYear, organizingClub);
+                List<Finisher> finishers = buildFinishers(divData.items, null, raceDate, organizingClub);
                 if (!finishers.isEmpty())
                     divisions.add(new Division(baseName, finishers));
             }
@@ -492,7 +492,7 @@ public class SailSysImporter
                     String divName = multiSystem
                         ? baseName + " " + normalizeSystem(sys.shortName)
                         : baseName;
-                    List<Finisher> finishers = buildFinishers(divData.items, sys, raceYear, organizingClub);
+                    List<Finisher> finishers = buildFinishers(divData.items, sys, raceDate, organizingClub);
                     if (!finishers.isEmpty())
                         divisions.add(new Division(divName, finishers));
                 }
@@ -509,7 +509,7 @@ public class SailSysImporter
      */
     private List<Finisher> buildFinishers(List<EntryData> items,
                                           HandicappingSummary system,
-                                          int raceYear, Club organizingClub)
+                                          LocalDate raceDate, Club organizingClub)
     {
         if (items == null)
             return List.of();
@@ -526,7 +526,7 @@ public class SailSysImporter
 
             boolean nonSpinnaker = entry.nonSpinnaker != null && entry.nonSpinnaker;
 
-            Boat boat = resolveBoat(entry.boat, organizingClub);
+            Boat boat = resolveBoat(entry.boat, organizingClub, raceDate);
             if (boat == null)
                 continue;
 
@@ -537,7 +537,7 @@ public class SailSysImporter
                 if (value == null)
                     continue; // no handicap for this system — exclude from this division
                 certNumber = resolveCertificate(boat, normalizeSystem(system.shortName),
-                    value, raceYear, nonSpinnaker, false, isClubCert(system.shortName));
+                    value, raceDate.getYear(), nonSpinnaker, false, isClubCert(system.shortName));
             }
 
             // Re-read boat after cert may have been added by resolveCertificate
@@ -556,7 +556,7 @@ public class SailSysImporter
      *
      * @return the resolved/created Boat, or {@code null} if sail number or name is blank.
      */
-    private Boat resolveBoat(BoatSummary boatSummary, Club organizingClub)
+    private Boat resolveBoat(BoatSummary boatSummary, Club organizingClub, LocalDate raceDate)
     {
         if (boatSummary == null
                 || boatSummary.sailNumber == null || boatSummary.sailNumber.isBlank()
@@ -574,7 +574,7 @@ public class SailSysImporter
         if (designName != null && isGenericBoatClass(designName))
             designName = null;
 
-        Boat boat = store.findOrCreateBoat(sailNo, name, designName, SOURCE);
+        Boat boat = store.findOrCreateBoat(sailNo, name, designName, raceDate, SOURCE);
 
         // Assign club if missing
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);

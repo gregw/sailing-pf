@@ -19,7 +19,7 @@ import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Factor;
 import org.mortbay.sailing.hpf.data.Race;
 import org.mortbay.sailing.hpf.importer.IdGenerator;
-import org.mortbay.sailing.hpf.store.AliasLoader;
+import org.mortbay.sailing.hpf.store.Aliases;
 import org.mortbay.sailing.hpf.store.DataStore;
 
 import java.io.IOException;
@@ -549,7 +549,7 @@ public class AdminApiServlet extends HttpServlet
                 writeJson(resp, Map.of("error", "Keep boat not found: " + keepId));
                 return;
             }
-            List<AliasLoader.MergeAliasSpec> aliasSpecs = new ArrayList<>();
+            List<Aliases.SailNumberName> aliases = new ArrayList<>();
             for (String mergeId : mergeIds)
             {
                 Boat mb = store.boats().get(mergeId);
@@ -563,7 +563,7 @@ public class AdminApiServlet extends HttpServlet
                 // Always record the merged boat's name (even if it equals the canonical, for completeness)
                 names.add(mb.name());
                 names.addAll(mb.aliases());
-                aliasSpecs.add(new AliasLoader.MergeAliasSpec(
+                aliasSpecs.add(new Aliases.MergeAliasSpec(
                     IdGenerator.normaliseSailNumber(mb.sailNumber()),
                     IdGenerator.normaliseSailNumber(keepBoat.sailNumber()),
                     keepBoat.name(),
@@ -575,8 +575,8 @@ public class AdminApiServlet extends HttpServlet
             store.save();
 
             // Update aliases.yaml and reload the alias seed so future imports honour the merge
-            AliasLoader.appendMergeAliases(store.configDir(), aliasSpecs);
-            store.reloadAliasSeed();
+            Aliases.appendMergeAliases(store.configDir(), aliasSpecs);
+            store.reloadAliases();
 
             writeJson(resp, Map.of(
                 "ok", true,
@@ -651,8 +651,8 @@ public class AdminApiServlet extends HttpServlet
             DataStore.DesignMergeResult result = store.mergeDesigns(keepId, mergeIds);
             store.save();
 
-            AliasLoader.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
-            store.reloadAliasSeed();
+            Aliases.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
+            store.reloadAliases();
 
             writeJson(resp, Map.of("ok", true,
                 "updatedBoats", result.updatedBoats(),
