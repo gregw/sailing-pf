@@ -20,12 +20,12 @@ importers:
   mode: "api"
   includeInSchedule: true
   runAtStartup: false
-- name: "topyacht"
-  mode: "api"
-  includeInSchedule: true
-  runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
+  includeInSchedule: false
+  runAtStartup: false
+- name: "topyacht"
+  mode: "api"
   includeInSchedule: true
   runAtStartup: false
 - name: "build-indexes"
@@ -46,8 +46,8 @@ importers:
   runAtStartup: true
 schedule:
   days:
-  - "FRIDAY"
-  time: "22:31:00"
+  - "MONDAY"
+  time: "16:01:00"
 nextSailSysRaceId: 32640
 targetIrcYear: 2025
 outlierSigma: null
@@ -73,7 +73,7 @@ hpfLambda: 1.0
 hpfOutlierK: 0.5
 hpfAsymmetryFactor: 2.5
 hpfOuterDampingFactor: 0.3
-hpfOuterConvergenceThreshold: 0.25
+hpfOuterConvergenceThreshold: 0.27
 hpfConvergenceThreshold: 1.0E-4
 hpfMaxInnerIterations: 100
 hpfMaxOuterIterations: 100

@@ -174,7 +174,7 @@ public class RshyrImporter
             }
             catch (Exception e)
             {
-                LOG.error("RSHYR: failed to import year {}: {}", year, e.getMessage(), e);
+                ImporterLog.error(LOG,"RSHYR: failed to import year {}: {}", year, e.getMessage(), e);
             }
         }
         LOG.info("RSHYR: done");
@@ -217,7 +217,7 @@ public class RshyrImporter
         RaceCategories cats = discoverCategories(year, raceId);
         if (cats == null)
         {
-            LOG.warn("RSHYR: year {} — could not identify Line Honours + IRC/ORC categories", year);
+            ImporterLog.warn(LOG,"RSHYR: year {} — could not identify Line Honours + IRC/ORC categories", year);
             return;
         }
 
@@ -248,7 +248,7 @@ public class RshyrImporter
 
         if (divMap.isEmpty())
         {
-            LOG.warn("RSHYR: year {} — no finishers with matched elapsed times", year);
+            ImporterLog.warn(LOG,"RSHYR: year {} — no finishers with matched elapsed times", year);
             return;
         }
 
@@ -371,7 +371,7 @@ public class RshyrImporter
 
         if (lhCat == null || ircCat == null)
         {
-            LOG.warn("RSHYR: category discovery failed for year={} raceId={} (scanned {}–{}): "
+            ImporterLog.warn(LOG,"RSHYR: category discovery failed for year={} raceId={} (scanned {}–{}): "
                 + "lhCat={} ircCat={} orcCat={}",
                 year, raceId, scanStart, scanEnd, lhCat, ircCat, orcCat);
             return null;
@@ -647,7 +647,7 @@ public class RshyrImporter
         }
         catch (Exception e)
         {
-            LOG.warn("RSHYR: could not fetch results page for year {}: {}", year, e.getMessage());
+            ImporterLog.warn(LOG,"RSHYR: could not fetch results page for year {}: {}", year, e.getMessage());
             return null;
         }
         Matcher m = RACE_ID_JS.matcher(html);
@@ -657,7 +657,7 @@ public class RshyrImporter
             LOG.info("RSHYR: year {} → raceId={} (discovered from page)", year, id);
             return id;
         }
-        LOG.warn("RSHYR: raceId not found in results page for year {}", year);
+        ImporterLog.warn(LOG,"RSHYR: raceId not found in results page for year {}", year);
         return null;
     }
 

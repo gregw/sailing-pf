@@ -128,12 +128,12 @@ public class AmsImporter
     {
         if (boatName.isBlank() || sailNo.isBlank())
         {
-            LOG.warn("Skipping row: missing boat name or sail number");
+            ImporterLog.warn(LOG,"Skipping row: missing boat name or sail number");
             return;
         }
         if (certNo.isBlank())
         {
-            LOG.warn("Skipping row boat={}: missing cert number", boatName);
+            ImporterLog.warn(LOG,"Skipping row boat={}: missing cert number", boatName);
             return;
         }
 
@@ -149,12 +149,17 @@ public class AmsImporter
         }
 
         if (club.isBlank())
-            LOG.error("Missing club for boat={}", boatName);
+            ImporterLog.error(LOG,"Missing club for boat={}", boatName);
         else if (store.findClubByShortName(club, state, "AMS boat=" + boatName) == null)
-            LOG.error("Unknown club shortName={} state={} for boat={}", club, state, boatName);
+            ImporterLog.error(LOG,"Unknown club shortName={} state={} for boat={}", club, state, boatName);
 
         LocalDate fakeDate = LocalDate.of(year, 7, 1);
         Boat boat = store.findOrCreateBoat(sailNo.trim(), boatName.trim(), (String) null, fakeDate, SOURCE);
+        if (boat == null)
+        {
+            ImporterLog.warn(LOG,"AMS: ambiguous boat (multiple designs) for sail={} name={} — skipping cert {}", sailNo, boatName, certNo);
+            return;
+        }
 
         // Upsert: remove all existing AMS certs whose certNo starts with this base number
         // (covers the bare certNo plus the -ns and -2h suffixed variants)

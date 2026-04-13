@@ -92,6 +92,8 @@ public class AdminApiServlet extends HttpServlet
             handleComparisonChart(req, resp);
         else if ("/comparison/division".equals(path))
             handleComparisonDivision(req, resp);
+        else if ("/comparison/elapsed-chart".equals(path))
+            handleElapsedComparisonChart(req, resp);
         else if ("/design-comparison/candidates".equals(path))
             handleDesignComparisonCandidates(req, resp);
         else if ("/design-comparison/chart".equals(path))
@@ -700,6 +702,8 @@ public class AdminApiServlet extends HttpServlet
                 store.reloadAliases();
             }
 
+            cache.refreshIndexes();
+
             writeJson(resp, Map.of(
                 "ok", true,
                 "updatedRaces", result.updatedRaces(),
@@ -787,6 +791,8 @@ public class AdminApiServlet extends HttpServlet
 
             Aliases.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
             store.reloadAliases();
+
+            cache.refreshIndexes();
 
             writeJson(resp, Map.of("ok", true,
                 "updatedBoats", result.updatedBoats(),
@@ -1919,6 +1925,101 @@ public class AdminApiServlet extends HttpServlet
         designB.put("rfNonSpin", rfB != null ? factorMap(rfB.nonSpin()) : null);
 
         writeJson(resp, Map.of("designA", designA, "designB", designB, "points", points));
+    }
+
+    /**
+     * GET /api/comparison/elapsed-chart — returns pairwise elapsed-time comparison data for two boats.
+     * <p>
+     * Required params: {@code boatAId} and {@code boatBId}. For each race division in which both
+     * boats recorded an elapsed time, emits a point with {@code x} = boat B elapsed seconds and
+     * {@code y} = boat A elapsed seconds, plus race metadata. Also returns each boat's HPF and RF
+     * factors for use as reference lines. Used by the pairwise elapsed-time scatter charts on the
+     * boat comparison page.
+     */
+    private void handleElapsedComparisonChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String boatAId = req.getParameter("boatAId");
+        String boatBId = req.getParameter("boatBId");
+        if (boatAId == null || boatBId == null) { resp.sendError(400); return; }
+        boatAId = boatAId.trim();
+        boatBId = boatBId.trim();
+
+        BoatDerived bda = cache.boatDerived().get(boatAId);
+        BoatDerived bdb = cache.boatDerived().get(boatBId);
+        if (bda == null || bdb == null) { resp.sendError(404); return; }
+
+        // Collect races where boat A competed, then look for boat B in the same division
+        Set<String> racesA = bda.raceIds() != null ? bda.raceIds() : Set.of();
+
+        List<Map<String, Object>> points = new ArrayList<>();
+        for (String raceId : racesA)
+        {
+            Race race = store.races().get(raceId);
+            if (race == null || race.divisions() == null) continue;
+
+            for (var div : race.divisions())
+            {
+                Double aElapsed = null, bElapsed = null;
+                for (var f : div.finishers())
+                {
+                    if (f.elapsedTime() == null) continue;
+                    if (f.boatId().equals(boatAId)) aElapsed = (double) f.elapsedTime().toSeconds();
+                    if (f.boatId().equals(boatBId)) bElapsed = (double) f.elapsedTime().toSeconds();
+                }
+                if (aElapsed == null || bElapsed == null) continue;
+
+                String seriesName = null;
+                if (race.seriesIds() != null && !race.seriesIds().isEmpty())
+                {
+                    String seriesId = race.seriesIds().getFirst();
+                    var club = store.clubs().get(race.clubId());
+                    if (club != null && club.series() != null)
+                        for (var s : club.series())
+                            if (seriesId.equals(s.id())) { seriesName = s.name(); break; }
+                    if (seriesName == null) seriesName = seriesId;
+                }
+
+                Map<String, Object> pt = new LinkedHashMap<>();
+                pt.put("x",          bElapsed);
+                pt.put("y",          aElapsed);
+                pt.put("date",       race.date() != null ? race.date().toString() : null);
+                pt.put("raceId",     raceId);
+                pt.put("raceName",   raceName(race));
+                pt.put("seriesName", seriesName);
+                pt.put("division",   div.name());
+                points.add(pt);
+            }
+        }
+
+        points.sort(Comparator.comparing(m -> (String) m.get("date"),
+            Comparator.nullsLast(Comparator.naturalOrder())));
+
+        ReferenceFactors rfA = bda.referenceFactors();
+        ReferenceFactors rfB = bdb.referenceFactors();
+        BoatHpf hpfA = bda.hpf();
+        BoatHpf hpfB = bdb.hpf();
+
+        Map<String, Object> boatAMap = new LinkedHashMap<>();
+        boatAMap.put("id",         boatAId);
+        boatAMap.put("name",       bda.boat().name());
+        boatAMap.put("sailNumber", bda.boat().sailNumber());
+        boatAMap.put("rfSpin",     rfA != null ? factorMap(rfA.spin())    : null);
+        boatAMap.put("rfNonSpin",  rfA != null ? factorMap(rfA.nonSpin()) : null);
+        boatAMap.put("hpfSpin",      hpfA != null ? factorMap(hpfA.spin())      : null);
+        boatAMap.put("hpfNonSpin",   hpfA != null ? factorMap(hpfA.nonSpin())   : null);
+        boatAMap.put("hpfTwoHanded", hpfA != null ? factorMap(hpfA.twoHanded()) : null);
+
+        Map<String, Object> boatBMap = new LinkedHashMap<>();
+        boatBMap.put("id",         boatBId);
+        boatBMap.put("name",       bdb.boat().name());
+        boatBMap.put("sailNumber", bdb.boat().sailNumber());
+        boatBMap.put("rfSpin",     rfB != null ? factorMap(rfB.spin())    : null);
+        boatBMap.put("rfNonSpin",  rfB != null ? factorMap(rfB.nonSpin()) : null);
+        boatBMap.put("hpfSpin",      hpfB != null ? factorMap(hpfB.spin())      : null);
+        boatBMap.put("hpfNonSpin",   hpfB != null ? factorMap(hpfB.nonSpin())   : null);
+        boatBMap.put("hpfTwoHanded", hpfB != null ? factorMap(hpfB.twoHanded()) : null);
+
+        writeJson(resp, Map.of("boatA", boatAMap, "boatB", boatBMap, "points", points));
     }
 
     private double medianOf(List<Double> values)

@@ -162,7 +162,7 @@ class AmsImporterTest
         importer.parseAndImport(html);
 
         assertEquals(2, store.boats().size());
-        assertTrue(store.boats().values().stream().anyMatch(b -> "AUS601".equals(b.sailNumber())));
-        assertTrue(store.boats().values().stream().anyMatch(b -> "AUS602".equals(b.sailNumber())));
+        assertTrue(store.boats().values().stream().anyMatch(b -> "601".equals(b.sailNumber())));
+        assertTrue(store.boats().values().stream().anyMatch(b -> "602".equals(b.sailNumber())));
     }
 }

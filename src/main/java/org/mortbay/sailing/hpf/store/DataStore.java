@@ -279,13 +279,14 @@ public class DataStore
             {
                 // We have a design, but the candidate does not, so we need to merge the boats
                 Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
+                String resolvedDesignId = design != null ? design.id() : designId;
                 String boatId = IdGenerator.generateBoatId(normSailNo, normName, design);
 
                 Boat upgraded = new Boat(
                     boatId,
                     normSailNo,
                     rawName,
-                    design.id(),
+                    resolvedDesignId,
                     candidate.clubId(),
                     candidate.certificates(),
                     addSource(candidate.sources(), sourceDesign), Instant.now(), candidate.loadedAt());

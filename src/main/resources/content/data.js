@@ -872,12 +872,31 @@ function renderDivisionChart(data) {
           text: hoverTexts('RF corrected', rfCorr), hoverinfo: 'text' }
     ];
 
+    // Boat name labels: vertical text at each finisher's lowest time point
+    // (lowest time = topmost on chart since y-axis is reversed)
+    const annotations = finishers.map((f, i) => {
+        const ys = [elapsed[i], hpfCorr[i], rfCorr[i]].filter(v => v != null);
+        const minY = Math.min(...ys);
+        return {
+            x: xs[i], y: minY,
+            text: f.name,
+            textangle: -90,
+            xanchor: 'bottom',
+            yanchor: 'bottom',
+            yshift: 6,
+            showarrow: false,
+            cliponaxis: false,
+            font: { size: 11 }
+        };
+    });
+
     const layout = {
         xaxis: { title: 'HPF' },
         yaxis: { title: 'Time (min)', tickformat: '.1f', autorange: 'reversed' },
         legend: { orientation: 'h', y: -0.18 },
-        margin: { t: 10, b: 80, l: 60, r: 20 },
-        hovermode: 'closest'
+        margin: { t: 120, b: 80, l: 60, r: 20 },
+        hovermode: 'closest',
+        annotations
     };
 
     document.getElementById('division-section-races').style.display = '';

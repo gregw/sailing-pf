@@ -50,6 +50,12 @@
       <label title="Hide the chart legend">
         <input type="checkbox" id="hide-legend"> Hide legend
       </label>
+      <label title="Only show race results from the last 12 months">
+        <input type="checkbox" id="last-12-months"> Last 12 months
+      </label>
+      <label title="Only plot races in which all selected boats competed">
+        <input type="checkbox" id="common-races-only"> Common races only
+      </label>
     </div>
   </div>
 
@@ -64,6 +70,11 @@
       Enter a handicap for any boat — the others are scaled by HPF ratio.
     </p>
     <table class="hpf-calc-table"></table>
+  </div>
+
+  <div id="elapsed-charts-section" style="display:none; margin-top:1.5rem;">
+    <h3 style="margin:0 0 0.5rem;">Elapsed Time Comparison</h3>
+    <div id="elapsed-charts-container"></div>
   </div>
 
 

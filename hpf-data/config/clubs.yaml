@@ -782,3 +782,9 @@ clubs:
     state: NZ
     fullName: Opua Cruising Club
     aliases: []
+
+  tcbyachtclub.wixsite.com:
+    shortName: TCYC
+    state: QLD
+    fullName: Tin Can Bay Yacht Club
+    aliases: []

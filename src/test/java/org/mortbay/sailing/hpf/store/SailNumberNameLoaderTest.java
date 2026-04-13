@@ -108,4 +108,42 @@ class SailNumberNameLoaderTest
         Aliases.Loaded seed = Aliases.load(tempDir);
         assertEquals("First Name", seed.designCanonicalName("mydesign"));
     }
+
+    // --- Implicit AUS prefix alias tests ---
+
+    @Test
+    void lookupBoatStripsAusPrefixWithNoYamlEntry()
+    {
+        Aliases.Loaded empty = Aliases.Loaded.EMPTY;
+        Optional<Aliases.BoatMatch> result = empty.lookupBoat("AUS1234", "someboat");
+        assertTrue(result.isPresent());
+        assertEquals("1234", result.get().normSailNumber());
+        assertEquals("someboat", result.get().normName());
+        assertNull(result.get().canonicalDisplayName());
+    }
+
+    @Test
+    void lookupBoatStripsJausPrefixWithNoYamlEntry()
+    {
+        Aliases.Loaded empty = Aliases.Loaded.EMPTY;
+        Optional<Aliases.BoatMatch> result = empty.lookupBoat("JAUS103", "myyacht");
+        assertTrue(result.isPresent());
+        assertEquals("103", result.get().normSailNumber());
+        assertEquals("myyacht", result.get().normName());
+    }
+
+    @Test
+    void lookupBoatNoPrefixAndNoYamlEntryReturnsEmpty()
+    {
+        Aliases.Loaded empty = Aliases.Loaded.EMPTY;
+        assertTrue(empty.lookupBoat("1234", "someboat").isEmpty());
+    }
+
+    @Test
+    void lookupBoatPrefixOnlyNoDigitsDoesNotStrip()
+    {
+        // "AUS" alone (no trailing digit) should not be stripped
+        Aliases.Loaded empty = Aliases.Loaded.EMPTY;
+        assertTrue(empty.lookupBoat("AUS", "someboat").isEmpty());
+    }
 }

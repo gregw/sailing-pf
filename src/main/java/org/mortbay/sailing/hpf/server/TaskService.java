@@ -8,6 +8,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.mortbay.sailing.hpf.analysis.ConversionGraph;
 import org.mortbay.sailing.hpf.analysis.HpfConfig;
 import org.mortbay.sailing.hpf.importer.AmsImporter;
+import org.mortbay.sailing.hpf.importer.ImporterLog;
 import org.mortbay.sailing.hpf.importer.BwpsImporter;
 import org.mortbay.sailing.hpf.importer.RshyrImporter;
 import org.mortbay.sailing.hpf.importer.OrcImporter;
@@ -576,7 +577,25 @@ public void stop()
             .orElseThrow();
     }
 
+    private static final java.util.Set<String> IMPORTER_NAMES = java.util.Set.of(
+        "sailsys-races", "orc", "ams", "topyacht", "bwps", "rshyr");
+
     private void runImporter(String name, String mode, int startId) throws Exception
+    {
+        if (IMPORTER_NAMES.contains(name))
+            ImporterLog.open(dataRoot.resolve("log"), name);
+        try
+        {
+            runImporterSwitch(name, mode, startId);
+        }
+        finally
+        {
+            if (IMPORTER_NAMES.contains(name))
+                ImporterLog.close();
+        }
+    }
+
+    private void runImporterSwitch(String name, String mode, int startId) throws Exception
     {
         switch (name)
         {

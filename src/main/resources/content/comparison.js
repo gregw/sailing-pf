@@ -11,10 +11,12 @@ const STORAGE_KEY = 'hpf-comparison-items';
 let selectedItems   = [];   // {type:'boat', id, label, color}
 let allAvailable    = false;
 let selectedVariant = 'spin';
-let showErrorBars   = false;
+let showErrorBars    = false;
 let showTrendLinear  = true;
 let showTrendSliding = true;
 let hideLegend       = false;
+let showLast12Months  = false;
+let showCommonRacesOnly = false;
 let slidingAverageCount = 8;
 let slidingAverageDrops = 0;
 let candidateBoats  = [];
@@ -207,11 +209,13 @@ async function loadChart() {
     if (!data) return;
     lastChartData = data;
     renderChart(data);
+    loadElapsedCharts();
 }
 
 function onVariantChange() {
     selectedVariant = document.getElementById('variant-selector').value;
     if (lastChartData) renderChart(lastChartData);
+    loadElapsedCharts();
 }
 
 function filterByVariant(entries) {
@@ -222,13 +226,35 @@ function filterByVariant(entries) {
     );
 }
 
+function filterEntries(entries) {
+    let result = filterByVariant(entries);
+    if (showLast12Months) {
+        const cutoff = new Date();
+        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        result = result.filter(e => e.date >= cutoffStr);
+    }
+    return result;
+}
+
 function renderChart(data) {
     const traces = [];
+
+    // Pre-compute filtered entries per boat (variant + last-12-months)
+    const filteredPerBoat = new Map(data.boats.map(b => [b.id, filterEntries(b.entries)]));
+
+    // If "common races only", further restrict each boat to the intersection of raceIds
+    if (showCommonRacesOnly && data.boats.length >= 2) {
+        const sets = data.boats.map(b => new Set(filteredPerBoat.get(b.id).map(e => e.raceId)));
+        const common = sets.reduce((acc, s) => new Set([...acc].filter(id => s.has(id))));
+        data.boats.forEach(b =>
+            filteredPerBoat.set(b.id, filteredPerBoat.get(b.id).filter(e => common.has(e.raceId))));
+    }
 
     // Compute Y range from all filtered entries
     let yMin = 0.5, yMax = 1.5;
     data.boats.forEach(b => {
-        filterByVariant(b.entries).forEach(e => {
+        filteredPerBoat.get(b.id).forEach(e => {
             if (e.backCalcFactor < yMin) yMin = e.backCalcFactor;
             if (e.backCalcFactor > yMax) yMax = e.backCalcFactor;
         });
@@ -240,7 +266,7 @@ function renderChart(data) {
 
     let minDate = null, maxDate = null;
     data.boats.forEach(b => {
-        filterByVariant(b.entries).forEach(e => {
+        filteredPerBoat.get(b.id).forEach(e => {
             if (!minDate || e.date < minDate) minDate = e.date;
             if (!maxDate || e.date > maxDate) maxDate = e.date;
         });
@@ -280,7 +306,7 @@ function renderChart(data) {
             });
         }
 
-        const entries = filterByVariant(boat.entries);
+        const entries = filteredPerBoat.get(boat.id);
         if (entries.length > 0) {
             const xs = [], ys = [], sizes = [], texts = [], custom = [];
             entries.forEach(e => {
@@ -441,6 +467,184 @@ function onCalcInput(changedInput, calcBoats) {
     });
 }
 
+// ---- Elapsed time comparison charts ----
+
+async function loadElapsedCharts() {
+    const section = document.getElementById('elapsed-charts-section');
+    const container = document.getElementById('elapsed-charts-container');
+
+    const boats = selectedItems.filter(i => i.type === 'boat');
+    if (boats.length < 2 || boats.length > 3) {
+        if (boats.length >= 4) {
+            section.style.display = '';
+            container.innerHTML = '<p style="color:#666;">Too many boats selected — select 2 or 3 boats to see elapsed time comparisons.</p>';
+        } else {
+            section.style.display = 'none';
+        }
+        return;
+    }
+
+    // Build pairs: [A,B] for 2 boats; [A,B],[A,C],[B,C] for 3 boats
+    const pairs = [];
+    for (let i = 0; i < boats.length; i++)
+        for (let j = i + 1; j < boats.length; j++)
+            pairs.push([boats[i], boats[j]]);
+
+    section.style.display = '';
+    container.innerHTML = '';
+
+    // Fetch all pairs in parallel
+    const results = await Promise.all(pairs.map(([a, b]) => {
+        const params = new URLSearchParams({ boatAId: a.id, boatBId: b.id });
+        return fetchJson('/api/comparison/elapsed-chart?' + params);
+    }));
+
+    // Render one chart per pair
+    pairs.forEach(([boatItemA, boatItemB], idx) => {
+        const data = results[idx];
+        if (!data) return;
+        const divId = `elapsed-chart-${idx}`;
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '1.5rem';
+        const title = document.createElement('div');
+        title.style.cssText = 'font-weight:bold;margin-bottom:0.25rem;';
+        title.textContent = `${boatItemA.label} vs ${boatItemB.label}`;
+        const chartDiv = document.createElement('div');
+        chartDiv.id = divId;
+        chartDiv.style.cssText = 'width:100%;height:500px;';
+        wrapper.appendChild(title);
+        wrapper.appendChild(chartDiv);
+        container.appendChild(wrapper);
+        renderElapsedChart(divId, data, boatItemA.color, boatItemB.color);
+    });
+}
+
+function renderElapsedChart(divId, data, colorA, colorB) {
+    let points = data.points || [];
+
+    // Apply last-12-months filter if active
+    if (showLast12Months) {
+        const cutoff = new Date();
+        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        points = points.filter(p => p.date >= cutoffStr);
+    }
+
+    if (points.length === 0) {
+        Plotly.purge(divId);
+        return;
+    }
+
+    const xs = points.map(p => p.x / 3600);
+    const ys = points.map(p => p.y / 3600);
+
+    const nameA = data.boatA.sailNumber ? `${data.boatA.sailNumber} ${data.boatA.name}` : data.boatA.name;
+    const nameB = data.boatB.sailNumber ? `${data.boatB.sailNumber} ${data.boatB.name}` : data.boatB.name;
+
+    const texts = points.map(p =>
+        `${esc(p.date || '')}<br>` +
+        (p.seriesName ? `${esc(p.seriesName)}<br>` : '') +
+        (p.raceName   ? `${esc(p.raceName)}<br>`   : '') +
+        `${esc(p.division || '')}<br>` +
+        `${esc(nameA)}: ${fmtTime(p.y)}<br>` +
+        `${esc(nameB)}: ${fmtTime(p.x)}`
+    );
+    const customdata = points.map(p => ({ raceId: p.raceId }));
+
+    const traces = [];
+
+    traces.push({
+        x: xs, y: ys,
+        type: 'scatter', mode: 'markers',
+        name: 'Co-raced divisions',
+        marker: { color: colorA, size: 7, opacity: 0.75,
+                  line: { color: 'rgba(0,0,0,0.3)', width: 0.5 } },
+        text: texts, hoverinfo: 'text',
+        customdata
+    });
+
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    const xPad = (xMax - xMin) * 0.05 || xMin * 0.05;
+
+    // Best-fit line
+    const fit = linearFitElapsed(xs, ys);
+    if (fit) {
+        const x0 = xMin - xPad, x1 = xMax + xPad;
+        traces.push({
+            x: [x0, x1],
+            y: [fit.slope * x0 + fit.intercept, fit.slope * x1 + fit.intercept],
+            type: 'scatter', mode: 'lines',
+            name: `Best fit (slope ${fit.slope.toFixed(4)})`,
+            line: { color: colorA, width: 2 }
+        });
+    }
+
+    // Expected HPF reference line
+    const hpfA = selectedVariant === 'nonSpin' ? data.boatA.hpfNonSpin
+               : selectedVariant === 'twoHanded' ? data.boatA.hpfTwoHanded : data.boatA.hpfSpin;
+    const hpfB = selectedVariant === 'nonSpin' ? data.boatB.hpfNonSpin
+               : selectedVariant === 'twoHanded' ? data.boatB.hpfTwoHanded : data.boatB.hpfSpin;
+    if (hpfA && hpfB && hpfA.value && hpfB.value) {
+        const slope = hpfA.value / hpfB.value;
+        const meanX = xs.reduce((s, v) => s + v, 0) / xs.length;
+        const meanY = ys.reduce((s, v) => s + v, 0) / ys.length;
+        const x0 = xMin - xPad, x1 = xMax + xPad;
+        traces.push({
+            x: [x0, x1],
+            y: [meanY + slope * (x0 - meanX), meanY + slope * (x1 - meanX)],
+            type: 'scatter', mode: 'lines',
+            name: `Expected HPF (${hpfA.value.toFixed(4)} / ${hpfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            line: { color: colorB, width: 2, dash: 'dot' }
+        });
+    }
+
+    const yMin = Math.min(...ys), yMax = Math.max(...ys);
+    const yPad = (yMax - yMin) * 0.05 || yMin * 0.05;
+
+    const layout = {
+        xaxis: { title: `${esc(nameB)} elapsed (h)`, range: [xMax + xPad, xMin - xPad] },
+        yaxis: { title: `${esc(nameA)} elapsed (h)`, range: [yMax + yPad, yMin - yPad] },
+        legend: { orientation: 'v', xanchor: 'right', x: 1 },
+        margin: { t: 20, b: 70, l: 80, r: 20 },
+        hovermode: 'closest'
+    };
+
+    Plotly.react(divId, traces, layout, { responsive: true });
+
+    const chartDiv = document.getElementById(divId);
+    chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_click');
+    chartDiv.on('plotly_click', (eventData) => {
+        if (!eventData.points || !eventData.points.length) return;
+        const pt = eventData.points[0];
+        if (!pt.customdata || !pt.customdata.raceId) return;
+        window.location.href = 'data.html?' + new URLSearchParams({ tab: 'races', raceId: pt.customdata.raceId });
+    });
+}
+
+function linearFitElapsed(xs, ys) {
+    const n = xs.length;
+    if (n < 2) return null;
+    const meanX = xs.reduce((s, v) => s + v, 0) / n;
+    const meanY = ys.reduce((s, v) => s + v, 0) / n;
+    let num = 0, den = 0;
+    for (let i = 0; i < n; i++) {
+        num += (xs[i] - meanX) * (ys[i] - meanY);
+        den += (xs[i] - meanX) ** 2;
+    }
+    if (den === 0) return null;
+    const slope = num / den;
+    return { slope, intercept: meanY - slope * meanX };
+}
+
+function fmtTime(secs) {
+    if (secs == null) return '—';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.round(secs % 60);
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+}
+
 // ---- Initialisation ----
 
 async function loadConfig() {
@@ -459,9 +663,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadCandidates();
     });
     document.getElementById('variant-selector').addEventListener('change', onVariantChange);
-    document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear  = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend       = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('last-12-months')    .addEventListener('change', e => { showLast12Months   = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
+    document.getElementById('common-races-only') .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('boat-search').addEventListener('input', () => {
         clearTimeout(boatDebounce);
         boatDebounce = setTimeout(loadCandidates, 250);

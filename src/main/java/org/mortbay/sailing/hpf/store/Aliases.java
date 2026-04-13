@@ -314,6 +314,13 @@ public class Aliases
                 }
             }
 
+            // Implicit prefix alias: "AUS1234" → "1234" (no yaml entry needed).
+            // Any sail number with a strippable AUS country/fleet prefix is treated as
+            // equivalent to its bare numeric form, preventing duplicate boat records.
+            String stripped = stripPrefix(normSailNumber);
+            if (!stripped.equals(normSailNumber))
+                return Optional.of(new BoatMatch(stripped, normName, null));
+
             return Optional.empty();
         }
 

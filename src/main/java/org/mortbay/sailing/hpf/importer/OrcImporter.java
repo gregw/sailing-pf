@@ -108,7 +108,7 @@ public class OrcImporter
 
         NodeList certNodes = listDoc.getElementsByTagName("ROW");
         if (certNodes.getLength() == 0)
-            LOG.warn("No ROW nodes found — check XML for correct tag name");
+            ImporterLog.warn(LOG,"No ROW nodes found — check XML for correct tag name");
         LOG.info("Processing {} certificate entries", certNodes.getLength());
 
         Path certsDir = cacheDir != null ? cacheDir.resolve("certs") : null;
@@ -123,7 +123,7 @@ public class OrcImporter
                 dxtId = getDxtID(el);
             if (dxtId == null || dxtId.isBlank())
             {
-                LOG.warn("Skipping cert with missing dxtID");
+                ImporterLog.warn(LOG,"Skipping cert with missing dxtID");
                 continue;
             }
             final String finalDxtId = dxtId;
@@ -142,7 +142,7 @@ public class OrcImporter
             }
             catch (Exception e)
             {
-                LOG.warn("Skipping cert dxtID={}: failed to fetch cert page — {}", dxtId, e.getMessage());
+                ImporterLog.warn(LOG,"Skipping cert dxtID={}: failed to fetch cert page — {}", dxtId, e.getMessage());
                 continue;
             }
 
@@ -245,7 +245,7 @@ public class OrcImporter
 
         if (yachtName == null || sailNo == null || vppYearStr == null)
         {
-            LOG.warn("Skipping cert dxtID={}: missing required fields", dxtId);
+            ImporterLog.warn(LOG,"Skipping cert dxtID={}: missing required fields", dxtId);
             return;
         }
 
@@ -256,19 +256,19 @@ public class OrcImporter
         }
         catch (NumberFormatException e)
         {
-            LOG.warn("Skipping cert dxtID={}: invalid VPPYear={}", dxtId, vppYearStr);
+            ImporterLog.warn(LOG,"Skipping cert dxtID={}: invalid VPPYear={}", dxtId, vppYearStr);
             return;
         }
 
         double gph = parseGph(certHtml, dxtId);
         if (Double.isNaN(gph))
         {
-            LOG.warn("Skipping cert dxtID={}: GPH not found in cert HTML", dxtId);
+            ImporterLog.warn(LOG,"Skipping cert dxtID={}: GPH not found in cert HTML", dxtId);
             return;
         }
         if (gph < 400 || gph > 900)
         {
-            LOG.warn("Skipping cert dxtID={}: implausible GPH={} (expected 400-900, regex mismatch?)", dxtId, gph);
+            ImporterLog.warn(LOG,"Skipping cert dxtID={}: implausible GPH={} (expected 400-900, regex mismatch?)", dxtId, gph);
             return;
         }
         double tcf = 600.0 / gph;
@@ -334,7 +334,7 @@ public class OrcImporter
             }
             catch (NumberFormatException e)
             {
-                LOG.warn("Cannot parse GPH value for dxtID={}: {}", dxtId, m.group(1));
+                ImporterLog.warn(LOG,"Cannot parse GPH value for dxtID={}: {}", dxtId, m.group(1));
             }
         }
         return Double.NaN;

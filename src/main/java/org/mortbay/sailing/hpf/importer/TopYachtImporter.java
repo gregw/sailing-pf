@@ -146,7 +146,7 @@ public class TopYachtImporter
                 }
                 catch (Exception e)
                 {
-                    LOG.error("Failed to fetch index for club={} url={}: {}", club.id(), indexUrl, e.getMessage());
+                    ImporterLog.error(LOG,"Failed to fetch index for club={} url={}: {}", club.id(), indexUrl, e.getMessage());
                 }
             }
         }
@@ -164,7 +164,7 @@ public class TopYachtImporter
             // TODO: log a warning if series name contains two-handed hints
             String lower = sl.name().toLowerCase();
             if (lower.contains("two") || lower.contains("2h") || lower.contains("2-handed"))
-                LOG.warn("TopYacht: possible two-handed series '{}' — two-handed detection not yet implemented", sl.name());
+                ImporterLog.warn(LOG,"TopYacht: possible two-handed series '{}' — two-handed detection not yet implemented", sl.name());
 
             try
             {
@@ -173,7 +173,7 @@ public class TopYachtImporter
             }
             catch (Exception e)
             {
-                LOG.error("Failed to fetch series url={}: {}", sl.url(), e.getMessage());
+                ImporterLog.error(LOG,"Failed to fetch series url={}: {}", sl.url(), e.getMessage());
             }
         }
     }
@@ -196,7 +196,7 @@ public class TopYachtImporter
                 }
                 catch (Exception e)
                 {
-                    LOG.error("Failed to fetch results url={}: {}", url, e.getMessage());
+                    ImporterLog.error(LOG,"Failed to fetch results url={}: {}", url, e.getMessage());
                 }
             }
             else
@@ -215,7 +215,7 @@ public class TopYachtImporter
                     }
                     catch (Exception e)
                     {
-                        LOG.error("Failed to fetch results url={}: {}", url, e.getMessage());
+                        ImporterLog.error(LOG,"Failed to fetch results url={}: {}", url, e.getMessage());
                     }
                 }
                 if (!parsedList.isEmpty())
@@ -316,7 +316,7 @@ public class TopYachtImporter
                             existing.elapsed.minus(row.elapsed()).abs().toSeconds());
                         if (diffSeconds > 1)
                         {
-                            LOG.error("TopYacht: sail {} '{}' has conflicting elapsed times " +
+                            ImporterLog.error(LOG,"TopYacht: sail {} '{}' has conflicting elapsed times " +
                                 "{} vs {} in race {} — discarding duplicate",
                                 row.sailNo(), row.boatName(),
                                 existing.elapsed, row.elapsed(), raceId);
@@ -381,7 +381,7 @@ public class TopYachtImporter
 
             if (me.elapsed != null && (me.elapsed.isNegative() || me.elapsed.isZero()))
             {
-                LOG.warn("TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), me.elapsed);
+                ImporterLog.warn(LOG,"TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), me.elapsed);
                 continue;
             }
             finishers.add(new Finisher(boat.id(), me.elapsed, divNS, certNumber));
@@ -509,7 +509,7 @@ public class TopYachtImporter
         Elements tables = doc.select("table.centre_results_table");
         if (tables.isEmpty())
         {
-            LOG.warn("TopYacht: no centre_results_table found in results page");
+            ImporterLog.warn(LOG,"TopYacht: no centre_results_table found in results page");
             return null;
         }
 
@@ -631,7 +631,7 @@ public class TopYachtImporter
             Element headerRow = table.selectFirst("tr.type1");
             if (headerRow == null)
             {
-                LOG.warn("TopYacht: no header row (type1) found in results table; skipping division");
+                ImporterLog.warn(LOG,"TopYacht: no header row (type1) found in results table; skipping division");
                 continue;
             }
 
@@ -656,7 +656,7 @@ public class TopYachtImporter
 
             if (sailIdx < 0 || nameIdx < 0 || elapsedIdx < 0)
             {
-                LOG.warn("TopYacht: required columns not found (sail={}, name={}, elapsed={}); skipping division",
+                ImporterLog.warn(LOG,"TopYacht: required columns not found (sail={}, name={}, elapsed={}); skipping division",
                     sailIdx, nameIdx, elapsedIdx);
                 continue;
             }
@@ -740,7 +740,7 @@ public class TopYachtImporter
 
             if (row.elapsed() != null && (row.elapsed().isNegative() || row.elapsed().isZero()))
             {
-                LOG.warn("TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), row.elapsed());
+                ImporterLog.warn(LOG,"TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), row.elapsed());
                 continue;
             }
             finishers.add(new Finisher(boat.id(), row.elapsed(), nonSpinnaker, certNumber));
@@ -813,7 +813,7 @@ public class TopYachtImporter
         }
         catch (Exception e)
         {
-            LOG.warn("TopYacht: could not write to {}: {}", errorFile, e.getMessage());
+            ImporterLog.warn(LOG,"TopYacht: could not write to {}: {}", errorFile, e.getMessage());
         }
     }
 
@@ -958,7 +958,7 @@ public class TopYachtImporter
         }
         catch (Exception e)
         {
-            LOG.warn("TopYacht: could not resolve href '{}' against base '{}': {}", href, baseUrl, e.getMessage());
+            ImporterLog.warn(LOG,"TopYacht: could not resolve href '{}' against base '{}': {}", href, baseUrl, e.getMessage());
             return null;
         }
     }

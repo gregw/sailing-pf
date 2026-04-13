@@ -160,7 +160,7 @@ public class SailSysImporter
             }
             catch (Exception e)
             {
-                LOG.warn("Error processing {}: {}", file.getFileName(), e.getMessage());
+                ImporterLog.warn(LOG,"Error processing {}: {}", file.getFileName(), e.getMessage());
             }
             processed++;
             if (processed % SAVE_INTERVAL == 0)
@@ -211,7 +211,7 @@ public class SailSysImporter
             }
             catch (Exception e)
             {
-                LOG.warn("HTTP error fetching race id={}: {}", id, e.getMessage());
+                ImporterLog.warn(LOG,"HTTP error fetching race id={}: {}", id, e.getMessage());
                 id++;
                 continue;
             }
@@ -315,7 +315,7 @@ public class SailSysImporter
                     }
                     else
                     {
-                        LOG.warn("Error fetching race id={}: {}", id, e.getMessage());
+                        ImporterLog.warn(LOG,"Error fetching race id={}: {}", id, e.getMessage());
                         id++;
                         continue;
                     }
@@ -382,7 +382,7 @@ public class SailSysImporter
         }
         catch (Exception e)
         {
-            LOG.warn("Cannot parse race JSON: {}", e.getMessage());
+            ImporterLog.warn(LOG,"Cannot parse race JSON: {}", e.getMessage());
             return false;
         }
 
@@ -415,7 +415,7 @@ public class SailSysImporter
         LocalDate raceDate = parseDate(data.dateTime);
         if (raceDate == null)
         {
-            LOG.warn("Skipping race id={}: cannot parse dateTime={}", data.id, data.dateTime);
+            ImporterLog.warn(LOG,"Skipping race id={}: cannot parse dateTime={}", data.id, data.dateTime);
             return;
         }
 

@@ -76,7 +76,7 @@ class OrcImporterTest {
 
         assertEquals(1, store.boats().size());
         Boat boat = store.boats().values().iterator().next();
-        assertEquals("AUS1234", boat.sailNumber());
+        assertEquals("1234", boat.sailNumber());
         assertEquals("Wild Thing", boat.name());
         assertEquals("j24", boat.designId());
 

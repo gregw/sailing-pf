@@ -112,7 +112,7 @@ public class BwpsImporter
             }
             catch (Exception e)
             {
-                LOG.error("BWPS: failed to fetch race page {}: {}", race.url(), e.getMessage());
+                ImporterLog.error(LOG,"BWPS: failed to fetch race page {}: {}", race.url(), e.getMessage());
                 continue;
             }
 
@@ -128,7 +128,7 @@ public class BwpsImporter
                 }
                 catch (Exception e)
                 {
-                    LOG.error("BWPS: failed to process race='{}' year={}: {}",
+                    ImporterLog.error(LOG,"BWPS: failed to process race='{}' year={}: {}",
                         race.name(), year.yearLabel(), e.getMessage(), e);
                 }
             }
@@ -152,7 +152,7 @@ public class BwpsImporter
         String lhTabUrl  = tabs.get("Line Honours");
         if (ircTabUrl == null || lhTabUrl == null)
         {
-            LOG.warn("BWPS: race='{}' year={} — IRC or Line Honours tab not found; tabs={}",
+            ImporterLog.warn(LOG,"BWPS: race='{}' year={} — IRC or Line Honours tab not found; tabs={}",
                 raceName, year, tabs.keySet());
             return;
         }
@@ -175,7 +175,7 @@ public class BwpsImporter
         LocalDate raceDate = computeRaceDate(lhRows, year);
         if (raceDate == null)
         {
-            LOG.warn("BWPS: race='{}' year={} — could not compute race date", raceName, year);
+            ImporterLog.warn(LOG,"BWPS: race='{}' year={} — could not compute race date", raceName, year);
             return;
         }
 
@@ -217,7 +217,7 @@ public class BwpsImporter
             }
             catch (Exception e)
             {
-                LOG.warn("BWPS: failed to fetch boat detail {}: {}", row.boatDetailUrl(), e.getMessage());
+                ImporterLog.warn(LOG,"BWPS: failed to fetch boat detail {}: {}", row.boatDetailUrl(), e.getMessage());
                 continue;
             }
 
@@ -256,7 +256,7 @@ public class BwpsImporter
             Duration lhElapsed = lh.elapsed();
             if (lhElapsed == null || lhElapsed.isNegative() || lhElapsed.isZero())
             {
-                LOG.warn("BWPS: skipping finisher '{}' in race '{}' year={}: non-positive elapsed {}",
+                ImporterLog.warn(LOG,"BWPS: skipping finisher '{}' in race '{}' year={}: non-positive elapsed {}",
                     boat.id(), raceName, year, lhElapsed);
                 continue;
             }
@@ -267,7 +267,7 @@ public class BwpsImporter
 
         if (divMap.isEmpty())
         {
-            LOG.warn("BWPS: race='{}' year={} — no finished IRC/ORC boats with elapsed times", raceName, year);
+            ImporterLog.warn(LOG,"BWPS: race='{}' year={} — no finished IRC/ORC boats with elapsed times", raceName, year);
             return;
         }
 
@@ -364,7 +364,7 @@ public class BwpsImporter
         Element table = doc.selectFirst("table.standings");
         if (table == null)
         {
-            LOG.warn("BWPS: no standings table found (system={})", system);
+            ImporterLog.warn(LOG,"BWPS: no standings table found (system={})", system);
             return result;
         }
 
@@ -376,7 +376,7 @@ public class BwpsImporter
                 .anyMatch(th -> th.text().trim().equalsIgnoreCase("HCAP"));
             if (!hasHcap)
             {
-                LOG.warn("BWPS: standings table for system={} has no HCAP column — skipping", system);
+                ImporterLog.warn(LOG,"BWPS: standings table for system={} has no HCAP column — skipping", system);
                 return result;
             }
         }
@@ -430,7 +430,7 @@ public class BwpsImporter
         Element table = doc.selectFirst("table.standings");
         if (table == null)
         {
-            LOG.warn("BWPS: no standings table found on Line Honours page");
+            ImporterLog.warn(LOG,"BWPS: no standings table found on Line Honours page");
             return result;
         }
 
@@ -578,7 +578,7 @@ public class BwpsImporter
         }
         catch (Exception e)
         {
-            LOG.warn("BWPS: could not parse finish datetime '{}': {}", fullDateTimeStr, e.getMessage());
+            ImporterLog.warn(LOG,"BWPS: could not parse finish datetime '{}': {}", fullDateTimeStr, e.getMessage());
             return null;
         }
     }

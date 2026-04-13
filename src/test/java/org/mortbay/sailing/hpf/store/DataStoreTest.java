@@ -261,8 +261,8 @@ class DataStoreTest {
 
         Boat boat = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
-        assertEquals("AUS1234-ragingbull-j24", boat.id());
-        assertEquals("AUS1234", boat.sailNumber());
+        assertEquals("1234-ragingbull-j24", boat.id());
+        assertEquals("1234", boat.sailNumber());
         assertEquals("Raging Bull", boat.name());
         assertEquals("j24", boat.designId());
         assertEquals(1, store.boats().size());
@@ -286,7 +286,7 @@ class DataStoreTest {
     void findOrCreateBoatUpgradesNoDesignBoat(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat noDesign = new Boat("AUS1234-ragingbull", "AUS1234", "Raging Bull", null, null,
+        Boat noDesign = new Boat("1234-ragingbull", "1234", "Raging Bull", null, null,
                 List.of(), List.of(), null, null);
         store.putBoat(noDesign);
 
@@ -295,9 +295,9 @@ class DataStoreTest {
 
         Boat upgraded = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
 
-        assertEquals("AUS1234-ragingbull-j24", upgraded.id());
+        assertEquals("1234-ragingbull-j24", upgraded.id());
         assertEquals("j24", upgraded.designId());
-        assertFalse(store.boats().containsKey("AUS1234-ragingbull"));
+        assertFalse(store.boats().containsKey("1234-ragingbull"));
         assertEquals(1, store.boats().size());
     }
 

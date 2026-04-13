@@ -123,7 +123,7 @@ class SailSysImporterTest
             "Unknown cert should be inferred");
 
         Boat boat = store.boats().values().stream()
-            .filter(b -> "AUS1234".equals(b.sailNumber()))
+            .filter(b -> "1234".equals(b.sailNumber()))
             .findFirst().orElseThrow();
         assertEquals(1, boat.certificates().size());
         Certificate cert = boat.certificates().getFirst();
@@ -139,7 +139,7 @@ class SailSysImporterTest
         store.putClub(myc);
 
         Certificate existingCert = new Certificate("IRC", 2020, 1.071, false, false, false, false, "CERT-12345", null);
-        Boat boat = new Boat("AUS1234-ragingbull", "AUS1234", "Raging Bull", null, "myc.com.au",
+        Boat boat = new Boat("1234-ragingbull", "1234", "Raging Bull", null, "myc.com.au",
             List.of(existingCert), List.of(), null, null);
         store.putBoat(boat);
 
