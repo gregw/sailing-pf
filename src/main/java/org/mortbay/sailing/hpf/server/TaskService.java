@@ -10,7 +10,6 @@ import org.mortbay.sailing.hpf.analysis.HpfConfig;
 import org.mortbay.sailing.hpf.importer.AmsImporter;
 import org.mortbay.sailing.hpf.importer.ImporterLog;
 import org.mortbay.sailing.hpf.importer.BwpsImporter;
-import org.mortbay.sailing.hpf.importer.RshyrImporter;
 import org.mortbay.sailing.hpf.importer.OrcImporter;
 import org.mortbay.sailing.hpf.importer.SailSysImporter;
 import org.mortbay.sailing.hpf.importer.TopYachtImporter;
@@ -157,7 +156,6 @@ public class TaskService
         new ImporterEntry("ams",                "api",  false, false),
         new ImporterEntry("topyacht",           "api",  false, false),
         new ImporterEntry("bwps",               "api",  false, false),
-        new ImporterEntry("rshyr",              "api",  false, false),
         new ImporterEntry("analysis",           "run",  false, false),
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
@@ -591,7 +589,7 @@ public void stop()
     }
 
     private static final java.util.Set<String> IMPORTER_NAMES = java.util.Set.of(
-        "sailsys-races", "orc", "ams", "topyacht", "bwps", "rshyr");
+        "sailsys-races", "orc", "ams", "topyacht", "bwps");
 
     private void runImporter(String name, String mode, int startId) throws Exception
     {
@@ -630,7 +628,6 @@ public void stop()
             case "ams" -> new AmsImporter(store, httpClient).run();
             case "topyacht" -> new TopYachtImporter(store, httpClient).run(recentRaceReimportDays);
             case "bwps"     -> new BwpsImporter(store, httpClient).run(recentRaceReimportDays, bwpsMinYear);
-            case "rshyr"    -> new RshyrImporter(store, httpClient).run(recentRaceReimportDays);
             case "analysis" ->
             {
                 if (cache != null)

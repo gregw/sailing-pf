@@ -133,7 +133,6 @@ const COLUMNS = {
             : null },
         { label: 'Race',      key: 'name',      anchor: 'col-race-name',      tip: 'Race name or number within the series.' },
         { label: 'Finishers', key: 'finishers',    anchor: 'col-race-finishers',   tip: 'Total finishers across all divisions in this race.' },
-        { label: 'Ref Time',  key: 'referenceTime', anchor: 'col-race-ref-time', tip: 'T₀: elapsed time a 1.000 HPF boat would have taken. Only available after HPF optimisation.' },
         { label: 'Excl',      key: 'excluded',  type: 'toggle', anchor: 'col-race-excl',
           tip: 'Excluded races are not used in HPF calculations.' },
     ],
@@ -1195,6 +1194,10 @@ function renderSeriesChartForDivision(divName) {
         '#ff7f0e', '#1f77b4', '#aec7e8', '#ffbb78', '#98df8a'
     ];
 
+    const podiumSymbols = ['star', 'diamond', 'triangle-up'];
+    const podiumSizes   = [14, 12, 11];
+    const podiumLabels  = ['1st', '2nd', '3rd'];
+
     const traces = [];
     data.races.forEach((race, raceIdx) => {
         const color = raceColors[raceIdx % raceColors.length];
@@ -1205,6 +1208,11 @@ function renderSeriesChartForDivision(divName) {
 
         const finishers = div.finishers.filter(f => f.hpf != null && f.hpfCorrected != null);
         if (finishers.length === 0) return;
+
+        // Find the indices of the 3 fastest HPF-corrected times
+        const sorted = finishers.map((f, i) => ({ i, t: f.hpfCorrected }))
+            .sort((a, b) => a.t - b.t);
+        const podiumSet = new Set(sorted.slice(0, 3).map(s => s.i));
 
         const xs = finishers.map(f => f.hpf);
         const ys = finishers.map(f => f.hpfCorrected / 60);
@@ -1221,6 +1229,25 @@ function renderSeriesChartForDivision(divName) {
             text: texts,
             hoverinfo: 'text'
         });
+
+        // Add podium markers (1st/2nd/3rd fastest corrected times)
+        for (let p = 0; p < Math.min(3, sorted.length); p++) {
+            const f = finishers[sorted[p].i];
+            traces.push({
+                x: [f.hpf], y: [f.hpfCorrected / 60],
+                mode: 'markers', type: 'scatter',
+                name: podiumLabels[p],
+                legendgroup: podiumLabels[p],
+                showlegend: raceIdx === 0,
+                marker: {
+                    symbol: podiumSymbols[p], size: podiumSizes[p],
+                    color: color,
+                    line: { color: '#fff', width: 1.5 }
+                },
+                text: [`${podiumLabels[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>HPF corrected: ${fmtTime(f.hpfCorrected)}`],
+                hoverinfo: 'text'
+            });
+        }
     });
 
     if (traces.length === 0) {

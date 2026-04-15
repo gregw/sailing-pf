@@ -12,6 +12,7 @@ import org.mortbay.sailing.hpf.data.Race;
 import org.mortbay.sailing.hpf.data.Series;
 
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -591,6 +592,43 @@ class DataStoreTest {
         assertTrue(store.boats().containsKey("AUS1-foo"), "boat with null designId must be untouched");
         assertNull(store.boats().get("AUS1-foo").designId());
         assertEquals(1, store.boats().size());
+    }
+
+    // --- Design override ---
+
+    @Test
+    void findOrCreateBoatAppliesDesignOverride(@TempDir Path tempDir) throws Exception {
+        // Create config/design.yaml with an override: 6499/Supernova → sydney36mkii
+        Path configDir = tempDir.resolve("config");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("design.yaml"),
+            """
+            excluded: []
+            ignored: []
+            boatDesignOverrides:
+              - designId: "sydney36mkii"
+                canonicalName: "Sydney 36 MkII"
+                boats:
+                  - sailNumber: "6499"
+                    name: "Supernova"
+            """);
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        // Create an existing "sydney36" design (the wrong one, from raw data)
+        store.putDesign(new Design("sydney36", "Sydney 36", List.of(), List.of(), null, null));
+
+        // The override should have auto-created "sydney36mkii" at startup
+        assertNotNull(store.designs().get("sydney36mkii"), "override design should be auto-created");
+
+        // Call findOrCreateBoat with raw design "Sydney 36" — override should kick in
+        Boat boat = store.findOrCreateBoat("6499", "Supernova", "Sydney 36");
+
+        assertEquals("sydney36mkii", boat.designId(),
+            "design override should replace sydney36 with sydney36mkii");
+        assertEquals("6499-supernova-sydney36mkii", boat.id(),
+            "boat ID should use the overridden design");
     }
 
     // --- Helpers ---

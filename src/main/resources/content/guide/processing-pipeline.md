@@ -2,11 +2,11 @@
 
 ## Overview
 
-This document describes the full processing pipeline for the Australian Yacht Racing Elapsed Time Database. The pipeline is divided into two phases: **Data Preparation and Reference Network Construction** (steps 1–14) and **HPF Calculation** (steps 15–21).
+This document describes the full processing pipeline for the Australian Yacht Racing Elapsed Time Database. The pipeline is divided into two phases: **Data Preparation and Reference Network Construction** (steps 1–13) and **HPF Calculation** (steps 14–20).
 
 ---
 
-## Phase 1: Data Preparation and Reference Network Construction (Implemented)
+## Phase 1: Data Preparation and Reference Network Construction
 
 All steps in Phase 1 are implemented and operational. They are run via the admin webapp's
 import management page or via scheduled runs configured in `admin.yaml`.
@@ -44,16 +44,7 @@ Scrape AMS certificate listings from raceyachts.org. Creates `Certificate` recor
 
 ---
 
-### Step 3: Import SailSys Boat Records (`SailSysBoatImporter`)
-
-Import boats from SailSys, either from pre-downloaded JSON files (`--local` mode) or via
-HTTP API with configurable throttling. Extracts IRC certificates from the `handicaps[]` array
-where `definition.shortName` is `IRC` or `IRC SH`. Maps `IRC SH` to `twoHanded=true`.
-`make`/`model` fields are normalised for design name derivation; ORC `Class` is preferred.
-
----
-
-### Step 4: Import SailSys Races (`SailSysRaceImporter`)
+### Step 3: Import SailSys Races (`SailSysImporter`)
 
 Scan SailSys race records starting from `nextSailSysRaceId` (configured in `admin.yaml`).
 Supports local file mode and HTTP API mode. For each completed race (non-null
@@ -63,14 +54,21 @@ Supports local file mode and HTTP API mode. For each completed race (non-null
 - Per-boat entries: sail number, name, elapsed time, `nonSpinnaker` flag
 - Certificate inference from `handicapCreatedFrom` in `calculations[]` — the handicap actually
   used for scoring. Inferred certificates include the `nonSpinnaker` flag from the race entry.
+- Boat design from the SailSys boat API, fetched on demand per entry.
 
 Unknown boats are resolved via fuzzy matching (Jaro-Winkler, threshold configurable in
-`admin.yaml`) or created as new `Boat` instances. The SailSys boat API is fetched on demand
-for design information. Clubs are matched via `clubs.yaml` seed data.
+`admin.yaml`) or created as new `Boat` instances. Clubs are matched via `clubs.yaml` seed data.
+`make`/`model` fields are normalised for design name derivation; ORC `Class` is preferred.
+
+**Conflict avoidance with dedicated importers:** CYCA offshore races (Sydney Hobart, Gold Coast)
+appear in both SailSys and the dedicated `BwpsImporter`. When SailSys produces no finishers for
+a race and a `BwpsImporter` record already exists for the same club and date, SailSys runs in
+*cert-only* mode — it extracts measurement certificates from the boat data without creating a
+duplicate race record.
 
 ---
 
-### Step 5: Import TopYacht Races (`TopYachtImporter`)
+### Step 4: Import TopYacht Races (`TopYachtImporter`)
 
 Scrape TopYacht HTML result pages from club URLs curated in `clubs.yaml`. For each result page:
 
@@ -91,14 +89,37 @@ the parsed caption.
 
 ---
 
-### Step 6: Import BWPS Races (`BwpsImporter`)
+### Step 5: Import CYCA Major Offshore Races (`BwpsImporter`)
 
-Import BWPS race results from the Cruising Yacht Club of Australia. IRC-based races providing
-boat identity, elapsed times, and IRC handicaps used for scoring.
+A single importer handles all major CYCA offshore race data across three sources:
+
+**Phase A — BWPS club series races** (Flinders Islet, Tollgate Islands, Newcastle Bass Island,
+Cabbage Tree Island, Bird Island): fetched from the BWPS standings site at
+`bwps.cycaracing.com`. IRC-based results providing elapsed times and inferred IRC certificates.
+
+**Phase B — Rolex Sydney Hobart Yacht Race (RSHYR):** fetched from `rolexsydneyhobart.com` and
+the CYCA feeds API at `feeds.cycaracing.com`. Results from 2021 onwards. Elapsed times are
+computed from the Line Honours feed (finish time minus fixed 13:00 AEDT start on 26 December).
+IRC divisions are imported with per-division finisher lists; ORC divisions where available.
+
+**Phase C — Noakes Sydney Gold Coast Yacht Race:** fetched from `goldcoast.cycaracing.com` and
+the CYCA feeds API. Results from 2018 onwards (no race in 2020 or 2021 due to COVID). Race
+date varies by year; elapsed times computed from Line Honours finish times and known start times.
+
+For all three phases, boat design information is supplemented by yacht listing pages on each
+race website (`/race/{year}/yachts`), which provide a sail-number-to-design-type table.
+
+Category (division) IDs for unknown future years are discovered via the
+`feeds.cycaracing.com/Race/Categories/{raceId}` API, falling back to forward-scanning if the
+API doesn't return usable results.
+
+Each major race belongs to two series simultaneously: the **Blue Water Pointscore {year}**
+series (alongside the club series races) and its own dedicated race series (e.g. *Rolex Sydney
+Hobart Yacht Race*).
 
 ---
 
-### Step 7: Build Indexes (`AnalysisCache.refreshIndexes()`)
+### Step 6: Build Indexes (`AnalysisCache.refreshIndexes()`)
 
 Build navigation indexes from raw data:
 - `boatIdsByDesignId` — designId → Set of boatIds
@@ -109,7 +130,7 @@ These indexes replace back-references that would otherwise be needed on entity r
 
 ---
 
-### Step 8: Build Conversion Graph (`HandicapAnalyser`)
+### Step 7: Build Conversion Graph (`HandicapAnalyser`)
 
 `HandicapAnalyser.analyseAll()` mines all boats for paired handicap observations. For each
 boat holding certificates in multiple systems, years, or variants, it emits `DataPair` records
@@ -127,7 +148,7 @@ fit recomputed.
 
 ---
 
-### Step 9: Compute Reference Factors (`ReferenceNetworkBuilder`)
+### Step 8: Compute Reference Factors (`ReferenceNetworkBuilder`)
 
 `ReferenceNetworkBuilder.build(store, graph, targetYear)` computes a `BoatReferenceFactors`
 for every boat. The target is the IRC node for `targetYear` (configurable, defaults to the
@@ -147,7 +168,7 @@ independently: spinnaker, non-spinnaker, and two-handed.
 
 ---
 
-### Step 10: Propagate via Race Co-participation
+### Step 9: Propagate via Race Co-participation
 
 For boats without reference factors, scan all races where they competed against boats that
 do have factors. Estimate an implied factor from elapsed time ratios, weighted by the
@@ -156,14 +177,14 @@ reference boat's RF weight. All implied factors across all races are aggregated 
 
 ---
 
-### Step 11: Iterate Until Convergence
+### Step 10: Iterate Until Convergence
 
-Repeat step 10 until no new factors are assigned (max 20 iterations). At convergence,
+Repeat step 9 until no new factors are assigned (max 20 iterations). At convergence,
 every boat reachable via race co-participation has spin and/or nonSpin factors.
 
 ---
 
-### Step 12: Aggregate to Design Factors
+### Step 11: Aggregate to Design Factors
 
 After race propagation converges, aggregate all boat-level RFs to design level using
 `Factor.aggregate`. This produces a `ReferenceFactors` per design from all boats of that
@@ -172,7 +193,7 @@ loop) ensures the design factors reflect a stable, fully-propagated set of boat 
 
 ---
 
-### Step 13: Aggregate with Design Reference Factors
+### Step 12: Aggregate with Design Reference Factors
 
 For every boat whose design has a Reference Factor, aggregate the boat's own per-variant RF
 with the design's RF using `Factor.aggregate` (`combineWithDesignFactors()`). Evidence
@@ -187,7 +208,7 @@ accumulation increases confidence while disagreement penalises weight:
 
 ---
 
-### Step 14: Cross-Variant Fill
+### Step 13: Cross-Variant Fill
 
 For any boat that has one variant's IRC-equivalent RF but is missing another, derive the
 missing variant by traversing the ConversionGraph's cross-variant edges (e.g. nonSpin → spin,
@@ -196,9 +217,9 @@ combination and therefore never had the cert-based cross-variant pass applied to
 
 ---
 
-## Phase 2: HPF Calculation (Steps 15–21)
+## Phase 2: HPF Calculation (Steps 14–20)
 
-### Step 15: Compute Initial Reference Time per Race
+### Step 14: Compute Initial Reference Time per Race
 
 For each race, for each boat entry, compute a **factor-corrected elapsed time**:
 
@@ -214,7 +235,7 @@ Record the **weighted IQR** of the corrected times as a first-pass measure of ra
 
 ---
 
-### Step 16: Compute Initial Per-Boat HPF Estimates
+### Step 15: Compute Initial Per-Boat HPF Estimates
 
 For each race entry, compute the boat's initial HPF estimate for that race:
 
@@ -228,11 +249,11 @@ This is the handicap the boat would have needed to equal the median corrected ti
 log(HPF_boat) = Σ( w_r × log(HPF_race) ) / Σ(w_r)
 ```
 
-Where w_r is the race's aggregate reference weight — the sum of reference factor weights of all boats in that race. Working in log space ensures that being 10% fast and 10% slow are treated symmetrically, which is the correct prior before asymmetric weighting is applied in Step 17.
+Where w_r is the race's aggregate reference weight — the sum of reference factor weights of all boats in that race. Working in log space ensures that being 10% fast and 10% slow are treated symmetrically, which is the correct prior before asymmetric weighting is applied in Step 16.
 
 ---
 
-### Step 17: Assign Initial Race and Entry Weights
+### Step 16: Assign Initial Race and Entry Weights
 
 For each race, compute a **race weight** based on:
 
@@ -247,7 +268,7 @@ For each boat entry within a race, compute an **entry weight** based on:
 
 ---
 
-### Step 18: Alternating Least Squares Optimisation (Log Space)
+### Step 17: Alternating Least Squares Optimisation (Log Space)
 
 The two unknowns are:
 
@@ -284,9 +305,9 @@ Iterate A and B until convergence — defined as the maximum change in any HPF v
 
 ---
 
-### Step 19: Recompute Weights and Iterate
+### Step 18: Recompute Weights and Iterate
 
-After convergence of Step 18, recompute entry weights using the residuals from the fitted model:
+After convergence of Step 17, recompute entry weights using the residuals from the fitted model:
 
 ```
 residual = log(elapsedTime) + log(HPF_boat) - log(T_race)
@@ -296,11 +317,11 @@ A positive residual means the boat was slower than expected; a negative residual
 
 Flag races where a large fraction of entries have high absolute residuals — this signals a weather/tide gate or other race-level anomaly. In this case, down-weight the entire race rather than individual entries.
 
-Return to Step 18 with the updated weights and re-run to convergence. Repeat until weights stabilise across outer iterations (typically 3–5 outer iterations are sufficient).
+Return to Step 17 with the updated weights and re-run to convergence. Repeat until weights stabilise across outer iterations (typically 3–5 outer iterations are sufficient).
 
 ---
 
-### Step 20: Scope of Optimisation
+### Step 19: Scope of Optimisation
 
 The optimisation can be run at several scopes, from narrowest to broadest:
 
@@ -313,7 +334,7 @@ The regularisation term is essential for full-fleet scope: without it, the solut
 
 ---
 
-### Step 21: Output
+### Step 20: Output
 
 For each boat in the optimisation scope, emit:
 

@@ -103,6 +103,7 @@ function addBoat() {
     });
     focusedBoatId = null;
     document.getElementById('add-boat-btn').disabled = true;
+    document.getElementById('boat-search').value = '';
     renderChips();
     saveSelection();
     loadCandidates();

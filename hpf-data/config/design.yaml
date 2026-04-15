@@ -141,7 +141,7 @@ ignored:
 # Use this for boats that import without a design (e.g. PHS-only boats) or with the wrong design.
 # canonicalName sets the display name used when the design is auto-created (optional; defaults to designId).
 boatDesignOverrides:
-  - designId: "sydney36mkII"
+  - designId: "sydney36mkii"
     canonicalName: "Sydney 36 MkII"
     boats:
       - sailNumber: "5915"

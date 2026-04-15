@@ -12,10 +12,6 @@ importers:
   mode: "api"
   includeInSchedule: true
   runAtStartup: false
-- name: "rshyr"
-  mode: "api"
-  includeInSchedule: true
-  runAtStartup: false
 - name: "bwps"
   mode: "api"
   includeInSchedule: true
@@ -49,7 +45,7 @@ schedule:
   - "TUESDAY"
   time: "08:08:00"
 nextSailSysRaceId: 32414
-sailsysEndRaceId: 41036
+sailsysEndRaceId: 41104
 targetIrcYear: 2025
 outlierSigma: null
 recentRaceReimportDays: 30

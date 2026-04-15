@@ -1442,7 +1442,7 @@ public class AdminApiServlet extends HttpServlet
      * GET /api/races[/{id}] — race listing or single-race detail.
      * <p>
      * <b>List</b>: filters by optional {@code boatId}, {@code clubId}, or {@code seriesId},
-     * supports free-text search ({@code q} matches race id or clubId), pagination, and sort.
+     * supports free-text search ({@code q} matches race id, race name, or series name), pagination, and sort.
      * The {@code showExcluded} flag (default false) hides individually excluded races and races
      * where every finisher belongs to an excluded design. The {@code excludeNulls} flag removes
      * races with zero finishers. Each row includes series name, finisher count, excluded status,
@@ -1467,6 +1467,18 @@ public class AdminApiServlet extends HttpServlet
             String filterSeriesId = req.getParameter("seriesId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             boolean excludeNulls = "true".equals(req.getParameter("excludeNulls"));
+
+            // Build series-id → name index for search matching
+            Map<String, String> seriesNameById = new java.util.HashMap<>();
+            if (lower != null)
+            {
+                for (Club c : store.clubs().values())
+                    if (c.series() != null)
+                        for (var s : c.series())
+                            if (s.name() != null)
+                                seriesNameById.put(s.id(), s.name().toLowerCase());
+            }
+
             // Enrich all filtered rows — needed to allow sort by seriesName or finishers
             List<Map<String, Object>> enriched = store.races().values().stream()
                 .filter(r -> filterBoatId   == null || raceContainsBoat(r, filterBoatId))
@@ -1474,7 +1486,10 @@ public class AdminApiServlet extends HttpServlet
                 .filter(r -> filterSeriesId == null || (r.seriesIds() != null && r.seriesIds().contains(filterSeriesId)))
                 .filter(r -> lower == null
                     || r.id().toLowerCase().contains(lower)
-                    || (r.clubId() != null && r.clubId().toLowerCase().contains(lower)))
+                    || (r.clubId()  != null && r.clubId().toLowerCase().contains(lower))
+                    || (r.name()    != null && r.name().toLowerCase().contains(lower))
+                    || (r.seriesIds() != null && r.seriesIds().stream()
+                            .anyMatch(sid -> seriesNameById.getOrDefault(sid, "").contains(lower))))
                 .filter(r -> showExcluded || (!store.isRaceExcluded(r.id()) && !isRaceAllExcluded(r)))
                 .map(this::raceRow)
                 .collect(Collectors.toList());

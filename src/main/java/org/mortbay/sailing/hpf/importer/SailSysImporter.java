@@ -72,8 +72,7 @@ public class SailSysImporter
     static final String SOURCE = "SailSys";
 
     /** Sources from dedicated importers whose races SailSys should not overwrite with empty results. */
-    private static final Set<String> DEDICATED_SOURCES = Set.of(
-        BwpsImporter.SOURCE, RshyrImporter.SOURCE);
+    private static final Set<String> DEDICATED_SOURCES = BwpsImporter.ALL_SOURCES;
 
     private static final String API_BASE   = "https://api.sailsys.com.au/api/v1/races/";
     private static final String API_SUFFIX = "/resultsentrants/display";
@@ -453,11 +452,20 @@ public class SailSysImporter
         int number = data.number != null ? data.number : 0;
 
         // Organising club — required for race ID and series registration.
-        // Log a warning if not found (club.yaml may need updating) but continue.
+        // Excluded clubs are filtered out by findUniqueClubByShortName; if the club name
+        // resolves only to excluded clubs, skip the race entirely.
         Club organizingClub = null;
         if (data.club != null && data.club.shortName != null)
-            organizingClub = store.findUniqueClubByShortName(data.club.shortName, data.club.longName,
-                "SailSys race id=" + data.id + " series=" + (data.series != null ? data.series.name : "?"));
+        {
+            String context = "SailSys race id=" + data.id + " series=" + (data.series != null ? data.series.name : "?");
+            organizingClub = store.findUniqueClubByShortName(data.club.shortName, data.club.longName, context);
+            if (organizingClub == null && store.isClubNameExcluded(data.club.shortName))
+            {
+                LOG.debug("SailSys: skipping race id={} — organising club '{}' is excluded",
+                    data.id, data.club.shortName);
+                return;
+            }
+        }
 
         String clubId     = organizingClub != null ? organizingClub.id() : null;
         String seriesName = data.series != null ? data.series.name : null;

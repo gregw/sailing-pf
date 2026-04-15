@@ -241,6 +241,7 @@ public class DataStore
                 rawDesign == null ? "null" : rawDesign, overrideDesignId);
             sourceDesign += "->" + designId;
             designId = overrideDesignId;
+            rawDesign = designs.containsKey(designId) ? designs.get(designId).canonicalName() : overrideDesignId;
         }
 
         final String normSailNo = sailNo;
@@ -283,10 +284,11 @@ public class DataStore
                 String resolvedDesignId = design != null ? design.id() : designId;
                 String boatId = IdGenerator.generateBoatId(normSailNo, normName, design);
 
+                // Preserve the existing display name to avoid case-variant flip-flopping
                 Boat upgraded = new Boat(
                     boatId,
                     normSailNo,
-                    rawName,
+                    candidate.name(),
                     resolvedDesignId,
                     candidate.clubId(),
                     candidate.certificates(),
@@ -306,11 +308,23 @@ public class DataStore
         if (matches.isEmpty())
         {
             Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
+            String newBoatId = IdGenerator.generateBoatId(normSailNo, normName, design);
+
+            // Defensive: if a boat with this ID already exists (e.g. due to name case
+            // variants that normalise to the same ID), return it instead of overwriting.
+            Boat existingById = boats.get(newBoatId);
+            if (existingById != null)
+            {
+                LOG.debug("Boat ID {} already exists (existing name='{}', incoming name='{}'), returning existing",
+                    newBoatId, existingById.name(), rawName);
+                return existingById;
+            }
+
             String newClubId = clubCatalogue.resolveClubOverride(normSailNo, rawName);
             if (newClubId != null)
                 LOG.info("Boat {}/{}: club override → {}", normSailNo, rawName, newClubId);
             Boat newBoat = new Boat(
-                IdGenerator.generateBoatId(normSailNo, normName, design),
+                newBoatId,
                 normSailNo,
                 rawName,
                 design != null ? design.id() : null,
@@ -328,6 +342,8 @@ public class DataStore
             return matches.getFirst();
 
         // We have multiple boats with the same sailNo, name but different designs, so we don't know which one this is?
+        LOG.warn("Ambiguous boat match: sailNo={} name={} design={} — {} candidates with different designs",
+            normSailNo, normName, designId, matches.size());
         return null;
     }
 
@@ -402,6 +418,7 @@ public class DataStore
         List<Club> allClubs = Stream.concat(
                 clubs.values().stream(),
                 clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+            .filter(c -> !isClubExcluded(c.id()))
             .toList();
 
         // Primary: exact short name match
@@ -737,6 +754,28 @@ public class DataStore
             return club.excluded();
         Club seed = clubSeed.get(clubId);
         return seed != null && seed.excluded();
+    }
+
+    /**
+     * Returns true if every club matching the given short name (or long name / alias) is
+     * excluded. Used by importers to decide whether to skip races from an excluded club
+     * when {@link #findUniqueClubByShortName} returns null because all candidates are excluded.
+     */
+    public boolean isClubNameExcluded(String shortName)
+    {
+        requireStarted();
+        if (shortName == null || shortName.isBlank())
+            return false;
+        String lower = shortName.toLowerCase();
+        List<Club> allIncludingExcluded = Stream.concat(
+                clubs.values().stream(),
+                clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+            .filter(c -> lower.equalsIgnoreCase(c.shortName())
+                      || lower.equalsIgnoreCase(c.longName())
+                      || c.aliases().stream().anyMatch(lower::equalsIgnoreCase))
+            .toList();
+        return !allIncludingExcluded.isEmpty()
+            && allIncludingExcluded.stream().allMatch(c -> isClubExcluded(c.id()));
     }
 
     /**

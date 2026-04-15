@@ -150,18 +150,10 @@
     <div class="guide-links">
         <strong>Further reading</strong> — technical design documents:
         <ul>
-            <li><a href="guide/project-description.md">Project Description</a> — data sources, standard candles, optimisation
-                overview
-            </li>
-            <li><a href="guide/processing-pipeline.md">Processing Pipeline</a> — 19-step pipeline from data ingestion to HPF
-                output
-            </li>
+            <li><a href="guide/project-description.md">Project Description</a> — data sources, standard candles, optimisation.</li>
+            <li><a href="guide/processing-pipeline.md">Processing Pipeline</a> — the pipeline from data ingestion to HPF</li>
             <li><a href="guide/factor-design.md">Factor Design</a> — detailed design of the HPF optimisation algorithm</li>
-            <li><a href="guide/data-sources-and-formats.md">Data Sources &amp; Formats</a> — field-level detail for SailSys,
-                TopYacht, ORC, AMS, BWPS
-            </li>
             <li><a href="guide/performance_profile.md">Performance Rank</a> — How to rate a boats performance</li>
-            <li><a href="guide/error-bars.md">Error Bars</a> — weight-to-confidence-interval math and σ₀ calibration</li>
         </ul>
     </div>
 
@@ -372,16 +364,6 @@
 
     <h4 id="col-race-finishers">Races › Finishers</h4>
     <p>Total finishers across all divisions in this race.</p>
-
-    <h4 id="col-race-ref-time">Races › Ref Time</h4>
-    <p>T₀ — the estimated elapsed time a 1.000 HPF boat would have taken to complete the
-        course, computed as the weighted median of (elapsed ÷ HPF) across all boats with
-        reference factors in this race. Only available after the HPF optimiser has run.
-        For multi-division races, each division's T₀ is shown separately
-        (e.g. <em>Div A: 1:19:59 / Div B: 1:07:07</em>).</p>
-    <p>The weighted median is used rather than the mean because elapsed-time distributions
-        are right-skewed — slow outliers from gear failure, bad wind holes, or tactical errors
-        are common and should not distort the baseline.</p>
 
     <h4 id="col-race-excl">Races › Excluded</h4>
     <p>Excluded races are not used in HPF calculations. Individual races can be excluded

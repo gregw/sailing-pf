@@ -204,6 +204,11 @@ designs:
     aliases:
     - "Adams Ten Cruising"
     - "adamstencruising"
+  reichelpugh69:
+    canonicalName: "Reichel / Pugh 69"
+    aliases:
+    - "Reichal Pugh 69"
+    - "reichalpugh69"
 boats:
   MYC7-daydreaming:
     canonicalName: "Day Dreaming"
@@ -438,3 +443,28 @@ boats:
     aliases:
     - sailNumber: "4806"
       name: "trinity"
+  "8300-secretmensbusiness":
+    canonicalName: "Secret Mens Business"
+    aliases:
+    - sailNumber: "8300"
+      name: "secretmensbusiness1"
+  "99-diskotrooper":
+    canonicalName: "Disko Trooper"
+    aliases:
+    - sailNumber: "99"
+      name: "diskotroopercontendersailcloth"
+  MYC99-jupiter:
+    canonicalName: "Jupiter"
+    aliases:
+    - sailNumber: "MYC99"
+      name: "jupiterdh"
+  "020-philosopher":
+    canonicalName: "Philosopher"
+    aliases:
+    - sailNumber: "20"
+      name: "philosopher"
+  "72-urmgroup":
+    canonicalName: "URM Group"
+    aliases:
+    - sailNumber: "72"
+      name: "urm"
