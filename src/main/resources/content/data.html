@@ -228,6 +228,7 @@
       <input type="text" id="q-series" placeholder="Search by club or series name…" oninput="debounceSearch('series')">
       <button class="search-clear-btn" title="Clear search" onclick="clearSearch('series')">✕</button>
       <button onclick="doSearch('series')">Search</button>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-series" onchange="doSearch('series')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-empty-series" checked onchange="doSearch('series')"> Exclude empty</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-series" onchange="setPageSize(this.value)">
         <option value="10">10</option>

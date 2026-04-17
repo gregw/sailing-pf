@@ -1677,6 +1677,7 @@ public class AdminApiServlet extends HttpServlet
         String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
         String filterClubId = req.getParameter("clubId");
         boolean excludeEmpty = "true".equals(req.getParameter("excludeEmpty"));
+        boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
 
         // Index races by seriesId for fast lookup
         Map<String, List<Race>> racesBySeries = new java.util.HashMap<>();
@@ -1718,7 +1719,9 @@ public class AdminApiServlet extends HttpServlet
                 row.put("firstDate", firstDate);
                 row.put("lastDate",  lastDate);
                 row.put("races",     seriesRaces.size());
-                row.put("excluded",  store.isSeriesExcluded(s.name()));
+                boolean excluded = store.isSeriesExcluded(s.name());
+                if (!showExcluded && excluded) continue;
+                row.put("excluded",  excluded);
                 rows.add(row);
             }
         }

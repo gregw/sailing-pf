@@ -39,7 +39,18 @@ const COLUMNS = {
         { label: 'ID',     key: 'id',     anchor: 'col-boat-id',      tip: 'Unique boat identifier derived from sail number, name and design.' },
         { label: 'Sail',   key: 'sailNumber', anchor: 'col-boat-sail', tip: 'Sail number as recorded in source data (SailSys / TopYacht).' },
         { label: 'Name',   key: 'name',   anchor: 'col-boat-name',     tip: 'Boat name as recorded in source data.' },
-        { label: 'Design', key: 'designId', anchor: 'col-boat-design', tip: 'Design (class) identifier linking this boat to a design record.' },
+        { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design',
+          tip: 'Design (class) identifier; click to search for this design in the designs tab.',
+          render: item => item.designId || '',
+          action: item => {
+              if (!item.designId) return;
+              state.searches['designs'] = item.designId;
+              state.pages['designs'] = 0;
+              const q = document.getElementById('q-designs');
+              if (q) q.value = item.designId;
+              switchTab('designs');
+              loadList('designs', 0);
+          } },
         { label: 'RF',     key: 'spinRef', anchor: 'col-boat-rf',
           tip: 'Reference Factor — IRC-equivalent handicap derived from certificates "standard candles" or median performance against boats with an RF. Colour: green = high confidence, red = low.',
           render: v => v && v.value != null

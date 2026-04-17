@@ -195,13 +195,21 @@ function weightedOlsTrend(entries) {
              y: [slope * x0 + intercept, slope * x1 + intercept] };
 }
 
-function slidingAverage(entries, n, drops) {
+function slidingAverage(entries, n, drops, seed) {
     if (entries.length < 2) return null;
     const pts = [...entries].sort((a, b) => a.date.localeCompare(b.date));
     const xs = [], ys = [];
     const keep = Math.max(1, n - (drops || 0));
+    // Build N virtual seed entries at the HPF value so the average is fully initialised
+    // from race 1; these are not plotted but fill the window before real data.
+    const virtual = seed != null
+        ? Array.from({ length: n }, () => ({ backCalcFactor: seed }))
+        : [];
     for (let i = 0; i < pts.length; i++) {
-        const window = pts.slice(Math.max(0, i - n + 1), i + 1);
+        // Window = last n real entries, padded on the left with virtual seed entries
+        const realWindow = pts.slice(Math.max(0, i - n + 1), i + 1);
+        const pad = virtual.slice(Math.max(0, n - i - 1));  // virtual entries that still fit
+        const window = [...pad, ...realWindow];
         // Sort window by backCalcFactor ascending, drop the worst (highest) values
         const sorted = [...window].sort((a, b) => a.backCalcFactor - b.backCalcFactor);
         const used = sorted.slice(0, Math.min(keep, sorted.length));
@@ -371,7 +379,8 @@ function renderChart(data) {
                 });
             }
             if (showTrendSliding) {
-                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops);
+                const hpfSeed = hpfFactor ? hpfFactor.value : null;
+                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, hpfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
                 const avgLabel = slidingAverageDrops > 0
                     ? `best ${best} of ${slidingAverageCount} avg`
