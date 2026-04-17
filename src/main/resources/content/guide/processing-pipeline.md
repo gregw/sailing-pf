@@ -46,7 +46,7 @@ Scrape AMS certificate listings from raceyachts.org. Creates `Certificate` recor
 
 ### Step 3: Import SailSys Races (`SailSysImporter`)
 
-Scan SailSys race records starting from `nextSailSysRaceId` (configured in `admin.yaml`).
+Scan SailSys race records starting from `sailsysNextRaceId` (configured in `admin.yaml`).
 Supports local file mode and HTTP API mode. For each completed race (non-null
 `lastProcessedTime`), extracts:
 

@@ -62,7 +62,8 @@ public class TaskService
     private static final Map<String, String> CONFIG_COMMENTS = new LinkedHashMap<>();
     static
     {
-        CONFIG_COMMENTS.put("sailsysYoungCacheMaxAgeDays:", "# --- SailSys importer ---");
+        CONFIG_COMMENTS.put("sailsysNextRaceId:",           "# --- SailSys importer ---");
+        CONFIG_COMMENTS.put("bwpsMinYear:",                 "# --- BWPS importer ---");
         CONFIG_COMMENTS.put("orcListMaxAgeDays:",           "# --- ORC importer ---");
         CONFIG_COMMENTS.put("minAnalysisR2:",               "# --- Analysis ---");
         CONFIG_COMMENTS.put("hpfLambda:",                   "# --- HPF optimiser ---");
@@ -114,15 +115,15 @@ public class TaskService
     public record GlobalSchedule(List<DayOfWeek> days, LocalTime time) {}
 
     private record AdminConfig(List<ImporterEntry> importers, GlobalSchedule schedule,
-                               Integer nextSailSysRaceId, Integer sailsysEndRaceId, Integer targetIrcYear,
+                               Integer targetIrcYear,
                                Double outlierSigma,
                                Integer recentRaceReimportDays,      // null → default 90
+                               Integer sailsysNextRaceId, Integer sailsysEndRaceId,
                                Integer sailsysYoungCacheMaxAgeDays, // null → default 7
                                Integer sailsysOldCacheMaxAgeDays,   // null → default 352
                                Integer sailsysYoungRaceMaxAgeDays,  // null → default 365
                                Integer sailsysHttpDelayMs,          // null → default 200
                                Integer sailsysRecentRaceDays,       // null → default 14
-                               List<String> sailsysExcludedRacePatterns, // null → built-in defaults
                                Integer bwpsMinYear,                 // null → default 2020
                                Integer orcListMaxAgeDays,           // null → default 1
                                Double minAnalysisR2,             // null → default 0.50
@@ -166,7 +167,7 @@ public class TaskService
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
     private GlobalSchedule globalSchedule = new GlobalSchedule(List.of(), LocalTime.of(3, 0));
     private ScheduledFuture<?> scheduledFuture;
-    private volatile Integer nextSailSysRaceId = null;    // null = start from 1
+    private volatile Integer sailsysNextRaceId = null;    // null = start from 1
     private volatile Integer sailsysEndRaceId  = null;    // null = use large default
     private volatile Integer targetIrcYear = null;          // null = auto-detect from data
     private volatile Double outlierSigma = null;            // null = use default (2.5)
@@ -176,8 +177,6 @@ public class TaskService
     private volatile int sailsysYoungRaceMaxAgeDays = 365;
     private volatile int sailsysHttpDelayMs = 200;
     private volatile int sailsysRecentRaceDays = 14;
-    private volatile List<String> sailsysExcludedRacePatterns =
-        List.of("OTB", "Off the Beach", "skiff", "foil", "dinghy");
     private volatile int bwpsMinYear = BwpsImporter.DEFAULT_MIN_YEAR;
     private volatile int orcListMaxAgeDays = 1;
     private volatile double minAnalysisR2 = ConversionGraph.DEFAULT_MIN_R2;
@@ -235,8 +234,8 @@ public class TaskService
             }
             if (config.schedule() != null)
                 globalSchedule = config.schedule();
-            if (config.nextSailSysRaceId() != null)
-                nextSailSysRaceId = config.nextSailSysRaceId();
+            if (config.sailsysNextRaceId() != null)
+                sailsysNextRaceId = config.sailsysNextRaceId();
             if (config.sailsysEndRaceId() != null)
                 sailsysEndRaceId = config.sailsysEndRaceId();
             targetIrcYear = config.targetIrcYear();   // null is valid (auto-detect)
@@ -247,7 +246,6 @@ public class TaskService
             if (config.sailsysYoungRaceMaxAgeDays() != null) sailsysYoungRaceMaxAgeDays = config.sailsysYoungRaceMaxAgeDays();
             if (config.sailsysHttpDelayMs() != null) sailsysHttpDelayMs = config.sailsysHttpDelayMs();
             if (config.sailsysRecentRaceDays() != null) sailsysRecentRaceDays = config.sailsysRecentRaceDays();
-            if (config.sailsysExcludedRacePatterns() != null) sailsysExcludedRacePatterns = config.sailsysExcludedRacePatterns().stream().filter(p -> p != null).toList();
             if (config.bwpsMinYear() != null) bwpsMinYear = config.bwpsMinYear();
             if (config.orcListMaxAgeDays() != null) orcListMaxAgeDays = config.orcListMaxAgeDays();
             if (config.minAnalysisR2() != null) minAnalysisR2 = config.minAnalysisR2();
@@ -311,7 +309,7 @@ public void stop()
                     currentStatus = new ImportStatus(name, mode, Instant.now());
                     LOG.info("Starting importer={} mode={} startId={}", name, mode, startId);
                     runImporter(name, mode, startId);
-                    persistNextSailSysRaceId(name);
+                    persistsailsysNextRaceId(name);
                     store.save();
                     LOG.info("Finished importer={}", name);
                 }
@@ -345,7 +343,7 @@ public void stop()
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
-        if (sailsysStartRaceId != null) nextSailSysRaceId = sailsysStartRaceId;
+        if (sailsysStartRaceId != null) sailsysNextRaceId = sailsysStartRaceId;
         this.sailsysEndRaceId = sailsysEndRaceId;
         this.targetIrcYear = targetIrcYear;
         this.outlierSigma = outlierSigma;
@@ -395,9 +393,9 @@ public void stop()
         return scheduledRunActive;
     }
 
-    public Integer nextSailSysRaceId()
+    public Integer sailsysNextRaceId()
     {
-        return nextSailSysRaceId;
+        return sailsysNextRaceId;
     }
 
     public Integer sailsysEndRaceId()
@@ -491,11 +489,11 @@ public void stop()
                     currentSailSysId = 0;
                     currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
                     LOG.info("Scheduled: importer={} mode={}", entry.name(), entry.mode());
-                    int startId = "sailsys-races".equals(entry.name()) && nextSailSysRaceId != null
-                        ? nextSailSysRaceId
+                    int startId = "sailsys-races".equals(entry.name()) && sailsysNextRaceId != null
+                        ? sailsysNextRaceId
                         : 1;
                     runImporter(entry.name(), entry.mode(), startId);
-                    persistNextSailSysRaceId(entry.name());
+                    persistsailsysNextRaceId(entry.name());
                     store.save();
                 }
                 LOG.info("Scheduled run complete");
@@ -544,10 +542,10 @@ public void stop()
                     currentSailSysId = 0;
                     currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
                     LOG.info("Startup: importer={} mode={}", entry.name(), entry.mode());
-                    int startId = "sailsys-races".equals(entry.name()) && nextSailSysRaceId != null
-                        ? nextSailSysRaceId : 1;
+                    int startId = "sailsys-races".equals(entry.name()) && sailsysNextRaceId != null
+                        ? sailsysNextRaceId : 1;
                     runImporter(entry.name(), entry.mode(), startId);
-                    persistNextSailSysRaceId(entry.name());
+                    persistsailsysNextRaceId(entry.name());
                     store.save();
                 }
                 LOG.info("Startup run complete");
@@ -622,7 +620,7 @@ public void stop()
                     startId, endId, id -> currentSailSysId = id, stopRequested::get,
                     racesDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
                     sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs,
-                    sailsysRecentRaceDays, sailsysExcludedRacePatterns);
+                    sailsysRecentRaceDays);
                 if (result.minRecentId() > 0)
                     currentSailSysId = result.minRecentId() - 1;
                 if (result.maxFoundId() > 0)
@@ -664,11 +662,11 @@ public void stop()
         }
     }
 
-    private void persistNextSailSysRaceId(String name)
+    private void persistsailsysNextRaceId(String name)
     {
         if (currentSailSysId > 0 && "sailsys-races".equals(name))
         {
-            nextSailSysRaceId = currentSailSysId + 1;
+            sailsysNextRaceId = currentSailSysId + 1;
             persistConfig();
         }
     }
@@ -687,11 +685,12 @@ public void stop()
         {
             Files.createDirectories(configFile.getParent());
             String yaml = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(
-                new AdminConfig(importerEntries, globalSchedule, nextSailSysRaceId, sailsysEndRaceId,
+                new AdminConfig(importerEntries, globalSchedule,
                     targetIrcYear, outlierSigma,
                     recentRaceReimportDays,
+                    sailsysNextRaceId, sailsysEndRaceId,
                     sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
-                    sailsysHttpDelayMs, sailsysRecentRaceDays, sailsysExcludedRacePatterns, bwpsMinYear,
+                    sailsysHttpDelayMs, sailsysRecentRaceDays, bwpsMinYear,
                     orcListMaxAgeDays,
                     minAnalysisR2, clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
                     hpfOuterDampingFactor, hpfOuterConvergenceThreshold, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,

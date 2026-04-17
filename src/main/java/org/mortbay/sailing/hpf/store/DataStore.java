@@ -15,11 +15,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import org.mortbay.sailing.hpf.data.Boat;
@@ -60,6 +63,16 @@ public class DataStore
         .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .build();
+    private static final JsonMapper YAML_MAPPER = JsonMapper.builder(
+            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .build();
+    private static final String EXCLUSIONS_HEADER = """
+            # IMPORTANT: This file is managed by the server.
+            # It is overwritten whenever exclusions are changed via the admin UI.
+            # Only edit manually when the server is NOT running.
+            """;
+
 
     private final Path root;
     private final Path configDir;
@@ -85,6 +98,8 @@ public class DataStore
     private final Set<String> excludedBoatIds          = new LinkedHashSet<>();
     private final Set<String> excludedDesignOverrideIds = new LinkedHashSet<>();
     private final Set<String> excludedRaceIds           = new LinkedHashSet<>();
+    private final List<String> excludedSeriesPatterns    = new ArrayList<>();
+    private volatile List<Pattern> compiledSeriesPatterns = List.of();
 
     // Invalidation listener for derived data caches
     private volatile InvalidationListener invalidationListener;
@@ -835,48 +850,137 @@ public class DataStore
         saveExclusions();
     }
 
+    /**
+     * Returns true if either the race name or series name matches any of the
+     * configured series exclusion regex patterns (case-insensitive).
+     */
+    public boolean matchesSeriesExclusion(String raceName, String seriesName)
+    {
+        List<Pattern> patterns = compiledSeriesPatterns;
+        if (patterns.isEmpty()) return false;
+        for (Pattern p : patterns)
+        {
+            if (raceName != null && p.matcher(raceName).find()) return true;
+            if (seriesName != null && p.matcher(seriesName).find()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the given series name matches any series exclusion pattern.
+     */
+    public boolean isSeriesExcluded(String seriesName)
+    {
+        return matchesSeriesExclusion(null, seriesName);
+    }
+
+    /**
+     * Adds or removes a series exclusion pattern. When adding, the series name
+     * is wrapped as a regex that matches the full string (case-insensitive).
+     * When removing, any pattern whose regex matches the exact name is removed.
+     */
+    public void setSeriesExcluded(String seriesName, boolean excluded)
+    {
+        requireStarted();
+        String escaped = "^" + Pattern.quote(seriesName) + "$";
+        if (excluded)
+        {
+            if (!isSeriesExcluded(seriesName))
+            {
+                excludedSeriesPatterns.add(escaped);
+                compileSeriesPatterns();
+                saveExclusions();
+            }
+        }
+        else
+        {
+            // Remove any pattern that fully matches this series name
+            boolean changed = excludedSeriesPatterns.removeIf(p ->
+            {
+                try { return Pattern.compile(p, Pattern.CASE_INSENSITIVE).matcher(seriesName).find(); }
+                catch (Exception e) { return false; }
+            });
+            if (changed)
+            {
+                compileSeriesPatterns();
+                saveExclusions();
+            }
+        }
+    }
+
     private static class ExclusionsFile
     {
         public Set<String> boats   = new LinkedHashSet<>();
         public Set<String> designs = new LinkedHashSet<>();
         public Set<String> races   = new LinkedHashSet<>();
+        public List<String> series = new ArrayList<>();
     }
 
     private void loadExclusions()
     {
-        Path file = configDir.resolve("exclusions.json");
+        Path yamlFile = configDir.resolve("exclusions.yaml");
+        Path jsonFile = configDir.resolve("exclusions.json");
+        Path file = Files.exists(yamlFile) ? yamlFile : jsonFile;
         if (!Files.exists(file))
             return;
         try
         {
-            ExclusionsFile ef = MAPPER.readValue(file.toFile(), ExclusionsFile.class);
+            boolean isYaml = file.equals(yamlFile);
+            ExclusionsFile ef = (isYaml ? YAML_MAPPER : MAPPER).readValue(file.toFile(), ExclusionsFile.class);
             if (ef.boats   != null) excludedBoatIds.addAll(ef.boats);
             if (ef.designs != null) excludedDesignOverrideIds.addAll(ef.designs);
             if (ef.races   != null) excludedRaceIds.addAll(ef.races);
-            LOG.info("Loaded exclusions: {} boats, {} designs, {} races",
-                excludedBoatIds.size(), excludedDesignOverrideIds.size(), excludedRaceIds.size());
+            if (ef.series  != null)
+            {
+                excludedSeriesPatterns.addAll(ef.series);
+                compileSeriesPatterns();
+            }
+            LOG.info("Loaded exclusions from {}: {} boats, {} designs, {} races, {} series patterns",
+                file.getFileName(), excludedBoatIds.size(), excludedDesignOverrideIds.size(),
+                excludedRaceIds.size(), excludedSeriesPatterns.size());
+            // Migrate: if loaded from JSON, save as YAML and delete the JSON file
+            if (!isYaml)
+            {
+                saveExclusions();
+                Files.deleteIfExists(jsonFile);
+                LOG.info("Migrated exclusions.json → exclusions.yaml");
+            }
         }
         catch (Exception e)
         {
-            LOG.warn("Failed to load exclusions.json: {}", e.getMessage());
+            LOG.warn("Failed to load {}: {}", file.getFileName(), e.getMessage());
         }
+    }
+
+    private void compileSeriesPatterns()
+    {
+        compiledSeriesPatterns = excludedSeriesPatterns.stream()
+            .map(p ->
+            {
+                try { return Pattern.compile(p, Pattern.CASE_INSENSITIVE); }
+                catch (Exception e) { LOG.warn("Invalid series exclusion regex '{}': {}", p, e.getMessage()); return null; }
+            })
+            .filter(Objects::nonNull)
+            .toList();
     }
 
     private void saveExclusions()
     {
-        Path file = configDir.resolve("exclusions.json");
+        Path file = configDir.resolve("exclusions.yaml");
         ExclusionsFile ef = new ExclusionsFile();
         ef.boats   = new LinkedHashSet<>(excludedBoatIds);
         ef.designs = new LinkedHashSet<>(excludedDesignOverrideIds);
         ef.races   = new LinkedHashSet<>(excludedRaceIds);
+        ef.series  = new ArrayList<>(excludedSeriesPatterns);
         try
         {
             Files.createDirectories(configDir);
-            MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), ef);
+            String yaml = YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(ef);
+            Files.writeString(file, EXCLUSIONS_HEADER + yaml);
         }
         catch (Exception e)
         {
-            LOG.warn("Failed to save exclusions.json: {}", e.getMessage());
+            LOG.warn("Failed to save exclusions.yaml: {}", e.getMessage());
         }
     }
 

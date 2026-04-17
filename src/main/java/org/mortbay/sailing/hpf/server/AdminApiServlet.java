@@ -131,6 +131,8 @@ public class AdminApiServlet extends HttpServlet
             handleSetClubExcluded(req, resp);
         else if ("/races/exclude".equals(path))
             handleSetExcluded("races", req, resp);
+        else if ("/series/exclude".equals(path))
+            handleSetSeriesExcluded(req, resp);
         else if (path.startsWith("/importers/") && path.endsWith("/run"))
         {
             String name = path.substring("/importers/".length(), path.length() - "/run".length());
@@ -224,6 +226,30 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    private void handleSetSeriesExcluded(HttpServletRequest req,
+                                       HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String name = (String) body.get("name");
+            if (name == null)
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "name is required"));
+                return;
+            }
+            boolean excluded = Boolean.TRUE.equals(body.get("excluded"));
+            store.setSeriesExcluded(name, excluded);
+            writeJson(resp, Map.of("ok", true, "excluded", excluded));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
     /**
      * GET /api/stats — returns aggregate entity counts for the dashboard header.
      * <p>
@@ -241,13 +267,26 @@ public class AdminApiServlet extends HttpServlet
             .flatMap(c -> c.series().stream())
             .filter(s -> !s.isCatchAll())
             .count();
-        writeJson(resp, Map.of(
-            "races", store.races().size(),
-            "boats", store.boats().size(),
-            "designs", store.designs().size(),
-            "clubs", allClubs.size(),
-            "series", seriesCount
-        ));
+        long excludedBoats = store.boats().values().stream()
+            .filter(b -> store.isBoatExcluded(b.id())
+                      || (b.designId() != null && store.isDesignExcluded(b.designId())))
+            .count();
+        long excludedDesigns = store.designs().keySet().stream()
+            .filter(store::isDesignExcluded)
+            .count();
+        long excludedRaces = store.races().keySet().stream()
+            .filter(store::isRaceExcluded)
+            .count();
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("boats",          store.boats().size()   - excludedBoats);
+        stats.put("boatsExcluded",  excludedBoats);
+        stats.put("designs",        store.designs().size() - excludedDesigns);
+        stats.put("designsExcluded", excludedDesigns);
+        stats.put("clubs",          allClubs.size());
+        stats.put("series",         seriesCount);
+        stats.put("races",          store.races().size()   - excludedRaces);
+        stats.put("racesExcluded",  excludedRaces);
+        writeJson(resp, stats);
     }
 
     /**
@@ -1679,6 +1718,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("firstDate", firstDate);
                 row.put("lastDate",  lastDate);
                 row.put("races",     seriesRaces.size());
+                row.put("excluded",  store.isSeriesExcluded(s.name()));
                 rows.add(row);
             }
         }
@@ -1844,7 +1884,7 @@ public class AdminApiServlet extends HttpServlet
     private void handleImporters(HttpServletResponse resp) throws IOException
     {
         TaskService.ImportStatus status = _taskService.currentStatus();
-        Integer nextSailSysRaceId = _taskService.nextSailSysRaceId();
+        Integer sailsysNextRaceId = _taskService.sailsysNextRaceId();
         List<Map<String, Object>> entries = new ArrayList<>();
         for (TaskService.ImporterEntry e : _taskService.importerEntries())
         {
@@ -1857,12 +1897,12 @@ public class AdminApiServlet extends HttpServlet
             row.put("includeInSchedule", e.includeInSchedule());
             row.put("runAtStartup", e.runAtStartup());
             row.put("status", isRunning ? "running" : "idle");
-            row.put("nextStartId", "sailsys-races".equals(e.name()) ? nextSailSysRaceId : null);
+            row.put("nextStartId", "sailsys-races".equals(e.name()) ? sailsysNextRaceId : null);
             entries.add(row);
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("entries", entries);
-        result.put("sailsysStartId", _taskService.nextSailSysRaceId());
+        result.put("sailsysStartId", _taskService.sailsysNextRaceId());
         result.put("sailsysEndId", _taskService.sailsysEndRaceId());
         result.put("schedule", _taskService.globalSchedule());
         result.put("targetIrcYear", _taskService.targetIrcYear());
@@ -1923,7 +1963,7 @@ public class AdminApiServlet extends HttpServlet
     private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         // Start ID is now configured in the SailSys config section; use 1 as fallback
-        int startId = _taskService.nextSailSysRaceId() != null ? _taskService.nextSailSysRaceId() : 1;
+        int startId = _taskService.sailsysNextRaceId() != null ? _taskService.sailsysNextRaceId() : 1;
         boolean accepted = _taskService.submit(name, mode, startId);
         if (accepted)
         {

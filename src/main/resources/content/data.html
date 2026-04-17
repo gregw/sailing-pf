@@ -60,6 +60,10 @@
         <label for="merge-email-boats" style="font-size:0.9rem;">Your email (optional): </label>
         <input type="email" id="merge-email-boats" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
       </div>
+      <div id="merge-message-row-boats" style="display:none; margin-bottom:0.5rem;">
+        <label for="merge-message-boats" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="merge-message-boats" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for merge…"></textarea>
+      </div>
       <button id="merge-confirm-boats" onclick="performMerge('boats')">Confirm merge</button>
       <button id="merge-request-confirm-boats" onclick="requestMerge('boats')" style="display:none;">Request merge</button>
       <button onclick="hideMergePanel('boats')" style="margin-left:0.5rem;">Cancel</button>
@@ -86,6 +90,10 @@
         <div id="edit-email-row" style="display:none; margin-bottom:0.5rem;">
           <label for="edit-email" style="font-size:0.9rem;">Your email (optional): </label>
           <input type="email" id="edit-email" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="edit-message-row" style="display:none; margin-bottom:0.5rem;">
+          <label for="edit-message" style="font-size:0.9rem;">Message (optional):</label><br>
+          <textarea id="edit-message" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
         </div>
         <button id="edit-save-btn" onclick="saveBoatEdit()">Save</button>
         <button id="edit-request-btn" onclick="requestBoatEdit()" style="display:none;">Request</button>
@@ -131,6 +139,10 @@
       <div id="merge-email-row-designs" style="display:none; margin-bottom:0.5rem;">
         <label for="merge-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
         <input type="email" id="merge-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="merge-message-row-designs" style="display:none; margin-bottom:0.5rem;">
+        <label for="merge-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="merge-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for merge…"></textarea>
       </div>
       <button id="merge-confirm-designs" onclick="performMerge('designs')">Confirm merge</button>
       <button id="merge-request-confirm-designs" onclick="requestMerge('designs')" style="display:none;">Request merge</button>

@@ -120,6 +120,8 @@ const COLUMNS = {
           tip: 'Number of races in this series; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
           action: item => { setFilter('races', 'seriesId', item.id, 'Series: ' + (item.name || item.id)); switchTab('races'); } },
+        { label: 'Excl',      key: 'excluded', type: 'toggle', anchor: 'col-series-excl',
+          tip: 'Excluded series — all races in this series are excluded from HPF calculations.' },
     ],
     races: [
         { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.' },
@@ -344,7 +346,7 @@ function renderTable(entity, items) {
                     e.stopPropagation();
                     item[col.key] = ecb.checked;
                     tr.classList.toggle('excluded', ecb.checked);
-                    toggleExcluded(entity, item.id, ecb.checked);
+                    toggleExcluded(entity, item.id, ecb.checked, item);
                 };
                 td.appendChild(ecb);
             } else if (col.type === 'action') {
@@ -715,13 +717,17 @@ function applyMergeAuthState() {
         if (confirmBtn)     confirmBtn.style.display     = w ? '' : 'none';
         if (reqConfirmBtn)  reqConfirmBtn.style.display  = w ? 'none' : '';
         if (emailRow)       emailRow.style.display       = w ? 'none' : '';
+        const msgRow = document.getElementById('merge-message-row-' + entity);
+        if (msgRow)         msgRow.style.display         = w ? 'none' : '';
     });
     const editSaveBtn  = document.getElementById('edit-save-btn');
     const editReqBtn   = document.getElementById('edit-request-btn');
     const editEmailRow = document.getElementById('edit-email-row');
+    const editMsgRow   = document.getElementById('edit-message-row');
     if (editSaveBtn)  editSaveBtn.style.display  = w ? '' : 'none';
     if (editReqBtn)   editReqBtn.style.display   = w ? 'none' : '';
     if (editEmailRow) editEmailRow.style.display = w ? 'none' : '';
+    if (editMsgRow)   editMsgRow.style.display   = w ? 'none' : '';
     // Pre-populate email fields with remembered value
     if (!w) {
         ['merge-email-boats', 'merge-email-designs', 'edit-email'].forEach(id => {
@@ -761,11 +767,14 @@ async function performMerge(entity) {
     loadList(entity, 0);
 }
 
-async function toggleExcluded(entity, id, excluded) {
+async function toggleExcluded(entity, id, excluded, item) {
+    const body = entity === 'series'
+        ? { name: item.name, excluded }
+        : { id, excluded };
     const resp = await fetch('/api/' + entity + '/exclude', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, excluded })
+        body: JSON.stringify(body)
     });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -784,10 +793,11 @@ async function requestMerge(entity) {
     statusEl.textContent = 'Submitting request…';
 
     const email = document.getElementById('merge-email-' + entity)?.value.trim() || '';
+    const message = document.getElementById('merge-message-' + entity)?.value.trim() || '';
     const result = await fetchJson('/api/' + entity + '/merge-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keepId, mergeIds, ...(email && { email }) })
+        body: JSON.stringify({ keepId, mergeIds, ...(email && { email }), ...(message && { message }) })
     });
 
     if (result && result.ok) {
@@ -903,13 +913,15 @@ async function requestBoatEdit() {
     statusEl.textContent = 'Submitting request…';
 
     const email = document.getElementById('edit-email')?.value.trim() || '';
+    const message = document.getElementById('edit-message')?.value.trim() || '';
     const body = {
         boatId: editingBoatId,
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
         clubId: document.getElementById('edit-boat-club').value.trim(),
-        ...(email && { email })
+        ...(email && { email }),
+        ...(message && { message })
     };
 
     const result = await fetchJson('/api/boats/edit-request', {

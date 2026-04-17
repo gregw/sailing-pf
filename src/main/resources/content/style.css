@@ -53,6 +53,7 @@ a { color: #2255aa; }
 /* Stats */
 .stats { display: flex; gap: 3rem; background: #f5f5f5; padding: 1rem; margin-bottom: 0.5rem; }
 .stat strong { display: block; font-size: 2rem; }
+.stat-excluded { display: block; font-size: 0.7rem; color: #999; line-height: 1; margin-top: -0.2rem; }
 
 /* Importers table — order column */
 .order-col { white-space: nowrap; padding: 2px 2px; }

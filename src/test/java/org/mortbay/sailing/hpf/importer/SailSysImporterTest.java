@@ -420,7 +420,7 @@ class SailSysImporterTest
 
         int[] count = {0};
         SailSysImporter.RunResult result = importer.run(1, 3, id -> {}, () -> false,
-            racesDir, 7, 352, 365, 0, 30, List.of());
+            racesDir, 7, 352, 365, 0, 30);
 
         assertEquals(1, result.minRecentId(), "Should return the lowest recent ID");
     }
@@ -447,7 +447,7 @@ class SailSysImporterTest
 
         int[] count = {0};
         SailSysImporter.RunResult result = importer.run(1, 3, id -> {}, () -> false,
-            racesDir, 7, 352, 365, 0, 30, List.of());
+            racesDir, 7, 352, 365, 0, 30);
 
         assertEquals(0, result.minRecentId(), "No recent races: should return 0");
     }

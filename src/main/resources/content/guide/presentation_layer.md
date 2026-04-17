@@ -95,7 +95,7 @@ importers:                    # list of importers with name, mode, includeInSche
 schedule:
   days: [MONDAY, SUNDAY]     # days to run scheduled imports
   time: "09:45:00"            # time of day for scheduled runs
-nextSailSysRaceId: 32638     # resume point for SailSys race scanning
+sailsysNextRaceId: 32638     # resume point for SailSys race scanning
 targetIrcYear: 2025           # target year for reference factor DFS
 outlierSigma: null            # outlier trimming threshold (null = default 2.5)
 clubCertificateWeight: 0.9    # weight multiplier for club-level certificates

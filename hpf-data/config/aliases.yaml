@@ -232,6 +232,13 @@ designs:
     - "archambault40rc"
     - "Archambault Rc40"
     - "archambaultrc40"
+  xyachtsxp44:
+    canonicalName: "X Yachts XP44"
+    aliases:
+    - "X Yacht Xp 44"
+    - "xyachtxp44"
+    - "XP-44"
+    - "xp44"
 boats:
   MYC7-daydreaming:
     canonicalName: "Day Dreaming"
@@ -491,3 +498,8 @@ boats:
     aliases:
     - sailNumber: "72"
       name: "urm"
+  E442-toyboxx:
+    canonicalName: "Toyboxx"
+    aliases:
+    - sailNumber: "E442"
+      name: "toybox"

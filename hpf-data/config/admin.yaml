@@ -6,15 +6,15 @@
 importers:
 - name: "orc"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "ams"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
@@ -22,7 +22,7 @@ importers:
   runAtStartup: false
 - name: "topyacht"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "build-indexes"
   mode: "run"
@@ -44,27 +44,20 @@ schedule:
   days:
   - "TUESDAY"
   time: "08:08:00"
-nextSailSysRaceId: 32413
-sailsysEndRaceId: 41104
 targetIrcYear: 2025
 outlierSigma: null
 recentRaceReimportDays: 30
 
 # --- SailSys importer ---
+sailsysNextRaceId: 32414
+sailsysEndRaceId: 41104
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
 sailsysHttpDelayMs: 200
 sailsysRecentRaceDays: 14
-sailsysExcludedRacePatterns:
-- "OTB"
-- "Off the Beach"
-- "skiff"
-- "foil"
-- "dinghy"
-- "finn"
-- "aero"
-- "international ok"
+
+# --- BWPS importer ---
 bwpsMinYear: 2021
 
 # --- ORC importer ---

@@ -22,11 +22,11 @@
       </p>
 
     <div class="stats">
-      <div class="stat"><a href="data.html?tab=boats"><strong id="stat-boats">–</strong></a>Boats</div>
-      <div class="stat"><a href="data.html?tab=designs"><strong id="stat-designs">–</strong></a>Designs</div>
+      <div class="stat"><a href="data.html?tab=boats"><strong id="stat-boats">–</strong><span class="stat-excluded" id="stat-boats-excl"></span></a>Boats</div>
+      <div class="stat"><a href="data.html?tab=designs"><strong id="stat-designs">–</strong><span class="stat-excluded" id="stat-designs-excl"></span></a>Designs</div>
       <div class="stat"><a href="data.html?tab=clubs"><strong id="stat-clubs">–</strong></a>Clubs</div>
       <div class="stat"><a href="data.html?tab=series"><strong id="stat-series">–</strong></a>Series</div>
-      <div class="stat"><a href="data.html?tab=races"><strong id="stat-races">–</strong></a>Races</div>
+      <div class="stat"><a href="data.html?tab=races"><strong id="stat-races">–</strong><span class="stat-excluded" id="stat-races-excl"></span></a>Races</div>
     </div>
 
     <div class="landing-links">
@@ -59,6 +59,10 @@
 
   <script src="common.js"></script>
   <script>
+    function setExcludedSpan(id, count) {
+        const el = document.getElementById(id);
+        if (el && count > 0) el.textContent = count.toLocaleString() + ' excl.';
+    }
     async function loadStats() {
         const data = await fetchJson('/api/stats');
         if (!data) return;
@@ -67,6 +71,9 @@
         document.getElementById('stat-clubs').textContent = data.clubs.toLocaleString();
         document.getElementById('stat-series').textContent = data.series.toLocaleString();
         document.getElementById('stat-races').textContent = data.races.toLocaleString();
+        setExcludedSpan('stat-boats-excl',   data.boatsExcluded);
+        setExcludedSpan('stat-designs-excl', data.designsExcluded);
+        setExcludedSpan('stat-races-excl',   data.racesExcluded);
     }
     loadStats();
   </script>

@@ -105,7 +105,7 @@ Two importers handle SailSys data:
 
 **`SailSysRaceImporter`** — imports races and finishers:
 - **Local file mode** — reads from directory of downloaded `race-{id}.json` files
-- **HTTP API mode** — scans from `nextSailSysRaceId` (configured in `admin.yaml`)
+- **HTTP API mode** — scans from `sailsysNextRaceId` (configured in `admin.yaml`)
 - Infers certificates from `handicapCreatedFrom` in `calculations[]`
 - Propagates `nonSpinnaker` flag from race entries to inferred certificates
 - Recent race window: `sailsysRecentRaceDays` (default 14) for re-check of recently processed races
