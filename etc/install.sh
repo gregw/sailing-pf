@@ -33,7 +33,11 @@ mkdir -p "$DATA_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
 
 echo "==> Pre-building the project…"
-sudo -u "$SERVICE_USER" mvn --batch-mode -f "$INSTALL_DIR/pom.xml" compile -q
+sudo -u "$SERVICE_USER" \
+    HOME="$DATA_DIR" \
+    mvn --batch-mode -f "$INSTALL_DIR/pom.xml" \
+        -Dmaven.repo.local="$DATA_DIR/.m2/repository" \
+        compile -q
 
 echo "==> Installing systemd service unit…"
 install -m 644 "$(dirname "$0")/sailing-hpf.service" "$SERVICE_FILE"

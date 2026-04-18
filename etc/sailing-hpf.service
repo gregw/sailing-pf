@@ -9,7 +9,8 @@ Type=simple
 User=sailing-hpf
 Group=sailing-hpf
 WorkingDirectory=/opt/sailing-hpf
-ExecStart=/usr/bin/mvn --batch-mode exec:java -Dhpf-data=/var/lib/sailing-hpf
+Environment=HOME=/var/lib/sailing-hpf
+ExecStart=/usr/bin/mvn --batch-mode -Dmaven.repo.local=/var/lib/sailing-hpf/.m2/repository exec:java -Dhpf-data=/var/lib/sailing-hpf
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
