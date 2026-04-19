@@ -201,17 +201,17 @@ function renderChart(data) {
         });
     }
 
-    // Expected RF ratio line through origin: slope = rfA / rfB
-    // (y = design-A elapsed, x = design-B elapsed; faster boat has lower elapsed → rfA/rfB)
+    // Expected RF ratio line through origin: slope = rfB / rfA
+    // correctedTime = elapsed × TCF; equating gives elapsedA/elapsedB = rfB/rfA.
     const rfA = selectedVariant === 'nonSpin' ? data.designA.rfNonSpin : data.designA.rfSpin;
     const rfB = selectedVariant === 'nonSpin' ? data.designB.rfNonSpin : data.designB.rfSpin;
     if (rfA && rfB && rfA.value && rfB.value) {
-        const slope = rfA.value / rfB.value;
+        const slope = rfB.value / rfA.value;
         traces.push({
             x: [0, x1],
             y: [0, slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `RF ratio (${rfA.value.toFixed(4)} / ${rfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            name: `RF ratio (${rfB.value.toFixed(4)} / ${rfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: '#c47900', width: 2, dash: 'dot' }
         });
     }

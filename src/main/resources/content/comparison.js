@@ -805,12 +805,12 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const rfA = selectedVariant === 'nonSpin' ? data.boatA.rfNonSpin : data.boatA.rfSpin;
     const rfB = selectedVariant === 'nonSpin' ? data.boatB.rfNonSpin : data.boatB.rfSpin;
     if (rfA && rfB && rfA.value && rfB.value) {
-        const slope = rfA.value / rfB.value;
+        const slope = rfB.value / rfA.value;
         traces.push({
             x: [x0, x1],
             y: [0, slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `RF ratio (${rfA.value.toFixed(4)} / ${rfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            name: `RF ratio (${rfB.value.toFixed(4)} / ${rfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: '#c47900', width: 2, dash: 'dot' }
         });
     }
@@ -821,12 +821,12 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const hpfB = selectedVariant === 'nonSpin' ? data.boatB.hpfNonSpin
                : selectedVariant === 'twoHanded' ? data.boatB.hpfTwoHanded : data.boatB.hpfSpin;
     if (hpfA && hpfB && hpfA.value && hpfB.value) {
-        const slope = hpfA.value / hpfB.value;
+        const slope = hpfB.value / hpfA.value;
         traces.push({
             x: [x0, x1],
             y: [0, slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `HPF ratio (${hpfA.value.toFixed(4)} / ${hpfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            name: `HPF ratio (${hpfB.value.toFixed(4)} / ${hpfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: colorB, width: 2, dash: 'dash' }
         });
     }
