@@ -25,6 +25,7 @@ let candidateBoats  = [];
 let focusedBoatId   = null;
 let boatDebounce    = null;
 let lastChartData   = null;
+let calcSort        = { col: 'hpf', dir: 'desc' }; // handicap calculator sort state
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -432,6 +433,12 @@ function renderHandicapCalc(data) {
     const section = document.getElementById('hpf-calc');
     const table   = section.querySelector('table');
 
+    // Snapshot any values the user has typed so a re-render (e.g. sort click) doesn't wipe them.
+    const enteredValues = new Map();
+    document.querySelectorAll('.hpf-calc-input').forEach(inp => {
+        if (inp.value !== '') enteredValues.set(inp.dataset.boatId, inp.value);
+    });
+
     const showBestFit = data.boats.length <= 3;
 
     const calcBoats = data.boats.map(b => {
@@ -460,7 +467,7 @@ function renderHandicapCalc(data) {
             rf:      rfFactor  ? rfFactor.value  : null,
             bestFit
         };
-    }).filter(b => b.hpf != null).sort((a, b) => b.hpf - a.hpf);
+    }).filter(b => b.hpf != null);
 
     if (calcBoats.length === 0) {
         section.style.display = 'none';
@@ -472,15 +479,35 @@ function renderHandicapCalc(data) {
 
     const factorTypes = showBestFit ? ['hpf', 'rf', 'bestFit'] : ['hpf', 'rf'];
 
+    // Column definitions: { key, label, align }. key matches dataset.factorType for value columns,
+    // 'name' for the boat-name column, 'input' for the entered handicap.
+    const cols = [
+        { key: 'name',  label: 'Boat',           align: 'left'   },
+        { key: 'input', label: 'Enter handicap', align: 'center' },
+        { key: 'hpf',   label: 'HPF',            align: 'right'  },
+        { key: 'rf',    label: 'RF',             align: 'right'  },
+    ];
+    if (showBestFit) cols.push({ key: 'bestFit', label: 'Best Fit', align: 'right' });
+
+    if (!cols.some(c => c.key === calcSort.col)) calcSort = { col: 'hpf', dir: 'desc' };
+
+    sortCalcBoats(calcBoats);
+
     // Header row
     const thead = document.createElement('thead');
     const hdrTr = document.createElement('tr');
-    const hdrLabels = ['', 'HPF', 'RF', ...(showBestFit ? ['Best Fit'] : []), 'Enter handicap'];
-    hdrLabels.forEach((text, i) => {
+    cols.forEach(c => {
         const th = document.createElement('th');
-        th.textContent = text;
-        const align = i === 0 ? 'left' : i === hdrLabels.length - 1 ? 'center' : 'right';
-        th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${align};`;
+        const isActive = c.key === calcSort.col;
+        const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+        th.textContent = c.label + arrow;
+        th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};cursor:pointer;user-select:none;`
+            + (isActive ? 'font-weight:bold;' : '');
+        th.addEventListener('click', () => {
+            if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
+            else calcSort = { col: c.key, dir: c.key === 'name' ? 'asc' : 'desc' };
+            renderHandicapCalc(data);
+        });
         hdrTr.appendChild(th);
     });
     thead.appendChild(hdrTr);
@@ -491,44 +518,65 @@ function renderHandicapCalc(data) {
     calcBoats.forEach(b => {
         const tr = document.createElement('tr');
 
-        // Boat name
-        const tdName = document.createElement('td');
-        tdName.style.cssText = `color:${b.color};font-weight:bold;`;
-        tdName.textContent = b.name;
-        tr.appendChild(tdName);
-
-        // Value cells: HPF, RF, [Best Fit]
-        factorTypes.forEach(ft => {
-            const td = document.createElement('td');
-            td.className = 'hpf-calc-value';
-            td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
-            const v = b[ft];
-            td.textContent = v != null ? v.toFixed(4) : '—';
-            td.dataset.boatId = b.id;
-            td.dataset.factorType = ft;
-            td.dataset.origValue = v != null ? String(v) : '';
-            tr.appendChild(td);
+        cols.forEach(c => {
+            if (c.key === 'name') {
+                const tdName = document.createElement('td');
+                tdName.style.cssText = `color:${b.color};font-weight:bold;`;
+                tdName.textContent = b.name;
+                tr.appendChild(tdName);
+            } else if (c.key === 'input') {
+                const tdInput = document.createElement('td');
+                tdInput.style.cssText = 'padding:2px 4px;text-align:center;';
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.step = '0.0001';
+                input.min  = '0.1';
+                input.max  = '2.0';
+                input.className = 'hpf-calc-input';
+                input.dataset.boatId = b.id;
+                input.placeholder = 'enter…';
+                input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
+                if (enteredValues.has(b.id)) input.value = enteredValues.get(b.id);
+                input.addEventListener('input', () => recalcAll(calcBoats));
+                tdInput.appendChild(input);
+                tr.appendChild(tdInput);
+            } else {
+                const td = document.createElement('td');
+                td.className = 'hpf-calc-value';
+                td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
+                const v = b[c.key];
+                td.textContent = v != null ? v.toFixed(4) : '—';
+                td.dataset.boatId = b.id;
+                td.dataset.factorType = c.key;
+                td.dataset.origValue = v != null ? String(v) : '';
+                tr.appendChild(td);
+            }
         });
-
-        // Single input cell
-        const tdInput = document.createElement('td');
-        tdInput.style.cssText = 'padding:2px 4px;text-align:center;';
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.step = '0.0001';
-        input.min  = '0.1';
-        input.max  = '2.0';
-        input.className = 'hpf-calc-input';
-        input.dataset.boatId = b.id;
-        input.placeholder = 'enter…';
-        input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
-        input.addEventListener('input', () => recalcAll(calcBoats));
-        tdInput.appendChild(input);
-        tr.appendChild(tdInput);
 
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
+
+    if (enteredValues.size > 0) recalcAll(calcBoats);
+}
+
+function sortCalcBoats(calcBoats) {
+    const { col, dir } = calcSort;
+    const mul = dir === 'asc' ? 1 : -1;
+    if (col === 'name') {
+        calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
+    } else if (col === 'input') {
+        // No entered values yet at render time; fall back to HPF order so rows aren't arbitrary.
+        calcBoats.sort((a, b) => mul * ((a.hpf ?? 0) - (b.hpf ?? 0)));
+    } else {
+        calcBoats.sort((a, b) => {
+            const av = a[col], bv = b[col];
+            if (av == null && bv == null) return 0;
+            if (av == null) return 1;       // nulls always last
+            if (bv == null) return -1;
+            return mul * (av - bv);
+        });
+    }
 }
 
 // Fit-quality color: green (good fit) → red (bad fit)
