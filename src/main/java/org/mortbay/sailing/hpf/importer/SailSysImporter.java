@@ -259,8 +259,9 @@ public class SailSysImporter
      *   <li>Successful responses: re-fetch if recent (within {@code recentRaceDays}); otherwise
      *       use file last-modified vs {@code youngCacheMaxAgeDays} (young race) or
      *       {@code oldCacheMaxAgeDays} (old race).</li>
-     *   <li>Error responses (series locked / not yet published): use file last-modified
-     *       vs {@code youngCacheMaxAgeDays}, never force-refetch based on race date.</li>
+     *   <li>Error responses (series locked / not yet published): refetch while the cached
+     *       error is younger than {@code youngCacheMaxAgeDays} (the race may have since been
+     *       published); once older, treat the error as settled and reuse the cache.</li>
      * </ul>
      *
      * @return a {@link RunResult} containing the minimum recent race ID and the highest
@@ -317,8 +318,9 @@ public class SailSysImporter
                 else
                 {
                     // Error response (series locked / not yet published / not found):
-                    // use file last-modified date — never force-refetch based on race date
-                    useCache = !isStale(cachedFile, youngCacheMaxAgeDays);
+                    // the race may still become available — refetch while the cached error
+                    // is within the young window, then settle on the cached error afterwards.
+                    useCache = isStale(cachedFile, youngCacheMaxAgeDays);
                 }
             }
 
