@@ -186,7 +186,7 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
 .division-nav button { white-space: nowrap; }
 
 /* HPF calculator */
-.hpf-calc-table { border-collapse: collapse; }
+.hpf-calc-table { width: auto; border-collapse: collapse; }
 .hpf-calc-table td { padding: 3px 8px; vertical-align: middle; }
 
 /* Info button (ⓘ) — tooltip on hover, links to docs on click */
