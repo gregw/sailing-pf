@@ -160,6 +160,19 @@ public class AdminApiServlet extends HttpServlet
                 writeJson(resp, Map.of("error", "An import is already running or no tasks are scheduled"));
             }
         }
+        else if ("/importers/run-startup".equals(path))
+        {
+            if (_taskService.runStartupTasks())
+            {
+                resp.setStatus(202);
+                writeJson(resp, Map.of("accepted", true));
+            }
+            else
+            {
+                resp.setStatus(409);
+                writeJson(resp, Map.of("error", "An import is already running or no tasks are flagged for on-start"));
+            }
+        }
         else if ("/schedule".equals(path))
         {
             handleSetSchedule(req, resp);

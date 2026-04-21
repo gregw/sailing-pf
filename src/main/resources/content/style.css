@@ -63,8 +63,9 @@ a { color: #2255aa; }
 .badge { padding: 2px 8px; border-radius: 3px; font-size: 0.75rem; }
 .badge-idle { background: #eee; color: #555; }
 .badge-running { background: #4caf50; color: #fff; }
+.importer-table { width: auto; }
+.importer-table th, .importer-table td { padding-left: 0.75rem; padding-right: 0.75rem; }
 .importer-table td:nth-child(3) { white-space: nowrap; }
-.importer-table td:nth-child(4) { text-align: center; }
 tr.excluded td { color: #aaa; }
 tr.excluded td:last-child { color: inherit; }
 

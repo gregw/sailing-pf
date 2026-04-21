@@ -514,18 +514,22 @@ public void stop()
 
     /**
      * Runs tasks marked {@code runAtStartup=true}, in order, asynchronously.
-     * Called once from HpfServer after the cache and all services are initialised.
+     * Called once from HpfServer after the cache and all services are initialised,
+     * and on demand from the admin "Run Now" button under the On Start column.
+     *
+     * @return true if a run was submitted, false if no tasks are flagged or another
+     *         run is already in progress.
      */
-    public void runStartupTasks()
+    public boolean runStartupTasks()
     {
         List<ImporterEntry> toRun = importerEntries.stream()
             .filter(ImporterEntry::runAtStartup).toList();
         if (toRun.isEmpty())
-            return;
+            return false;
         if (!running.compareAndSet(false, true))
         {
             LOG.warn("Startup run skipped — import already running");
-            return;
+            return false;
         }
         stopRequested.set(false);
         importExecutor.submit(() ->
@@ -560,6 +564,7 @@ public void stop()
                 running.set(false);
             }
         });
+        return true;
     }
 
     private void armSchedule()

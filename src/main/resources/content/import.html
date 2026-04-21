@@ -23,12 +23,29 @@
           <th></th>
           <th>Task <a href="docs.html#col-importer-task" class="info-btn" data-tip="Task name and run mode (api = fetch from network, run = compute locally)." target="_blank">ⓘ</a></th>
           <th>Status <a href="docs.html#col-importer-status" class="info-btn" data-tip="Current status of this task: idle or running." target="_blank">ⓘ</a></th>
-          <th>Run <a href="docs.html#col-importer-run" class="info-btn" data-tip="Run this task now. For sailsys-races, optionally set the starting race ID." target="_blank">ⓘ</a></th>
-          <th title="Include this task in the automatic scheduled run">In schedule <a href="docs.html#col-importer-in-schedule" class="info-btn" data-tip="Tick to include this task in the automatic scheduled run." target="_blank">ⓘ</a></th>
-          <th title="Run this task automatically when the server starts">On start <a href="docs.html#col-importer-on-start" class="info-btn" data-tip="Tick to run this task automatically when the server starts." target="_blank">ⓘ</a></th>
+          <th style="text-align:center">Run <a href="docs.html#col-importer-run" class="info-btn" data-tip="Run this task now. For sailsys-races, optionally set the starting race ID." target="_blank">ⓘ</a></th>
+          <th style="text-align:center" title="Include this task in the automatic scheduled run">In schedule <a href="docs.html#col-importer-in-schedule" class="info-btn" data-tip="Tick to include this task in the automatic scheduled run." target="_blank">ⓘ</a></th>
+          <th style="text-align:center" title="Run this task automatically when the server starts">On start <a href="docs.html#col-importer-on-start" class="info-btn" data-tip="Tick to run this task automatically when the server starts." target="_blank">ⓘ</a></th>
         </tr>
       </thead>
       <tbody id="importers-body"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4"></td>
+          <td style="text-align:center">
+            <button onclick="runScheduleNow()" title="Run all ticked In Schedule tasks immediately, in order"
+                    style="background:#1a6b2a;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">
+              Run Now
+            </button>
+          </td>
+          <td style="text-align:center">
+            <button onclick="runStartupNow()" title="Run all ticked On Start tasks immediately, in order"
+                    style="background:#1a6b2a;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">
+              Run Now
+            </button>
+          </td>
+        </tr>
+      </tfoot>
     </table>
   </section>
 
@@ -48,10 +65,6 @@
     </label>
     <div style="display:flex;gap:0.75rem;margin-top:0.5rem;align-items:center;">
       <button onclick="saveSchedule()" title="Save schedule days, time and task list">Save</button>
-      <button onclick="runScheduleNow()" title="Run all ticked tasks immediately, in order"
-              style="background:#1a6b2a;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">
-        Run now
-      </button>
     </div>
   </section>
 

@@ -26,7 +26,7 @@ function isWriteAllowed() { return window.hpfAuth?.authenticated; }
 function applyAuthState() {
     const ok = isWriteAllowed();
     document.querySelectorAll(
-        '#importers-body button, [onclick="saveSchedule()"], [onclick="stopSchedule()"], [onclick="runScheduleNow()"]'
+        '#importers-body button, [onclick="saveSchedule()"], [onclick="stopSchedule()"], [onclick="runScheduleNow()"], [onclick="runStartupNow()"]'
     ).forEach(b => {
         b.disabled = !ok;
         b.title = ok ? '' : 'Sign in to use this action';
@@ -105,7 +105,7 @@ function buildRow(entry) {
     const isSailSysApi = entry.name === 'sailsys-races';
     const key = entry.name + '-' + entry.mode;
     const progressField = isSailSysApi
-        ? `<span id="progress-${esc(key)}" style="font-family:monospace;font-size:0.9em;color:#666;margin-right:0.4em;"></span>`
+        ? `<span id="progress-${esc(key)}" style="font-family:monospace;font-size:0.9em;color:#666;margin-left:0.4em;"></span>`
         : '';
     const runStopBtns = isSailSysApi
         ? `<button id="run-btn-${esc(key)}"
@@ -127,8 +127,8 @@ function buildRow(entry) {
       </td>
       <td>${esc(displayName(entry.name))} ${infoBtn('task-' + entry.name, taskTip(entry.name))}</td>
       <td><span class="badge ${isRunning ? 'badge-running' : 'badge-idle'}"
-               id="badge-${esc(key)}">${esc(entry.status)}</span></td>
-      <td>${progressField}${runStopBtns}</td>
+               id="badge-${esc(key)}">${esc(entry.status)}</span>${progressField}</td>
+      <td style="text-align:center">${runStopBtns}</td>
       <td style="text-align:center"><input type="checkbox" id="sched-${esc(key)}"
                title="Include in the automatic scheduled run"
                ${entry.includeInSchedule ? 'checked' : ''}></td>
@@ -201,6 +201,19 @@ async function runScheduleNow() {
     }
 }
 
+async function runStartupNow() {
+    if (!isWriteAllowed()) return;
+    const resp = await fetch('/api/importers/run-startup', { method: 'POST' });
+    if (resp.status === 409) {
+        alert('An import is already running, or no tasks are flagged for On Start');
+    } else if (resp.status === 202) {
+        setAllRunButtonsDisabled(true);
+        startStatusPoller();
+    } else {
+        alert('Unexpected response: ' + resp.status);
+    }
+}
+
 async function saveSchedule() {
     if (!isWriteAllowed()) return;
     const days = [...document.querySelectorAll('#schedule-days input:checked')].map(cb => cb.value);
@@ -253,6 +266,9 @@ function setAllRunButtonsDisabled(disabled) {
             });
         }
     }
+    document.querySelectorAll(
+        '[onclick="runScheduleNow()"], [onclick="runStartupNow()"]'
+    ).forEach(b => b.disabled = disabled);
 }
 
 function setStopScheduleVisible(visible) {
