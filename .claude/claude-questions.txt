@@ -1,6 +1,15 @@
 
-Make the club id in the boats databrowser a link to races tab with all only the races for that club displayed
-
-
+Let's further refine the excluded mechanism - how it works and how it is displayed:
+ + when I say "greyed out" below, this may not be literally grey as some of the fields a links and shown in blue.  Links to excluded entities should be shown in a blue tinted grey to clearly indicate that they are both excluded, but still a link that can be followed.
+ + When a club is explicitly excluded, then all its races are also considered excluded, but its boats are not and can participate in races of non excluded clubs.
+ + When an excluded club is displayed (show excluded is ticked), it is shown as a greyed out line.
+ + A boat is excluded if it is explicitly excluded or its design is explicitly excluded.
+ + when an excluded boat is displayed (show excluded is ticked), it is shown as a greyed out line if the boat is explicitly excluded. If the boat is excluded because of its design, then the design name is "greyed out" .
+ + A boats club is shown "greyed out" if the club is excluded, but that does not exclude the boat. The club column in the boats table should be converted to a link.
+ + A series is excluded if it is explicitly excluded or its club is excluded.
+ + when an excluded series is displayed (show excluded is ticked), it is shown as a greyed out line if the series is explicitly excluded. If the series is excluded because of its club, then only the club is "greyed out".
+ + A race is excluded if it is explicitly excluded or its series is excluded (either due to explicit exclusion or club exclusion).
+ + when an excluded race is displayed (show excluded is ticked), it is shown as a greyed out line if the race is explicitly excluded. If the series is excluded, then the series is "greyed out" and if the club is excluded then that is "greyed out".
+ + In all places where there is a club column, it should display the club short name, but have a hover over that displays the club id and long name. On tabs other than the club tab, the club should be a link to the club tab with that club displayed.
 
 Add an AMS file cache

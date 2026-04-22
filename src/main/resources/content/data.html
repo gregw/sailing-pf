@@ -36,7 +36,7 @@
         <option value="nonSpin">Non-spin</option>
         <option value="twoHanded">Two-handed</option>
       </select></label>
-      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-boats" onchange="doSearch('boats')"> Exclude nulls</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-boats" onchange="doSearch('boats')"> Hide empty</label>
     </div>
     <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;"><table>
       <thead><tr id="thead-boats"></tr></thead>
@@ -48,7 +48,26 @@
       <span id="merge-bar-count-boats"></span>
       <button id="merge-btn-boats" onclick="showMergePanel('boats')" style="margin-left:0.5rem;">Merge selected…</button>
       <button id="merge-request-btn-boats" onclick="showMergePanel('boats')" style="margin-left:0.5rem;display:none;">Request merge…</button>
+      <button id="exclude-btn-boats" onclick="showExcludePanel('boats', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
+      <button id="include-btn-boats" onclick="showExcludePanel('boats', false)" style="margin-left:0.5rem;display:none;">Include selected…</button>
       <button onclick="clearSelection('boats')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-boats" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="exclude-panel-title-boats"></strong>
+      <div id="exclude-list-boats" style="margin:0.6rem 0;"></div>
+      <div id="exclude-email-row-boats" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-email-boats" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="exclude-email-boats" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="exclude-message-row-boats" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-message-boats" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="exclude-message-boats" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+      </div>
+      <button id="exclude-confirm-boats" onclick="performExclude('boats')">Confirm</button>
+      <button id="exclude-request-confirm-boats" onclick="requestExclude('boats')" style="display:none;">Submit request</button>
+      <button onclick="hideExcludePanel('boats')" style="margin-left:0.5rem;">Cancel</button>
+      <div id="exclude-status-boats" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="merge-panel-boats" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
@@ -109,7 +128,7 @@
       <button class="search-clear-btn" title="Clear search" onclick="clearSearch('designs')">✕</button>
       <button onclick="doSearch('designs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
-      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-designs" onchange="doSearch('designs')"> Exclude nulls</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-designs" onchange="doSearch('designs')"> Hide empty</label>
     </div>
     <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;"><table>
       <thead><tr id="thead-designs"></tr></thead>
@@ -121,7 +140,26 @@
       <span id="merge-bar-count-designs"></span>
       <button id="merge-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;">Merge selected…</button>
       <button id="merge-request-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;display:none;">Request merge…</button>
+      <button id="exclude-btn-designs" onclick="showExcludePanel('designs', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
+      <button id="include-btn-designs" onclick="showExcludePanel('designs', false)" style="margin-left:0.5rem;display:none;">Include selected…</button>
       <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="exclude-panel-title-designs"></strong>
+      <div id="exclude-list-designs" style="margin:0.6rem 0;"></div>
+      <div id="exclude-email-row-designs" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="exclude-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="exclude-message-row-designs" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="exclude-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+      </div>
+      <button id="exclude-confirm-designs" onclick="performExclude('designs')">Confirm</button>
+      <button id="exclude-request-confirm-designs" onclick="requestExclude('designs')" style="display:none;">Submit request</button>
+      <button onclick="hideExcludePanel('designs')" style="margin-left:0.5rem;">Cancel</button>
+      <div id="exclude-status-designs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="merge-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
@@ -151,13 +189,38 @@
       <button class="search-clear-btn" title="Clear search" onclick="clearSearch('clubs')">✕</button>
       <button onclick="doSearch('clubs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show excluded</label>
-      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-clubs" onchange="doSearch('clubs')"> Exclude nulls</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-clubs" onchange="doSearch('clubs')"> Hide empty</label>
     </div>
     <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;"><table>
       <thead><tr id="thead-clubs"></tr></thead>
       <tbody id="tbody-clubs"></tbody>
     </table></div>
     <div class="scroll-status" id="scroll-status-clubs"></div>
+
+    <div id="merge-bar-clubs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+      <span id="merge-bar-count-clubs"></span>
+      <button id="exclude-btn-clubs" onclick="showExcludePanel('clubs', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
+      <button id="include-btn-clubs" onclick="showExcludePanel('clubs', false)" style="margin-left:0.5rem;display:none;">Include selected…</button>
+      <button onclick="clearSelection('clubs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="exclude-panel-title-clubs"></strong>
+      <div id="exclude-list-clubs" style="margin:0.6rem 0;"></div>
+      <div id="exclude-email-row-clubs" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-email-clubs" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="exclude-email-clubs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="exclude-message-row-clubs" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-message-clubs" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="exclude-message-clubs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+      </div>
+      <button id="exclude-confirm-clubs" onclick="performExclude('clubs')">Confirm</button>
+      <button id="exclude-request-confirm-clubs" onclick="requestExclude('clubs')" style="display:none;">Submit request</button>
+      <button onclick="hideExcludePanel('clubs')" style="margin-left:0.5rem;">Cancel</button>
+      <div id="exclude-status-clubs" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
     <div class="detail-panel" id="detail-clubs"><div id="pre-clubs" class="json-tree"></div></div>
   </div>
 
@@ -168,13 +231,37 @@
       <button class="search-clear-btn" title="Clear search" onclick="clearSearch('races')">✕</button>
       <button onclick="doSearch('races')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
-      <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-races" onchange="doSearch('races')"> Exclude empty</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-races" onchange="doSearch('races')"> Hide empty</label>
     </div>
     <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;"><table>
       <thead><tr id="thead-races"></tr></thead>
       <tbody id="tbody-races"></tbody>
     </table></div>
     <div class="scroll-status" id="scroll-status-races"></div>
+
+    <div id="merge-bar-races" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+      <span id="merge-bar-count-races"></span>
+      <button id="exclude-btn-races" onclick="showExcludePanel('races', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
+      <button id="include-btn-races" onclick="showExcludePanel('races', false)" style="margin-left:0.5rem;display:none;">Include selected…</button>
+      <button onclick="clearSelection('races')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-races" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="exclude-panel-title-races"></strong>
+      <div id="exclude-list-races" style="margin:0.6rem 0;"></div>
+      <div id="exclude-email-row-races" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-email-races" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="exclude-email-races" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="exclude-message-row-races" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-message-races" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="exclude-message-races" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+      </div>
+      <button id="exclude-confirm-races" onclick="performExclude('races')">Confirm</button>
+      <button id="exclude-request-confirm-races" onclick="requestExclude('races')" style="display:none;">Submit request</button>
+      <button onclick="hideExcludePanel('races')" style="margin-left:0.5rem;">Cancel</button>
+      <div id="exclude-status-races" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
 
     <div id="division-section-races" style="display:none; margin-top:1rem;">
       <div id="race-series-race-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
@@ -213,6 +300,31 @@
       <tbody id="tbody-series"></tbody>
     </table></div>
     <div class="scroll-status" id="scroll-status-series"></div>
+
+    <div id="merge-bar-series" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+      <span id="merge-bar-count-series"></span>
+      <button id="exclude-btn-series" onclick="showExcludePanel('series', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
+      <button id="include-btn-series" onclick="showExcludePanel('series', false)" style="margin-left:0.5rem;display:none;">Include selected…</button>
+      <button onclick="clearSelection('series')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-series" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="exclude-panel-title-series"></strong>
+      <div id="exclude-list-series" style="margin:0.6rem 0;"></div>
+      <div id="exclude-email-row-series" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-email-series" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="exclude-email-series" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="exclude-message-row-series" style="display:none; margin-bottom:0.5rem;">
+        <label for="exclude-message-series" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="exclude-message-series" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+      </div>
+      <button id="exclude-confirm-series" onclick="performExclude('series')">Confirm</button>
+      <button id="exclude-request-confirm-series" onclick="requestExclude('series')" style="display:none;">Submit request</button>
+      <button onclick="hideExcludePanel('series')" style="margin-left:0.5rem;">Cancel</button>
+      <div id="exclude-status-series" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
     <div id="series-chart-section" style="display:none; margin-top:1rem;">
       <div id="series-chart-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">

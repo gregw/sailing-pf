@@ -46,6 +46,42 @@ function weightSpan(value, formattedValue, w) {
     return `<span style="color:${weightColor(w)}" title="${weightLabel(w)}">${formattedValue}</span>`;
 }
 
+/**
+ * Returns the display bits for a club reference: short name for text, full tooltip,
+ * and whether the referenced club is marked excluded. `item.clubShortName`, `clubLongName`
+ * and `clubExcluded` are provided by the server on every listing row that carries a clubId.
+ */
+function clubDisplay(item) {
+    const id    = item.clubId || '';
+    const short = item.clubShortName || id;
+    const long  = item.clubLongName || '';
+    const title = id ? (id + (long ? ' — ' + long : '')) : '';
+    return { id, short, title, excluded: !!item.clubExcluded };
+}
+
+/**
+ * Cross-tab navigation: click a club cell outside the Clubs tab to land on the Clubs
+ * tab filtered to that single club.
+ */
+function openClubTab(item) {
+    const id = item.clubId;
+    if (!id) return;
+    setFilter('clubs', 'id', id, 'Club: ' + (item.clubShortName || id));
+    switchTab('clubs');
+}
+
+/** Shared Club action column used on boats / series / races tabs. */
+function clubColumn(anchor, sortKey) {
+    return {
+        label: 'Club', type: 'action', anchor, sortKey,
+        tip: 'Home club (short name). Click to see this club on the Clubs tab; hover for id and full name.',
+        render:   item => clubDisplay(item).short,
+        title:    item => clubDisplay(item).title,
+        btnClass: item => clubDisplay(item).excluded ? 'excluded-link' : '',
+        action:   item => openClubTab(item)
+    };
+}
+
 const COLUMNS = {
     boats: [
         { label: 'ID',     key: 'id',     anchor: 'col-boat-id',      tip: 'Unique boat identifier derived from sail number, name and design.', cls: 'id-col' },
@@ -53,7 +89,8 @@ const COLUMNS = {
         { label: 'Name',   key: 'name',   anchor: 'col-boat-name',     tip: 'Boat name as recorded in source data.', cls: 'id-col' },
         { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design', cls: 'id-col',
           tip: 'Design (class) identifier; click to search for this design in the designs tab.',
-          render: item => item.designId || '',
+          render:   item => item.designId || '',
+          btnClass: item => item.designExcluded ? 'excluded-link' : '',
           action: item => {
               if (!item.designId) return;
               state.searches['designs'] = item.designId;
@@ -83,17 +120,13 @@ const COLUMNS = {
           } },
         { label: 'Overall', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
           tip: 'Performance profile overall score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, NonChaotic and Stability spokes (last 12 months).',
-          render: v => v != null
-            ? weightSpan(v, v.toFixed(3), v)
-            : '<span style="color:#bbb">—</span>' },
-        { label: 'Club',     key: 'clubId', anchor: 'col-boat-club',   tip: 'Home club identifier.', cls: 'id-col' },
+          render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
+        clubColumn('col-boat-club', 'clubId'),
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
           tip: 'Number of recorded finishes; click to view this boat\'s races.',
           render: item => item.finishes ? String(item.finishes) : '',
           action: item => { setFilter('races', 'boatId', item.id,
                             'Races for ' + (item.name || item.id)); switchTab('races'); } },
-        { label: 'Excl',   key: 'excluded', type: 'toggle', anchor: 'col-boat-excl',
-          tip: 'Excluded boats are hidden from analysis and charts.' },
     ],
     designs: [
         { label: 'ID',     key: 'id',           anchor: 'col-design-id',     tip: 'Unique design identifier (normalised class name).', cls: 'id-col' },
@@ -113,8 +146,6 @@ const COLUMNS = {
           render: item => item.boats ? String(item.boats) : '',
           action: item => { setFilter('boats', 'designId', item.id,
                             'Boats of design ' + (item.canonicalName || item.id)); switchTab('boats'); } },
-        { label: 'Excl',   key: 'excluded', type: 'toggle', anchor: 'col-design-excl',
-          tip: 'Excluded designs are hidden from analysis and charts.' },
     ],
     clubs: [
         { label: 'ID',        key: 'id',        anchor: 'col-club-id',    tip: 'Club identifier (website domain).', cls: 'id-col' },
@@ -136,14 +167,9 @@ const COLUMNS = {
           render: item => item.races != null ? String(item.races) : '',
           action: item => { setFilter('races', 'clubId', item.id,
                             'Races at ' + (item.shortName || item.id)); switchTab('races'); } },
-        { label: 'Excl',      key: 'excluded', type: 'toggle', anchor: 'col-club-excl',
-          tip: 'Excluded clubs are hidden from analysis.' },
     ],
     series: [
-        { label: 'Club',      type: 'action', sortKey: 'club', anchor: 'col-series-club',
-          tip: 'Club that runs this series; click to show only series from this club.',
-          render: item => item.club || item.clubId || '',
-          action: item => setFilter('series', 'clubId', item.clubId, 'Series at ' + (item.club || item.clubId)) },
+        clubColumn('col-series-club', 'club'),
         { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.', cls: 'id-col' },
         { label: 'First',     key: 'firstDate', anchor: 'col-series-first',   tip: 'Date of the first race in this series.' },
         { label: 'Last',      key: 'lastDate',  anchor: 'col-series-last',    tip: 'Date of the last race in this series.' },
@@ -151,23 +177,20 @@ const COLUMNS = {
           tip: 'Number of races in this series; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
           action: item => { setFilter('races', 'seriesId', item.id, 'Series: ' + (item.name || item.id)); switchTab('races'); } },
-        { label: 'Excl',      key: 'excluded', type: 'toggle', anchor: 'col-series-excl',
-          tip: 'Excluded series — all races in this series are excluded from PF calculations.' },
     ],
     races: [
         { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.', cls: 'id-col' },
         { label: 'Date',      key: 'date',      anchor: 'col-race-date',      tip: 'Race date.' },
-        { label: 'Club',      key: 'clubId',    anchor: 'col-race-club',      tip: 'Club that ran this race.', cls: 'id-col' },
+        clubColumn('col-race-club', 'clubId'),
         { label: 'Series',    type: 'action', sortKey: 'seriesName', anchor: 'col-race-series',
           tip: 'Series this race belongs to; click to show the races of this series.',
-          render: item => item.seriesName || '',
+          render:   item => item.seriesName || '',
+          btnClass: item => item.seriesExcluded ? 'excluded-link' : '',
           action: item => item.seriesId
             ? setFilter('races', 'seriesId', item.seriesId, 'Series: ' + (item.seriesName || item.seriesId))
             : null },
         { label: 'Race',      key: 'name',      anchor: 'col-race-name',      tip: 'Race name or number within the series.' },
         { label: 'Finishers', key: 'finishers',    anchor: 'col-race-finishers',   tip: 'Total finishers across all divisions in this race.' },
-        { label: 'Excl',      key: 'excluded',  type: 'toggle', anchor: 'col-race-excl',
-          tip: 'Excluded races are not used in PF calculations.' },
     ],
 };
 
@@ -193,8 +216,8 @@ const state = {
     searchTimers: {},
     searches: { boats: '', designs: '', clubs: '', races: '', series: '' },  // persistent per-tab search terms
     activeTab: 'boats',
-    selected:     { boats: new Set(), designs: new Set() },   // IDs of checked rows
-    selectedData: { boats: new Map(), designs: new Map() },   // id → item for merge panel
+    selected:     { boats: new Set(), designs: new Set(), clubs: new Set(), series: new Set(), races: new Set() },   // IDs of checked rows
+    selectedData: { boats: new Map(), designs: new Map(), clubs: new Map(), series: new Map(), races: new Map() },   // id → item for action panel
     filter: { boats: null, designs: null, clubs: null, races: null, series: null },
     raceItems:       [],   // current page's race rows for prev/next navigation
     currentRaceIdx:  -1,   // index into raceItems of the currently shown race
@@ -257,7 +280,7 @@ function updateFilterBanner(entity) {
 
 function updateFilterControls(entity) {
     const active = !!state.filter[entity];
-    ['show-excluded-' + entity, 'exclude-empty-' + entity, 'filter-dupe-sails'].forEach(id => {
+    ['exclude-empty-' + entity, 'filter-dupe-sails'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = active;
@@ -300,9 +323,9 @@ async function loadList(entity, page) {
         if (document.getElementById('filter-dupe-sails').checked) url += '&dupeSails=true';
     }
     const showExcludedEl = document.getElementById('show-excluded-' + entity);
-    if (!f && showExcludedEl && showExcludedEl.checked) url += '&showExcluded=true';
-    const excludeNullsEl = document.getElementById('exclude-nulls-' + entity);
-    if (excludeNullsEl && excludeNullsEl.checked) url += '&excludeNulls=true';
+    if (showExcludedEl && showExcludedEl.checked) url += '&showExcluded=true';
+    const hideEmptyEl = document.getElementById('hide-empty-' + entity);
+    if (hideEmptyEl && hideEmptyEl.checked) url += '&hideEmpty=true';
     const excludeEmptyEl = document.getElementById('exclude-empty-' + entity);
     if (!f && excludeEmptyEl && excludeEmptyEl.checked) url += '&excludeEmpty=true';
     const data = await fetchJson(url);
@@ -323,7 +346,7 @@ function renderHeaders(entity) {
     const active = state.sort[entity];
     const dir    = state.dir[entity];
     let html = '';
-    if (entity === 'boats' || entity === 'designs') html += '<th style="width:2rem"></th>';
+    html += '<th style="width:2rem"></th>';
     html += cols.map(col => {
         const info = col.anchor ? infoBtn(col.anchor, col.tip || '') : '';
         if (col.type === 'toggle') return `<th>${esc(col.label)}${info}</th>`;
@@ -368,18 +391,16 @@ function renderTable(entity, items, append) {
         const globalIdx = baseIdx + itemIdx;
         const tr = document.createElement('tr');
         if (item.excluded) tr.classList.add('excluded');
-        if (entity === 'boats' || entity === 'designs') {
-            if (state.selected[entity].has(item.id)) tr.classList.add('selected');
-            // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
-            const tdCb = document.createElement('td');
-            tdCb.style.textAlign = 'center';
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = state.selected[entity].has(item.id);
-            cb.onclick = (e) => { e.stopPropagation(); toggleSelect(entity, item, cb.checked); };
-            tdCb.appendChild(cb);
-            tr.appendChild(tdCb);
-        }
+        if (state.selected[entity].has(item.id)) tr.classList.add('selected');
+        // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
+        const tdCb = document.createElement('td');
+        tdCb.style.textAlign = 'center';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = state.selected[entity].has(item.id);
+        cb.onclick = (e) => { e.stopPropagation(); toggleSelect(entity, item, cb.checked); };
+        tdCb.appendChild(cb);
+        tr.appendChild(tdCb);
         tr.onclick = () => {
             if (entity === 'races') state.currentRaceIdx = globalIdx;
             if (entity === 'boats') { state.currentBoatIdx = globalIdx; }
@@ -388,30 +409,21 @@ function renderTable(entity, items, append) {
         cols.forEach(col => {
             const td = document.createElement('td');
             if (col.cls) td.className = col.cls;
-            if (col.type === 'toggle') {
-                td.style.textAlign = 'center';
-                const ecb = document.createElement('input');
-                ecb.type = 'checkbox';
-                ecb.title = 'Exclude from analysis';
-                ecb.checked = !!item[col.key];
-                ecb.disabled = !isWriteAllowed();
-                ecb.onclick = (e) => {
-                    e.stopPropagation();
-                    item[col.key] = ecb.checked;
-                    tr.classList.toggle('excluded', ecb.checked);
-                    toggleExcluded(entity, item.id, ecb.checked, item);
-                };
-                td.appendChild(ecb);
-            } else if (col.type === 'action') {
+            if (col.type === 'action') {
                 const text = col.render ? col.render(item) : col.label;
+                const extraClass = col.btnClass ? col.btnClass(item) : '';
+                const tooltip    = col.title    ? col.title(item)    : null;
                 if (text && col.action) {
                     const btn = document.createElement('button');
-                    btn.className = 'link-btn';
+                    btn.className = 'link-btn' + (extraClass ? ' ' + extraClass : '');
                     btn.textContent = text;
+                    if (tooltip) btn.title = tooltip;
                     btn.onclick = (e) => { e.stopPropagation(); col.action(item); };
                     td.appendChild(btn);
                 } else {
                     td.textContent = text || '';
+                    if (tooltip) td.title = tooltip;
+                    if (extraClass) td.className = ((td.className || '') + ' ' + extraClass).trim();
                 }
             } else {
                 const v = col.key != null ? item[col.key] : item;
@@ -705,20 +717,46 @@ function toggleSelect(entity, item, checked) {
     updateMergeBar(entity);
 }
 
+const ENTITY_NOUNS = {
+    boats: 'boat', designs: 'design', clubs: 'club', series: 'series', races: 'race'
+};
+
 function updateMergeBar(entity) {
     const n   = state.selected[entity].size;
     const bar = document.getElementById('merge-bar-' + entity);
-    bar.style.display = n >= 2 ? '' : 'none';
-    const noun = entity === 'boats' ? 'boat' : 'design';
-    document.getElementById('merge-bar-count-' + entity).textContent =
-        n + ' ' + noun + (n !== 1 ? 's' : '') + ' selected';
+    if (!bar) return;
+    bar.style.display = n >= 1 ? '' : 'none';
+    const noun = ENTITY_NOUNS[entity] || entity;
+    const label = (entity === 'series') ? (n + ' series selected')
+                : (n + ' ' + noun + (n !== 1 ? 's' : '') + ' selected');
+    document.getElementById('merge-bar-count-' + entity).textContent = label;
+
+    const mergeable = (entity === 'boats' || entity === 'designs');
+    const w = isWriteAllowed();
+    const mergeBtn = document.getElementById('merge-btn-' + entity);
+    const reqBtn   = document.getElementById('merge-request-btn-' + entity);
+    if (mergeBtn) mergeBtn.style.display = (mergeable && n >= 2 && w)  ? '' : 'none';
+    if (reqBtn)   reqBtn.style.display   = (mergeable && n >= 2 && !w) ? '' : 'none';
+
+    // Exclude / Include — visible based on excluded-state of currently-selected items.
+    const items = Array.from(state.selectedData[entity].values());
+    const anyExcluded  = items.some(isItemExcluded);
+    const anyIncluded  = items.some(it => !isItemExcluded(it));
+    const excludeBtn = document.getElementById('exclude-btn-' + entity);
+    const includeBtn = document.getElementById('include-btn-' + entity);
+    if (excludeBtn) excludeBtn.style.display = (n >= 1 && anyIncluded) ? '' : 'none';
+    if (includeBtn) includeBtn.style.display = (n >= 1 && anyExcluded) ? '' : 'none';
 }
+
+/** Returns true if the item is currently excluded (as seen by the last list fetch). */
+function isItemExcluded(item) { return !!item.excluded; }
 
 function clearSelection(entity) {
     state.selected[entity].clear();
     state.selectedData[entity].clear();
     updateMergeBar(entity);
     hideMergePanel(entity);
+    hideExcludePanel(entity);
     document.querySelectorAll('#tbody-' + entity + ' input[type=checkbox]').forEach(cb => cb.checked = false);
     document.querySelectorAll('#tbody-' + entity + ' tr.selected').forEach(tr => tr.classList.remove('selected'));
 }
@@ -750,7 +788,8 @@ function showMergePanel(entity) {
 }
 
 function hideMergePanel(entity) {
-    document.getElementById('merge-panel-' + entity).style.display = 'none';
+    const panel = document.getElementById('merge-panel-' + entity);
+    if (panel) panel.style.display = 'none';
 }
 
 document.addEventListener('pf:authready', () => {
@@ -760,10 +799,17 @@ document.addEventListener('pf:authready', () => {
 
 let requestEmail = '';
 
+const ALL_ENTITIES = ['boats', 'designs', 'clubs', 'series', 'races'];
+
 function syncRequestEmail(value) {
     requestEmail = value;
     // Keep all email inputs in sync
-    ['merge-email-boats', 'merge-email-designs', 'edit-email'].forEach(id => {
+    const ids = ['edit-email'];
+    ALL_ENTITIES.forEach(e => {
+        ids.push('merge-email-' + e);
+        ids.push('exclude-email-' + e);
+    });
+    ids.forEach(id => {
         const el = document.getElementById(id);
         if (el && el !== document.activeElement) el.value = value;
     });
@@ -771,20 +817,13 @@ function syncRequestEmail(value) {
 
 function applyMergeAuthState() {
     const w = isWriteAllowed();
+    // Merge panels only exist for boats/designs; exclude panels exist for all entities.
     ['boats', 'designs'].forEach(entity => {
-        const mergeBtn = document.getElementById('merge-btn-' + entity);
-        const reqBtn   = document.getElementById('merge-request-btn-' + entity);
-        const confirmBtn = document.getElementById('merge-confirm-' + entity);
-        const reqConfirmBtn = document.getElementById('merge-request-confirm-' + entity);
-        const emailRow = document.getElementById('merge-email-row-' + entity);
-        if (mergeBtn)       mergeBtn.style.display      = w ? '' : 'none';
-        if (reqBtn)         reqBtn.style.display         = w ? 'none' : '';
-        if (confirmBtn)     confirmBtn.style.display     = w ? '' : 'none';
-        if (reqConfirmBtn)  reqConfirmBtn.style.display  = w ? 'none' : '';
-        if (emailRow)       emailRow.style.display       = w ? 'none' : '';
-        const msgRow = document.getElementById('merge-message-row-' + entity);
-        if (msgRow)         msgRow.style.display         = w ? 'none' : '';
+        applyPanelAuthState(entity, 'merge', w);
     });
+    ALL_ENTITIES.forEach(entity => applyPanelAuthState(entity, 'exclude', w));
+    ALL_ENTITIES.forEach(updateMergeBar);
+
     const editSaveBtn  = document.getElementById('edit-save-btn');
     const editReqBtn   = document.getElementById('edit-request-btn');
     const editEmailRow = document.getElementById('edit-email-row');
@@ -795,11 +834,28 @@ function applyMergeAuthState() {
     if (editMsgRow)   editMsgRow.style.display   = w ? 'none' : '';
     // Pre-populate email fields with remembered value
     if (!w) {
-        ['merge-email-boats', 'merge-email-designs', 'edit-email'].forEach(id => {
+        const ids = ['edit-email'];
+        ALL_ENTITIES.forEach(e => {
+            ids.push('merge-email-' + e);
+            ids.push('exclude-email-' + e);
+        });
+        ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = requestEmail;
         });
     }
+}
+
+/** Show/hide the auth vs request confirm buttons and email/message rows in a panel. */
+function applyPanelAuthState(entity, kind, writeAllowed) {
+    const confirmBtn    = document.getElementById(kind + '-confirm-' + entity);
+    const reqConfirmBtn = document.getElementById(kind + '-request-confirm-' + entity);
+    const emailRow      = document.getElementById(kind + '-email-row-' + entity);
+    const msgRow        = document.getElementById(kind + '-message-row-' + entity);
+    if (confirmBtn)    confirmBtn.style.display    = writeAllowed ? '' : 'none';
+    if (reqConfirmBtn) reqConfirmBtn.style.display = writeAllowed ? 'none' : '';
+    if (emailRow)      emailRow.style.display      = writeAllowed ? 'none' : '';
+    if (msgRow)        msgRow.style.display        = writeAllowed ? 'none' : '';
 }
 
 async function performMerge(entity) {
@@ -832,21 +888,6 @@ async function performMerge(entity) {
     loadList(entity, 0);
 }
 
-async function toggleExcluded(entity, id, excluded, item) {
-    const body = entity === 'series'
-        ? { name: item.name, excluded }
-        : { id, excluded };
-    const resp = await fetch('/api/' + entity + '/exclude', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-    if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        alert('Failed to update exclusion: ' + (err.error || resp.status));
-    }
-}
-
 // ---- Merge request (read-only users) ----
 
 async function requestMerge(entity) {
@@ -867,6 +908,110 @@ async function requestMerge(entity) {
 
     if (result && result.ok) {
         clearSelection(entity);
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
+// ---- Exclude / Include (selection-based, all entities) ----
+
+let excludeIntent = {};   // per-entity: true = exclude, false = include
+
+function showExcludePanel(entity, doExclude) {
+    excludeIntent[entity] = doExclude;
+    const panel = document.getElementById('exclude-panel-' + entity);
+    const list  = document.getElementById('exclude-list-' + entity);
+    const title = document.getElementById('exclude-panel-title-' + entity);
+    document.getElementById('exclude-status-' + entity).textContent = '';
+    // Only act on items that need the transition (not already in target state)
+    const targetItems = Array.from(state.selectedData[entity].values())
+        .filter(it => isItemExcluded(it) !== doExclude);
+    const verb = doExclude ? 'Exclude' : 'Include';
+    const noun = entity === 'series' ? 'series'
+               : (ENTITY_NOUNS[entity] + (targetItems.length !== 1 ? 's' : ''));
+    title.textContent = verb + ' ' + targetItems.length + ' ' + noun + '?';
+    list.innerHTML = '';
+    targetItems.forEach(it => {
+        const line = document.createElement('div');
+        line.style.fontFamily = 'monospace';
+        line.style.fontSize   = '0.9rem';
+        line.textContent = describeItem(entity, it);
+        list.appendChild(line);
+    });
+    panel.style.display = '';
+    // Auth-dependent visibility of confirm buttons / email + message rows
+    applyPanelAuthState(entity, 'exclude', isWriteAllowed());
+}
+
+function hideExcludePanel(entity) {
+    const panel = document.getElementById('exclude-panel-' + entity);
+    if (panel) panel.style.display = 'none';
+}
+
+function describeItem(entity, item) {
+    switch (entity) {
+        case 'boats':   return item.id + '  —  sail: ' + (item.sailNumber || '') + '  name: ' + (item.name || '');
+        case 'designs': return item.id + '  —  ' + (item.canonicalName || '');
+        case 'clubs':   return item.id + '  —  ' + (item.shortName || '') + (item.longName ? ' (' + item.longName + ')' : '');
+        case 'series':  return item.id + '  —  ' + (item.name || '');
+        case 'races':   return item.id + '  —  ' + (item.date || '') + '  ' + (item.name || '');
+        default:        return item.id;
+    }
+}
+
+/** Build the body payload for a POST to /api/{entity}/exclude or /exclude-request. */
+function buildExcludeBody(entity, intent) {
+    const items = Array.from(state.selectedData[entity].values())
+        .filter(it => isItemExcluded(it) !== intent);
+    const payload = { excluded: intent };
+    if (entity === 'series') payload.names = items.map(it => it.name).filter(Boolean);
+    else                     payload.ids   = items.map(it => it.id).filter(Boolean);
+    return payload;
+}
+
+async function performExclude(entity) {
+    if (!isWriteAllowed()) return;
+    const intent = !!excludeIntent[entity];
+    const statusEl = document.getElementById('exclude-status-' + entity);
+    const body = buildExcludeBody(entity, intent);
+    const keyCount = (body.ids || body.names || []).length;
+    if (keyCount === 0) { hideExcludePanel(entity); return; }
+    statusEl.textContent = (intent ? 'Excluding' : 'Including') + '…';
+
+    const result = await fetchJson('/api/' + entity + '/exclude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!result || !result.ok) {
+        statusEl.textContent = 'Failed — see console.';
+        return;
+    }
+    clearSelection(entity);
+    hideExcludePanel(entity);
+    loadList(entity, 0);
+}
+
+async function requestExclude(entity) {
+    const intent = !!excludeIntent[entity];
+    const statusEl = document.getElementById('exclude-status-' + entity);
+    const email = document.getElementById('exclude-email-' + entity)?.value.trim() || '';
+    const message = document.getElementById('exclude-message-' + entity)?.value.trim() || '';
+    const body = buildExcludeBody(entity, intent);
+    const keyCount = (body.ids || body.names || []).length;
+    if (keyCount === 0) { hideExcludePanel(entity); return; }
+    if (email) body.email = email;
+    if (message) body.message = message;
+    statusEl.textContent = 'Submitting request…';
+    const result = await fetchJson('/api/' + entity + '/exclude-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (result && result.ok) {
+        statusEl.textContent = 'Request recorded.';
+        clearSelection(entity);
+        hideExcludePanel(entity);
     } else {
         statusEl.textContent = 'Failed to record request — see console.';
     }

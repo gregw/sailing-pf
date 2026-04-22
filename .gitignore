@@ -1,7 +1,8 @@
 # project
-OLD
 pf-data/*
 !pf-data/config
+.claude/*
+~.claude/claude-questions.txt
 
 # eclipse
 .classpath
