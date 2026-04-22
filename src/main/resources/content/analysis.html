@@ -17,12 +17,12 @@
   <h1>Handicap Analysis</h1>
 
   <section id="hpf-quality" style="display:none">
-    <h2>HPF Run Quality <a href="docs.html#hpf-quality" class="info-btn" data-tip="Summary statistics from the most recent HPF optimisation run: convergence status, dataset size, fit quality, outlier rate, and confidence." target="_blank">ⓘ</a></h2>
+    <h2>HPF Run Quality <a href="docs.md#hpf-quality" class="info-btn" data-tip="Summary statistics from the most recent HPF optimisation run: convergence status, dataset size, fit quality, outlier rate, and confidence." target="_blank">ⓘ</a></h2>
     <div id="hpf-quality-content"></div>
   </section>
 
   <section>
-    <h2>Handicap Conversion Weights <a href="docs.html#chart-network" class="info-btn" data-tip="Network of empirical linear conversion fits between handicap systems and years. Darker edges = stronger R². Click an edge to see the scatter plot." target="_blank">ⓘ</a></h2>
+    <h2>Handicap Conversion Weights <a href="docs.md#chart-network" class="info-btn" data-tip="Network of empirical linear conversion fits between handicap systems and years. Darker edges = stronger R². Click an edge to see the scatter plot." target="_blank">ⓘ</a></h2>
     <p style="font-size:0.85rem;color:#666;margin:0 0 0.5rem;">Edge labels show the median conversion weight between handicap systems or years.
         Darker lines indicate a stronger relationship (higher R²).
         Hover over an edge for more details and click on it to see a detailed analysis graph.</p>
@@ -36,7 +36,7 @@
       </select>
     </label>
     <button id="analysis-load-btn" onclick="loadAnalysis()" disabled>Load</button>
-    <a href="docs.html#chart-analysis" class="info-btn" data-tip="Scatter plot of paired handicap observations with regression line and optional ±1σ error band." target="_blank">ⓘ</a>
+    <a href="docs.md#chart-analysis" class="info-btn" data-tip="Scatter plot of paired handicap observations with regression line and optional ±1σ error band." target="_blank">ⓘ</a>
     <label style="margin-left:0.5rem;"><input type="checkbox" id="show-analysis-errors" onchange="onAnalysisErrorsChange()"> Error band</label>
     <span id="analysis-summary" style="font-size:0.85rem;color:#555;"></span>
   </div>
@@ -46,7 +46,7 @@
   <div id="analysis-table-warning" style="display:none; margin-top:1rem; color:#b00; font-size:0.9rem;"></div>
 
   <div id="analysis-table-section" style="display:none; margin-top:1rem;">
-    <strong>Conversion table <a href="docs.html#table-conversion" class="info-btn" data-tip="Predicted y values for a range of x inputs using the fitted linear conversion." target="_blank">ⓘ</a></strong>
+    <strong>Conversion table <a href="docs.md#table-conversion" class="info-btn" data-tip="Predicted y values for a range of x inputs using the fitted linear conversion." target="_blank">ⓘ</a></strong>
     <div style="display:flex; gap:0.75rem; align-items:center; margin:0.5rem 0; flex-wrap:wrap;">
       <label style="font-size:0.85rem;">Min: <input type="number" id="tbl-min" value="0.85" step="0.01" style="width:5rem;font-family:monospace;"></label>
       <label style="font-size:0.85rem;">Max: <input type="number" id="tbl-max" value="1.15" step="0.01" style="width:5rem;font-family:monospace;"></label>
@@ -55,7 +55,7 @@
     </div>
     <div class="conv-table">
       <table>
-        <thead><tr><th id="th-conv-x">x <a href="docs.html#col-conv-x" class="info-btn" data-tip="Input value in the source handicap system." target="_blank">ⓘ</a></th><th id="th-conv-y">Predicted y <a href="docs.html#col-conv-y" class="info-btn" data-tip="Predicted value in the target handicap system via the fitted linear conversion." target="_blank">ⓘ</a></th><th>Weight <a href="docs.html#col-conv-weight" class="info-btn" data-tip="Effective weight of observations near this x value, shown as a proportional bar." target="_blank">ⓘ</a></th><th></th></tr></thead>
+        <thead><tr><th id="th-conv-x">x <a href="docs.md#col-conv-x" class="info-btn" data-tip="Input value in the source handicap system." target="_blank">ⓘ</a></th><th id="th-conv-y">Predicted y <a href="docs.md#col-conv-y" class="info-btn" data-tip="Predicted value in the target handicap system via the fitted linear conversion." target="_blank">ⓘ</a></th><th>Weight <a href="docs.md#col-conv-weight" class="info-btn" data-tip="Effective weight of observations near this x value, shown as a proportional bar." target="_blank">ⓘ</a></th><th></th></tr></thead>
         <tbody id="tbody-conv"></tbody>
       </table>
     </div>

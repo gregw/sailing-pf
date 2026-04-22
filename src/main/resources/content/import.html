@@ -13,7 +13,7 @@
   <h1>Tasks</h1>
 
   <section>
-    <h2>Tasks <a href="docs.html#table-importers" class="info-btn" data-tip="Data import tasks. Run individually or on a schedule. Order controls the sequence of the scheduled run." target="_blank">ⓘ</a>
+    <h2>Tasks <a href="docs.md#table-importers" class="info-btn" data-tip="Data import tasks. Run individually or on a schedule. Order controls the sequence of the scheduled run." target="_blank">ⓘ</a>
       <button id="stop-schedule-btn" style="display:none;margin-left:1rem;background:#c62828;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer"
               onclick="stopSchedule()">Stop schedule</button>
     </h2>
@@ -21,11 +21,11 @@
       <thead>
         <tr>
           <th></th>
-          <th>Task <a href="docs.html#col-importer-task" class="info-btn" data-tip="Task name and run mode (api = fetch from network, run = compute locally)." target="_blank">ⓘ</a></th>
-          <th>Status <a href="docs.html#col-importer-status" class="info-btn" data-tip="Current status of this task: idle or running." target="_blank">ⓘ</a></th>
-          <th style="text-align:center">Run <a href="docs.html#col-importer-run" class="info-btn" data-tip="Run this task now. For sailsys-races, optionally set the starting race ID." target="_blank">ⓘ</a></th>
-          <th style="text-align:center" title="Include this task in the automatic scheduled run">In schedule <a href="docs.html#col-importer-in-schedule" class="info-btn" data-tip="Tick to include this task in the automatic scheduled run." target="_blank">ⓘ</a></th>
-          <th style="text-align:center" title="Run this task automatically when the server starts">On start <a href="docs.html#col-importer-on-start" class="info-btn" data-tip="Tick to run this task automatically when the server starts." target="_blank">ⓘ</a></th>
+          <th>Task <a href="docs.md#col-importer-task" class="info-btn" data-tip="Task name and run mode (api = fetch from network, run = compute locally)." target="_blank">ⓘ</a></th>
+          <th>Status <a href="docs.md#col-importer-status" class="info-btn" data-tip="Current status of this task: idle or running." target="_blank">ⓘ</a></th>
+          <th style="text-align:center">Run <a href="docs.md#col-importer-run" class="info-btn" data-tip="Run this task now. For sailsys-races, optionally set the starting race ID." target="_blank">ⓘ</a></th>
+          <th style="text-align:center" title="Include this task in the automatic scheduled run">In schedule <a href="docs.md#col-importer-in-schedule" class="info-btn" data-tip="Tick to include this task in the automatic scheduled run." target="_blank">ⓘ</a></th>
+          <th style="text-align:center" title="Run this task automatically when the server starts">On start <a href="docs.md#col-importer-on-start" class="info-btn" data-tip="Tick to run this task automatically when the server starts." target="_blank">ⓘ</a></th>
         </tr>
       </thead>
       <tbody id="importers-body"></tbody>
@@ -50,16 +50,16 @@
   </section>
 
   <section>
-    <h2>Schedule <a href="docs.html#configuration" class="info-btn" data-tip="Configure which days and time to run the scheduled import automatically." target="_blank">ⓘ</a></h2>
+    <h2>Schedule <a href="docs.md#configuration" class="info-btn" data-tip="Configure which days and time to run the scheduled import automatically." target="_blank">ⓘ</a></h2>
     <p>Select days to run all ticked tasks sequentially. No days selected = disabled.</p>
-    <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.25rem;font-size:0.9rem;">Days <a href="docs.html#config-schedule-days" class="info-btn" data-tip="Days of the week on which the scheduled run will execute. No days selected = schedule disabled." target="_blank">ⓘ</a></div>
+    <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.25rem;font-size:0.9rem;">Days <a href="docs.md#config-schedule-days" class="info-btn" data-tip="Days of the week on which the scheduled run will execute. No days selected = schedule disabled." target="_blank">ⓘ</a></div>
     <div class="schedule-days" id="schedule-days"></div>
     <label title="Time of day (server local time) to begin the scheduled run">
-      Time <a href="docs.html#config-schedule-time" class="info-btn" data-tip="Time of day (server local time) at which the scheduled run begins." target="_blank">ⓘ</a>: <input type="time" id="schedule-time" value="03:00"
+      Time <a href="docs.md#config-schedule-time" class="info-btn" data-tip="Time of day (server local time) at which the scheduled run begins." target="_blank">ⓘ</a>: <input type="time" id="schedule-time" value="03:00"
                    title="Time of day (server local time) to begin the scheduled run">
     </label>
     <label title="Override the IRC certificate year used for reference factor calculation. Leave blank to auto-detect from the most recent certificates.">
-      Target IRC year <a href="docs.html#config-target-irc-year" class="info-btn" data-tip="Override the IRC certificate year used for reference factor calculation. Leave blank to auto-detect." target="_blank">ⓘ</a>:
+      Target IRC year <a href="docs.md#config-target-irc-year" class="info-btn" data-tip="Override the IRC certificate year used for reference factor calculation. Leave blank to auto-detect." target="_blank">ⓘ</a>:
       <input type="number" id="target-irc-year" min="2019" max="2099" style="width:5em" placeholder="auto"
              title="Override the IRC certificate year used for reference factor calculation. Leave blank to auto-detect from the most recent certificates.">
     </label>
@@ -83,45 +83,45 @@
   </section>
 
   <section>
-    <h2>HPF Parameters <a href="docs.html#configuration" class="info-btn" data-tip="Parameters controlling the HPF optimisation algorithm." target="_blank">ⓘ</a></h2>
+    <h2>HPF Parameters <a href="docs.md#configuration" class="info-btn" data-tip="Parameters controlling the HPF optimisation algorithm." target="_blank">ⓘ</a></h2>
     <div style="display:grid;grid-template-columns:auto auto;gap:0.3rem 1rem;max-width:420px;align-items:center">
       <label for="hpf-lambda">
-        Lambda (regularisation) <a href="docs.html#config-hpf-lambda" class="info-btn" data-tip="Regularisation strength: pulls each boat&apos;s HPF toward its reference factor. Higher = more trust in certificates." target="_blank">ⓘ</a>:
+        Lambda (regularisation) <a href="docs.md#config-hpf-lambda" class="info-btn" data-tip="Regularisation strength: pulls each boat&apos;s HPF toward its reference factor. Higher = more trust in certificates." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-lambda" step="0.1" min="0" style="width:6em">
 
       <label for="hpf-convergence">
-        Convergence threshold <a href="docs.html#config-hpf-convergence" class="info-btn" data-tip="Inner loop stops when max change to any boat&apos;s log(HPF) is below this. Smaller = tighter but slower." target="_blank">ⓘ</a>:
+        Convergence threshold <a href="docs.md#config-hpf-convergence" class="info-btn" data-tip="Inner loop stops when max change to any boat&apos;s log(HPF) is below this. Smaller = tighter but slower." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-convergence" step="0.00001" min="0" style="width:8em">
 
       <label for="hpf-max-inner">
-        Max inner iterations <a href="docs.html#config-hpf-max-inner" class="info-btn" data-tip="Maximum ALS iterations per reweighting cycle. Increase if the inner loop does not converge." target="_blank">ⓘ</a>:
+        Max inner iterations <a href="docs.md#config-hpf-max-inner" class="info-btn" data-tip="Maximum ALS iterations per reweighting cycle. Increase if the inner loop does not converge." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-max-inner" step="1" min="1" style="width:6em">
 
       <label for="hpf-max-outer">
-        Max outer iterations <a href="docs.html#config-hpf-max-outer" class="info-btn" data-tip="Maximum number of outlier-reweighting cycles. Increase if the outer loop does not converge." target="_blank">ⓘ</a>:
+        Max outer iterations <a href="docs.md#config-hpf-max-outer" class="info-btn" data-tip="Maximum number of outlier-reweighting cycles. Increase if the outer loop does not converge." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-max-outer" step="1" min="1" style="width:6em">
 
       <label for="hpf-outlier-k">
-        Outlier K (IQR multiplier) <a href="docs.html#config-hpf-outlier-k" class="info-btn" data-tip="IQR multiplier for Cauchy outlier down-weighting. Lower = more aggressive outlier suppression." target="_blank">ⓘ</a>:
+        Outlier K (IQR multiplier) <a href="docs.md#config-hpf-outlier-k" class="info-btn" data-tip="IQR multiplier for Cauchy outlier down-weighting. Lower = more aggressive outlier suppression." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-outlier-k" step="0.1" min="0" style="width:6em">
 
       <label for="hpf-asymmetry">
-        Asymmetry factor <a href="docs.html#config-hpf-asymmetry" class="info-btn" data-tip="Extra penalty for boats finishing faster than predicted. Higher = trust unusually fast finishers less." target="_blank">ⓘ</a>:
+        Asymmetry factor <a href="docs.md#config-hpf-asymmetry" class="info-btn" data-tip="Extra penalty for boats finishing faster than predicted. Higher = trust unusually fast finishers less." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-asymmetry" step="0.1" min="0" style="width:6em">
 
       <label for="hpf-outer-damping">
-        Outer damping factor <a href="docs.html#config-hpf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles (0–1). Lower values damp oscillation; 1.0 = no damping. Default 0.5." target="_blank">ⓘ</a>:
+        Outer damping factor <a href="docs.md#config-hpf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles (0–1). Lower values damp oscillation; 1.0 = no damping. Default 0.5." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-outer-damping" step="0.05" min="0.05" max="1.0" style="width:6em">
 
       <label for="hpf-outer-convergence">
-        Outer convergence threshold <a href="docs.html#config-hpf-outer-convergence" class="info-btn" data-tip="Outer loop stops when max entry weight change is below this. Set higher (e.g. 0.3) if the dataset cannot reach the default 0.01." target="_blank">ⓘ</a>:
+        Outer convergence threshold <a href="docs.md#config-hpf-outer-convergence" class="info-btn" data-tip="Outer loop stops when max entry weight change is below this. Set higher (e.g. 0.3) if the dataset cannot reach the default 0.01." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="hpf-outer-convergence" step="0.01" min="0" style="width:8em">
     </div>

@@ -10,7 +10,7 @@ function esc(val) {
 
 function infoBtn(anchor, tip) {
     const escapedTip = tip.replace(/"/g, '&quot;');
-    return `<a href="docs.html#${anchor}" class="info-btn" data-tip="${escapedTip}" target="_blank" onclick="event.stopPropagation()">ⓘ</a>`;
+    return `<a href="docs.md#${anchor}" class="info-btn" data-tip="${escapedTip}" target="_blank" onclick="event.stopPropagation()">ⓘ</a>`;
 }
 
 async function fetchJson(url, options) {
