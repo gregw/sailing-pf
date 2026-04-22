@@ -296,7 +296,7 @@ clubs:
     state: "NSW"
     fullName: "Royal Prince Alfred Yacht Club"
     excluded: null
-    aliases: []
+    aliases: ["RPAYC-OTB"]
     topyacht:
     - "https://rpayc.com.au/results/2022/club/otb/index.htm"
   byra.org.au:
@@ -803,6 +803,25 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+  iycsailing.asn.au:
+    shortName: "IYC"
+    state: "NSW"
+    fullName: "Illawarra Yacht Club"
+    excluded: null
+    aliases: []
+    topyacht: null
+  rpnyc.org.nz:
+    shortName: "RPNYC"
+    state: "NZ"
+    fullName: "Royal Port Nicholson Yacht Club"
+    excluded: null
+    aliases: []
+    topyacht: null
+  yacht.org.nz:
+    shortName: "TYPBC"
+    state: "NZ"
+    fullName: "Tauranga Yacht & Power Boat Club Inc"
+    excluded: null
 boatClubOverrides:
 - sailNumber: "20"
   name: "Rhett's Rig"

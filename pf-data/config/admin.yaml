@@ -43,7 +43,7 @@ importers:
 - name: "save-database"
   mode: "run"
   includeInSchedule: false
-  runAtStartup: false
+  runAtStartup: true
 schedule:
   days:
   - "MONDAY"
