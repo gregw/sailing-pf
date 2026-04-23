@@ -191,8 +191,12 @@ public class AdminApiServlet extends HttpServlet
         {
             handleEditBoat(req, resp);
         }
+        else if ("/designs/edit".equals(path))
+        {
+            handleEditDesign(req, resp);
+        }
         else if ("/boats/merge-request".equals(path) || "/designs/merge-request".equals(path)
-            || "/boats/edit-request".equals(path)
+            || "/boats/edit-request".equals(path) || "/designs/edit-request".equals(path)
             || "/boats/exclude-request".equals(path) || "/designs/exclude-request".equals(path)
             || "/clubs/exclude-request".equals(path) || "/races/exclude-request".equals(path)
             || "/series/exclude-request".equals(path)
@@ -1152,7 +1156,138 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * POST /api/boats/merge-request, /api/designs/merge-request, /api/boats/edit-request
+     * POST /api/designs/edit — edits a design's id and/or canonical name.
+     * <p>
+     * Accepts JSON with {@code designId} (current id), optional {@code newId} (raw or
+     * pre-normalised — passed through {@code IdGenerator.normaliseDesignName}), and optional
+     * {@code canonicalName}. When the id changes, delegates the boat-id regeneration and
+     * race-finisher repointing to {@link org.mortbay.sailing.pf.store.DataStore#mergeDesigns}
+     * (with the renamed design pre-created as the keep target) and writes a design alias
+     * entry in {@code aliases.yaml} so future imports of the old id or canonical name
+     * resolve to the renamed design. When only the canonical name changes, updates the
+     * design record in place. Responds 409 on an id collision, 404 if the design is
+     * unknown, 400 for validation errors.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleEditDesign(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String oldId = (String) body.get("designId");
+            String newIdRaw = (String) body.get("newId");
+            String newCanonicalNameRaw = (String) body.get("canonicalName");
+
+            if (oldId == null || oldId.isBlank())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "designId is required"));
+                return;
+            }
+            Design old = store.designs().get(oldId);
+            if (old == null)
+            {
+                resp.setStatus(404);
+                writeJson(resp, Map.of("error", "Design not found: " + oldId));
+                return;
+            }
+
+            String newName = (newCanonicalNameRaw != null && !newCanonicalNameRaw.isBlank())
+                ? newCanonicalNameRaw.trim() : old.canonicalName();
+            // Normalise whichever id-source is provided; id field wins, else derive from name.
+            String newIdSource = (newIdRaw != null && !newIdRaw.isBlank()) ? newIdRaw.trim() : newName;
+            String newId = IdGenerator.normaliseDesignName(newIdSource);
+            if (newId.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "newId must be non-empty after normalisation"));
+                return;
+            }
+
+            boolean idChanged   = !newId.equalsIgnoreCase(oldId);
+            boolean nameChanged = !newName.equalsIgnoreCase(old.canonicalName());
+            if (!idChanged && !nameChanged)
+            {
+                writeJson(resp, Map.of("ok", true, "noop", true, "newDesignId", oldId));
+                return;
+            }
+            if (idChanged && store.designs().containsKey(newId))
+            {
+                resp.setStatus(409);
+                writeJson(resp, Map.of("error",
+                    "Design '" + newId + "' already exists — merge first, then edit."));
+                return;
+            }
+
+            // Build the renamed design: start from old's aliases, fold the old canonical name
+            // in if it differs from the new, and drop any entry equal to the new name.
+            List<String> aliases = new ArrayList<>();
+            for (String a : old.aliases())
+                if (a != null && !a.equalsIgnoreCase(newName) && !aliases.contains(a))
+                    aliases.add(a);
+            if (idChanged || !old.canonicalName().equalsIgnoreCase(newName))
+                if (!aliases.contains(old.canonicalName()))
+                    aliases.add(old.canonicalName());
+
+            int updatedBoats = 0, updatedRaces = 0, updatedFinishers = 0;
+
+            if (idChanged)
+            {
+                // Pre-create the renamed design at the new id, then let mergeDesigns move
+                // all boats and delete the old design record.
+                Design renamed = new Design(newId, newName, aliases, old.sources(),
+                    java.time.Instant.now(), null);
+                store.putDesign(renamed);
+
+                DataStore.DesignMergeResult r = store.mergeDesigns(newId, List.of(oldId));
+                updatedBoats     = r.updatedBoats();
+                updatedRaces     = r.updatedRaces();
+                updatedFinishers = r.updatedFinishers();
+
+                // Design-level aliases in aliases.yaml so future imports of the old id or
+                // the old canonical name resolve to the new design.
+                List<String> aliasNames = new ArrayList<>();
+                aliasNames.add(old.canonicalName());
+                aliasNames.add(oldId);
+                Aliases.appendDesignMergeAliases(store.configDir(), newId, newName, aliasNames);
+                store.reloadAliases();
+            }
+            else
+            {
+                // Id unchanged — just swap the canonical name and add the old name as an alias.
+                Design renamed = new Design(oldId, newName, aliases, old.sources(),
+                    java.time.Instant.now(), null);
+                store.putDesign(renamed);
+                Aliases.appendDesignMergeAliases(store.configDir(), oldId, newName,
+                    List.of(old.canonicalName()));
+                store.reloadAliases();
+            }
+
+            store.save();
+            if (cache != null)
+                cache.refreshIndexes();
+
+            writeJson(resp, Map.of("ok", true, "newDesignId", newId,
+                "idChanged", idChanged, "nameChanged", nameChanged,
+                "updatedBoats", updatedBoats,
+                "updatedRaces", updatedRaces,
+                "updatedFinishers", updatedFinishers));
+        }
+        catch (IllegalArgumentException e)
+        {
+            resp.setStatus(400);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/boats/merge-request, /api/designs/merge-request, /api/boats/edit-request,
+     * /api/designs/edit-request
      * — records a user request to a log file in {@code pf-data/log/} for later admin review.
      * These endpoints are open to unauthenticated (read-only) users.
      */
@@ -1796,6 +1931,7 @@ public class AdminApiServlet extends HttpServlet
         boolean asc = !"desc".equals(req.getParameter("dir"));
         String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
         String filterClubId = req.getParameter("clubId");
+        String filterId = req.getParameter("id");
         boolean excludeEmpty = "true".equals(req.getParameter("excludeEmpty"));
         boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
 
@@ -1817,6 +1953,7 @@ public class AdminApiServlet extends HttpServlet
             for (var s : club.series())
             {
                 if (s.isCatchAll()) continue;
+                if (filterId != null && !filterId.equals(s.id())) continue;
                 if (lower != null
                     && !s.name().toLowerCase().contains(lower)
                     && !clubShort.toLowerCase().contains(lower)

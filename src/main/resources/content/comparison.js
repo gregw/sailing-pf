@@ -787,6 +787,11 @@ async function loadElapsedCharts() {
     });
 }
 
+/** Re-renders the elapsed-time charts without refetching; used by the From-0 toggle. */
+function onElapsedFromZeroChange() {
+    loadElapsedCharts();
+}
+
 function renderElapsedChart(divId, data, colorA, colorB) {
     let points = data.points || [];
 
@@ -882,9 +887,12 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const yMin = Math.min(...ys), yMax = Math.max(...ys);
     const yPad = (yMax - yMin) * 0.05 || yMin * 0.05;
 
+    const fromZero = document.getElementById('elapsed-from-zero')?.checked ?? true;
     const layout = {
-        xaxis: { title: `${esc(nameB)} elapsed (h)`, range: [xMax + xPad, 0] },
-        yaxis: { title: `${esc(nameA)} elapsed (h)`, range: [yMax + yPad, 0] },
+        xaxis: { title: `${esc(nameB)} elapsed (h)`,
+                 rangemode: fromZero ? 'tozero' : 'normal' },
+        yaxis: { title: `${esc(nameA)} elapsed (h)`,
+                 rangemode: fromZero ? 'tozero' : 'normal' },
         showlegend: !hideLegend,
         legend: { orientation: 'h', y: -0.2 },
         margin: { t: 20, b: hideLegend ? 70 : 100, l: 80, r: 20 },

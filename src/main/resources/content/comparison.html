@@ -80,6 +80,11 @@
 
   <div id="elapsed-charts-section" style="display:none; margin-top:1.5rem;">
     <h3 style="margin:0 0 0.5rem;">Elapsed Time Comparison</h3>
+    <div style="display:flex;gap:1.5rem;align-items:center;margin:0 0 0.5rem 0;font-size:0.9rem;">
+      <label title="Start both axes at zero">
+        <input type="checkbox" id="elapsed-from-zero" checked onchange="onElapsedFromZeroChange()"> From 0
+      </label>
+    </div>
     <div id="elapsed-charts-container"></div>
   </div>
 

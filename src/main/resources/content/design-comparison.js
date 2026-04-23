@@ -150,6 +150,10 @@ function onVariantChange() {
     if (chartData) renderChart(chartData);
 }
 
+function onDesignFromZeroChange() {
+    if (chartData) renderChart(chartData);
+}
+
 function renderChart(data) {
     const points = data.points || [];
     if (points.length === 0) {
@@ -219,11 +223,12 @@ function renderChart(data) {
     const yMin = Math.min(...ys), yMax = Math.max(...ys);
     const yPad = (yMax - yMin) * 0.05 || yMin * 0.05;
 
+    const fromZero = document.getElementById('design-from-zero')?.checked ?? true;
     const layout = {
         xaxis: { title: `${esc(data.designB.canonicalName)} elapsed (h)`,
-                 range: [xMax + xPad, 0] },
+                 rangemode: fromZero ? 'tozero' : 'normal' },
         yaxis: { title: `${esc(data.designA.canonicalName)} elapsed (h)`,
-                 range: [yMax + yPad, 0] },
+                 rangemode: fromZero ? 'tozero' : 'normal' },
         legend: { orientation: 'v', xanchor: 'right', x: 1 },
         margin: { t: 20, b: 70, l: 80, r: 20 },
         hovermode: 'closest'

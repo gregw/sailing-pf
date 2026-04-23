@@ -140,6 +140,8 @@
 
     <div id="merge-bar-designs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-designs"></span>
+      <button id="edit-btn-designs" onclick="showEditDesignPanel()" style="margin-left:0.5rem;display:none;">Edit selected…</button>
+      <button id="edit-request-btn-designs" onclick="showEditDesignPanel()" style="margin-left:0.5rem;display:none;">Request edit…</button>
       <button id="merge-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;">Merge selected…</button>
       <button id="merge-request-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;display:none;">Request merge…</button>
       <button id="exclude-btn-designs" onclick="showExcludePanel('designs', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
@@ -147,6 +149,29 @@
       <button id="ignore-btn-designs" onclick="showIgnorePanel(true)" style="margin-left:0.5rem;display:none;">Ignore selected…</button>
       <button id="unignore-btn-designs" onclick="showIgnorePanel(false)" style="margin-left:0.5rem;display:none;">Do Not Ignore selected…</button>
       <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="edit-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="edit-panel-title-designs">Edit Design</strong>
+      <div id="edit-design-warning" style="margin:0.4rem 0;font-size:0.9rem;color:#8a4500;"></div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
+        <label for="edit-design-id">ID:</label>
+        <input type="text" id="edit-design-id" style="font-family:monospace;padding:3px 6px;">
+        <label for="edit-design-name">Canonical name:</label>
+        <input type="text" id="edit-design-name" style="font-family:monospace;padding:3px 6px;">
+      </div>
+      <div id="edit-design-email-row" style="display:none; margin-bottom:0.5rem;">
+        <label for="edit-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="edit-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="edit-design-message-row" style="display:none; margin-bottom:0.5rem;">
+        <label for="edit-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="edit-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
+      </div>
+      <button id="edit-design-save-btn" onclick="saveDesignEdit()">Save</button>
+      <button id="edit-design-request-btn" onclick="requestDesignEdit()" style="display:none;">Request</button>
+      <button onclick="hideEditDesignPanel()" style="margin-left:0.5rem;">Cancel</button>
+      <div id="edit-status-designs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="ignore-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
@@ -294,6 +319,12 @@
         <label><input type="checkbox" id="race-show-rf" checked onchange="onRaceRfChange()"> RF line</label>
         <label><input type="checkbox" id="race-show-error-bars" onchange="onRaceErrorBarsChange()"> Error bars</label>
         <label><input type="checkbox" id="race-show-trend" onchange="onRaceTrendChange()"> Trend line</label>
+        <label title="Start the time axis at zero so bar heights are directly comparable">
+            <input type="checkbox" id="race-y-from-zero" checked onchange="onDivChartYFromZeroChange(this)"> From 0m
+        </label>
+        <label title="Start the PF axis at zero">
+          <input type="checkbox" id="race-x-from-zero" onchange="onDivChartXFromZeroChange(this)"> From 0.0F
+        </label>
       </div>
       <div id="race-division-note" style="font-size:0.85rem;color:#888;margin-bottom:0.25rem;"></div>
       <div id="race-division-chart" style="width:100%;height:600px;"></div>
@@ -351,6 +382,15 @@
       <div id="series-chart-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
         <label>Division: <select id="series-division-select" onchange="onSeriesDivisionChange()"></select></label>
+        <label title="Start the time axis at zero">
+            <input type="checkbox" id="series-y-from-zero" checked onchange="onDivChartYFromZeroChange(this)"> From 0m
+        </label>
+        <label title="Start the PF axis at zero">
+          <input type="checkbox" id="series-x-from-zero" onchange="onDivChartXFromZeroChange(this)"> From 0.0F
+        </label>
+        <label title="Line through the median PF / PF-corrected time point, with the average slope of the per-race trends">
+          <input type="checkbox" id="series-show-overall-trend" onchange="onSeriesOverallTrendChange(this)"> Overall trend
+        </label>
       </div>
       <div id="series-chart" style="width:100%;height:500px;"></div>
       <div id="series-compare-btn-container"></div>

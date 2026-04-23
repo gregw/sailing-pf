@@ -186,18 +186,65 @@ const COLUMNS = {
         { label: 'Date',      key: 'date',      anchor: 'col-race-date',      tip: 'Race date.' },
         clubColumn('col-race-club', 'clubId'),
         { label: 'Series',    type: 'action', sortKey: 'seriesName', anchor: 'col-race-series',
-          tip: 'Series this race belongs to; click to show the races of this series.',
+          tip: 'Series this race belongs to; click to jump to it on the Series tab.',
           render:   item => item.seriesName || '',
           btnClass: item => item.seriesExcluded ? 'excluded-link' : '',
-          action: item => item.seriesId
-            ? setFilter('races', 'seriesId', item.seriesId, 'Series: ' + (item.seriesName || item.seriesId))
-            : null },
+          action: item => {
+              if (!item.seriesId) return;
+              setFilter('series', 'id', item.seriesId,
+                  'Series: ' + (item.seriesName || item.seriesId));
+              switchTab('series');
+              loadDetail('series', item.seriesId);
+          } },
         { label: 'Race',      key: 'name',      anchor: 'col-race-name',      tip: 'Race name or number within the series.' },
         { label: 'Finishers', key: 'finishers',    anchor: 'col-race-finishers',   tip: 'Total finishers across all divisions in this race.' },
     ],
 };
 
 let boatVariant = 'spin';
+
+// ---- Division-chart "From 0" state (shared across races + series tabs) ----
+// Persisted in sessionStorage so switching divisions/tabs keeps the same preference.
+const DIV_CHART_X_KEY = 'pf.divChart.xFromZero';
+const DIV_CHART_Y_KEY = 'pf.divChart.yFromZero';
+const DIV_X_CHECKBOX_IDS = ['race-x-from-zero', 'series-x-from-zero'];
+const DIV_Y_CHECKBOX_IDS = ['race-y-from-zero', 'series-y-from-zero'];
+
+function getDivChartXFromZero() {
+    const v = sessionStorage.getItem(DIV_CHART_X_KEY);
+    return v === null ? false : v === 'true';   // default: X not ticked
+}
+function getDivChartYFromZero() {
+    const v = sessionStorage.getItem(DIV_CHART_Y_KEY);
+    return v === null ? true : v === 'true';    // default: Y ticked
+}
+function setDivChartXFromZero(on) {
+    sessionStorage.setItem(DIV_CHART_X_KEY, String(!!on));
+    DIV_X_CHECKBOX_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = !!on;
+    });
+}
+function setDivChartYFromZero(on) {
+    sessionStorage.setItem(DIV_CHART_Y_KEY, String(!!on));
+    DIV_Y_CHECKBOX_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = !!on;
+    });
+}
+/** Re-renders whichever division chart is currently visible (races or series tab). */
+function reRenderActiveDivisionChart() {
+    if (state.activeTab === 'races') onRaceDivisionChange();
+    else if (state.activeTab === 'series') onSeriesDivisionChange();
+}
+function onDivChartXFromZeroChange(cb) {
+    setDivChartXFromZero(cb.checked);
+    reRenderActiveDivisionChart();
+}
+function onDivChartYFromZeroChange(cb) {
+    setDivChartYFromZero(cb.checked);
+    reRenderActiveDivisionChart();
+}
 
 function setBoatVariant(v) {
     boatVariant = v;
@@ -230,9 +277,20 @@ const state = {
 };
 
 let currentDivRaceId = null;
-let showRaceErrorBars = false;
-let showRaceTrendLine = false;
-let showRaceRfLine    = true;
+// Race-division-chart toggles — persisted in sessionStorage so they survive tab
+// switches and page reloads within a session. Defaults: RF line on, the rest off.
+const RACE_RF_KEY    = 'pf.divChart.showRf';
+const RACE_ERR_KEY   = 'pf.divChart.showErrorBars';
+const RACE_TREND_KEY = 'pf.divChart.showTrend';
+function sessionBool(key, dflt) {
+    const v = sessionStorage.getItem(key);
+    return v === null ? dflt : v === 'true';
+}
+let showRaceRfLine    = sessionBool(RACE_RF_KEY,    true);
+let showRaceErrorBars = sessionBool(RACE_ERR_KEY,   false);
+let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
+const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
+let showSeriesOverallTrend = sessionBool(SERIES_OVERALL_TREND_KEY, false);
 let preferredDivision = null;
 
 function isWriteAllowed() { return window.pfAuth?.authenticated; }
@@ -452,7 +510,8 @@ function loadNextPage(entity) {
     loadList(entity, state.pages[entity] + 1);
 }
 
-// Attach infinite-scroll listeners to all table-scroll containers
+// Attach infinite-scroll listeners to all table-scroll containers, and restore any
+// session-persisted chart preferences to their checkboxes.
 document.addEventListener('DOMContentLoaded', () => {
     ['clubs', 'boats', 'designs', 'series', 'races'].forEach(entity => {
         const container = document.querySelector('#panel-' + entity + ' .table-scroll');
@@ -463,6 +522,24 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Division-chart From-0 checkboxes (shared across races + series tabs).
+    const xFrom = getDivChartXFromZero();
+    const yFrom = getDivChartYFromZero();
+    DIV_X_CHECKBOX_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.checked = xFrom; });
+    DIV_Y_CHECKBOX_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.checked = yFrom; });
+
+    // Race-division-chart toggles.
+    const rfCb    = document.getElementById('race-show-rf');
+    const errCb   = document.getElementById('race-show-error-bars');
+    const trendCb = document.getElementById('race-show-trend');
+    if (rfCb)    rfCb.checked    = showRaceRfLine;
+    if (errCb)   errCb.checked   = showRaceErrorBars;
+    if (trendCb) trendCb.checked = showRaceTrendLine;
+
+    // Series-chart overall-trend toggle.
+    const seriesTrendCb = document.getElementById('series-show-overall-trend');
+    if (seriesTrendCb) seriesTrendCb.checked = showSeriesOverallTrend;
 });
 
 async function loadDetail(entity, id) {
@@ -764,6 +841,12 @@ function updateMergeBar(entity) {
         const unignoreBtn = document.getElementById('unignore-btn-designs');
         if (ignoreBtn)   ignoreBtn.style.display   = (n >= 1 && anyUnignored) ? '' : 'none';
         if (unignoreBtn) unignoreBtn.style.display = (n >= 1 && anyIgnored)   ? '' : 'none';
+
+        // Edit design (single selection) — Edit when authed, Request edit otherwise.
+        const editBtn = document.getElementById('edit-btn-designs');
+        const editReq = document.getElementById('edit-request-btn-designs');
+        if (editBtn) editBtn.style.display = (n === 1 && w)  ? '' : 'none';
+        if (editReq) editReq.style.display = (n === 1 && !w) ? '' : 'none';
     }
 
     // Exclude / Include — visible based on excluded-state of currently-selected items.
@@ -788,7 +871,7 @@ function clearSelection(entity) {
     hideMergePanel(entity);
     hideExcludePanel(entity);
     if (entity === 'boats')   hideEditPanel();
-    if (entity === 'designs') hideIgnorePanel();
+    if (entity === 'designs') { hideIgnorePanel(); hideEditDesignPanel(); }
     const panel = document.getElementById('detail-' + entity);
     if (panel) panel.classList.remove('visible');
     document.querySelectorAll('#tbody-' + entity + ' input[type=checkbox]').forEach(cb => cb.checked = false);
@@ -838,7 +921,7 @@ const ALL_ENTITIES = ['boats', 'designs', 'clubs', 'series', 'races'];
 function syncRequestEmail(value) {
     requestEmail = value;
     // Keep all email inputs in sync
-    const ids = ['edit-email'];
+    const ids = ['edit-email', 'edit-email-designs'];
     ALL_ENTITIES.forEach(e => {
         ids.push('merge-email-' + e);
         ids.push('exclude-email-' + e);
@@ -867,9 +950,20 @@ function applyMergeAuthState() {
     if (editReqBtn)   editReqBtn.style.display   = w ? 'none' : '';
     if (editEmailRow) editEmailRow.style.display = w ? 'none' : '';
     if (editMsgRow)   editMsgRow.style.display   = w ? 'none' : '';
+
+    // Edit-design panel: same auth pattern but with design-scoped ids.
+    const edSave = document.getElementById('edit-design-save-btn');
+    const edReq  = document.getElementById('edit-design-request-btn');
+    const edEmail = document.getElementById('edit-design-email-row');
+    const edMsg   = document.getElementById('edit-design-message-row');
+    if (edSave)  edSave.style.display  = w ? '' : 'none';
+    if (edReq)   edReq.style.display   = w ? 'none' : '';
+    if (edEmail) edEmail.style.display = w ? 'none' : '';
+    if (edMsg)   edMsg.style.display   = w ? 'none' : '';
+
     // Pre-populate email fields with remembered value
     if (!w) {
-        const ids = ['edit-email'];
+        const ids = ['edit-email', 'edit-email-designs'];
         ALL_ENTITIES.forEach(e => {
             ids.push('merge-email-' + e);
             ids.push('exclude-email-' + e);
@@ -1285,6 +1379,92 @@ async function requestBoatEdit() {
     }
 }
 
+// ---- Edit design ----
+
+let editingDesignId = null;
+
+function showEditDesignPanel() {
+    const ids = Array.from(state.selected.designs);
+    if (ids.length !== 1) return;
+    const item = state.selectedData.designs.get(ids[0]);
+    if (!item) return;
+    editingDesignId = item.id;
+    const title = document.getElementById('edit-panel-title-designs');
+    title.textContent = isWriteAllowed()
+        ? ('Edit Design ' + item.id)
+        : ('Request edit for Design ' + item.id);
+    document.getElementById('edit-design-id').value   = item.id || '';
+    document.getElementById('edit-design-name').value = item.canonicalName || '';
+    const boats = item.boats != null ? item.boats : 0;
+    const warn = document.getElementById('edit-design-warning');
+    warn.textContent = boats > 0
+        ? 'Changing the ID will rename ' + boats + ' boat' + (boats !== 1 ? 's' : '')
+          + ' of this design; an alias entry will be added so future imports still resolve correctly.'
+        : '';
+    document.getElementById('edit-status-designs').textContent = '';
+    document.getElementById('edit-panel-designs').style.display = '';
+    applyPanelAuthState('designs', 'edit-design', isWriteAllowed());
+}
+
+function hideEditDesignPanel() {
+    const panel = document.getElementById('edit-panel-designs');
+    if (panel) panel.style.display = 'none';
+    editingDesignId = null;
+}
+
+function buildDesignEditBody() {
+    const newId = document.getElementById('edit-design-id').value.trim();
+    const newName = document.getElementById('edit-design-name').value.trim();
+    return { designId: editingDesignId, newId, canonicalName: newName };
+}
+
+async function saveDesignEdit() {
+    if (!isWriteAllowed() || !editingDesignId) return;
+    const statusEl = document.getElementById('edit-status-designs');
+    statusEl.textContent = 'Saving…';
+    const result = await fetchJson('/api/designs/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildDesignEditBody())
+    });
+    if (!result || !result.ok) {
+        statusEl.textContent = 'Save failed: ' + ((result && result.error) || 'see console');
+        return;
+    }
+    let msg = result.noop ? 'No change.' : 'Saved.';
+    if (result.idChanged)   msg += ' ID → ' + result.newDesignId + '.';
+    if (result.nameChanged) msg += ' Name updated.';
+    if (result.updatedBoats > 0)
+        msg += ' ' + result.updatedBoats + ' boat' + (result.updatedBoats !== 1 ? 's' : '') + ' re-keyed.';
+    if (result.updatedRaces > 0)
+        msg += ' ' + result.updatedRaces + ' race(s).';
+    statusEl.textContent = msg;
+    clearSelection('designs');
+    loadList('designs', 0);
+}
+
+async function requestDesignEdit() {
+    if (!editingDesignId) return;
+    const statusEl = document.getElementById('edit-status-designs');
+    const email = document.getElementById('edit-email-designs')?.value.trim() || '';
+    const message = document.getElementById('edit-message-designs')?.value.trim() || '';
+    const body = buildDesignEditBody();
+    if (email) body.email = email;
+    if (message) body.message = message;
+    statusEl.textContent = 'Submitting request…';
+    const result = await fetchJson('/api/designs/edit-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (result && result.ok) {
+        statusEl.textContent = 'Request recorded.';
+        clearSelection('designs');
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
 // ---- Race division chart ----
 
 function setupRaceDivisionChart(raceId, raceJson) {
@@ -1395,17 +1575,26 @@ function onRaceDivisionChange() {
 
 function onRaceRfChange() {
     showRaceRfLine = document.getElementById('race-show-rf').checked;
+    sessionStorage.setItem(RACE_RF_KEY, String(showRaceRfLine));
     onRaceDivisionChange();
 }
 
 function onRaceErrorBarsChange() {
     showRaceErrorBars = document.getElementById('race-show-error-bars').checked;
+    sessionStorage.setItem(RACE_ERR_KEY, String(showRaceErrorBars));
     onRaceDivisionChange();
 }
 
 function onRaceTrendChange() {
     showRaceTrendLine = document.getElementById('race-show-trend').checked;
+    sessionStorage.setItem(RACE_TREND_KEY, String(showRaceTrendLine));
     onRaceDivisionChange();
+}
+
+function onSeriesOverallTrendChange(cb) {
+    showSeriesOverallTrend = cb.checked;
+    sessionStorage.setItem(SERIES_OVERALL_TREND_KEY, String(showSeriesOverallTrend));
+    onSeriesDivisionChange();
 }
 
 async function loadRaceDivChart(raceId, divisionName) {
@@ -1514,16 +1703,16 @@ function renderDivisionChart(data) {
         }
     }
 
-    // Boat name labels: vertical text at each finisher's lowest time point
-    // (lowest time = topmost on chart since y-axis is reversed)
+    // Boat name labels: vertical text rising above each finisher's slowest-time point,
+    // so they sit in the top margin and never overlap the bars.
     const annotations = finishers.map((f, i) => {
         const ys = [elapsed[i], pfCorr[i], rfCorr[i]].filter(v => v != null);
-        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
         return {
-            x: xs[i], y: minY,
+            x: xs[i], y: maxY,
             text: f.name,
             textangle: -90,
-            xanchor: 'bottom',
+            xanchor: 'center',
             yanchor: 'bottom',
             yshift: 6,
             showarrow: false,
@@ -1533,8 +1722,9 @@ function renderDivisionChart(data) {
     });
 
     const layout = {
-        xaxis: { title: 'PF' },
-        yaxis: { title: 'Time (min)', tickformat: '.1f', autorange: 'reversed' },
+        xaxis: { title: 'PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal' },
+        yaxis: { title: 'Time (min)', tickformat: '.1f',
+                 rangemode: getDivChartYFromZero() ? 'tozero' : 'normal' },
         legend: { orientation: 'h', y: -0.18 },
         margin: { t: 120, b: 80, l: 60, r: 20 },
         hovermode: 'closest',
@@ -1690,9 +1880,15 @@ function renderSeriesChartForDivision(divName) {
         return;
     }
 
+    if (showSeriesOverallTrend) {
+        const trend = computeSeriesOverallTrend(data, divName);
+        if (trend) traces.push(trend);
+    }
+
     const layout = {
-        xaxis: { title: 'PF' },
-        yaxis: { title: 'PF Corrected Time (min)', tickformat: '.1f', autorange: 'reversed' },
+        xaxis: { title: 'PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal' },
+        yaxis: { title: 'PF Corrected Time (min)', tickformat: '.1f',
+                 rangemode: getDivChartYFromZero() ? 'tozero' : 'normal' },
         legend: { orientation: 'h', y: -0.25 },
         margin: { t: 30, b: 80, l: 60, r: 20 },
         hovermode: 'closest'
@@ -1712,6 +1908,69 @@ function renderSeriesChartForDivision(divName) {
     });
     addCompareButton('series-compare-btn-container',
         [...seenBoats.entries()].map(([id, label]) => ({ id, label })));
+}
+
+/**
+ * Computes the series overall trend trace for the given division: the line with the
+ * average OLS slope of each race's (PF, PF-corrected-minutes) points, anchored at the
+ * median of all PF values and the median of all PF-corrected-minutes values across the
+ * division. Returns null if there is insufficient data (fewer than two races with at
+ * least two qualifying finishers each).
+ */
+function computeSeriesOverallTrend(data, divName) {
+    const slopes = [];
+    const allX = [];
+    const allY = [];
+    data.races.forEach(race => {
+        const div = race.divisions.find(d => (d.name || '') === divName);
+        if (!div) return;
+        const finishers = div.finishers.filter(f => f.pf != null && f.pfCorrected != null);
+        if (finishers.length < 2) return;
+        const xs = finishers.map(f => f.pf);
+        const ys = finishers.map(f => f.pfCorrected / 60);
+        allX.push(...xs);
+        allY.push(...ys);
+        const s = olsSlope(xs, ys);
+        if (s != null && isFinite(s)) slopes.push(s);
+    });
+    if (slopes.length === 0 || allX.length === 0) return null;
+
+    const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
+    const medX = median(allX);
+    const medY = median(allY);
+    const xMin = Math.min(...allX);
+    const xMax = Math.max(...allX);
+    // Line: y = avgSlope * (x - medX) + medY, across the observed X range.
+    return {
+        x: [xMin, xMax],
+        y: [avgSlope * (xMin - medX) + medY, avgSlope * (xMax - medX) + medY],
+        mode: 'lines', type: 'scatter',
+        name: `Overall trend (slope ${avgSlope.toFixed(2)})`,
+        line: { dash: 'dot', color: '#333', width: 3 },
+        hoverinfo: 'skip'
+    };
+}
+
+function olsSlope(xs, ys) {
+    const n = xs.length;
+    if (n < 2) return null;
+    let sx = 0, sy = 0;
+    for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; }
+    const mx = sx / n, my = sy / n;
+    let num = 0, den = 0;
+    for (let i = 0; i < n; i++) {
+        const dx = xs[i] - mx;
+        num += dx * (ys[i] - my);
+        den += dx * dx;
+    }
+    return den > 0 ? num / den : null;
+}
+
+function median(arr) {
+    const s = arr.slice().sort((a, b) => a - b);
+    const n = s.length;
+    if (n === 0) return 0;
+    return (n % 2) ? s[(n - 1) >> 1] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
 // ---- URL param handling (navigation from comparison page) ----
