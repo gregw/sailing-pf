@@ -109,6 +109,8 @@ public class AdminApiServlet extends HttpServlet
             handleImporterStatus(resp);
         else if ("/importers".equals(path))
             handleImporters(resp);
+        else if ("/user-requests/count".equals(path))
+            handleUserRequestsCount(resp);
         else
             resp.sendError(404);
     }
@@ -1312,6 +1314,25 @@ public class AdminApiServlet extends HttpServlet
             resp.setStatus(500);
             writeJson(resp, Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * GET /api/user-requests/count — returns the number of lines in the user-requests log file.
+     * The log is appended by {@link #handleUserRequest} and lives at {@code pf-data/log/user-requests.log}.
+     * Returns {@code {count: 0}} when the file does not yet exist.
+     */
+    private void handleUserRequestsCount(HttpServletResponse resp) throws IOException
+    {
+        Path logFile = store.dataRoot().resolve("log").resolve("user-requests.log");
+        long count = 0;
+        if (java.nio.file.Files.exists(logFile))
+        {
+            try (var lines = java.nio.file.Files.lines(logFile))
+            {
+                count = lines.count();
+            }
+        }
+        writeJson(resp, Map.of("count", count));
     }
 
     /**

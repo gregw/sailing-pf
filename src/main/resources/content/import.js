@@ -332,4 +332,16 @@ function setBadge(name, mode, status) {
     badge.className = 'badge ' + (status === 'running' ? 'badge-running' : 'badge-idle');
 }
 
+async function loadUserRequestsCount() {
+    try {
+        const data = await fetchJson('/api/user-requests/count');
+        if (data && data.count != null) {
+            document.getElementById('user-requests-count').textContent = data.count;
+        }
+    } catch (e) {
+        console.warn('Failed to load user requests count:', e);
+    }
+}
+
 loadImporters();
+loadUserRequestsCount();
