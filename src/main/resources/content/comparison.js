@@ -30,6 +30,9 @@ let currentCalcBoats = []; // current boats in the calculator
 let inlineDivisionData = null; // most recently loaded /api/comparison/division payload
 let inlineDivisionRaceId = null;
 let inlineDivisionName = null;
+let inlineDivisionSeriesId = null;
+let inlineSeriesId = null;  // seriesId for which inlineSeriesRaces was fetched
+let inlineSeriesRaces = null;  // [{raceId, raceName, date}] sorted by date, or null
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -411,8 +414,8 @@ function renderChart(data) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata) return;
-        const {raceId, divisionName} = pt.customdata;
-        if (raceId) showRaceDivisionInline(raceId, divisionName || '');
+        const {raceId, divisionName, seriesId} = pt.customdata;
+        if (raceId) showRaceDivisionInline(raceId, divisionName || '', seriesId || null);
     });
 
     renderHandicapCalc(data);
@@ -1127,18 +1130,56 @@ function downloadHandicaps(calcBoats) {
 
 // ---- Inline race-division chart (shown below BCFC chart on dot click) ----
 
-async function showRaceDivisionInline(raceId, divisionName) {
+async function showRaceDivisionInline(raceId, divisionName, seriesId = null) {
     const params = new URLSearchParams({raceId, divisionName});
     const data = await fetchJson('/api/comparison/division?' + params);
     if (!data) return;
     inlineDivisionData = data;
     inlineDivisionRaceId = raceId;
     inlineDivisionName = divisionName;
+    inlineDivisionSeriesId = seriesId;
+
+    // Fetch ordered series race list if we've moved to a different series
+    if (seriesId && seriesId !== inlineSeriesId) {
+        inlineSeriesRaces = null;
+        inlineSeriesId = seriesId;
+        const sd = await fetchJson('/api/series/chart?' + new URLSearchParams({seriesId}));
+        if (sd && sd.races) {
+            inlineSeriesRaces = sd.races.map(r => ({raceId: r.raceId, raceName: r.raceName, date: r.date}));
+        }
+    } else if (!seriesId) {
+        inlineSeriesRaces = null;
+        inlineSeriesId = null;
+    }
+
     document.getElementById('bcfc-race-division-section').style.display = '';
     const titleParts = [data.date, data.seriesName, data.raceName,
         divisionName ? divisionName : 'Results'].filter(Boolean);
     document.getElementById('bcfc-race-division-title').textContent = titleParts.join(' — ');
+    updateInlineDivNavButtons();
     renderInlineDivisionChart();
+}
+
+function updateInlineDivNavButtons() {
+    const prevBtn = document.getElementById('bcfc-div-prev-btn');
+    const nextBtn = document.getElementById('bcfc-div-next-btn');
+    if (!prevBtn || !nextBtn) return;
+    const idx = inlineSeriesRaces ? inlineSeriesRaces.findIndex(r => r.raceId === inlineDivisionRaceId) : -1;
+    prevBtn.disabled = idx <= 0;
+    nextBtn.disabled = idx < 0 || idx >= (inlineSeriesRaces?.length ?? 0) - 1;
+}
+
+function inlineDivPrev() {
+    if (!inlineSeriesRaces) return;
+    const idx = inlineSeriesRaces.findIndex(r => r.raceId === inlineDivisionRaceId);
+    if (idx > 0) showRaceDivisionInline(inlineSeriesRaces[idx - 1].raceId, inlineDivisionName, inlineDivisionSeriesId);
+}
+
+function inlineDivNext() {
+    if (!inlineSeriesRaces) return;
+    const idx = inlineSeriesRaces.findIndex(r => r.raceId === inlineDivisionRaceId);
+    if (idx >= 0 && idx < inlineSeriesRaces.length - 1)
+        showRaceDivisionInline(inlineSeriesRaces[idx + 1].raceId, inlineDivisionName, inlineDivisionSeriesId);
 }
 
 function renderInlineDivisionChart() {
