@@ -27,6 +27,9 @@ let boatDebounce    = null;
 let lastChartData   = null;
 let calcSort        = { col: 'pf', dir: 'desc' }; // handicap calculator sort state
 let currentCalcBoats = []; // current boats in the calculator
+let inlineDivisionData = null; // most recently loaded /api/comparison/division payload
+let inlineDivisionRaceId = null;
+let inlineDivisionName = null;
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -230,6 +233,8 @@ async function loadChart() {
         Plotly.purge('comparison-chart');
         lastChartData = null;
         document.getElementById('pf-calc').style.display = 'none';
+        document.getElementById('bcfc-race-division-section').style.display = 'none';
+        inlineDivisionData = null;
         return;
     }
 
@@ -281,19 +286,6 @@ function renderChart(data) {
         data.boats.forEach(b =>
             filteredPerBoat.set(b.id, filteredPerBoat.get(b.id).filter(e => common.has(e.raceId))));
     }
-
-    // Compute Y range from all filtered entries
-    let yMin = 0.5, yMax = 1.5;
-    data.boats.forEach(b => {
-        filteredPerBoat.get(b.id).forEach(e => {
-            if (e.backCalcFactor < yMin) yMin = e.backCalcFactor;
-            if (e.backCalcFactor > yMax) yMax = e.backCalcFactor;
-        });
-    });
-    const pad = (yMax - yMin) * 0.05 + 0.02;
-    yMin = Math.floor((yMin - pad) * 20) / 20;
-    yMax = Math.ceil ((yMax + pad) * 20) / 20;
-    const yRange = [Math.min(0.5, yMin), Math.max(1.5, yMax)];
 
     let minDate = null, maxDate = null;
     data.boats.forEach(b => {
@@ -401,9 +393,10 @@ function renderChart(data) {
         }
     });
 
+    const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;
     const layout = {
         xaxis: { title: 'Date', type: 'date' },
-        yaxis: { title: 'Factor', range: yRange },
+        yaxis: {title: 'Factor', rangemode: yFromZero ? 'tozero' : 'normal'},
         showlegend: !hideLegend,
         legend: { orientation: 'v', xanchor: 'right', x: 1 },
         margin: { t: 20, b: 60, l: 60, r: 20 },
@@ -418,11 +411,8 @@ function renderChart(data) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata) return;
-        const { raceId, seriesId, seriesName } = pt.customdata;
-        const p = new URLSearchParams({ tab: 'races' });
-        if (seriesId)   p.set('seriesId',   seriesId);
-        else if (raceId) p.set('raceId', raceId);
-        window.location.href = 'data.html?' + p;
+        const {raceId, divisionName} = pt.customdata;
+        if (raceId) showRaceDivisionInline(raceId, divisionName || '');
     });
 
     renderHandicapCalc(data);
@@ -892,15 +882,12 @@ function recalcAll(calcBoats) {
         }
     });
 
-    if (anchors.length === 0) {
-        restoreAll();
-        return;
-    }
-    if (anchors.length === 1) {
-        scaleSingle(anchors[0], calcBoats);
-        return;
-    }
-    scaleMulti(anchors, calcBoats);
+    if (anchors.length === 0) restoreAll();
+    else if (anchors.length === 1) scaleSingle(anchors[0], calcBoats);
+    else scaleMulti(anchors, calcBoats);
+
+    // Allocated-handicap line in the inline division chart depends on the calculator inputs.
+    if (inlineDivisionData) renderInlineDivisionChart();
 }
 
 // --- Sail-number / boat-name normalisation ---
@@ -1138,6 +1125,106 @@ function downloadHandicaps(calcBoats) {
     }
 }
 
+// ---- Inline race-division chart (shown below BCFC chart on dot click) ----
+
+async function showRaceDivisionInline(raceId, divisionName) {
+    const params = new URLSearchParams({raceId, divisionName});
+    const data = await fetchJson('/api/comparison/division?' + params);
+    if (!data) return;
+    inlineDivisionData = data;
+    inlineDivisionRaceId = raceId;
+    inlineDivisionName = divisionName;
+    document.getElementById('bcfc-race-division-section').style.display = '';
+    const titleParts = [data.date, data.seriesName, data.raceName,
+        divisionName ? divisionName : 'Results'].filter(Boolean);
+    document.getElementById('bcfc-race-division-title').textContent = titleParts.join(' — ');
+    renderInlineDivisionChart();
+}
+
+function renderInlineDivisionChart() {
+    const data = inlineDivisionData;
+    if (!data) return;
+    const finishers = (data.finishers || []).filter(f => f.pf != null && f.elapsed > 0);
+    if (finishers.length === 0) {
+        Plotly.purge('bcfc-race-division-chart');
+        return;
+    }
+
+    const xs = finishers.map(f => f.pf);
+    const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+    const elapsed = finishers.map(f => f.elapsed / 60);
+    const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+
+    const traces = [
+        {
+            x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+            line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+            text: names.map((n, i) => `${esc(n)}<br>Elapsed: ${fmtTime(elapsed[i] * 60)}`),
+            hoverinfo: 'text'
+        },
+        {
+            x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+            line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+            text: names.map((n, i) => pfCorr[i] != null
+                ? `${esc(n)}<br>PF corrected: ${fmtTime(pfCorr[i] * 60)}` : ''),
+            hoverinfo: 'text'
+        }
+    ];
+
+    addPodiumTraces(traces, finishers, xs, pfCorr);
+
+    // Allocated-handicap line: pulled live from the handicap calculator inputs.
+    // For each finisher with an entered handicap, plot (handicap, elapsed*handicap).
+    const allocByBoat = new Map();
+    document.querySelectorAll('.pf-calc-input').forEach(inp => {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v)) allocByBoat.set(inp.dataset.boatId, v);
+    });
+    const allocPts = finishers
+        .filter(f => allocByBoat.has(f.boatId))
+        .map(f => ({
+            name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
+            handicap: allocByBoat.get(f.boatId),
+            correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
+        }))
+        .sort((a, b) => a.handicap - b.handicap);
+    if (allocPts.length > 0) {
+        traces.push({
+            x: allocPts.map(p => p.handicap),
+            y: allocPts.map(p => p.correctedMin),
+            mode: 'lines+markers', type: 'scatter',
+            name: 'Allocated handicap corrected',
+            line: {dash: 'longdash', color: '#a04020', width: 2},
+            marker: {size: 8, symbol: 'square'},
+            text: allocPts.map(p =>
+                `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
+                + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+            hoverinfo: 'text'
+        });
+    }
+
+    const annotations = finishers.map((f, i) => {
+        const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+        return {
+            x: xs[i], y: Math.max(...ys),
+            text: f.name, textangle: -90,
+            xanchor: 'center', yanchor: 'bottom', yshift: 6,
+            showarrow: false, cliponaxis: false, font: {size: 11}
+        };
+    });
+
+    const layout = {
+        xaxis: {title: 'Handicap (PF)'},
+        yaxis: {title: 'Time (min)', tickformat: '.1f', rangemode: 'tozero'},
+        legend: {orientation: 'h', y: -0.18},
+        margin: {t: 80, b: 80, l: 60, r: 20},
+        hovermode: 'closest',
+        annotations
+    };
+
+    Plotly.react('bcfc-race-division-chart', traces, layout, {responsive: true});
+}
+
 // ---- Elapsed time comparison charts ----
 
 async function loadElapsedCharts() {
@@ -1362,6 +1449,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
     document.getElementById('last-12-months')    .addEventListener('change', e => { showLast12Months   = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
     document.getElementById('common-races-only') .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('bcfc-y-from-zero').addEventListener('change', () => {
+        if (lastChartData) renderChart(lastChartData);
+    });
     document.getElementById('boat-search').addEventListener('input', () => {
         clearTimeout(boatDebounce);
         boatDebounce = setTimeout(loadCandidates, 250);

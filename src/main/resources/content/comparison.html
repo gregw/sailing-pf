@@ -62,13 +62,23 @@
       <label title="Only plot races in which all selected boats competed">
         <input type="checkbox" id="common-races-only"> Common races only
       </label>
+        <label title="Start Y axis at 0">
+            <input type="checkbox" id="bcfc-y-from-zero"> Y from 0
+        </label>
     </div>
   </div>
 
   <div id="chip-list" class="chip-list"></div>
 
-  <div style="font-weight:bold;margin-bottom:0.25rem;">Back Calculated Factor Comparison <a href="ui-tips.md#chart-comparison" class="info-btn" data-tip="Scatter plot of back-calculated factor per race over time for each comparison boat. Each dot is one race result; hover for details." target="_blank">ⓘ</a></div>
-  <div id="comparison-chart" class="chart-tall" style="width:100%;height:960px;margin-top:0.5rem;"></div>
+<div style="font-weight:bold;margin-bottom:0.25rem;">Back Calculated Factor Comparison
+    <a href="ui-tips.md#chart-comparison" class="info-btn" data-tip="Scatter plot of back-calculated factor per race over time for each comparison boat. Each dot is one race result; hover for details. Click a dot to show that race's division chart below." target="_blank">ⓘ</a>
+</div>
+<div id="comparison-chart" class="chart-tall" style="width:100%;height:670px;margin-top:0.5rem;"></div>
+
+<div id="bcfc-race-division-section" style="display:none; margin-top:1rem;">
+    <div style="font-weight:bold;margin-bottom:0.25rem;" id="bcfc-race-division-title"></div>
+    <div id="bcfc-race-division-chart" style="width:100%;height:500px;"></div>
+</div>
 
   <div id="pf-calc" style="display:none; margin-top:1.25rem;">
     <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Enter a handicap for any boat — PF, RF, and Best Fit columns for all boats are scaled by ratio. Each column uses its own per-boat ratio. Best Fit uses the latest point on the weighted linear trend through back-calculated factors." target="_blank">ⓘ</a></h3>

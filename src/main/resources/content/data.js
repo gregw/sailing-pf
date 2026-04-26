@@ -1658,7 +1658,7 @@ function renderDivisionChart(data) {
     const elapsed = finishers.map(f => f.elapsed / 60);
     const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
 
-    // RF trace plots (rf, rfCorrected) — independent x values from PF, sorted so the line is monotonic.
+    // RF trace plots (rf, rfCorrected) — sorted by RF so the line is monotonic.
     const rfFinishers = finishers
         .map(f => ({f, rf: f.rf, rfCorrMin: f.rfCorrected != null ? f.rfCorrected / 60 : null}))
         .filter(o => o.rf != null && o.rfCorrMin != null)
@@ -1667,6 +1667,13 @@ function renderDivisionChart(data) {
     const rfCorr = rfFinishers.map(o => o.rfCorrMin);
     const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
     const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
+    const rfElapsed = rfFinishers.map(o => o.f.elapsed / 60);
+
+    // When the RF line is shown, RF boats' elapsed baseline belongs at x=rf (not x=pf),
+    // so it sits alongside their RF-corrected marker. PF-only boats remain at x=pf.
+    const rfBoatIdsForElapsed = showRaceRfLine
+        ? new Set(rfFinishers.map(o => o.f.boatId)) : new Set();
+    const pfElapsedFinishers = finishers.filter(f => !rfBoatIdsForElapsed.has(f.boatId));
 
     // Vertical error bars on corrected times: factor uncertainty propagates multiplicatively
     // to the corrected time — e.g. PF_upper_time = elapsed * pf_upper / 60
@@ -1693,22 +1700,42 @@ function renderDivisionChart(data) {
     const boatCustom = finishers.map(f => ({ boatId: f.boatId }));
 
     const traces = [
-        { x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+        // Elapsed for PF-only boats (no RF) at x=pf
+        {
+            x: pfElapsedFinishers.map(f => f.pf),
+            y: pfElapsedFinishers.map(f => f.elapsed / 60),
+            mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
           line: { dash: 'dash', color: '#555', width: 1.5 }, marker: { size: 7 },
-            text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'text', customdata: boatCustom
+            text: hoverTexts('Elapsed',
+                pfElapsedFinishers.map(f => f.elapsed / 60),
+                pfElapsedFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name)),
+            hoverinfo: 'text', customdata: pfElapsedFinishers.map(f => ({boatId: f.boatId}))
         },
         { x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
           line: { dash: 'solid', color: '#2255aa', width: 2 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
             text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
         },
-        ...(showRaceRfLine && rfFinishers.length > 0 ? [{
-            x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
-          line: { dash: 'dot', color: '#c47900', width: 1.5 }, marker: { size: 7 },
-            error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
-            text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
-        }] : [])
+        ...(showRaceRfLine && rfFinishers.length > 0 ? [
+            // Elapsed for RF boats at x=rf (same legend entry as Elapsed above)
+            {
+                x: rfXs, y: rfElapsed,
+                mode: 'lines+markers', type: 'scatter',
+                name: 'Elapsed', legendgroup: 'Elapsed', showlegend: false,
+                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+                text: hoverTexts('Elapsed', rfElapsed, rfNames),
+                hoverinfo: 'text', customdata: rfCustom
+            },
+            {
+                x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+                line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+                error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
+                text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
+            }
+        ] : [])
     ];
+
+    addPodiumTraces(traces, finishers, xs, pfCorr);
 
     if (showRaceTrendLine) {
         // Linear regression of pfCorrected times vs PF, excluding nulls

@@ -48,6 +48,40 @@ function fmtTime(seconds) {
     return `${m}:${String(s).padStart(2,'0')}`;
 }
 
+/**
+ * Push 1st/2nd/3rd podium markers (by smallest pfCorrected) onto the given Plotly traces array.
+ * `xs` are x-axis values per finisher (matching the PF-corrected line); `pfCorr` are the
+ * corresponding corrected times in MINUTES (already divided by 60). Markers are placed on the
+ * PF-corrected line at the three fastest finishers.
+ */
+function addPodiumTraces(traces, finishers, xs, pfCorr, color = '#2255aa') {
+    const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
+    const PODIUM_SIZES = [14, 12, 11];
+    const PODIUM_LABELS = ['1st', '2nd', '3rd'];
+    const ranked = finishers
+        .map((f, i) => ({i, t: pfCorr[i]}))
+        .filter(o => o.t != null)
+        .sort((a, b) => a.t - b.t);
+    for (let p = 0; p < Math.min(3, ranked.length); p++) {
+        const idx = ranked[p].i;
+        const f = finishers[idx];
+        traces.push({
+            x: [xs[idx]], y: [pfCorr[idx]],
+            mode: 'markers', type: 'scatter',
+            name: PODIUM_LABELS[p],
+            legendgroup: PODIUM_LABELS[p],
+            marker: {
+                symbol: PODIUM_SYMBOLS[p], size: PODIUM_SIZES[p],
+                color, line: {color: '#fff', width: 1.5}
+            },
+            text: [`${PODIUM_LABELS[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}`
+            + `<br>PF corrected: ${fmtTime(pfCorr[idx] * 60)}`],
+            hoverinfo: 'text',
+            customdata: [{boatId: f.boatId}]
+        });
+    }
+}
+
 /** Reference std dev in log space at weight = 1.0.  See .claude/error_bars.md. */
 const SIGMA_0 = 0.020;
 
