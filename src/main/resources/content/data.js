@@ -723,6 +723,7 @@ function renderResidualChart(residuals) {
                 parts.push(`w=${e.weight.toFixed(2)}  r=${(-e.residual).toFixed(4)}`);
                 return parts.join('<br>');
             }),
+            customdata: entries.map(e => ({ raceId: e.raceId, seriesId: e.seriesId })),
             hoverinfo: 'text+x'
         };
     }
@@ -752,6 +753,16 @@ function renderResidualChart(residuals) {
 
     Plotly.newPlot(container, traces, layout, { responsive: true })
         .then(() => Plotly.Plots.resize(container));
+
+    container.removeAllListeners && container.removeAllListeners('plotly_click');
+    container.on('plotly_click', (eventData) => {
+        if (!eventData.points || !eventData.points.length) return;
+        const pt = eventData.points[0];
+        if (!pt.customdata || !pt.customdata.raceId) return;
+        const params = new URLSearchParams({ tab: 'races', raceId: pt.customdata.raceId });
+        if (pt.customdata.seriesId) params.set('seriesId', pt.customdata.seriesId);
+        window.location.href = 'data.html?' + params;
+    });
 }
 
 function renderProfileChart(profile) {
@@ -1670,18 +1681,20 @@ function renderDivisionChart(data) {
             t != null ? `${esc(names[i])}<br>${label}: ${fmtTime(t * 60)}` : '');
     }
 
+    const boatCustom = finishers.map(f => ({ boatId: f.boatId }));
+
     const traces = [
         { x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
           line: { dash: 'dash', color: '#555', width: 1.5 }, marker: { size: 7 },
-          text: hoverTexts('Elapsed', elapsed), hoverinfo: 'text' },
+          text: hoverTexts('Elapsed', elapsed), hoverinfo: 'text', customdata: boatCustom },
         { x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
           line: { dash: 'solid', color: '#2255aa', width: 2 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
-          text: hoverTexts('PF corrected', pfCorr), hoverinfo: 'text' },
+          text: hoverTexts('PF corrected', pfCorr), hoverinfo: 'text', customdata: boatCustom },
         ...(showRaceRfLine ? [{ x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
           line: { dash: 'dot', color: '#c47900', width: 1.5 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'rf', 'rfWeight'),
-          text: hoverTexts('RF corrected', rfCorr), hoverinfo: 'text' }] : [])
+          text: hoverTexts('RF corrected', rfCorr), hoverinfo: 'text', customdata: boatCustom }] : [])
     ];
 
     if (showRaceTrendLine) {
@@ -1741,6 +1754,16 @@ function renderDivisionChart(data) {
 
     document.getElementById('division-section-races').style.display = '';
     Plotly.react('race-division-chart', traces, layout, { responsive: true });
+
+    const raceDivDiv = document.getElementById('race-division-chart');
+    raceDivDiv.removeAllListeners && raceDivDiv.removeAllListeners('plotly_click');
+    raceDivDiv.on('plotly_click', (eventData) => {
+        if (!eventData.points || !eventData.points.length) return;
+        const pt = eventData.points[0];
+        if (!pt.customdata || !pt.customdata.boatId) return;
+        window.location.href = 'data.html?' +
+            new URLSearchParams({ tab: 'boats', boatId: pt.customdata.boatId });
+    });
 
     // Compare button: include all finishers with a boatId (not just PF-filtered ones)
     const compareBoats = (data.finishers || [])
@@ -1852,6 +1875,7 @@ function renderSeriesChartForDivision(divName) {
         const texts = finishers.map(f =>
             `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>PF corrected: ${fmtTime(f.pfCorrected)}`
         );
+        const boatCustom = finishers.map(f => ({ boatId: f.boatId }));
 
         traces.push({
             x: xs, y: ys,
@@ -1860,7 +1884,8 @@ function renderSeriesChartForDivision(divName) {
             line: { dash: 'solid', color: color, width: 1.5 },
             marker: { size: 5 },
             text: texts,
-            hoverinfo: 'text'
+            hoverinfo: 'text',
+            customdata: boatCustom
         });
 
         // Add podium markers (1st/2nd/3rd fastest corrected times)
@@ -1878,7 +1903,8 @@ function renderSeriesChartForDivision(divName) {
                     line: { color: '#fff', width: 1.5 }
                 },
                 text: [`${podiumLabels[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>PF corrected: ${fmtTime(f.pfCorrected)}`],
-                hoverinfo: 'text'
+                hoverinfo: 'text',
+                customdata: [{ boatId: f.boatId }]
             });
         }
     });
@@ -1903,6 +1929,16 @@ function renderSeriesChartForDivision(divName) {
     };
 
     Plotly.react('series-chart', traces, layout, { responsive: true });
+
+    const seriesChartDiv = document.getElementById('series-chart');
+    seriesChartDiv.removeAllListeners && seriesChartDiv.removeAllListeners('plotly_click');
+    seriesChartDiv.on('plotly_click', (eventData) => {
+        if (!eventData.points || !eventData.points.length) return;
+        const pt = eventData.points[0];
+        if (!pt.customdata || !pt.customdata.boatId) return;
+        window.location.href = 'data.html?' +
+            new URLSearchParams({ tab: 'boats', boatId: pt.customdata.boatId });
+    });
 
     // Compare button: unique boats across all races in this division
     const seenBoats = new Map();
@@ -1981,23 +2017,56 @@ function median(arr) {
     return (n % 2) ? s[(n - 1) >> 1] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
-// ---- URL param handling (navigation from comparison page) ----
+// ---- URL param handling (navigation from comparison page or in-chart links) ----
+//
+// Strategy: pre-fill the entity's search box with the target id and (for races) apply the
+// series filter. This narrows the list to the target row, then we open its detail panel —
+// the same end-state as if the user had typed the id and clicked the row. We deliberately
+// do NOT tick the selection checkbox; a click on a chart dot is a navigation action, not a
+// selection action.
 
-(function applyUrlParams() {
+(async function applyUrlParams() {
     const p = new URLSearchParams(window.location.search);
     const tab      = p.get('tab');
     const seriesId = p.get('seriesId');
     const raceId   = p.get('raceId');
-    if (tab) {
+    const boatId   = p.get('boatId');
+    if (!tab) {
+        loadList('clubs', 0);
+        return;
+    }
+
+    if (tab === 'races') {
         if (seriesId) {
             state.filter['races'] = { param: 'seriesId', value: seriesId, label: 'Series: ' + seriesId };
             state.pages['races'] = 0;
         }
-        switchTab(tab);
-        if (!seriesId && raceId) {
-            loadList('races', 0).then(() => loadDetail('races', raceId));
+        if (raceId) {
+            const q = document.getElementById('q-races');
+            if (q) q.value = raceId;
+            state.searches['races'] = raceId;
         }
+        await loadList('races', 0);
+        switchTab(tab);
+        if (raceId) {
+            const idx = state.raceItems.findIndex(it => it.id === raceId);
+            if (idx >= 0) state.currentRaceIdx = idx;
+            await loadDetail('races', raceId);
+        }
+    } else if (tab === 'boats') {
+        if (boatId) {
+            const q = document.getElementById('q-boats');
+            if (q) q.value = boatId;
+            state.searches['boats'] = boatId;
+        }
+        await loadList('boats', 0);
+        switchTab(tab);
+        if (boatId) {
+            const idx = state.boatItems.findIndex(it => it.id === boatId);
+            if (idx >= 0) state.currentBoatIdx = idx;
+            await loadDetail('boats', boatId);
+        }
+    } else {
+        switchTab(tab);
     }
 })();
-
-loadList('clubs', 0);

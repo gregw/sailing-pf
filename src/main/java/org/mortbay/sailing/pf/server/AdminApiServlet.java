@@ -576,19 +576,21 @@ public class AdminApiServlet extends HttpServlet
             {
                 Race race = store.races().get(r.raceId());
                 String rName = raceName(race);
+                String sId = null;
                 String sName = null;
                 if (race != null && race.seriesIds() != null && !race.seriesIds().isEmpty())
                 {
-                    String sid = race.seriesIds().getFirst();
+                    sId = race.seriesIds().getFirst();
                     var club = store.clubs().get(race.clubId());
                     if (club != null && club.series() != null)
                         for (var s : club.series())
-                            if (sid.equals(s.id())) { sName = s.name(); break; }
-                    if (sName == null) sName = sid;
+                            if (sId.equals(s.id())) { sName = s.name(); break; }
+                    if (sName == null) sName = sId;
                 }
                 Map<String, Object> rm = new LinkedHashMap<>();
                 rm.put("raceId",       r.raceId());
                 rm.put("raceName",     rName);
+                rm.put("seriesId",     sId);
                 rm.put("seriesName",   sName);
                 rm.put("division",     r.divisionName());
                 rm.put("date",         r.raceDate().toString());
