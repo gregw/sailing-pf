@@ -89,7 +89,7 @@ public class PfServer
         FilterHolder waf = new FilterHolder(new WriteAuthFilter(authConfig));
         context.addFilter(waf, "/api/*", EnumSet.of(DispatcherType.REQUEST));
 
-        context.addServlet(new ServletHolder(new AdminApiServlet(store, taskService, cache)), "/api/*");
+        context.addServlet(new ServletHolder(new AdminApiServlet(store, taskService, cache, httpClient, authConfig)), "/api/*");
         context.addServlet(new ServletHolder(new AnalysisServlet(store, cache)), "/api/analyse/*");
         context.addServlet(new ServletHolder(new StaticResourceServlet()), "/*");
         server.setHandler(context);

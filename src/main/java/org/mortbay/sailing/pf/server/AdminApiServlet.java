@@ -6,6 +6,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.HttpClient;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.mortbay.sailing.pf.analysis.BoatDerived;
 import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
@@ -36,9 +42,12 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -53,12 +62,23 @@ public class AdminApiServlet extends HttpServlet
     private final DataStore store;
     private final TaskService _taskService;
     private final AnalysisCache cache;
+    private final HttpClient httpClient;
+    private final AuthConfig authConfig;
 
-    public AdminApiServlet(DataStore store, TaskService taskService, AnalysisCache cache)
+    /** Sliding-window timestamps of recent unauthenticated handicap-fetch calls. */
+    private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
+    private static final int  FETCH_HCAP_UNAUTH_LIMIT = 1000;
+    private static final long FETCH_HCAP_WINDOW_MS    = 24L * 60L * 60L * 1000L;
+    private final java.util.ArrayDeque<Long> unauthFetchHcapTimes = new java.util.ArrayDeque<>();
+
+    public AdminApiServlet(DataStore store, TaskService taskService, AnalysisCache cache,
+                           HttpClient httpClient, AuthConfig authConfig)
     {
         this.store = store;
         this._taskService = taskService;
         this.cache = cache;
+        this.httpClient = httpClient;
+        this.authConfig = authConfig;
     }
 
     @Override
@@ -205,6 +225,10 @@ public class AdminApiServlet extends HttpServlet
             || "/designs/ignore-request".equals(path))
         {
             handleUserRequest(path, req, resp);
+        }
+        else if ("/comparison/fetch-handicaps".equals(path))
+        {
+            handleComparisonFetchHandicaps(req, resp);
         }
         else
         {
@@ -2836,6 +2860,371 @@ public class AdminApiServlet extends HttpServlet
         boatBMap.put("pfTwoHanded", pfB != null ? factorMap(pfB.twoHanded()) : null);
 
         writeJson(resp, Map.of("boatA", boatAMap, "boatB", boatBMap, "points", points));
+    }
+
+    /**
+     * POST /api/comparison/fetch-handicaps — fetches per-boat handicaps from a results page URL.
+     * <p>
+     * Body: {@code {"url": "<results-page-url>"}}.
+     * Returns: {@code [{"sailno": "123", "name": "Boat Name", "handicap": 1.234}, ...]}.
+     * <p>
+     * Supports SailSys (app.sailsys.com.au), TopYacht (topyacht.net.au) and BWPS
+     * (bwps.cycaracing.com / *.cycaracing.com) URLs. PHS is preferred over measurement
+     * systems when multiple are present, since this endpoint feeds the PHS handicap
+     * calculator. For TopYacht entrants pages that publish a PURHC (PHS minute penalty)
+     * rather than an AHC/TCF, the value is converted to a TCF using the boat's known PF.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleComparisonFetchHandicaps(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            // Open to all users; unauthenticated callers share a 1000-per-24h global quota
+            // because each call hits a third-party site (SailSys / TopYacht / BWPS).
+            if (!isAuthenticated(req) && !tryConsumeUnauthFetchHcapQuota())
+            {
+                resp.setStatus(429);
+                writeJson(resp, Map.of("error",
+                    "Daily unauthenticated fetch limit reached — sign in to continue"));
+                return;
+            }
+
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String url = body.get("url") instanceof String s ? s.trim() : "";
+            if (url.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "url is required"));
+                return;
+            }
+
+            List<Map<String, Object>> result;
+            String lower = url.toLowerCase(Locale.ENGLISH);
+            if (lower.contains("sailsys.com.au"))
+                result = fetchSailSysHandicaps(url);
+            else if (lower.contains("topyacht."))
+                result = fetchTopYachtHandicaps(url);
+            else if (lower.contains("cycaracing.com"))
+                result = fetchBwpsHandicaps(url);
+            else
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "Unrecognised URL — must be a SailSys, TopYacht or BWPS results page"));
+                return;
+            }
+
+            resp.setStatus(200);
+            writeJson(resp, result);
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+        }
+    }
+
+    /** Mirrors {@link WriteAuthFilter}: admin-connector or session-claims counts as authenticated. */
+    private boolean isAuthenticated(HttpServletRequest req)
+    {
+        if (authConfig != null && authConfig.isAdminConnector(req))
+            return true;
+        jakarta.servlet.http.HttpSession session = req.getSession(false);
+        return session != null && session.getAttribute(CLAIMS_ATTR) != null;
+    }
+
+    /** Returns true if the global unauthenticated quota still has capacity, also recording the call. */
+    private synchronized boolean tryConsumeUnauthFetchHcapQuota()
+    {
+        long now = System.currentTimeMillis();
+        long cutoff = now - FETCH_HCAP_WINDOW_MS;
+        while (!unauthFetchHcapTimes.isEmpty() && unauthFetchHcapTimes.peekFirst() < cutoff)
+            unauthFetchHcapTimes.pollFirst();
+        if (unauthFetchHcapTimes.size() >= FETCH_HCAP_UNAUTH_LIMIT)
+            return false;
+        unauthFetchHcapTimes.addLast(now);
+        return true;
+    }
+
+    // --- SailSys ---
+
+    private static final Pattern SAILSYS_RACE_ID = Pattern.compile("/races/(\\d+)");
+
+    /**
+     * Hits the public SailSys race API (same endpoint the importer uses) for the race id
+     * embedded in the URL, and extracts each entrant's allocated handicap. PHS is preferred
+     * over IRC/ORC/AMS so the value is the actual time-on-time multiplier used for scoring
+     * the PHS standings the comparison calculator expects.
+     */
+    private List<Map<String, Object>> fetchSailSysHandicaps(String url) throws Exception
+    {
+        Matcher m = SAILSYS_RACE_ID.matcher(url);
+        if (!m.find())
+            throw new IllegalArgumentException("Could not extract SailSys race id from URL");
+        String raceId = m.group(1);
+        String apiUrl = "https://api.sailsys.com.au/api/v1/races/" + raceId + "/resultsentrants/display";
+
+        ContentResponse response = httpClient.GET(apiUrl);
+        if (response.getStatus() != 200)
+            throw new RuntimeException("SailSys API returned HTTP " + response.getStatus());
+
+        Map<String, Object> root = MAPPER.readValue(response.getContentAsString(), Map.class);
+        Map<String, Object> data = (Map<String, Object>) root.get("data");
+        if (data == null)
+            throw new RuntimeException("SailSys response missing 'data'");
+
+        // Map each handicap-system id → shortName so we can find the PHS row.
+        List<Map<String, Object>> handicappings = (List<Map<String, Object>>) data.get("handicappings");
+        Integer phsId = null;
+        Integer fallbackId = null;  // first system, used only when PHS isn't present
+        if (handicappings != null)
+        {
+            for (Map<String, Object> h : handicappings)
+            {
+                Object id = h.get("id");
+                Object shortName = h.get("shortName");
+                if (!(id instanceof Number)) continue;
+                int idInt = ((Number) id).intValue();
+                if (fallbackId == null) fallbackId = idInt;
+                if ("PHS".equalsIgnoreCase(String.valueOf(shortName)))
+                {
+                    phsId = idInt;
+                    break;
+                }
+            }
+        }
+        Integer chosenId = phsId != null ? phsId : fallbackId;
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        List<Map<String, Object>> divisions = (List<Map<String, Object>>) data.get("competitors");
+        if (divisions == null) return result;
+
+        for (Map<String, Object> div : divisions)
+        {
+            List<Map<String, Object>> items = (List<Map<String, Object>>) div.get("items");
+            if (items == null) continue;
+            for (Map<String, Object> entry : items)
+            {
+                Map<String, Object> boat = (Map<String, Object>) entry.get("boat");
+                if (boat == null) continue;
+                String sailNo = stringOf(boat.get("sailNumber"));
+                String name = stringOf(boat.get("name"));
+                if (sailNo == null && name == null) continue;
+
+                Double hcap = null;
+                if (chosenId != null)
+                {
+                    List<Map<String, Object>> calcs = (List<Map<String, Object>>) entry.get("calculations");
+                    if (calcs != null)
+                    {
+                        for (Map<String, Object> c : calcs)
+                        {
+                            Object defId = c.get("handicapDefinitionId");
+                            if (defId instanceof Number && ((Number) defId).intValue() == chosenId)
+                            {
+                                Object v = c.get("handicapCreatedFrom");
+                                if (v instanceof Number) hcap = ((Number) v).doubleValue();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (hcap == null) continue;
+                result.add(handicapEntry(sailNo, name, hcap));
+            }
+        }
+        return result;
+    }
+
+    // --- TopYacht ---
+
+    /**
+     * Fetches a TopYacht results- or entrants-HTML page and parses its tables.
+     * Prefers a published TCF/AHC/PHC column when present; falls back to converting
+     * a PURHC minute-penalty into a TCF using the boat's known PF (defaulting to 1.0).
+     */
+    private List<Map<String, Object>> fetchTopYachtHandicaps(String url) throws Exception
+    {
+        ContentResponse response = httpClient.GET(url);
+        if (response.getStatus() != 200)
+            throw new RuntimeException("TopYacht returned HTTP " + response.getStatus());
+
+        Document doc = Jsoup.parse(response.getContentAsString(), url);
+        Elements tables = doc.select("table.centre_results_table, table.centre_entrants_table");
+        if (tables.isEmpty())
+            tables = doc.select("table");  // last-resort fallback
+
+        // Collect rows across all tables, keyed by sail number so multi-system pages merge.
+        Map<String, Map<String, Object>> bySail = new LinkedHashMap<>();
+        for (Element table : tables)
+        {
+            Element headerRow = table.selectFirst("tr.type1");
+            if (headerRow == null) headerRow = table.selectFirst("tr");
+            if (headerRow == null) continue;
+
+            Elements headers = headerRow.select("td, th");
+            int sailIdx = -1, nameIdx = -1, tcfIdx = -1, purhcIdx = -1;
+            for (int i = 0; i < headers.size(); i++)
+            {
+                String h = headers.get(i).text().trim().toLowerCase(Locale.ENGLISH);
+                if (h.contains("sail")) sailIdx = i;
+                else if ((h.contains("boat") || h.equals("name") || h.contains("yacht")) && nameIdx < 0) nameIdx = i;
+                else if ((h.equals("tcf") || h.equals("ahc") || h.equals("phc") || h.equals("hcap")) && tcfIdx < 0) tcfIdx = i;
+                else if (h.equals("purhc") || h.equals("pur") || h.contains("urhc")) purhcIdx = i;
+            }
+            if (sailIdx < 0 || nameIdx < 0) continue;
+            if (tcfIdx < 0 && purhcIdx < 0) continue;
+
+            for (Element row : table.select("tr.type3, tr.type4, tbody tr"))
+            {
+                Elements cells = row.select("td");
+                if (cells.size() <= Math.max(sailIdx, nameIdx)) continue;
+                String sailNo = cells.get(sailIdx).text().trim();
+                String name   = cells.get(nameIdx).text().trim();
+                if (sailNo.isBlank() || name.isBlank()) continue;
+
+                Double hcap = null;
+                if (tcfIdx >= 0 && tcfIdx < cells.size())
+                    hcap = parseDoubleOrNull(cells.get(tcfIdx).text());
+                if (hcap == null && purhcIdx >= 0 && purhcIdx < cells.size())
+                {
+                    Double purhcMinutes = parseDoubleOrNull(cells.get(purhcIdx).text());
+                    if (purhcMinutes != null)
+                        hcap = tcfFromPurhc(sailNo, name, purhcMinutes);
+                }
+                if (hcap == null) continue;
+
+                bySail.putIfAbsent(sailNo, handicapEntry(sailNo, name, hcap));
+            }
+        }
+        return new ArrayList<>(bySail.values());
+    }
+
+    /**
+     * Converts a PURHC minute-penalty into a time-on-time TCF, anchored on a one-hour
+     * reference race so that PURHC=0 maps to the boat's known PF (defaulting to 1.0).
+     * The conversion is intentionally rough — it only needs to seed the PHS calculator
+     * with sensible per-boat handicaps that scale correctly relative to one another.
+     */
+    private double tcfFromPurhc(String sailNo, String name, double purhcMinutes)
+    {
+        double pf = lookupKnownPf(sailNo, name);
+        return pf * (60.0 / (60.0 + purhcMinutes));
+    }
+
+    private double lookupKnownPf(String sailNo, String name)
+    {
+        Boat match = findBoat(sailNo, name);
+        if (match == null) return 1.0;
+        BoatDerived bd = cache.boatDerived().get(match.id());
+        if (bd == null || bd.pf() == null) return 1.0;
+        Factor spin = bd.pf().spin();
+        if (spin != null) return spin.value();
+        Factor ns = bd.pf().nonSpin();
+        if (ns != null) return ns.value();
+        return 1.0;
+    }
+
+    // --- BWPS ---
+
+    /**
+     * Fetches a BWPS standings page and extracts each yacht's HCAP. Sail numbers are
+     * resolved from our local boat store by name (BWPS standings rows don't carry sail
+     * numbers; the boat-detail page does, but fetching one per row would be too slow).
+     */
+    private List<Map<String, Object>> fetchBwpsHandicaps(String url) throws Exception
+    {
+        ContentResponse response = httpClient.GET(url);
+        if (response.getStatus() != 200)
+            throw new RuntimeException("BWPS returned HTTP " + response.getStatus());
+
+        Document doc = Jsoup.parse(response.getContentAsString(), url);
+        Element table = doc.selectFirst("table.standings");
+        if (table == null)
+            throw new RuntimeException("BWPS standings table not found");
+
+        // Locate the HCAP column index from the header.
+        int hcapIdx = -1, nameIdx = 1;
+        Element headerRow = table.selectFirst("thead tr");
+        if (headerRow != null)
+        {
+            Elements ths = headerRow.select("th");
+            for (int i = 0; i < ths.size(); i++)
+            {
+                String h = ths.get(i).text().trim().toLowerCase(Locale.ENGLISH);
+                if (h.equals("hcap")) hcapIdx = i;
+                else if (h.equals("yacht") || h.contains("boat")) nameIdx = i;
+            }
+        }
+        if (hcapIdx < 0)
+            throw new RuntimeException("BWPS standings table has no HCAP column");
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Element row : table.select("tbody tr"))
+        {
+            Elements cells = row.select("td");
+            if (cells.size() <= Math.max(nameIdx, hcapIdx)) continue;
+            Element nameCell = cells.get(nameIdx);
+            Element link = nameCell.selectFirst("a[href]");
+            String name = (link != null ? link.text() : nameCell.text()).trim();
+            Double hcap = parseDoubleOrNull(cells.get(hcapIdx).text());
+            if (name.isBlank() || hcap == null) continue;
+            Boat boat = findBoat(null, name);
+            String sailNo = boat != null ? boat.sailNumber() : null;
+            result.add(handicapEntry(sailNo, name, hcap));
+        }
+        return result;
+    }
+
+    // --- Helpers ---
+
+    private Boat findBoat(String sailNo, String name)
+    {
+        String normSail = sailNo != null ? sailNo.replaceAll("\\s+", "").toUpperCase(Locale.ENGLISH) : null;
+        String normName = name != null ? name.trim().toLowerCase(Locale.ENGLISH) : null;
+        Boat sailMatch = null;
+        Boat nameMatch = null;
+        int nameMatches = 0;
+        for (Boat b : store.boats().values())
+        {
+            if (normSail != null && b.sailNumber() != null
+                && b.sailNumber().replaceAll("\\s+", "").equalsIgnoreCase(normSail))
+            {
+                sailMatch = b;
+                break;
+            }
+            if (normName != null && b.name() != null && b.name().toLowerCase(Locale.ENGLISH).equals(normName))
+            {
+                nameMatch = b;
+                nameMatches++;
+            }
+        }
+        if (sailMatch != null) return sailMatch;
+        return nameMatches == 1 ? nameMatch : null;
+    }
+
+    private static Map<String, Object> handicapEntry(String sailNo, String name, Double handicap)
+    {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("sailno", sailNo);
+        m.put("name", name);
+        m.put("handicap", handicap);
+        return m;
+    }
+
+    private static String stringOf(Object o)
+    {
+        if (o == null) return null;
+        String s = o.toString().trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private static Double parseDoubleOrNull(String text)
+    {
+        if (text == null) return null;
+        String t = text.trim().replace(",", "");
+        if (t.isEmpty()) return null;
+        try { return Double.parseDouble(t); }
+        catch (NumberFormatException e) { return null; }
     }
 
     private double medianOf(List<Double> values)

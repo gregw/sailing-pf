@@ -16,14 +16,16 @@ import java.util.Set;
 class WriteAuthFilter implements Filter
 {
     private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
-    /** POST endpoints that are open to unauthenticated users (read-only request logging). */
+    /** POST endpoints that are open to unauthenticated users (read-only request logging,
+     *  plus the comparison handicap-fetch endpoint which is rate-limited inside the handler). */
     private static final Set<String> OPEN_POST_PATHS = Set.of(
         "/api/boats/merge-request", "/api/designs/merge-request",
         "/api/boats/edit-request", "/api/designs/edit-request",
         "/api/boats/exclude-request", "/api/designs/exclude-request",
         "/api/clubs/exclude-request", "/api/races/exclude-request",
         "/api/series/exclude-request",
-        "/api/designs/ignore-request");
+        "/api/designs/ignore-request",
+        "/api/comparison/fetch-handicaps");
     private final AuthConfig authConfig;
 
     WriteAuthFilter(AuthConfig authConfig)
