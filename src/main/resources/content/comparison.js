@@ -583,6 +583,19 @@ function sortCalcBoats(calcBoats) {
     } else if (col === 'input') {
         // No entered values yet at render time; fall back to PF order so rows aren't arbitrary.
         calcBoats.sort((a, b) => mul * ((a.pf ?? 0) - (b.pf ?? 0)));
+    } else if (col === 'pfDelta' || col === 'rfDelta') {
+        // For delta columns, sort by the delta values from the DOM since they're computed dynamically
+        const deltaValues = new Map();
+        document.querySelectorAll(`.pf-calc-value[data-factor-type="${col}"]`).forEach(td => {
+            const boatId = td.dataset.boatId;
+            const delta = parseFloat(td.textContent) || 0;
+            deltaValues.set(boatId, delta);
+        });
+        calcBoats.sort((a, b) => {
+            const av = deltaValues.get(a.id) ?? 0;
+            const bv = deltaValues.get(b.id) ?? 0;
+            return mul * (av - bv);
+        });
     } else {
         calcBoats.sort((a, b) => {
             const av = a[col], bv = b[col];
@@ -627,6 +640,7 @@ function confidenceLabel(cv) {
 
 // Small inline delta indicator: shows how the displayed cell value differs from the
 // column's original (PF / RF / Best Fit) allocation.
+// TODO REMOVE
 function deltaSpan(displayed, orig) {
     if (orig == null || isNaN(orig)) return '';
     const delta = displayed - orig;
@@ -634,13 +648,25 @@ function deltaSpan(displayed, orig) {
     const arrow = delta > 0 ? '↑' : '↓';
     const sign = delta > 0 ? '+' : '−';
     const color = delta > 0 ? '#a04020' : '#206020';
-    return ` <span style="font-size:0.72rem;color:${color};margin-left:4px;font-weight:normal;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
+    return ` <span style="font-size:0.5rem;color:${color};margin-left:4px;font-weight:normal;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
 }
 
 function restoreAll() {
     document.querySelectorAll('.pf-calc-value').forEach(td => {
         const origStr = td.dataset.origValue;
         td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
+        td.style.color = '';
+        td.title = '';
+    });
+
+    // Clear delta columns
+    document.querySelectorAll('.pf-calc-value[data-factor-type="pfDelta"]').forEach(td => {
+        td.textContent = '';
+        td.style.color = '';
+        td.title = '';
+    });
+    document.querySelectorAll('.pf-calc-value[data-factor-type="rfDelta"]').forEach(td => {
+        td.textContent = '';
         td.style.color = '';
         td.title = '';
     });
@@ -740,8 +766,7 @@ function scaleMulti(anchors, calcBoats) {
         if (isAnchor) {
             // Show the entered value; delta is entered − consensus prediction (origVal * R).
             const a = anchorByBoat.get(boatId);
-            const predicted = origVal * stats.R;
-            td.innerHTML = a.value.toFixed(4) + deltaSpan(a.value, predicted);
+            td.textContent = a.value.toFixed(4);
             // Color: fit quality — how far this boat's ratio is from consensus
             const r = stats.ratioMap.get(boatId);
             if (r != null) {
@@ -760,6 +785,51 @@ function scaleMulti(anchors, calcBoats) {
             td.title = confidenceLabel(stats.cv);
         }
     });
+
+    // Update delta columns
+    calcBoats.forEach(boat => {
+        const boatId = boat.id;
+        const isAnchor = anchorIds.has(boatId);
+        const anchor = anchorByBoat.get(boatId);
+
+        // PF Delta
+        const pfStats = ftStats['pf'];
+        if (pfStats && pfStats.ratios.length > 1) {
+            const pfDeltaCell = document.querySelector(`.pf-calc-value[data-boat-id="${boatId}"][data-factor-type="pfDelta"]`);
+            if (pfDeltaCell) {
+                if (isAnchor && anchor) {
+                    const predicted = boat.pf * pfStats.R;
+                    const delta = anchor.value - predicted;
+                    pfDeltaCell.textContent = delta.toFixed(4);
+                    pfDeltaCell.style.color = delta > 0 ? '#a04020' : '#206020';
+                    pfDeltaCell.title = `Entered: ${anchor.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
+                } else {
+                    pfDeltaCell.textContent = '0.0000';
+                    pfDeltaCell.style.color = '';
+                    pfDeltaCell.title = 'Consensus prediction (no delta)';
+                }
+            }
+        }
+
+        // RF Delta
+        const rfStats = ftStats['rf'];
+        if (rfStats && rfStats.ratios.length > 1 && boat.rf != null) {
+            const rfDeltaCell = document.querySelector(`.pf-calc-value[data-boat-id="${boatId}"][data-factor-type="rfDelta"]`);
+            if (rfDeltaCell) {
+                if (isAnchor && anchor) {
+                    const predicted = boat.rf * rfStats.R;
+                    const delta = anchor.value - predicted;
+                    rfDeltaCell.textContent = delta.toFixed(4);
+                    rfDeltaCell.style.color = delta > 0 ? '#a04020' : '#206020';
+                    rfDeltaCell.title = `Entered: ${anchor.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
+                } else {
+                    rfDeltaCell.textContent = '0.0000';
+                    rfDeltaCell.style.color = '';
+                    rfDeltaCell.title = 'Consensus prediction (no delta)';
+                }
+            }
+        }
+    });
 }
 
 function recalcAll(calcBoats) {
@@ -768,12 +838,18 @@ function recalcAll(calcBoats) {
         const v = parseFloat(inp.value);
         if (!isNaN(v)) {
             const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
-            if (boat) anchors.push({ boat, value: v });
+            if (boat) anchors.push({boat, value: v});
         }
     });
 
-    if (anchors.length === 0) { restoreAll(); return; }
-    if (anchors.length === 1) { scaleSingle(anchors[0], calcBoats); return; }
+    if (anchors.length === 0) {
+        restoreAll();
+        return;
+    }
+    if (anchors.length === 1) {
+        scaleSingle(anchors[0], calcBoats);
+        return;
+    }
     scaleMulti(anchors, calcBoats);
 }
 
