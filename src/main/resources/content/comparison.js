@@ -490,7 +490,9 @@ function renderHandicapCalc(data) {
         { key: 'name',  label: 'Boat',           align: 'left'   },
         { key: 'input', label: 'Enter handicap', align: 'center' },
         { key: 'pf',   label: 'PF',            align: 'right'  },
+        {key: 'pfDelta', label: 'PFΔ', align: 'right'},
         { key: 'rf',    label: 'RF',             align: 'right'  },
+        {key: 'rfDelta', label: 'RFΔ', align: 'right'},
     ];
     if (showBestFit) cols.push({ key: 'bestFit', label: 'Best Fit', align: 'right' });
 
@@ -550,10 +552,18 @@ function renderHandicapCalc(data) {
                 td.className = 'pf-calc-value';
                 td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
                 const v = b[c.key];
-                td.textContent = v != null ? v.toFixed(4) : '—';
-                td.dataset.boatId = b.id;
-                td.dataset.factorType = c.key;
-                td.dataset.origValue = v != null ? String(v) : '';
+                if (c.key === 'pfDelta' || c.key === 'rfDelta') {
+                    // Delta columns start empty, will be filled by scaling functions
+                    td.textContent = '';
+                    td.dataset.boatId = b.id;
+                    td.dataset.factorType = c.key;
+                    td.dataset.origValue = '';
+                } else {
+                    td.textContent = v != null ? v.toFixed(4) : '—';
+                    td.dataset.boatId = b.id;
+                    td.dataset.factorType = c.key;
+                    td.dataset.origValue = v != null ? String(v) : '';
+                }
                 tr.appendChild(td);
             }
         });
@@ -657,6 +667,18 @@ function scaleSingle(anchor, calcBoats) {
         td.textContent = newVal.toFixed(4);
         td.style.color = '#c05000';
         td.title = 'Scaled from single entered value — no consensus spread available';
+    });
+
+    // Clear delta columns for single anchor (delta is always 0)
+    document.querySelectorAll('.pf-calc-value[data-factor-type="pfDelta"]').forEach(td => {
+        td.textContent = '';
+        td.style.color = '';
+        td.title = '';
+    });
+    document.querySelectorAll('.pf-calc-value[data-factor-type="rfDelta"]').forEach(td => {
+        td.textContent = '';
+        td.style.color = '';
+        td.title = '';
     });
 }
 

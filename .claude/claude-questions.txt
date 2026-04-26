@@ -1,8 +1,4 @@
 
 
-Use sailsys cache for handicap fetch?
-
-Modify div plots to plot RF on X axis for RF corrected time dots.
-
 Show allocated handicap results in division chart.
 

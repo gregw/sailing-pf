@@ -1657,17 +1657,26 @@ function renderDivisionChart(data) {
     const names   = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
     const elapsed = finishers.map(f => f.elapsed / 60);
     const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
-    const rfCorr  = finishers.map(f => f.rfCorrected  != null ? f.rfCorrected  / 60 : null);
+
+    // RF trace plots (rf, rfCorrected) — independent x values from PF, sorted so the line is monotonic.
+    const rfFinishers = finishers
+        .map(f => ({f, rf: f.rf, rfCorrMin: f.rfCorrected != null ? f.rfCorrected / 60 : null}))
+        .filter(o => o.rf != null && o.rfCorrMin != null)
+        .sort((a, b) => a.rf - b.rf);
+    const rfXs = rfFinishers.map(o => o.rf);
+    const rfCorr = rfFinishers.map(o => o.rfCorrMin);
+    const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
+    const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
 
     // Vertical error bars on corrected times: factor uncertainty propagates multiplicatively
     // to the corrected time — e.g. PF_upper_time = elapsed * pf_upper / 60
-    function yErrArrays(finishers, factorKey, weightKey) {
-        const plus  = finishers.map(f => {
+    function yErrArrays(rows, factorKey, weightKey) {
+        const plus = rows.map(f => {
             if (!showRaceErrorBars || !f[weightKey] || !f[factorKey]) return 0;
             const b = errorBounds(f[factorKey], f[weightKey]);
             return b ? f.elapsed / 60 * (b.upper - f[factorKey]) : 0;
         });
-        const minus = finishers.map(f => {
+        const minus = rows.map(f => {
             if (!showRaceErrorBars || !f[weightKey] || !f[factorKey]) return 0;
             const b = errorBounds(f[factorKey], f[weightKey]);
             return b ? f.elapsed / 60 * (f[factorKey] - b.lower) : 0;
@@ -1676,9 +1685,9 @@ function renderDivisionChart(data) {
                  visible: showRaceErrorBars, thickness: 1.5, width: 4 };
     }
 
-    function hoverTexts(label, times) {
+    function hoverTexts(label, times, labels) {
         return times.map((t, i) =>
-            t != null ? `${esc(names[i])}<br>${label}: ${fmtTime(t * 60)}` : '');
+            t != null ? `${esc(labels[i])}<br>${label}: ${fmtTime(t * 60)}` : '');
     }
 
     const boatCustom = finishers.map(f => ({ boatId: f.boatId }));
@@ -1686,15 +1695,19 @@ function renderDivisionChart(data) {
     const traces = [
         { x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
           line: { dash: 'dash', color: '#555', width: 1.5 }, marker: { size: 7 },
-          text: hoverTexts('Elapsed', elapsed), hoverinfo: 'text', customdata: boatCustom },
+            text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'text', customdata: boatCustom
+        },
         { x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
           line: { dash: 'solid', color: '#2255aa', width: 2 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
-          text: hoverTexts('PF corrected', pfCorr), hoverinfo: 'text', customdata: boatCustom },
-        ...(showRaceRfLine ? [{ x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+            text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+        },
+        ...(showRaceRfLine && rfFinishers.length > 0 ? [{
+            x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
           line: { dash: 'dot', color: '#c47900', width: 1.5 }, marker: { size: 7 },
-          error_y: yErrArrays(finishers, 'rf', 'rfWeight'),
-          text: hoverTexts('RF corrected', rfCorr), hoverinfo: 'text', customdata: boatCustom }] : [])
+            error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
+            text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
+        }] : [])
     ];
 
     if (showRaceTrendLine) {
@@ -1727,7 +1740,7 @@ function renderDivisionChart(data) {
     // Boat name labels: vertical text rising above each finisher's slowest-time point,
     // so they sit in the top margin and never overlap the bars.
     const annotations = finishers.map((f, i) => {
-        const ys = [elapsed[i], pfCorr[i], rfCorr[i]].filter(v => v != null);
+        const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
         const maxY = Math.max(...ys);
         return {
             x: xs[i], y: maxY,
@@ -1743,7 +1756,10 @@ function renderDivisionChart(data) {
     });
 
     const layout = {
-        xaxis: { title: 'PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal' },
+        xaxis: {
+            title: showRaceRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF',
+            rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
+        },
         yaxis: { title: 'Time (min)', tickformat: '.1f',
                  rangemode: getDivChartYFromZero() ? 'tozero' : 'normal' },
         legend: { orientation: 'h', y: -0.18 },
