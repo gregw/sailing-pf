@@ -1,3 +1,10 @@
 
 
-Don't merge back RF for designs with "Modified" in their name.
+Use sailsys cache for handicap fetch?
+
+Support CSV format files with sailno,name,PHS for handicap fetch.  Use the same format for a save/download option.
+
+Modify div plots to plot RF on X axis for RF corrected time dots.
+
+Show allocated handicap results in division chart.
+

@@ -76,6 +76,13 @@
       Enter a handicap for any boat — all three columns are scaled accordingly.
     </p>
     <table class="pf-calc-table"></table>
+
+      <div id="fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
+          <label for="handicap-url">Fetch handicaps from:</label>
+          <input type="url" id="handicap-url" placeholder="https://example.com/handicaps.json" style="margin-left:0.5rem;width:400px;padding:4px;">
+          <button id="fetch-handicaps-btn" style="margin-left:0.5rem;padding:4px 12px;">Fetch</button>
+          <div id="fetch-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+      </div>
   </div>
 
   <div id="elapsed-charts-section" style="display:none; margin-top:1.5rem;">

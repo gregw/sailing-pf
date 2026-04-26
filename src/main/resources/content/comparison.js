@@ -26,6 +26,7 @@ let focusedBoatId   = null;
 let boatDebounce    = null;
 let lastChartData   = null;
 let calcSort        = { col: 'pf', dir: 'desc' }; // handicap calculator sort state
+let currentCalcBoats = []; // current boats in the calculator
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -463,11 +464,15 @@ function renderHandicapCalc(data) {
 
         return {
             id: b.id, name, color,
+            sailNumber: b.sailNumber || null,
+            boatName: b.name || null,
             pf:     pfFactor ? pfFactor.value : null,
             rf:      rfFactor  ? rfFactor.value  : null,
             bestFit
         };
     }).filter(b => b.pf != null);
+
+    currentCalcBoats = calcBoats;
 
     if (calcBoats.length === 0) {
         section.style.display = 'none';
@@ -610,6 +615,18 @@ function confidenceLabel(cv) {
     return `Scaled from consensus — spread ${pct}% (very low confidence)`;
 }
 
+// Small inline delta indicator: shows how the displayed cell value differs from the
+// column's original (PF / RF / Best Fit) allocation.
+function deltaSpan(displayed, orig) {
+    if (orig == null || isNaN(orig)) return '';
+    const delta = displayed - orig;
+    if (Math.abs(delta) < 0.00005) return '';
+    const arrow = delta > 0 ? '↑' : '↓';
+    const sign = delta > 0 ? '+' : '−';
+    const color = delta > 0 ? '#a04020' : '#206020';
+    return ` <span style="font-size:0.72rem;color:${color};margin-left:4px;font-weight:normal;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
+}
+
 function restoreAll() {
     document.querySelectorAll('.pf-calc-value').forEach(td => {
         const origStr = td.dataset.origValue;
@@ -733,6 +750,127 @@ function recalcAll(calcBoats) {
     if (anchors.length === 0) { restoreAll(); return; }
     if (anchors.length === 1) { scaleSingle(anchors[0], calcBoats); return; }
     scaleMulti(anchors, calcBoats);
+}
+
+// --- Sail-number / boat-name normalisation ---
+//
+// The functions below intentionally duplicate the back-end normalisation logic so that the
+// front-end matches what the importers already do when the same boat is encountered from
+// multiple data sources. Keep these in sync with the referenced Java methods.
+
+/** Mirrors org.mortbay.sailing.pf.importer.IdGenerator#normaliseSailNumber:
+ *  uppercase, strip ALL non-[A-Z0-9] characters. */
+function normaliseSailNumber(raw) {
+    if (raw == null) return '';
+    return String(raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** Australian country/fleet sail-number prefixes — mirrors AUS_PREFIXES in
+ *  org.mortbay.sailing.pf.store.Aliases. JAUS is listed before AUS so "JAUS103" → "103",
+ *  not "US103". */
+const SAIL_PREFIXES = ['JAUS', 'EAUS', 'VAUS', 'SAUS', 'AUS'];
+
+/** Mirrors org.mortbay.sailing.pf.store.Aliases#stripPrefix: strip a known Australian
+ *  country/fleet prefix (only when at least one digit follows) AND any leading zeros, so
+ *  "AUS5656", "0103", and "AUS00103" all collapse to "5656" / "103" / "103". */
+function stripPrefix(normSail) {
+    if (normSail == null || normSail.length === 0) return normSail;
+    for (const prefix of SAIL_PREFIXES) {
+        if (normSail.startsWith(prefix) && normSail.length > prefix.length
+            && /\d/.test(normSail.charAt(prefix.length))) {
+            normSail = normSail.slice(prefix.length);
+            break;
+        }
+    }
+    while (normSail.length > 1 && normSail.charAt(0) === '0' && /\d/.test(normSail.charAt(1)))
+        normSail = normSail.slice(1);
+    return normSail;
+}
+
+/** Mirrors org.mortbay.sailing.pf.importer.IdGenerator#normaliseDesignName:
+ *  lowercase, strip ALL non-[a-z0-9] characters. Used here for boat-name matching as the
+ *  same collapsing rules apply ("Raging Bull" / "raging-bull" / "RagingBull" → "ragingbull"). */
+function normaliseDesignName(raw) {
+    if (raw == null) return '';
+    return String(raw).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Returns true if {@code candidate} and {@code target} sail numbers identify the same boat,
+ *  applying the same two-step normalisation the importers use: normaliseSailNumber + stripPrefix. */
+function sailnoMatch(candidate, target) {
+    if (candidate == null || target == null) return false;
+    const c = stripPrefix(normaliseSailNumber(candidate));
+    const t = stripPrefix(normaliseSailNumber(target));
+    return c.length > 0 && c === t;
+}
+
+async function fetchHandicaps(calcBoats) {
+    const url = document.getElementById('handicap-url').value.trim();
+    const statusDiv = document.getElementById('fetch-status');
+    const btn = document.getElementById('fetch-handicaps-btn');
+
+    if (!url) {
+        statusDiv.textContent = 'Please enter a URL';
+        statusDiv.style.color = '#c62828';
+        return;
+    }
+
+    statusDiv.textContent = 'Fetching...';
+    statusDiv.style.color = '#666';
+    btn.disabled = true;
+
+    try {
+        const resp = await fetch('/api/comparison/fetch-handicaps', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({url})
+        });
+
+        if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+
+        const data = await resp.json();
+        if (!Array.isArray(data)) {
+            throw new Error('Expected array of handicaps');
+        }
+
+        let matched = 0;
+        data.forEach(item => {
+            if (item.handicap == null) return;
+            // Primary: sail number matched the importer way (normaliseSailNumber + stripPrefix).
+            // Fallback: boat name compared via normaliseDesignName, used only when sail
+            // numbers don't carry enough info (e.g. BWPS, where the standings page doesn't
+            // publish sail numbers and we report what the local store has — sometimes null).
+            let boat = null;
+            if (item.sailno) {
+                boat = calcBoats.find(b => sailnoMatch(b.sailNumber, item.sailno));
+            }
+            if (!boat && item.name) {
+                const target = normaliseDesignName(item.name);
+                if (target) boat = calcBoats.find(b => normaliseDesignName(b.boatName) === target);
+            }
+            if (boat) {
+                const input = document.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
+                if (input) {
+                    input.value = item.handicap.toString();
+                    matched++;
+                }
+            }
+        });
+
+        statusDiv.textContent = `Fetched ${data.length} handicaps, matched ${matched} boats`;
+        statusDiv.style.color = matched > 0 ? '#2e7d32' : '#c62828';
+
+        // Trigger recalculation
+        recalcAll(calcBoats);
+
+    } catch (error) {
+        statusDiv.textContent = `Error: ${error.message}`;
+        statusDiv.style.color = '#c62828';
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 // ---- Elapsed time comparison charts ----
@@ -964,6 +1102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         boatDebounce = setTimeout(loadCandidates, 250);
     });
     document.getElementById('add-boat-btn').addEventListener('click', addBoat);
+    document.getElementById('fetch-handicaps-btn').addEventListener('click', () => fetchHandicaps(currentCalcBoats));
     loadCandidates();
     if (selectedItems.length > 0) loadChart();
 });
