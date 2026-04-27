@@ -122,7 +122,7 @@ const COLUMNS = {
                   : '<span style="color:#bbb">—</span>';
           } },
         { label: 'PP', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
-          tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, NonChaotic and Stability spokes (last 12 months).',
+            tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, Chaotic and Stability spokes (last 12 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         clubColumn('col-boat-club', 'clubId'),
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
@@ -660,7 +660,7 @@ function renderBoatPf(data) {
 
     if (data.profile) {
         const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile','Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. NonChaotic: whether inconsistency correlates with fleet-wide conditions. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. Chaotic: whether inconsistency correlates with fleet-wide conditions. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
         html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
@@ -774,9 +774,9 @@ function renderProfileChart(profile) {
     const container = document.getElementById('pf-profile-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
-    // Spoke order matches polygon area calculation: Frequency, Consistency, Diversity, NonChaotic, Stability
-    const labels = ['Frequency', 'Consistency', 'Diversity', 'NonChaotic', 'Stability'];
-    const keys   = ['frequency', 'consistency', 'diversity', 'nonChaotic', 'stability'];
+    // Spoke order matches polygon area calculation: Frequency, Consistency, Diversity, Chaotic, Stability
+    const labels = ['Frequency', 'Consistency', 'Diversity', 'Chaotic', 'Stability'];
+    const keys = ['frequency', 'consistency', 'diversity', 'chaotic', 'stability'];
     const values = keys.map(k => profile[k] ?? 0);
 
     // Close the polygon

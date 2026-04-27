@@ -687,7 +687,7 @@ public class AdminApiServlet extends HttpServlet
         m.put("diversity",    p.diversity());
         m.put("consistency",  p.consistency());
         m.put("stability",    p.stability());
-        m.put("nonChaotic",   p.nonChaotic());
+        m.put("chaotic", p.chaotic());
         m.put("overallScore", p.overallScore());
         return m;
     }

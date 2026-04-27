@@ -1,9 +1,5 @@
 package org.mortbay.sailing.pf.analysis;
 
-import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.Finisher;
-import org.mortbay.sailing.pf.data.Race;
-
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -15,6 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+
 /**
  * Builds fleet-relative {@link PerformanceProfile}s for all boats in one pass.
  * <p>
@@ -22,7 +22,7 @@ import java.util.Set;
  * percentile rank within the active fleet (boats with ≥1 finish in the window),
  * normalised to [0, 1] — 1.0 = best in fleet, 0.0 = worst.
  * <p>
- * Spoke definitions (pentagon order: Frequency → Consistency → Diversity → NonChaotic → Stability):
+ * Spoke definitions (pentagon order: Frequency → Consistency → Diversity → Chaotic → Stability):
  * <ul>
  *   <li><b>Frequency</b> — duration-weighted distinct race count in last 12m, multiplied by a
  *       small year-spread bonus (boats racing across many months score slightly higher than
@@ -32,7 +32,7 @@ import java.util.Set;
  *       untapped potential and a genuinely inconsistent boat. Lower raw = better rank</li>
  *   <li><b>Diversity</b> — variant-weighted Σ(√encounters) over distinct (opponent, variant)
  *       pairs; rewards both breadth of opposition and frequency of meeting it</li>
- *   <li><b>NonChaotic</b> — mean squared residual weighted inversely by fleet dispersion;
+ *   <li><b>Chaotic</b> — mean squared residual weighted inversely by fleet dispersion;
  *       large residuals on calm days are penalised more than large residuals on chaotic days,
  *       so boats with small residuals in chaos rank best, and boats with large residuals in
  *       calm conditions rank worst. Lower raw = better rank</li>
@@ -44,7 +44,7 @@ import java.util.Set;
 public class PerformanceProfileBuilder
 {
     private static final int RECENT_DAYS = 365;
-    private static final int MIN_NONCHAOTIC_PAIRS = 5;
+    private static final int MIN_CHAOTIC_PAIRS = 5;
 
     /** A race 2× longer than the fleet median counts this many times more in the Frequency spoke. */
     private static final double FREQUENCY_DURATION_SCALE = 1.2;
@@ -67,7 +67,7 @@ public class PerformanceProfileBuilder
     private static final double CONSISTENCY_FAST_WEIGHT = 1.5;
 
     /**
-     * Floor added to dispersion in the NonChaotic 1/dispersion weighting to avoid
+     * Floor added to dispersion in the Chaotic 1/dispersion weighting to avoid
      * blow-ups when dispersion is near zero (very tight fleet day).
      */
     private static final double DISPERSION_EPSILON = 0.01;
@@ -152,7 +152,7 @@ public class PerformanceProfileBuilder
         // [1] diversity (variant-weighted Σ√encounters, higher = better),
         // [2] consistency (asymmetric mean r², lower = better),
         // [3] stability (slope penalty, lower = better),
-        // [4] nonChaotic (1/dispersion-weighted mean r², lower = better; NaN if insufficient)
+        // [4] chaotic (1/dispersion-weighted mean r², lower = better; NaN if insufficient)
         Map<String, double[]> raw = new LinkedHashMap<>();
 
         for (Map.Entry<String, List<EntryResidual>> entry : residualsByBoatId.entrySet())
@@ -273,21 +273,21 @@ public class PerformanceProfileBuilder
             // Level (slope ≈ 0) → penalty = 0 → best rank.
             double slopePenalty = computeSlopePenalty(recent);
 
-            // NonChaotic: mean r² weighted by 1/dispersion. Lower = better.
-            double nonChaotic = computeNonChaotic(recent, dispersionByRaceDivision);
+            // Chaotic: mean r² weighted by 1/dispersion. Lower = better.
+            double chaotic = computeChaotic(recent, dispersionByRaceDivision);
 
-            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, nonChaotic});
+            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, chaotic});
         }
 
         if (raw.isEmpty()) return Map.of();
 
         // --- Step 2: percentile rank each metric, build profiles ---
-        // Spoke order for polygon area: Frequency, Consistency, Diversity, NonChaotic, Stability
+        // Spoke order for polygon area: Frequency, Consistency, Diversity, Chaotic, Stability
         double[] freqScores  = percentileRanks(raw, 0, true);
         double[] divScores   = percentileRanks(raw, 1, true);
         double[] consScores  = percentileRanks(raw, 2, false);
         double[] stabScores  = percentileRanks(raw, 3, false);  // lower penalty = better
-        double[] ncScores    = nonChaoticRanks(raw);
+        double[] ncScores = chaoticRanks(raw);
 
         String[] ids = raw.keySet().toArray(new String[0]);
         Map<String, PerformanceProfile> profiles = new LinkedHashMap<>();
@@ -334,11 +334,11 @@ public class PerformanceProfileBuilder
     }
 
     /**
-     * Percentile ranks for NonChaotic (index 4). Boats with NaN penalty (insufficient
+     * Percentile ranks for Chaotic (index 4). Boats with NaN penalty (insufficient
      * paired observations) get score 0. Among boats with a valid penalty, lower penalty
      * = better rank (small residuals on calm days).
      */
-    private static double[] nonChaoticRanks(Map<String, double[]> raw)
+    private static double[] chaoticRanks(Map<String, double[]> raw)
     {
         String[] ids = raw.keySet().toArray(new String[0]);
         int n = ids.length;
@@ -401,10 +401,10 @@ public class PerformanceProfileBuilder
         return slope > 0 ? slope : -slope * 0.5;
     }
 
-    // --- NonChaotic raw metric ---
+    // --- Chaotic raw metric ---
 
     /**
-     * Computes the NonChaotic penalty: mean squared residual weighted inversely by fleet
+     * Computes the Chaotic penalty: mean squared residual weighted inversely by fleet
      * dispersion. Calm conditions (low dispersion → high weight) penalise large residuals
      * heavily; chaotic conditions (high dispersion → low weight) excuse them. Therefore:
      * <ul>
@@ -412,10 +412,10 @@ public class PerformanceProfileBuilder
      *   <li>large residuals on chaotic days → moderate contribution → middle rank</li>
      *   <li>large residuals on calm days → very high contribution → worst rank</li>
      * </ul>
-     * Returns {@link Double#NaN} if fewer than {@link #MIN_NONCHAOTIC_PAIRS} races have
-     * dispersion data; such boats are ranked 0 by {@link #nonChaoticRanks}.
+     * Returns {@link Double#NaN} if fewer than {@link #MIN_CHAOTIC_PAIRS} races have
+     * dispersion data; such boats are ranked 0 by {@link #chaoticRanks}.
      */
-    private static double computeNonChaotic(
+    private static double computeChaotic(
         List<EntryResidual> recent,
         Map<String, Map<String, Double>> dispersionByRaceDivision)
     {
@@ -436,7 +436,8 @@ public class PerformanceProfileBuilder
             count++;
         }
 
-        if (count < MIN_NONCHAOTIC_PAIRS) return Double.NaN;
+        if (count < MIN_CHAOTIC_PAIRS)
+            return Double.NaN;
         return sumW > 1e-12 ? sumWR2 / sumW : Double.NaN;
     }
 
