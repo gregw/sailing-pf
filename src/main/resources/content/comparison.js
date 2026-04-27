@@ -1277,9 +1277,10 @@ function renderInlineDivisionChart() {
         };
     });
 
+    const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;
     const layout = {
         xaxis: {title: 'Handicap (PF)'},
-        yaxis: {title: 'Time (min)', tickformat: '.1f', rangemode: 'tozero'},
+        yaxis: {title: 'Time (min)', tickformat: '.1f', rangemode: yFromZero ? 'tozero' : 'normal'},
         legend: {orientation: 'h', y: -0.18},
         margin: {t: 80, b: 80, l: 60, r: 20},
         hovermode: 'closest',
@@ -1515,6 +1516,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('common-races-only') .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('bcfc-y-from-zero').addEventListener('change', () => {
         if (lastChartData) renderChart(lastChartData);
+        if (inlineDivisionData) renderInlineDivisionChart();
     });
     document.getElementById('boat-search').addEventListener('input', () => {
         clearTimeout(boatDebounce);
