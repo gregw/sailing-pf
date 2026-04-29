@@ -2087,32 +2087,12 @@ function renderDivisionChart(data) {
 // ---- Handicap calculator on the races tab ----
 //
 // Calculator is initialised lazily once the first race is selected. Allocated handicaps
-// are remembered across race selections in sessionStorage as [{sailno, name, handicap}],
-// and re-applied to matching boats whenever a different race is loaded.
+// persist in sessionStorage under ALLOCATED_HANDICAPS_KEY and are shared with the series
+// tab and the boat-comparison page, so entries follow the user across views.
 
-const RACES_HANDICAPS_KEY = 'pf.races.handicaps';
-
-function getRememberedHandicaps() {
-    try {
-        const v = sessionStorage.getItem(RACES_HANDICAPS_KEY);
-        return v ? JSON.parse(v) : [];
-    } catch (e) {
-        return [];
-    }
-}
-
-function setRememberedHandicaps(rows) {
-    try {
-        if (rows && rows.length > 0)
-            sessionStorage.setItem(RACES_HANDICAPS_KEY, JSON.stringify(rows));
-        else
-            sessionStorage.removeItem(RACES_HANDICAPS_KEY);
-    } catch (e) {
-    }
-}
+const ALLOCATED_HANDICAPS_KEY = 'pf.allocated.handicaps';
 
 let raceCalcController = null;
-let raceCalcSuppressChange = false;
 
 function raceCalc() {
     if (raceCalcController) return raceCalcController;
@@ -2120,6 +2100,7 @@ function raceCalc() {
         section: document.getElementById('pf-calc'),
         table: document.querySelector('#pf-calc table'),
         showBestFit: false,
+        sessionKey: ALLOCATED_HANDICAPS_KEY,
         urlInput: document.getElementById('handicap-url'),
         fetchBtn: document.getElementById('fetch-handicaps-btn'),
         fetchStatus: document.getElementById('fetch-status'),
@@ -2128,27 +2109,11 @@ function raceCalc() {
         downloadBtn: document.getElementById('download-handicaps-btn'),
         downloadStatus: document.getElementById('download-status'),
         onChange: () => {
-            if (raceCalcSuppressChange) return;
-            // Merge entered handicaps into remembered set (preserve entries for boats not
-            // currently shown — e.g. boats from other races).
-            const current = raceCalcController.getEnteredHandicaps();
-            const remembered = getRememberedHandicaps();
-            const isCurrent = (item) => current.some(c =>
-                (c.sailno && c.sailno === item.sailno) ||
-                (!c.sailno && c.name && c.name === item.name));
-            const merged = remembered.filter(r => !isCurrent(r)).concat(current);
-            setRememberedHandicaps(merged);
             if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
         }
     });
     const clearBtn = document.getElementById('clear-handicaps-btn');
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-        raceCalcSuppressChange = true;
-        raceCalcController.clearAll();
-        raceCalcSuppressChange = false;
-        setRememberedHandicaps([]);
-        if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
-    });
+    if (clearBtn) clearBtn.addEventListener('click', () => raceCalcController.clearAll());
     return raceCalcController;
 }
 
@@ -2166,48 +2131,41 @@ async function loadRaceHandicapCalc(raceId) {
         rf: b.rf,
         bestFit: null
     }));
-    const ctl = raceCalc();
-    raceCalcSuppressChange = true;
-    ctl.setBoats(boats);
-    const remembered = getRememberedHandicaps();
-    if (remembered.length > 0) ctl.setHandicapsByMatch(remembered);
-    raceCalcSuppressChange = false;
-    // Re-render division chart so the allocated line picks up applied entries.
+    raceCalc().setBoats(boats);
+    // Re-render division chart so the allocated line picks up any applied entries.
     if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
-}
-
-// ---- Compare button ----
-
-const COMPARE_COLORS = [
-    '#3a7ec4', '#e67e22', '#27ae60', '#8e44ad', '#c0392b',
-    '#16a085', '#d35400', '#2c3e50', '#f39c12', '#1abc9c'
-];
-
-function addCompareButton(containerId, boats) {
-    // boats: array of {id, label}
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    if (boats.length === 0) { container.innerHTML = ''; return; }
-    container.innerHTML = '';
-    const btn = document.createElement('button');
-    btn.textContent = `Compare ${boats.length} boats\u2026`;
-    btn.style.marginTop = '0.5rem';
-    btn.onclick = () => {
-        const items = boats.map((b, i) => ({
-            type: 'boat',
-            id: b.id,
-            label: b.label,
-            color: COMPARE_COLORS[i % COMPARE_COLORS.length]
-        }));
-        sessionStorage.setItem('pf-comparison-items', JSON.stringify(items));
-        window.location.href = '/comparison.html';
-    };
-    container.appendChild(btn);
 }
 
 // ---- Series chart ----
 
 let seriesChartData = null;  // last loaded series chart response
+let seriesCurrentDivision = null;  // division name currently displayed
+let seriesPfCalcController = null;
+
+function seriesPfCalc() {
+    if (seriesPfCalcController) return seriesPfCalcController;
+    seriesPfCalcController = HandicapCalc.create({
+        section: document.getElementById('series-pf-calc'),
+        table: document.querySelector('#series-pf-calc table'),
+        showBestFit: false,
+        sessionKey: ALLOCATED_HANDICAPS_KEY,
+        urlInput: document.getElementById('series-handicap-url'),
+        fetchBtn: document.getElementById('series-fetch-handicaps-btn'),
+        fetchStatus: document.getElementById('series-fetch-status'),
+        fileInput: document.getElementById('series-handicap-file'),
+        fileStatus: document.getElementById('series-file-status'),
+        downloadBtn: document.getElementById('series-download-handicaps-btn'),
+        downloadStatus: document.getElementById('series-download-status'),
+        onChange: () => {
+            // Re-render only the chart; the calc has already updated its own DOM.
+            if (seriesChartData && seriesCurrentDivision != null)
+                renderSeriesChartForDivision(seriesCurrentDivision, {refreshCalc: false});
+        }
+    });
+    const clearBtn = document.getElementById('series-clear-handicaps-btn');
+    if (clearBtn) clearBtn.addEventListener('click', () => seriesPfCalcController.clearAll());
+    return seriesPfCalcController;
+}
 
 async function loadSeriesChart(seriesId) {
     const section = document.getElementById('series-chart-section');
@@ -2220,6 +2178,7 @@ async function loadSeriesChart(seriesId) {
         label.textContent = 'No chart data available for this series.';
         document.getElementById('series-division-select').innerHTML = '';
         Plotly.purge('series-chart');
+        seriesPfCalc().setBoats([]);
         return;
     }
 
@@ -2243,9 +2202,37 @@ function onSeriesDivisionChange() {
     renderSeriesChartForDivision(divName);
 }
 
-function renderSeriesChartForDivision(divName) {
+// Build a unique-by-boatId list of {id, name, sailNumber, boatName, pf, rf} for the calc.
+function buildSeriesCalcBoats(data, divName) {
+    const seen = new Map();
+    data.races.forEach(race => {
+        const div = race.divisions.find(d => (d.name || '') === divName);
+        if (!div) return;
+        div.finishers.forEach(f => {
+            if (!f.boatId || f.pf == null || seen.has(f.boatId)) return;
+            seen.set(f.boatId, {
+                id: f.boatId,
+                name: f.sailNumber ? `${f.sailNumber} ${f.name || ''}`.trim() : (f.name || f.boatId),
+                sailNumber: f.sailNumber || null,
+                boatName: f.name || null,
+                pf: f.pf,
+                rf: f.rf != null ? f.rf : null,
+                bestFit: null
+            });
+        });
+    });
+    return [...seen.values()];
+}
+
+function renderSeriesChartForDivision(divName, opts) {
     const data = seriesChartData;
     if (!data) return;
+    seriesCurrentDivision = divName;
+
+    if (!opts || opts.refreshCalc !== false) {
+        seriesPfCalc().setBoats(buildSeriesCalcBoats(data, divName));
+    }
+    const allocByBoat = seriesPfCalc().getEnteredValues();
 
     // Colour palette for races
     const raceColors = [
@@ -2259,6 +2246,7 @@ function renderSeriesChartForDivision(divName) {
     const podiumLabels  = ['1st', '2nd', '3rd'];
 
     const traces = [];
+    let allocatedLegendShown = false;
     data.races.forEach((race, raceIdx) => {
         const color = raceColors[raceIdx % raceColors.length];
         const raceLabel = race.raceName || race.date || race.raceId;
@@ -2272,7 +2260,6 @@ function renderSeriesChartForDivision(divName) {
         // Find the indices of the 3 fastest PF-corrected times
         const sorted = finishers.map((f, i) => ({ i, t: f.pfCorrected }))
             .sort((a, b) => a.t - b.t);
-        const podiumSet = new Set(sorted.slice(0, 3).map(s => s.i));
 
         const xs = finishers.map(f => f.pf);
         const ys = finishers.map(f => f.pfCorrected / 60);
@@ -2285,12 +2272,42 @@ function renderSeriesChartForDivision(divName) {
             x: xs, y: ys,
             mode: 'lines+markers', type: 'scatter',
             name: raceLabel,
+            legendgroup: 'race-' + raceIdx,
             line: { dash: 'solid', color: color, width: 1.5 },
             marker: { size: 5 },
             text: texts,
             hoverinfo: 'text',
             customdata: boatCustom
         });
+
+        // Allocated-handicap corrected line for this race (sorted by allocated handicap)
+        const allocPts = finishers
+            .filter(f => allocByBoat.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
+            .map(f => ({
+                f,
+                handicap: allocByBoat.get(f.boatId),
+                correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
+            }))
+            .sort((a, b) => a.f.pf - b.f.pf);
+        if (allocPts.length > 0) {
+            traces.push({
+                x: allocPts.map(p => p.f.pf),
+                y: allocPts.map(p => p.correctedMin),
+                mode: 'lines+markers', type: 'scatter',
+                name: 'Allocated corrected',
+                legendgroup: 'allocated',
+                showlegend: !allocatedLegendShown,
+                line: {dash: 'dash', color: color, width: 1.5},
+                marker: {size: 5, symbol: 'square'},
+                text: allocPts.map(p =>
+                    `${p.f.sailNumber ? p.f.sailNumber + ' ' : ''}${esc(p.f.name || '')}<br>${esc(raceLabel)}`
+                    + `<br>Allocated: ${p.handicap.toFixed(4)}`
+                    + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                hoverinfo: 'text',
+                customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+            });
+            allocatedLegendShown = true;
+        }
 
         // Add podium markers (1st/2nd/3rd fastest corrected times)
         for (let p = 0; p < Math.min(3, sorted.length); p++) {
@@ -2321,6 +2338,8 @@ function renderSeriesChartForDivision(divName) {
     if (showSeriesOverallTrend) {
         const trend = computeSeriesOverallTrend(data, divName);
         if (trend) traces.push(trend);
+        const allocTrend = computeSeriesAllocatedTrend(data, divName, allocByBoat);
+        if (allocTrend) traces.push(allocTrend);
     }
 
     const layout = {
@@ -2343,19 +2362,6 @@ function renderSeriesChartForDivision(divName) {
         window.location.href = 'data.html?' +
             new URLSearchParams({ tab: 'boats', boatId: pt.customdata.boatId });
     });
-
-    // Compare button: unique boats across all races in this division
-    const seenBoats = new Map();
-    data.races.forEach(race => {
-        const div = race.divisions.find(d => (d.name || '') === divName);
-        if (!div) return;
-        div.finishers.forEach(f => {
-            if (f.boatId && !seenBoats.has(f.boatId))
-                seenBoats.set(f.boatId, f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
-        });
-    });
-    addCompareButton('series-compare-btn-container',
-        [...seenBoats.entries()].map(([id, label]) => ({ id, label })));
 }
 
 /**
@@ -2395,6 +2401,47 @@ function computeSeriesOverallTrend(data, divName) {
         mode: 'lines', type: 'scatter',
         name: `Overall trend (slope ${avgSlope.toFixed(2)})`,
         line: { dash: 'dot', color: '#333', width: 3 },
+        hoverinfo: 'skip'
+    };
+}
+
+/**
+ * Same as computeSeriesOverallTrend, but uses allocated-handicap corrected times
+ * (elapsed * allocatedHandicap) as Y, plotted against PF on X. Returns null when no
+ * allocated handicaps are entered, or when fewer than two races have at least two
+ * allocated finishers.
+ */
+function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
+    if (!allocByBoat || allocByBoat.size === 0) return null;
+    const slopes = [];
+    const allX = [];
+    const allY = [];
+    data.races.forEach(race => {
+        const div = race.divisions.find(d => (d.name || '') === divName);
+        if (!div) return;
+        const finishers = div.finishers.filter(f =>
+            f.pf != null && f.elapsed != null && f.elapsed > 0 && allocByBoat.has(f.boatId));
+        if (finishers.length < 2) return;
+        const xs = finishers.map(f => f.pf);
+        const ys = finishers.map(f => f.elapsed * allocByBoat.get(f.boatId) / 60);
+        allX.push(...xs);
+        allY.push(...ys);
+        const s = olsSlope(xs, ys);
+        if (s != null && isFinite(s)) slopes.push(s);
+    });
+    if (slopes.length === 0 || allX.length === 0) return null;
+
+    const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
+    const medX = median(allX);
+    const medY = median(allY);
+    const xMin = Math.min(...allX);
+    const xMax = Math.max(...allX);
+    return {
+        x: [xMin, xMax],
+        y: [avgSlope * (xMin - medX) + medY, avgSlope * (xMax - medX) + medY],
+        mode: 'lines', type: 'scatter',
+        name: `Allocated trend (slope ${avgSlope.toFixed(2)})`,
+        line: {dash: 'dashdot', color: '#a04020', width: 3},
         hoverinfo: 'skip'
     };
 }

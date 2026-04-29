@@ -2057,21 +2057,30 @@ public class AdminApiServlet extends HttpServlet
                     if (bd == null || f.elapsedTime() == null) continue;
 
                     BoatPf pf = bd.pf();
+                    ReferenceFactors rf = bd.referenceFactors();
                     String variant = f.nonSpinnaker() ? "nonSpin" : "spin";
                     Factor pfFactor = pf == null ? null : switch (variant)
                     {
                         case "nonSpin" -> pf.nonSpin();
                         default -> pf.spin();
                     };
+                    Factor rfFactor = rf == null ? null : switch (variant)
+                    {
+                        case "nonSpin" -> rf.nonSpin();
+                        default -> rf.spin();
+                    };
 
                     double elapsedSec = f.elapsedTime().toSeconds();
                     Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
+                    Double rfVal = rfFactor != null && !Double.isNaN(rfFactor.value()) ? rfFactor.value() : null;
 
                     Map<String, Object> fm = new LinkedHashMap<>();
                     fm.put("boatId", f.boatId());
                     fm.put("name", bd.boat().name());
                     fm.put("sailNumber", bd.boat().sailNumber());
+                    fm.put("elapsed", elapsedSec);
                     fm.put("pf", pfVal);
+                    fm.put("rf", rfVal);
                     fm.put("pfCorrected", pfVal != null && pfVal > 0 ? elapsedSec * pfVal : null);
                     finishers.add(fm);
                 }

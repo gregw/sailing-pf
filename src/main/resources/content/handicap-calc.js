@@ -18,6 +18,11 @@
 //   section,                        // section <div> wrapping the calculator (show/hide handled here)
 //   table,                          // <table> element to render rows into
 //   showBestFit,                    // include Best Fit column
+//   sessionKey,                     // optional sessionStorage key — when set, entered handicaps
+//                                   //   persist across page loads. Saves merge with existing
+//                                   //   stored entries for boats not currently shown, so multiple
+//                                   //   pages/views with different boat lists can share the same
+//                                   //   key without overwriting each other's entries.
 //   onChange,                       // optional () => void, fired after every recalc
 //   // Optional fetch/load/save controls; pass to wire automatic event handlers:
 //   urlInput, fetchBtn, fetchStatus,
@@ -403,13 +408,52 @@ window.HandicapCalc = (function () {
             if (anchors.length === 0) restoreAll();
             else if (anchors.length === 1) scaleSingle(anchors[0]);
             else scaleMulti(anchors);
+            saveToSession();
             if (cfg.onChange) cfg.onChange();
+        }
+
+        function readSession() {
+            if (!cfg.sessionKey) return [];
+            try {
+                const json = sessionStorage.getItem(cfg.sessionKey);
+                if (!json) return [];
+                const data = JSON.parse(json);
+                return Array.isArray(data) ? data : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        // Merge with existing session entries so boats not currently shown (e.g. from a
+        // different race/division on another page) keep their handicap.
+        function saveToSession() {
+            if (!cfg.sessionKey) return;
+            const current = getEnteredHandicaps();
+            const remembered = readSession();
+            const isCurrent = item => current.some(c =>
+                (c.sailno && c.sailno === item.sailno) ||
+                (!c.sailno && c.name && c.name === item.name));
+            const merged = remembered.filter(r => !isCurrent(r)).concat(current);
+            try {
+                if (merged.length > 0)
+                    sessionStorage.setItem(cfg.sessionKey, JSON.stringify(merged));
+                else
+                    sessionStorage.removeItem(cfg.sessionKey);
+            } catch (e) { /* quota or disabled storage — ignore */
+            }
+        }
+
+        function loadFromSession() {
+            if (!cfg.sessionKey) return;
+            const data = readSession();
+            if (data.length > 0) setHandicapsByMatch(data);
         }
 
         function setBoats(newBoats, opts) {
             if (opts && opts.showBestFit !== undefined) cfg.showBestFit = opts.showBestFit;
             calcBoats = (newBoats || []).filter(b => b.pf != null);
             render();
+            loadFromSession();
         }
 
         // Match imported rows to calc boats in passes, strongest criteria first, so that an
@@ -482,6 +526,12 @@ window.HandicapCalc = (function () {
             inputCells().forEach(inp => {
                 inp.value = '';
             });
+            if (cfg.sessionKey) {
+                try {
+                    sessionStorage.removeItem(cfg.sessionKey);
+                } catch (e) { /* ignore */
+                }
+            }
             recalc();
         }
 

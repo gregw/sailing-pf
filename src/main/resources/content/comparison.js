@@ -7,6 +7,7 @@ const PALETTE = [
 ];
 
 const STORAGE_KEY = 'pf-comparison-items';
+const HANDICAP_STORAGE_KEY = 'pf.allocated.handicaps';
 
 let selectedItems   = [];   // {type:'boat', id, label, color}
 let allAvailable    = false;
@@ -431,6 +432,7 @@ function pfCalc() {
         section: document.getElementById('pf-calc'),
         table: document.querySelector('#pf-calc table'),
         showBestFit: false,
+        sessionKey: HANDICAP_STORAGE_KEY,
         urlInput: document.getElementById('handicap-url'),
         fetchBtn: document.getElementById('fetch-handicaps-btn'),
         fetchStatus: document.getElementById('fetch-status'),
