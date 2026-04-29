@@ -1650,6 +1650,7 @@ function setupRaceDivisionChart(raceId, raceJson) {
     preferredDivision = null;
     select.value = preferred;
     loadRaceDivChart(raceId, preferred);
+    loadRaceHandicapCalc(raceId);
 }
 
 function updateRaceNav() {
@@ -1782,10 +1783,29 @@ function renderDivisionChart(data) {
         .filter(o => o.rf != null && o.rfCorrMin != null)
         .sort((a, b) => a.rf - b.rf);
 
+    // Allocated-handicap data: pulled live from the handicap calculator inputs in this section.
+    const allocByBoat = new Map();
+    document.querySelectorAll('#pf-calc .pf-calc-input').forEach(inp => {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v)) allocByBoat.set(inp.dataset.boatId, v);
+    });
+    const allocPts = finishers
+        .filter(f => allocByBoat.has(f.boatId))
+        .map(f => ({
+            f,
+            name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
+            handicap: allocByBoat.get(f.boatId),
+            correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
+        }))
+        .sort((a, b) => a.handicap - b.handicap);
+
     // Rebuild the x-factor selector with options valid for this data.
     const xSelect = document.getElementById('race-div-xfactor');
     if (xSelect) {
-        const opts = ['---', 'PF', ...(rfFinishers.length > 0 ? ['RF'] : [])];
+        const opts = ['---', 'PF',
+            ...(rfFinishers.length > 0 ? ['RF'] : []),
+            ...(allocPts.length > 0 ? ['Allocated'] : [])
+        ];
         if (!opts.includes(raceDivXFactor)) raceDivXFactor = '---';
         if (xSelect.options.length !== opts.length ||
             [...xSelect.options].map(o => o.value).join() !== opts.join()) {
@@ -1882,6 +1902,24 @@ function renderDivisionChart(data) {
 
         addPodiumTraces(traces, finishers, xs, pfCorr);
 
+        if (allocPts.length > 0) {
+            const allocXs = allocPts.map(p => p.handicap);
+            const allocYs = allocPts.map(p => p.correctedMin);
+            traces.push({
+                x: allocXs, y: allocYs,
+                mode: 'lines+markers', type: 'scatter',
+                name: 'Allocated handicap corrected',
+                line: {dash: 'longdash', color: '#a04020', width: 2},
+                marker: {size: 8, symbol: 'square'},
+                text: allocPts.map(p =>
+                    `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
+                    + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                hoverinfo: 'text',
+                customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+            });
+            addAllocPodiumTraces(traces, allocPts, allocXs, allocYs);
+        }
+
         if (showRaceTrendLine) {
             const t = buildTrendTrace(finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF');
             if (t) traces.push(t);
@@ -1902,7 +1940,11 @@ function renderDivisionChart(data) {
     } else {
         // Common-factor mode: all traces use the same x-axis factor, so all dots for
         // a given boat form a vertical line.
-        const getX = f => raceDivXFactor === 'RF' ? f.rf : f.pf;
+        const getX = f => {
+            if (raceDivXFactor === 'RF') return f.rf;
+            if (raceDivXFactor === 'Allocated') return allocByBoat.get(f.boatId);
+            return f.pf;
+        };
         const plotFinishers = finishers
             .filter(f => getX(f) != null)
             .sort((a, b) => getX(a) - getX(b));
@@ -1913,6 +1955,10 @@ function renderDivisionChart(data) {
         const elapsed = plotFinishers.map(f => f.elapsed / 60);
         const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
         const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
+        const allocCorr = plotFinishers.map(f => {
+            const h = allocByBoat.get(f.boatId);
+            return h != null ? f.elapsed * h / 60 : null;
+        });
         const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
 
         traces = [
@@ -1932,6 +1978,19 @@ function renderDivisionChart(data) {
                 line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
                 error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
                 text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
+            }] : []),
+            ...(allocCorr.some(v => v != null) ? [{
+                x: xs, y: allocCorr, mode: 'lines+markers', type: 'scatter',
+                name: 'Allocated handicap corrected',
+                line: {dash: 'longdash', color: '#a04020', width: 2},
+                marker: {size: 8, symbol: 'square'},
+                text: plotFinishers.map((f, i) => {
+                    const h = allocByBoat.get(f.boatId);
+                    return h != null
+                        ? `${esc(names[i])}<br>Allocated: ${h.toFixed(4)}<br>Corrected: ${fmtTime(allocCorr[i] * 60)}`
+                        : '';
+                }),
+                hoverinfo: 'text', customdata: boatCustom
             }] : [])
         ];
 
@@ -1951,7 +2010,7 @@ function renderDivisionChart(data) {
             };
         });
 
-        xAxisTitle = raceDivXFactor;
+        xAxisTitle = raceDivXFactor === 'Allocated' ? 'Allocated Handicap' : raceDivXFactor;
     }
 
     const layout = {
@@ -1979,12 +2038,97 @@ function renderDivisionChart(data) {
         window.location.href = 'data.html?' +
             new URLSearchParams({ tab: 'boats', boatId: pt.customdata.boatId });
     });
+}
 
-    // Compare button: include all finishers with a boatId (not just PF-filtered ones)
-    const compareBoats = (data.finishers || [])
-        .filter(f => f.boatId)
-        .map(f => ({ id: f.boatId, label: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name }));
-    addCompareButton('race-compare-btn-container', compareBoats);
+// ---- Handicap calculator on the races tab ----
+//
+// Calculator is initialised lazily once the first race is selected. Allocated handicaps
+// are remembered across race selections in sessionStorage as [{sailno, name, handicap}],
+// and re-applied to matching boats whenever a different race is loaded.
+
+const RACES_HANDICAPS_KEY = 'pf.races.handicaps';
+
+function getRememberedHandicaps() {
+    try {
+        const v = sessionStorage.getItem(RACES_HANDICAPS_KEY);
+        return v ? JSON.parse(v) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function setRememberedHandicaps(rows) {
+    try {
+        if (rows && rows.length > 0)
+            sessionStorage.setItem(RACES_HANDICAPS_KEY, JSON.stringify(rows));
+        else
+            sessionStorage.removeItem(RACES_HANDICAPS_KEY);
+    } catch (e) {
+    }
+}
+
+let raceCalcController = null;
+let raceCalcSuppressChange = false;
+
+function raceCalc() {
+    if (raceCalcController) return raceCalcController;
+    raceCalcController = HandicapCalc.create({
+        section: document.getElementById('pf-calc'),
+        table: document.querySelector('#pf-calc table'),
+        showBestFit: false,
+        urlInput: document.getElementById('handicap-url'),
+        fetchBtn: document.getElementById('fetch-handicaps-btn'),
+        fetchStatus: document.getElementById('fetch-status'),
+        fileInput: document.getElementById('handicap-file'),
+        fileStatus: document.getElementById('file-status'),
+        downloadBtn: document.getElementById('download-handicaps-btn'),
+        downloadStatus: document.getElementById('download-status'),
+        onChange: () => {
+            if (raceCalcSuppressChange) return;
+            // Merge entered handicaps into remembered set (preserve entries for boats not
+            // currently shown — e.g. boats from other races).
+            const current = raceCalcController.getEnteredHandicaps();
+            const remembered = getRememberedHandicaps();
+            const isCurrent = (item) => current.some(c =>
+                (c.sailno && c.sailno === item.sailno) ||
+                (!c.sailno && c.name && c.name === item.name));
+            const merged = remembered.filter(r => !isCurrent(r)).concat(current);
+            setRememberedHandicaps(merged);
+            if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+        }
+    });
+    const clearBtn = document.getElementById('clear-handicaps-btn');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+        raceCalcSuppressChange = true;
+        raceCalcController.clearAll();
+        raceCalcSuppressChange = false;
+        setRememberedHandicaps([]);
+        if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+    });
+    return raceCalcController;
+}
+
+async function loadRaceHandicapCalc(raceId) {
+    if (!raceId) return;
+    const data = await fetchJson('/api/comparison/race-boats?raceId=' + encodeURIComponent(raceId));
+    if (!data || !data.boats) return;
+    const boats = data.boats.map(b => ({
+        id: b.id,
+        name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
+        sailNumber: b.sailNumber || null,
+        boatName: b.name || null,
+        pf: b.pf,
+        rf: b.rf,
+        bestFit: null
+    }));
+    const ctl = raceCalc();
+    raceCalcSuppressChange = true;
+    ctl.setBoats(boats);
+    const remembered = getRememberedHandicaps();
+    if (remembered.length > 0) ctl.setHandicapsByMatch(remembered);
+    raceCalcSuppressChange = false;
+    // Re-render division chart so the allocated line picks up applied entries.
+    if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
 }
 
 // ---- Compare button ----

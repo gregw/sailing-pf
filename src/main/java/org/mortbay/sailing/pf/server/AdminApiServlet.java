@@ -119,6 +119,8 @@ public class AdminApiServlet extends HttpServlet
             handleComparisonChart(req, resp);
         else if ("/comparison/division".equals(path))
             handleComparisonDivision(req, resp);
+        else if ("/comparison/race-boats".equals(path))
+            handleComparisonRaceBoats(req, resp);
         else if ("/comparison/elapsed-chart".equals(path))
             handleElapsedComparisonChart(req, resp);
         else if ("/design-comparison/candidates".equals(path))
@@ -1746,6 +1748,80 @@ public class AdminApiServlet extends HttpServlet
         result.put("divisionVariant", divisionVariant);
         result.put("totalFinishers",  totalFinishers);
         result.put("finishers",       finishers);
+        writeJson(resp, result);
+    }
+
+    /**
+     * GET /api/comparison/race-boats — returns one row per unique boat across all divisions
+     * of a race, with the PF/RF factors for the variant the boat actually raced in. Used by
+     * the handicap calculator on the data browser races tab.
+     */
+    private void handleComparisonRaceBoats(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String raceId = req.getParameter("raceId");
+        if (raceId == null || raceId.isBlank())
+        {
+            resp.sendError(400);
+            return;
+        }
+
+        Race race = store.races().get(raceId);
+        if (race == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+
+        Map<String, Map<String, Object>> byBoat = new LinkedHashMap<>();
+        if (race.divisions() != null)
+        {
+            for (var div : race.divisions())
+            {
+                if (div.finishers() == null)
+                    continue;
+                for (var f : div.finishers())
+                {
+                    if (f.boatId() == null || byBoat.containsKey(f.boatId()))
+                        continue;
+                    BoatDerived bd = cache.boatDerived().get(f.boatId());
+                    if (bd == null)
+                        continue;
+
+                    String fVariant = f.nonSpinnaker() ? "nonSpin" : "spin";
+                    ReferenceFactors rf = bd.referenceFactors();
+                    BoatPf pf = bd.pf();
+                    Factor pfFactor = pf == null ? null : switch (fVariant)
+                    {
+                        case "nonSpin" -> pf.nonSpin();
+                        default -> pf.spin();
+                    };
+                    Factor rfFactor = rf == null ? null : switch (fVariant)
+                    {
+                        case "nonSpin" -> rf.nonSpin();
+                        default -> rf.spin();
+                    };
+                    Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
+                    Double rfVal = rfFactor != null && !Double.isNaN(rfFactor.value()) ? rfFactor.value() : null;
+                    if (pfVal == null)
+                        continue;
+
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", f.boatId());
+                    row.put("name", bd.boat().name());
+                    row.put("sailNumber", bd.boat().sailNumber());
+                    row.put("variant", fVariant);
+                    row.put("pf", pfVal);
+                    row.put("rf", rfVal);
+                    row.put("division", div.name());
+                    byBoat.put(f.boatId(), row);
+                }
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("raceId", raceId);
+        result.put("raceName", raceName(race));
+        result.put("boats", new ArrayList<>(byBoat.values()));
         writeJson(resp, result);
     }
 

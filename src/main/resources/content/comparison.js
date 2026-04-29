@@ -25,8 +25,6 @@ let candidateBoats  = [];
 let focusedBoatId   = null;
 let boatDebounce    = null;
 let lastChartData   = null;
-let calcSort        = { col: 'pf', dir: 'desc' }; // handicap calculator sort state
-let currentCalcBoats = []; // current boats in the calculator
 let inlineDivisionData = null; // most recently loaded /api/comparison/division payload
 const INLINE_DIV_XFACTOR_KEY = 'pf.inlineDiv.xFactor';
 let inlineDivXFactor = sessionStorage.getItem(INLINE_DIV_XFACTOR_KEY) || '---';
@@ -423,18 +421,31 @@ function renderChart(data) {
     renderHandicapCalc(data);
 }
 
-// ---- Handicap calculator ----
+// ---- Handicap calculator (thin adapter over shared HandicapCalc module) ----
+
+let pfCalcController = null;
+
+function pfCalc() {
+    if (pfCalcController) return pfCalcController;
+    pfCalcController = HandicapCalc.create({
+        section: document.getElementById('pf-calc'),
+        table: document.querySelector('#pf-calc table'),
+        showBestFit: false,
+        urlInput: document.getElementById('handicap-url'),
+        fetchBtn: document.getElementById('fetch-handicaps-btn'),
+        fetchStatus: document.getElementById('fetch-status'),
+        fileInput: document.getElementById('handicap-file'),
+        fileStatus: document.getElementById('file-status'),
+        downloadBtn: document.getElementById('download-handicaps-btn'),
+        downloadStatus: document.getElementById('download-status'),
+        onChange: () => {
+            if (inlineDivisionData) renderInlineDivisionChart();
+        }
+    });
+    return pfCalcController;
+}
 
 function renderHandicapCalc(data) {
-    const section = document.getElementById('pf-calc');
-    const table   = section.querySelector('table');
-
-    // Snapshot any values the user has typed so a re-render (e.g. sort click) doesn't wipe them.
-    const enteredValues = new Map();
-    document.querySelectorAll('.pf-calc-input').forEach(inp => {
-        if (inp.value !== '') enteredValues.set(inp.dataset.boatId, inp.value);
-    });
-
     const showBestFit = data.boats.length <= 3;
 
     const calcBoats = data.boats.map(b => {
@@ -442,14 +453,13 @@ function renderHandicapCalc(data) {
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name);
 
-        const pfFactor = selectedVariant === 'nonSpin'   ? b.pfNonSpin
-                        : selectedVariant === 'twoHanded' ? b.pfTwoHanded
-                        : b.pfSpin;
-        const rfFactor  = selectedVariant === 'nonSpin'   ? b.rfNonSpin
-                        : selectedVariant === 'twoHanded' ? null
-                        : b.rfSpin;
+        const pfFactor = selectedVariant === 'nonSpin' ? b.pfNonSpin
+            : selectedVariant === 'twoHanded' ? b.pfTwoHanded
+                : b.pfSpin;
+        const rfFactor = selectedVariant === 'nonSpin' ? b.rfNonSpin
+            : selectedVariant === 'twoHanded' ? null
+                : b.rfSpin;
 
-        // Best fit: latest endpoint of the weighted OLS trend through filtered back-calc factors
         let bestFit = null;
         if (showBestFit) {
             const entries = filterEntries(b.entries || []);
@@ -461,673 +471,13 @@ function renderHandicapCalc(data) {
             id: b.id, name, color,
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
-            pf:     pfFactor ? pfFactor.value : null,
-            rf:      rfFactor  ? rfFactor.value  : null,
+            pf: pfFactor ? pfFactor.value : null,
+            rf: rfFactor ? rfFactor.value : null,
             bestFit
         };
-    }).filter(b => b.pf != null);
-
-    currentCalcBoats = calcBoats;
-
-    if (calcBoats.length === 0) {
-        section.style.display = 'none';
-        return;
-    }
-
-    section.style.display = '';
-    table.innerHTML = '';
-
-    const factorTypes = showBestFit ? ['pf', 'rf', 'bestFit'] : ['pf', 'rf'];
-
-    // Column definitions: { key, label, align }. key matches dataset.factorType for value columns,
-    // 'name' for the boat-name column, 'input' for the entered handicap.
-    const cols = [
-        { key: 'name',  label: 'Boat',           align: 'left'   },
-        { key: 'input', label: 'Enter handicap', align: 'center' },
-        { key: 'pf',   label: 'PF',            align: 'right'  },
-        {key: 'pfDelta', label: 'PFΔ', align: 'right'},
-        { key: 'rf',    label: 'RF',             align: 'right'  },
-        {key: 'rfDelta', label: 'RFΔ', align: 'right'},
-    ];
-    if (showBestFit) cols.push({ key: 'bestFit', label: 'Best Fit', align: 'right' });
-
-    if (!cols.some(c => c.key === calcSort.col)) calcSort = { col: 'pf', dir: 'desc' };
-
-    sortCalcBoats(calcBoats);
-
-    // Header row
-    const thead = document.createElement('thead');
-    const hdrTr = document.createElement('tr');
-    cols.forEach(c => {
-        const th = document.createElement('th');
-        const isActive = c.key === calcSort.col;
-        const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
-        th.textContent = c.label + arrow;
-        th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};cursor:pointer;user-select:none;`
-            + (isActive ? 'font-weight:bold;' : '');
-        th.addEventListener('click', () => {
-            if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-            else calcSort = { col: c.key, dir: c.key === 'name' ? 'asc' : 'desc' };
-            renderHandicapCalc(data);
-        });
-        hdrTr.appendChild(th);
-    });
-    thead.appendChild(hdrTr);
-    table.appendChild(thead);
-
-    // Data rows — one input drives all three value columns via per-column ratio
-    const tbody = document.createElement('tbody');
-    calcBoats.forEach(b => {
-        const tr = document.createElement('tr');
-
-        cols.forEach(c => {
-            if (c.key === 'name') {
-                const tdName = document.createElement('td');
-                tdName.style.cssText = `color:${b.color};font-weight:bold;`;
-                tdName.textContent = b.name;
-                tr.appendChild(tdName);
-            } else if (c.key === 'input') {
-                const tdInput = document.createElement('td');
-                tdInput.style.cssText = 'padding:2px 4px;text-align:center;';
-                const input = document.createElement('input');
-                input.type = 'number';
-                input.step = '0.0001';
-                input.min  = '0.1';
-                input.max  = '2.0';
-                input.className = 'pf-calc-input';
-                input.dataset.boatId = b.id;
-                input.placeholder = 'enter…';
-                input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
-                if (enteredValues.has(b.id)) input.value = enteredValues.get(b.id);
-                input.addEventListener('input', () => recalcAll(calcBoats));
-                tdInput.appendChild(input);
-                tr.appendChild(tdInput);
-            } else {
-                const td = document.createElement('td');
-                td.className = 'pf-calc-value';
-                td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
-                const v = b[c.key];
-                if (c.key === 'pfDelta' || c.key === 'rfDelta') {
-                    // Delta columns start empty, will be filled by scaling functions
-                    td.textContent = '';
-                    td.dataset.boatId = b.id;
-                    td.dataset.factorType = c.key;
-                    td.dataset.origValue = '';
-                } else {
-                    td.textContent = v != null ? v.toFixed(4) : '—';
-                    td.dataset.boatId = b.id;
-                    td.dataset.factorType = c.key;
-                    td.dataset.origValue = v != null ? String(v) : '';
-                }
-                tr.appendChild(td);
-            }
-        });
-
-        tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-
-    if (enteredValues.size > 0) recalcAll(calcBoats);
-}
-
-function sortCalcBoats(calcBoats) {
-    const { col, dir } = calcSort;
-    const mul = dir === 'asc' ? 1 : -1;
-    if (col === 'name') {
-        calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
-    } else if (col === 'input') {
-        // No entered values yet at render time; fall back to PF order so rows aren't arbitrary.
-        calcBoats.sort((a, b) => mul * ((a.pf ?? 0) - (b.pf ?? 0)));
-    } else if (col === 'pfDelta' || col === 'rfDelta') {
-        // For delta columns, sort by the delta values from the DOM since they're computed dynamically
-        const deltaValues = new Map();
-        document.querySelectorAll(`.pf-calc-value[data-factor-type="${col}"]`).forEach(td => {
-            const boatId = td.dataset.boatId;
-            const delta = parseFloat(td.textContent) || 0;
-            deltaValues.set(boatId, delta);
-        });
-        calcBoats.sort((a, b) => {
-            const av = deltaValues.get(a.id) ?? 0;
-            const bv = deltaValues.get(b.id) ?? 0;
-            return mul * (av - bv);
-        });
-    } else {
-        calcBoats.sort((a, b) => {
-            const av = a[col], bv = b[col];
-            if (av == null && bv == null) return 0;
-            if (av == null) return 1;       // nulls always last
-            if (bv == null) return -1;
-            return mul * (av - bv);
-        });
-    }
-}
-
-// Fit-quality color: green (good fit) → red (bad fit)
-function fitColor(deviation) {
-    const t = Math.min(deviation / 0.05, 1);
-    const h = 120 * (1 - t);
-    return `hsl(${h}, 60%, 38%)`;
-}
-
-function fitLabel(deviation) {
-    const pct = (deviation * 100).toFixed(1);
-    if (deviation < 0.01) return `Entered value — deviation ${pct}% from consensus (excellent fit)`;
-    if (deviation < 0.025) return `Entered value — deviation ${pct}% from consensus (good fit)`;
-    if (deviation < 0.05) return `Entered value — deviation ${pct}% from consensus (moderate fit)`;
-    return `Entered value — deviation ${pct}% from consensus (poor fit)`;
-}
-
-// Confidence color: blue (low variance) → brown (high variance)
-function confidenceColor(cv) {
-    const t = Math.min(cv / 0.05, 1);
-    const h = 210 - 180 * t;
-    const l = 45 - 7 * t;
-    return `hsl(${h}, 55%, ${l}%)`;
-}
-
-function confidenceLabel(cv) {
-    const pct = (cv * 100).toFixed(1);
-    if (cv < 0.01) return `Scaled from consensus — spread ${pct}% (high confidence)`;
-    if (cv < 0.025) return `Scaled from consensus — spread ${pct}% (moderate confidence)`;
-    if (cv < 0.05) return `Scaled from consensus — spread ${pct}% (low confidence)`;
-    return `Scaled from consensus — spread ${pct}% (very low confidence)`;
-}
-
-// Small inline delta indicator: shows how the displayed cell value differs from the
-// column's original (PF / RF / Best Fit) allocation.
-// TODO REMOVE
-function deltaSpan(displayed, orig) {
-    if (orig == null || isNaN(orig)) return '';
-    const delta = displayed - orig;
-    if (Math.abs(delta) < 0.00005) return '';
-    const arrow = delta > 0 ? '↑' : '↓';
-    const sign = delta > 0 ? '+' : '−';
-    const color = delta > 0 ? '#a04020' : '#206020';
-    return ` <span style="font-size:0.5rem;color:${color};margin-left:4px;font-weight:normal;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
-}
-
-function restoreAll() {
-    document.querySelectorAll('.pf-calc-value').forEach(td => {
-        const origStr = td.dataset.origValue;
-        td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
-        td.style.color = '';
-        td.title = '';
     });
 
-    // Clear delta columns
-    document.querySelectorAll('.pf-calc-value[data-factor-type="pfDelta"]').forEach(td => {
-        td.textContent = '';
-        td.style.color = '';
-        td.title = '';
-    });
-    document.querySelectorAll('.pf-calc-value[data-factor-type="rfDelta"]').forEach(td => {
-        td.textContent = '';
-        td.style.color = '';
-        td.title = '';
-    });
-}
-
-function scaleSingle(anchor, calcBoats) {
-    document.querySelectorAll('.pf-calc-value').forEach(td => {
-        const ft      = td.dataset.factorType;
-        const origStr = td.dataset.origValue;
-        if (!origStr) return;
-        const origVal = parseFloat(origStr);
-        if (isNaN(origVal)) return;
-
-        const srcFactor = anchor.boat[ft];
-        if (srcFactor == null) {
-            td.textContent = origVal.toFixed(4);
-            td.style.color = '';
-            td.title = '';
-            return;
-        }
-
-        // Single-anchor: every cell IS the consensus prediction, so delta is always 0.
-        const newVal = origVal * (anchor.value / srcFactor);
-        td.textContent = newVal.toFixed(4);
-        td.style.color = '#c05000';
-        td.title = 'Scaled from single entered value — no consensus spread available';
-    });
-
-    // Clear delta columns for single anchor (delta is always 0)
-    document.querySelectorAll('.pf-calc-value[data-factor-type="pfDelta"]').forEach(td => {
-        td.textContent = '';
-        td.style.color = '';
-        td.title = '';
-    });
-    document.querySelectorAll('.pf-calc-value[data-factor-type="rfDelta"]').forEach(td => {
-        td.textContent = '';
-        td.style.color = '';
-        td.title = '';
-    });
-}
-
-function scaleMulti(anchors, calcBoats) {
-    // Build per-factor-type ratio stats
-    const anchorIds = new Set(anchors.map(a => a.boat.id));
-    const anchorByBoat = new Map(anchors.map(a => [a.boat.id, a]));
-
-    // Collect factor types from the cells
-    const ftSet = new Set();
-    document.querySelectorAll('.pf-calc-value').forEach(td => ftSet.add(td.dataset.factorType));
-
-    // Per factor type: compute ratios, mean, stddev
-    const ftStats = {};
-    for (const ft of ftSet) {
-        const ratios = [];
-        for (const a of anchors) {
-            const orig = a.boat[ft];
-            if (orig != null && orig !== 0) ratios.push({ boatId: a.boat.id, r: a.value / orig });
-        }
-        if (ratios.length === 0) {
-            ftStats[ft] = null;
-            continue;
-        }
-        const R = ratios.reduce((s, x) => s + x.r, 0) / ratios.length;
-        const S = ratios.length > 1
-            ? Math.sqrt(ratios.reduce((s, x) => s + (x.r - R) ** 2, 0) / ratios.length)
-            : 0;
-        const cv = R > 0 ? S / R : 0;
-        ftStats[ft] = { ratios, R, S, cv, ratioMap: new Map(ratios.map(x => [x.boatId, x.r])) };
-    }
-
-    // Update all value cells
-    document.querySelectorAll('.pf-calc-value').forEach(td => {
-        const ft      = td.dataset.factorType;
-        const boatId  = td.dataset.boatId;
-        const origStr = td.dataset.origValue;
-        if (!origStr) return;
-        const origVal = parseFloat(origStr);
-        if (isNaN(origVal)) return;
-
-        const stats = ftStats[ft];
-        if (!stats) {
-            td.textContent = origVal.toFixed(4);
-            td.style.color = '';
-            td.title = '';
-            return;
-        }
-
-        // Single valid ratio for this column — treat as single-anchor (delta = 0).
-        if (stats.ratios.length === 1) {
-            td.textContent = (origVal * stats.R).toFixed(4);
-            td.style.color = '#c05000';
-            td.title = 'Scaled from single entered value — no consensus spread available';
-            return;
-        }
-
-        const isAnchor = anchorIds.has(boatId);
-        if (isAnchor) {
-            // Show the entered value; delta is entered − consensus prediction (origVal * R).
-            const a = anchorByBoat.get(boatId);
-            td.textContent = a.value.toFixed(4);
-            // Color: fit quality — how far this boat's ratio is from consensus
-            const r = stats.ratioMap.get(boatId);
-            if (r != null) {
-                const deviation = Math.abs(r - stats.R) / stats.R;
-                td.style.color = fitColor(deviation);
-                td.title = fitLabel(deviation);
-            } else {
-                td.style.color = '';
-                td.title = '';
-            }
-        } else {
-            // Unentered boat: cell IS the consensus prediction, so delta = 0.
-            td.textContent = (origVal * stats.R).toFixed(4);
-            // Color: confidence based on coefficient of variation
-            td.style.color = confidenceColor(stats.cv);
-            td.title = confidenceLabel(stats.cv);
-        }
-    });
-
-    // Update delta columns — first pass: collect all deltas to find the max
-    const allDeltas = [];
-
-    // Collect PF deltas
-    const pfStats = ftStats['pf'];
-    if (pfStats && pfStats.ratios.length > 1) {
-        calcBoats.forEach(boat => {
-            const boatId = boat.id;
-            const isAnchor = anchorIds.has(boatId);
-            const anchor = anchorByBoat.get(boatId);
-            if (isAnchor && anchor) {
-                const predicted = boat.pf * pfStats.R;
-                const delta = anchor.value - predicted;
-                allDeltas.push(Math.abs(delta));
-            }
-        });
-    }
-
-    // Collect RF deltas
-    const rfStats = ftStats['rf'];
-    if (rfStats && rfStats.ratios.length > 1) {
-        calcBoats.forEach(boat => {
-            if (boat.rf != null) {
-                const boatId = boat.id;
-                const isAnchor = anchorIds.has(boatId);
-                const anchor = anchorByBoat.get(boatId);
-                if (isAnchor && anchor) {
-                    const predicted = boat.rf * rfStats.R;
-                    const delta = anchor.value - predicted;
-                    allDeltas.push(Math.abs(delta));
-                }
-            }
-        });
-    }
-
-    const maxAbsDelta = allDeltas.length > 0 ? Math.max(...allDeltas) : 0.05;
-
-    // Helper: gradient color from green (small delta) → red (large delta)
-    const deltaColor = (absDelta) => {
-        const t = Math.min(absDelta / maxAbsDelta, 1);
-        const h = 120 * (1 - t);
-        return `hsl(${h}, 60%, 38%)`;
-    };
-
-    // Helper to format delta with arrow and sign, using smaller font and gradient color
-    const formatDelta = (delta) => {
-        if (Math.abs(delta) < 0.00005) return '0';
-        const arrow = delta > 0 ? '↑' : '↓';
-        const sign = delta > 0 ? '+' : '−';
-        const color = deltaColor(Math.abs(delta));
-        const absValue = Math.abs(delta).toFixed(4);
-        return `<span style="font-size:0.75rem;color:${color};font-weight:bold;">${arrow}${sign}${absValue}</span>`;
-    };
-
-    // Second pass: render deltas with gradient colors
-    calcBoats.forEach(boat => {
-        const boatId = boat.id;
-        const isAnchor = anchorIds.has(boatId);
-        const anchor = anchorByBoat.get(boatId);
-
-        // PF Delta
-        if (pfStats && pfStats.ratios.length > 1) {
-            const pfDeltaCell = document.querySelector(`.pf-calc-value[data-boat-id="${boatId}"][data-factor-type="pfDelta"]`);
-            if (pfDeltaCell) {
-                if (isAnchor && anchor) {
-                    const predicted = boat.pf * pfStats.R;
-                    const delta = anchor.value - predicted;
-                    pfDeltaCell.innerHTML = formatDelta(delta);
-                    pfDeltaCell.title = `Entered: ${anchor.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
-                } else {
-                    pfDeltaCell.textContent = '';
-                    pfDeltaCell.style.color = '';
-                    pfDeltaCell.title = 'Consensus prediction (no delta)';
-                }
-            }
-        }
-
-        // RF Delta
-        if (rfStats && rfStats.ratios.length > 1 && boat.rf != null) {
-            const rfDeltaCell = document.querySelector(`.pf-calc-value[data-boat-id="${boatId}"][data-factor-type="rfDelta"]`);
-            if (rfDeltaCell) {
-                if (isAnchor && anchor) {
-                    const predicted = boat.rf * rfStats.R;
-                    const delta = anchor.value - predicted;
-                    rfDeltaCell.innerHTML = formatDelta(delta);
-                    rfDeltaCell.title = `Entered: ${anchor.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
-                } else {
-                    rfDeltaCell.textContent = '';
-                    rfDeltaCell.style.color = '';
-                    rfDeltaCell.title = 'Consensus prediction (no delta)';
-                }
-            }
-        }
-    });
-}
-
-function recalcAll(calcBoats) {
-    const anchors = [];
-    document.querySelectorAll('.pf-calc-input').forEach(inp => {
-        const v = parseFloat(inp.value);
-        if (!isNaN(v)) {
-            const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
-            if (boat) anchors.push({boat, value: v});
-        }
-    });
-
-    if (anchors.length === 0) restoreAll();
-    else if (anchors.length === 1) scaleSingle(anchors[0], calcBoats);
-    else scaleMulti(anchors, calcBoats);
-
-    // Allocated-handicap line in the inline division chart depends on the calculator inputs.
-    if (inlineDivisionData) renderInlineDivisionChart();
-}
-
-// --- Sail-number / boat-name normalisation ---
-//
-// The functions below intentionally duplicate the back-end normalisation logic so that the
-// front-end matches what the importers already do when the same boat is encountered from
-// multiple data sources. Keep these in sync with the referenced Java methods.
-
-/** Mirrors org.mortbay.sailing.pf.importer.IdGenerator#normaliseSailNumber:
- *  uppercase, strip ALL non-[A-Z0-9] characters. */
-function normaliseSailNumber(raw) {
-    if (raw == null) return '';
-    return String(raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
-/** Australian country/fleet sail-number prefixes — mirrors AUS_PREFIXES in
- *  org.mortbay.sailing.pf.store.Aliases. JAUS is listed before AUS so "JAUS103" → "103",
- *  not "US103". */
-const SAIL_PREFIXES = ['JAUS', 'EAUS', 'VAUS', 'SAUS', 'AUS'];
-
-/** Mirrors org.mortbay.sailing.pf.store.Aliases#stripPrefix: strip a known Australian
- *  country/fleet prefix (only when at least one digit follows) AND any leading zeros, so
- *  "AUS5656", "0103", and "AUS00103" all collapse to "5656" / "103" / "103". */
-function stripPrefix(normSail) {
-    if (normSail == null || normSail.length === 0) return normSail;
-    for (const prefix of SAIL_PREFIXES) {
-        if (normSail.startsWith(prefix) && normSail.length > prefix.length
-            && /\d/.test(normSail.charAt(prefix.length))) {
-            normSail = normSail.slice(prefix.length);
-            break;
-        }
-    }
-    while (normSail.length > 1 && normSail.charAt(0) === '0' && /\d/.test(normSail.charAt(1)))
-        normSail = normSail.slice(1);
-    return normSail;
-}
-
-/** Mirrors org.mortbay.sailing.pf.importer.IdGenerator#normaliseDesignName:
- *  lowercase, strip ALL non-[a-z0-9] characters. Used here for boat-name matching as the
- *  same collapsing rules apply ("Raging Bull" / "raging-bull" / "RagingBull" → "ragingbull"). */
-function normaliseDesignName(raw) {
-    if (raw == null) return '';
-    return String(raw).toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-/** Returns true if {@code candidate} and {@code target} sail numbers identify the same boat,
- *  applying the same two-step normalisation the importers use: normaliseSailNumber + stripPrefix. */
-function sailnoMatch(candidate, target) {
-    if (candidate == null || target == null) return false;
-    const c = stripPrefix(normaliseSailNumber(candidate));
-    const t = stripPrefix(normaliseSailNumber(target));
-    return c.length > 0 && c === t;
-}
-
-async function fetchHandicaps(calcBoats) {
-    const url = document.getElementById('handicap-url').value.trim();
-    const statusDiv = document.getElementById('fetch-status');
-    const btn = document.getElementById('fetch-handicaps-btn');
-
-    if (!url) {
-        statusDiv.textContent = 'Please enter a URL';
-        statusDiv.style.color = '#c62828';
-        return;
-    }
-
-    statusDiv.textContent = 'Fetching...';
-    statusDiv.style.color = '#666';
-    btn.disabled = true;
-
-    try {
-        const resp = await fetch('/api/comparison/fetch-handicaps', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({url})
-        });
-
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-        }
-
-        const data = await resp.json();
-        if (!Array.isArray(data)) {
-            throw new Error('Expected array of handicaps');
-        }
-
-        let matched = 0;
-        data.forEach(item => {
-            if (item.handicap == null) return;
-            // Primary: sail number matched the importer way (normaliseSailNumber + stripPrefix).
-            // Fallback: boat name compared via normaliseDesignName, used only when sail
-            // numbers don't carry enough info (e.g. BWPS, where the standings page doesn't
-            // publish sail numbers and we report what the local store has — sometimes null).
-            let boat = null;
-            if (item.sailno) {
-                boat = calcBoats.find(b => sailnoMatch(b.sailNumber, item.sailno));
-            }
-            if (!boat && item.name) {
-                const target = normaliseDesignName(item.name);
-                if (target) boat = calcBoats.find(b => normaliseDesignName(b.boatName) === target);
-            }
-            if (boat) {
-                const input = document.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
-                if (input) {
-                    input.value = item.handicap.toString();
-                    matched++;
-                }
-            }
-        });
-
-        statusDiv.textContent = `Fetched ${data.length} handicaps, matched ${matched} boats`;
-        statusDiv.style.color = matched > 0 ? '#2e7d32' : '#c62828';
-
-        // Trigger recalculation
-        recalcAll(calcBoats);
-
-    } catch (error) {
-        statusDiv.textContent = `Error: ${error.message}`;
-        statusDiv.style.color = '#c62828';
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-async function loadHandicapsFromFile(calcBoats) {
-    const fileInput = document.getElementById('handicap-file');
-    const statusDiv = document.getElementById('file-status');
-
-    if (!fileInput.files || !fileInput.files[0]) {
-        statusDiv.textContent = 'No file selected';
-        statusDiv.style.color = '#c62828';
-        return;
-    }
-
-    const file = fileInput.files[0];
-    statusDiv.textContent = 'Reading file...';
-    statusDiv.style.color = '#666';
-
-    try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-
-        if (!Array.isArray(data)) {
-            throw new Error('Expected array of handicaps in file');
-        }
-
-        let matched = 0;
-        data.forEach(item => {
-            if (item.handicap == null) return;
-            // Primary: sail number matched the importer way
-            // Fallback: boat name compared via normaliseDesignName
-            let boat = null;
-            if (item.sailno) {
-                boat = calcBoats.find(b => sailnoMatch(b.sailNumber, item.sailno));
-            }
-            if (!boat && item.name) {
-                const target = normaliseDesignName(item.name);
-                if (target) boat = calcBoats.find(b => normaliseDesignName(b.boatName) === target);
-            }
-            if (boat) {
-                const input = document.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
-                if (input) {
-                    input.value = item.handicap.toString();
-                    matched++;
-                }
-            }
-        });
-
-        statusDiv.textContent = `Loaded ${data.length} handicaps, matched ${matched} boats`;
-        statusDiv.style.color = matched > 0 ? '#2e7d32' : '#c62828';
-        fileInput.value = ''; // Clear the file input
-
-        // Trigger recalculation
-        recalcAll(calcBoats);
-
-    } catch (error) {
-        statusDiv.textContent = `Error: ${error.message}`;
-        statusDiv.style.color = '#c62828';
-        fileInput.value = '';
-    }
-}
-
-function downloadHandicaps(calcBoats) {
-    const statusDiv = document.getElementById('download-status');
-    const btn = document.getElementById('download-handicaps-btn');
-
-    btn.disabled = true;
-    statusDiv.textContent = 'Preparing download...';
-    statusDiv.style.color = '#666';
-
-    try {
-        const handicaps = [];
-
-        // Gather all entered handicap values
-        document.querySelectorAll('.pf-calc-input').forEach(inp => {
-            const v = parseFloat(inp.value);
-            if (!isNaN(v)) {
-                const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
-                if (boat) {
-                    handicaps.push({
-                        sailno: boat.sailNumber || '',
-                        name: boat.boatName || '',
-                        handicap: v
-                    });
-                }
-            }
-        });
-
-        if (handicaps.length === 0) {
-            statusDiv.textContent = 'No handicaps entered';
-            statusDiv.style.color = '#c62828';
-            btn.disabled = false;
-            return;
-        }
-
-        // Create JSON and trigger download
-        const json = JSON.stringify(handicaps, null, 2);
-        const blob = new Blob([json], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `handicaps-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        statusDiv.textContent = `Downloaded ${handicaps.length} handicap(s)`;
-        statusDiv.style.color = '#2e7d32';
-
-    } catch (error) {
-        statusDiv.textContent = `Error: ${error.message}`;
-        statusDiv.style.color = '#c62828';
-    } finally {
-        btn.disabled = false;
-    }
+    pfCalc().setBoats(calcBoats, {showBestFit});
 }
 
 // ---- Inline race-division chart (shown below BCFC chart on dot click) ----
@@ -1366,28 +716,6 @@ function renderInlineDivisionChart() {
     Plotly.react('bcfc-race-division-chart', traces, layout, {responsive: true});
 }
 
-function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs) {
-    const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
-    const PODIUM_SIZES = [14, 12, 11];
-    const PODIUM_LABELS = ['1st', '2nd', '3rd'];
-    const ranked = allocPts.map((p, i) => ({i, t: p.correctedMin})).sort((a, b) => a.t - b.t);
-    for (let pos = 0; pos < Math.min(3, ranked.length); pos++) {
-        const idx = ranked[pos].i;
-        const p = allocPts[idx];
-        traces.push({
-            x: [allocXs[idx]], y: [allocYs[idx]],
-            mode: 'markers', type: 'scatter',
-            name: PODIUM_LABELS[pos], legendgroup: PODIUM_LABELS[pos], showlegend: false,
-            marker: {
-                symbol: PODIUM_SYMBOLS[pos], size: PODIUM_SIZES[pos],
-                color: '#a04020', line: {color: '#fff', width: 1.5}
-            },
-            text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
-            hoverinfo: 'text'
-        });
-    }
-}
-
 // ---- Elapsed time comparison charts ----
 
 async function loadElapsedCharts() {
@@ -1621,9 +949,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         boatDebounce = setTimeout(loadCandidates, 250);
     });
     document.getElementById('add-boat-btn').addEventListener('click', addBoat);
-    document.getElementById('fetch-handicaps-btn').addEventListener('click', () => fetchHandicaps(currentCalcBoats));
-    document.getElementById('handicap-file').addEventListener('change', () => loadHandicapsFromFile(currentCalcBoats));
-    document.getElementById('download-handicaps-btn').addEventListener('click', () => downloadHandicaps(currentCalcBoats));
     loadCandidates();
     if (selectedItems.length > 0) loadChart();
 });

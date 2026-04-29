@@ -54,6 +54,31 @@ function fmtTime(seconds) {
  * corresponding corrected times in MINUTES (already divided by 60). Markers are placed on the
  * PF-corrected line at the three fastest finishers.
  */
+// Allocated-handicap podium: ranks `allocPts` (each with name, handicap, correctedMin)
+// by corrected time and pushes star/diamond/triangle markers in the allocated-line color.
+function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs) {
+    const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
+    const PODIUM_SIZES = [14, 12, 11];
+    const PODIUM_LABELS = ['1st', '2nd', '3rd'];
+    const ranked = allocPts.map((p, i) => ({i, t: p.correctedMin})).sort((a, b) => a.t - b.t);
+    for (let pos = 0; pos < Math.min(3, ranked.length); pos++) {
+        const idx = ranked[pos].i;
+        const p = allocPts[idx];
+        traces.push({
+            x: [allocXs[idx]], y: [allocYs[idx]],
+            mode: 'markers', type: 'scatter',
+            name: PODIUM_LABELS[pos], legendgroup: PODIUM_LABELS[pos], showlegend: false,
+            marker: {
+                symbol: PODIUM_SYMBOLS[pos], size: PODIUM_SIZES[pos],
+                color: '#a04020', line: {color: '#fff', width: 1.5}
+            },
+            text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
+            hoverinfo: 'text',
+            customdata: p.f ? [{boatId: p.f.boatId}] : undefined
+        });
+    }
+}
+
 function addPodiumTraces(traces, finishers, xs, pfCorr, color = '#2255aa') {
     const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
     const PODIUM_SIZES = [14, 12, 11];

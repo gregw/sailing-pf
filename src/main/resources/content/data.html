@@ -376,11 +376,40 @@
       </div>
       <div id="race-division-note" style="font-size:0.85rem;color:#888;margin-bottom:0.25rem;"></div>
       <div id="race-division-chart" style="width:100%;height:600px;"></div>
-      <div id="race-compare-btn-container"></div>
       <div class="division-nav" style="margin-top:0.5rem;">
         <button id="race-prev-btn" onclick="prevRace()" disabled>&#8592; Prev</button>
           <button id="race-next-btn" onclick="nextRace()" disabled>Next &#8594;</button>
         <span id="race-div-title" style="flex:1;text-align:center;font-weight:bold;font-size:1rem;"></span>
+      </div>
+
+        <div id="pf-calc" style="display:none; margin-top:1.25rem;">
+            <h3 style="margin:0 0 0.5rem;">Handicap Calculator
+                <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Enter a handicap for any boat — PF and RF columns for all boats are scaled by ratio. Each column uses its own per-boat ratio. Loaded handicaps are remembered across race selections." target="_blank">ⓘ</a>
+            </h3>
+            <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
+                All boats from all divisions of the selected race. Loaded handicaps persist while you browse other races.
+            </p>
+            <table class="pf-calc-table"></table>
+            <div id="fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
+                <div style="margin-bottom:0.8rem;">
+                    <label for="handicap-url">Fetch handicaps from:</label>
+                    <input type="url" id="handicap-url" placeholder="https://example.com/handicaps.json" style="margin-left:0.5rem;width:400px;padding:4px;">
+                    <button id="fetch-handicaps-btn" style="margin-left:0.5rem;padding:4px 12px;">Fetch</button>
+                    <div id="fetch-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+                </div>
+                <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
+                <div style="margin-bottom:0.8rem;">
+                    <label for="handicap-file">Load handicaps from file:</label>
+                    <input type="file" id="handicap-file" accept=".json" style="margin-left:0.5rem;">
+                    <div id="file-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+                </div>
+                <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
+                <div>
+                    <button id="download-handicaps-btn" style="padding:4px 12px;">Download handicaps as JSON</button>
+                    <button id="clear-handicaps-btn" style="margin-left:0.5rem;padding:4px 12px;">Clear all</button>
+                    <div id="download-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+                </div>
+            </div>
       </div>
     </div>
 
@@ -452,6 +481,7 @@
 
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
   <script src="common.js"></script>
+<script src="handicap-calc.js"></script>
   <script src="data.js"></script>
 </body>
 </html>
