@@ -531,11 +531,6 @@ boats:
     aliases:
     - sailNumber: "NZ8090"
       name: "masterpiece"
-  "018-phantom377":
-    canonicalName: "Phantom377"
-    aliases:
-    - sailNumber: "018"
-      name: "phantom"
   "10-guiltypleasures10":
     canonicalName: "Guilty Pleasures 10"
     aliases:
@@ -666,3 +661,135 @@ boats:
     aliases:
     - sailNumber: "067"
       name: "twicetempted"
+  "5-intrigue":
+    canonicalName: "Intrigue"
+    aliases:
+      - sailNumber: "05"
+        name: "intrigue"
+  "823-noma":
+    canonicalName: "Noma"
+    aliases:
+      - sailNumber: "0823"
+        name: "noma"
+  "60-nawi":
+    canonicalName: "Nawi"
+    aliases:
+      - sailNumber: "060"
+        name: "nawi"
+  "412-mojo":
+    canonicalName: "Mojo"
+    aliases:
+      - sailNumber: "0412"
+        name: "mojo"
+  "75-trex":
+    canonicalName: "Trex"
+    aliases:
+      - sailNumber: "075"
+        name: "trex"
+  "33-azure":
+    canonicalName: "Azure"
+    aliases:
+      - sailNumber: "033"
+        name: "azure"
+  "20-pingu":
+    canonicalName: "Pingu"
+    aliases:
+      - sailNumber: "020"
+        name: "pingu"
+  "68-sidewinder":
+    canonicalName: "Sidewinder"
+    aliases:
+      - sailNumber: "068"
+        name: "sidewinder"
+  "3-noahsii":
+    canonicalName: "Noahs II"
+    aliases:
+      - sailNumber: "03"
+        name: "noahsii"
+  "95-anarchy":
+    canonicalName: "Anarchy"
+    aliases:
+      - sailNumber: "095"
+        name: "anarchy"
+  "88-adelax":
+    canonicalName: "Adela X"
+    aliases:
+      - sailNumber: "0088"
+        name: "adelax"
+  "3-navigator":
+    canonicalName: "Navigator"
+    aliases:
+      - sailNumber: "003"
+        name: "navigator"
+  "349-bluebottle":
+    canonicalName: "Bluebottle"
+    aliases:
+      - sailNumber: "0349"
+        name: "bluebottle"
+  "75-pilgar":
+    canonicalName: "Pilgar"
+    aliases:
+      - sailNumber: "075"
+        name: "pilgar"
+  "1-independence":
+    canonicalName: "Independence"
+    aliases:
+      - sailNumber: "01"
+        name: "independence"
+  "18-phantom377":
+    canonicalName: "Phantom377"
+    aliases:
+      - sailNumber: "018"
+        name: "phantom377"
+      - sailNumber: "018"
+        name: "phantom"
+  "122-rumchaser":
+    canonicalName: "Rumchaser"
+    aliases:
+      - sailNumber: "0122"
+        name: "rumchaser"
+  "0-thetipsyunicorn":
+    canonicalName: "The Tipsy Unicorn"
+    aliases:
+      - sailNumber: "000"
+        name: "thetipsyunicorn"
+  "67-aetosiii":
+    canonicalName: "Aetos III"
+    aliases:
+      - sailNumber: "067"
+        name: "aetosiii"
+  "38-seremisa":
+    canonicalName: "Seremisa"
+    aliases:
+      - sailNumber: "0038"
+        name: "seremisa"
+  "11-vivalavita":
+    canonicalName: "Viva La Vita"
+    aliases:
+      - sailNumber: "0011"
+        name: "vivalavita"
+  "30-cuckoosnest":
+    canonicalName: "Cuckoo's Nest"
+    aliases:
+      - sailNumber: "030"
+        name: "cuckoosnest"
+  "78-intrigue2":
+    canonicalName: "Intrigue 2"
+    aliases:
+      - sailNumber: "078"
+        name: "intrigue2"
+  "900-ultime":
+    canonicalName: "Ultime"
+    aliases:
+      - sailNumber: "0900"
+        name: "ultime"
+  "7-amity":
+    canonicalName: "Amity"
+    aliases:
+      - sailNumber: "07"
+        name: "amity"
+  "400-andiamo":
+    canonicalName: "Andiamo"
+    aliases:
+      - sailNumber: "0400"
+        name: "andiamo"

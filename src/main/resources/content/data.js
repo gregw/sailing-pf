@@ -2139,6 +2139,7 @@ function renderDivisionChart(data) {
         annotations: allAnnotations
     };
 
+    document.getElementById('division-section-races').style.display = '';
     Plotly.react('race-division-chart', allTraces, layout, {responsive: true});
 
     const raceDivDiv = document.getElementById('race-division-chart');
