@@ -487,22 +487,32 @@ function renderTable(entity, items, append) {
             if (col.type === 'action') {
                 const text = col.render ? col.render(item) : col.label;
                 const extraClass = col.btnClass ? col.btnClass(item) : '';
-                const tooltip    = col.title    ? col.title(item)    : null;
+                const tooltip = col.title ? col.title(item) : null;
                 if (text && col.action) {
                     const btn = document.createElement('button');
                     btn.className = 'link-btn' + (extraClass ? ' ' + extraClass : '');
                     btn.textContent = text;
                     if (tooltip) btn.title = tooltip;
-                    btn.onclick = (e) => { e.stopPropagation(); col.action(item); };
+                    else if (col.cls && text) btn.title = text; // Add title for truncated text cells
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        col.action(item);
+                    };
                     td.appendChild(btn);
                 } else {
                     td.textContent = text || '';
                     if (tooltip) td.title = tooltip;
+                    else if (col.cls && text) td.title = text; // Add title for truncated text cells
                     if (extraClass) td.className = ((td.className || '') + ' ' + extraClass).trim();
                 }
             } else {
                 const v = col.key != null ? item[col.key] : item;
-                td.innerHTML = col.render ? col.render(v) : esc(v != null ? String(v) : '');
+                const rawValue = v != null ? String(v) : '';
+                td.innerHTML = col.render ? col.render(v) : esc(rawValue);
+                // Add title attribute for cells that may be truncated (those with id-col or similar classes)
+                if (col.cls && rawValue) {
+                    td.title = rawValue;
+                }
             }
             tr.appendChild(td);
         });
