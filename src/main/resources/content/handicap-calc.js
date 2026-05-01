@@ -189,7 +189,12 @@ window.HandicapCalc = (function () {
                         const tdName = document.createElement('td');
                         const color = b.color || '#888';
                         tdName.style.cssText = `color:${color};font-weight:bold;`;
-                        tdName.textContent = b.name;
+                        const link = document.createElement('a');
+                        link.href = `data.html?tab=boats&boatId=${encodeURIComponent(b.id)}`;
+                        link.textContent = b.name;
+                        link.style.cssText = 'color:inherit;text-decoration:none;';
+                        link.title = 'Click to view boat details';
+                        tdName.appendChild(link);
                         tr.appendChild(tdName);
                     } else if (c.key === 'input') {
                         const tdInput = document.createElement('td');

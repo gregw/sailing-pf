@@ -1502,6 +1502,7 @@ public class DataStore
                              String staleSail, String staleName,
                              String canonSail, String canonName) {}
             List<StalePair> staleBoatPairs = new ArrayList<>();
+            boolean aliasesChanged = false;
             for (Boat b : new ArrayList<>(boats.values()))
             {
                 String normName = IdGenerator.normaliseName(b.name());
@@ -1525,16 +1526,34 @@ public class DataStore
                                 b.sailNumber(), normName,
                                 canonSail, canonical.name()));
                         }
-                        else
-                            LOG.warn("Stale boat {} (name '{}') should map to canonical '{}' per alias seed but canonical boat {} not found; will be renamed on next import",
-                                b.id(), b.name(), displayName, canonId);
+                        else if (!canonId.equals(b.id()))
+                        {
+                            // No canonical record exists yet. Rename the stale boat in place:
+                            // change its id and sail/name to the canonical form, rewrite finisher
+                            // refs in races, remap its club override entry, and absorb any orphan
+                            // alias. Equivalent to what the next import would have done; doing it
+                            // at startup eliminates the recurring warning. A subsequent stale boat
+                            // mapping to the same canonical falls into the merge branch above
+                            // because this one now occupies canonId.
+                            LOG.info("Auto-renaming stale boat {} → {} (canonical sail per alias seed)",
+                                b.id(), canonId);
+                            Boat renamed = new Boat(canonId, canonSail, displayName, b.designId(),
+                                b.clubId(), b.certificates(), b.sources(), Instant.now(), null);
+                            String oldId = b.id();
+                            removeBoat(oldId);
+                            putBoat(renamed);
+                            rewriteFinisherBoatId(oldId, canonId);
+                            ClubLoader.remapBoatId(configDir, oldId, canonId);
+                            Aliases.addAliases(configDir, canonSail, displayName,
+                                List.of(new Aliases.SailNumberName(b.sailNumber(), normName)));
+                            aliasesChanged = true;
+                        }
                     }
                 }
             }
             if (!staleBoatPairs.isEmpty())
             {
                 LOG.info("Auto-fixing {} stale boat(s) at startup", staleBoatPairs.size());
-                boolean aliasesChanged = false;
                 for (StalePair pair : staleBoatPairs)
                 {
                     LOG.info("Auto-merging stale boat {} into canonical {}", pair.staleId(), pair.canonId());
@@ -1545,9 +1564,9 @@ public class DataStore
                         List.of(new Aliases.SailNumberName(pair.staleSail(), pair.staleName())));
                     aliasesChanged = true;
                 }
-                if (aliasesChanged)
-                    aliases = Aliases.load(configDir);
             }
+            if (aliasesChanged)
+                aliases = Aliases.load(configDir);
         }
 
         // Design upgrade: merge design-less boats into a design-bearing boat with the same

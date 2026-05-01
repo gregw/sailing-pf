@@ -312,12 +312,11 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
     right: 0;
     width: 20px;
     height: 20px;
-    cursor: ns-resize;
+    cursor: nw-resize;
     background: linear-gradient(-45deg, transparent 0%, transparent 40%, #ccc 40%, #ccc 60%, transparent 60%, transparent 100%);
     z-index: 10;
     opacity: 0.7;
 }
-
 .chart-resize-handle:hover {
     opacity: 1;
     background: linear-gradient(-45deg, transparent 0%, transparent 40%, #999 40%, #999 60%, transparent 60%, transparent 100%);

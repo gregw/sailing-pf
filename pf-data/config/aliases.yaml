@@ -559,12 +559,12 @@ designs:
       - "Clubman 8 Clubman 8"
       - "clubman8clubman8"
 boats:
-  "0404-navyone":
+  "404-navyone":
     canonicalName: "Navy One"
     aliases:
     - sailNumber: null
       name: "B Navy One"
-    - sailNumber: "404"
+    - sailNumber: "0404"
       name: null
     - sailNumber: "040"
       name: "navyone"
@@ -778,11 +778,11 @@ boats:
     aliases:
     - sailNumber: "MYC99"
       name: "jupiterdh"
-  "020-philosopher":
+  "20-philosopher":
     canonicalName: "Philosopher"
     aliases:
-    - sailNumber: "20"
-      name: "philosopher"
+      - sailNumber: "020"
+        name: null
   "72-urmgroup":
     canonicalName: "URM Group"
     aliases:

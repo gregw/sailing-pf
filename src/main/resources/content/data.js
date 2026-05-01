@@ -263,6 +263,19 @@ function setBoatVariant(v) {
     loadList('boats', 0);
 }
 
+// Session-persisted per-tab search terms ("as if just typed") and active tab.
+// Cleared only by the [×] button next to the search field, or by an inbound URL
+// that names a specific item to display.
+const SEARCH_KEY_PREFIX = 'pf.search.';
+const ACTIVE_TAB_KEY = 'pf.activeTab';
+const TAB_ENTITIES = ['clubs', 'boats', 'designs', 'series', 'races'];
+
+function loadPersistedSearches() {
+    const out = {};
+    TAB_ENTITIES.forEach(e => out[e] = sessionStorage.getItem(SEARCH_KEY_PREFIX + e) || '');
+    return out;
+}
+
 const state = {
     pages:    { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
     sort:     { boats: 'id', designs: 'id', clubs: 'shortName', races: 'date', series: 'firstDate' },
@@ -272,8 +285,8 @@ const state = {
     loading:  { boats: false, designs: false, clubs: false, races: false, series: false },
     totals:   { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
     searchTimers: {},
-    searches: { boats: '', designs: '', clubs: '', races: '', series: '' },  // persistent per-tab search terms
-    activeTab: 'boats',
+    searches: loadPersistedSearches(),  // per-tab search terms, persisted across navigation
+    activeTab: sessionStorage.getItem(ACTIVE_TAB_KEY) || 'boats',
     selected:     { boats: new Set(), designs: new Set(), clubs: new Set(), series: new Set(), races: new Set() },   // IDs of checked rows
     selectedData: { boats: new Map(), designs: new Map(), clubs: new Map(), series: new Map(), races: new Map() },   // id → item for action panel
     filter: { boats: null, designs: null, clubs: null, races: null, series: null },
@@ -290,7 +303,6 @@ let currentDivRaceId = null;
 const RACE_RF_KEY    = 'pf.divChart.showRf';
 const RACE_ERR_KEY   = 'pf.divChart.showErrorBars';
 const RACE_TREND_KEY = 'pf.divChart.showTrend';
-const CLUBS_SELECTED_KEY = 'pf.clubs.selectedId';
 const RACE_DIV_XFACTOR_KEY = 'pf.divChart.xFactor';
 function sessionBool(key, dflt) {
     const v = sessionStorage.getItem(key);
@@ -308,24 +320,26 @@ let lastRaceDivData = null;
 function isWriteAllowed() { return window.pfAuth?.authenticated; }
 
 function switchTab(entity) {
-    ['clubs', 'boats', 'designs', 'series', 'races'].forEach(e => {
+    TAB_ENTITIES.forEach(e => {
         document.getElementById('tab-btn-' + e).classList.toggle('active', e === entity);
         document.getElementById('panel-' + e).classList.toggle('active', e === entity);
     });
     state.activeTab = entity;
+    sessionStorage.setItem(ACTIVE_TAB_KEY, entity);
     // Restore persisted search term for this tab
     const q = document.getElementById('q-' + entity);
     if (q && state.searches[entity] !== undefined) q.value = state.searches[entity];
     updateFilterBanner(entity);
     updateFilterControls(entity);
-    if (document.querySelector('#tbody-' + entity + ' tr') === null) {
-        loadList(entity, 0);
-    }
+    // Always reload — tbody may be empty (first visit) or hold rows from a prior search
+    // that no longer matches the restored search term.
+    loadList(entity, 0);
 }
 
 function setFilter(entity, param, value, label) {
     state.filter[entity] = { param, value, label };
     state.searches[entity] = '';   // navigation filter clears any persistent search
+    sessionStorage.removeItem(SEARCH_KEY_PREFIX + entity);
     state.pages[entity] = 0;
     const q = document.getElementById('q-' + entity);
     if (q) q.value = '';
@@ -364,7 +378,10 @@ function updateFilterControls(entity) {
 
 function debounceSearch(entity) {
     const q = document.getElementById('q-' + entity);
-    if (q) state.searches[entity] = q.value;
+    if (q) {
+        state.searches[entity] = q.value;
+        sessionStorage.setItem(SEARCH_KEY_PREFIX + entity, q.value);
+    }
     clearTimeout(state.searchTimers[entity]);
     state.searchTimers[entity] = setTimeout(() => doSearch(entity), 300);
 }
@@ -377,9 +394,9 @@ function doSearch(entity) {
 
 function clearSearch(entity) {
     state.searches[entity] = '';
+    sessionStorage.removeItem(SEARCH_KEY_PREFIX + entity);
     const q = document.getElementById('q-' + entity);
     if (q) q.value = '';
-    if (entity === 'clubs') sessionStorage.removeItem(CLUBS_SELECTED_KEY);
     doSearch(entity);
 }
 
@@ -570,8 +587,6 @@ async function loadDetail(entity, id, {scroll = true} = {}) {
         loadSeriesChart(id);
         return;
     }
-
-    if (entity === 'clubs') sessionStorage.setItem(CLUBS_SELECTED_KEY, id);
 
     const data = await fetchJson('/api/' + entity + '/' + encodeURIComponent(id));
     if (!data) return;
@@ -2901,5 +2916,47 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---- Initial load ----
+//
+// Order of precedence:
+//   1. URL contains a specific target (raceId, boatId, seriesId, clubId, designId):
+//      switch to the matching tab, CLEAR that tab's persisted search, load the list,
+//      and load the detail for the target.
+//   2. URL contains only `tab=<entity>`: switch to that tab and restore its persisted
+//      search.
+//   3. No URL args: switch to the persisted active tab (default 'boats') and restore
+//      its persisted search.
+function initFromUrlOrSession() {
+    const params = new URLSearchParams(location.search);
+    const idParamToEntity = {
+        raceId: 'races',
+        boatId: 'boats',
+        seriesId: 'series',
+        clubId: 'clubs',
+        designId: 'designs',
+    };
+    let detailEntity = null;
+    let detailId = null;
+    for (const [param, entity] of Object.entries(idParamToEntity)) {
+        const v = params.get(param);
+        if (v) {
+            detailEntity = entity;
+            detailId = v;
+            break;
+        }
+    }
 
-loadList('boats', 0);
+    if (detailEntity && detailId) {
+        // Specific target: clear search for that tab, then switch + load detail.
+        state.searches[detailEntity] = '';
+        sessionStorage.removeItem(SEARCH_KEY_PREFIX + detailEntity);
+        switchTab(detailEntity);
+        loadDetail(detailEntity, detailId);
+        return;
+    }
+
+    const tabArg = params.get('tab');
+    const initialTab = (tabArg && TAB_ENTITIES.includes(tabArg)) ? tabArg : state.activeTab;
+    switchTab(initialTab);
+}
+
+initFromUrlOrSession();
