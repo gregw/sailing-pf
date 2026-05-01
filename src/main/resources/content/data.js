@@ -313,6 +313,10 @@ let showRaceErrorBars = sessionBool(RACE_ERR_KEY,   false);
 let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
 const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
 let showSeriesOverallTrend = sessionBool(SERIES_OVERALL_TREND_KEY, false);
+// Shared between race-division and series charts; default off so the plot area stays
+// constant in height as the user flips between divisions.
+const SHOW_LEGEND_KEY = 'pf.divChart.showLegend';
+let showLegend = sessionBool(SHOW_LEGEND_KEY, false);
 let preferredDivision = null;
 let raceDivXFactor = sessionStorage.getItem(RACE_DIV_XFACTOR_KEY) || '---';
 let lastRaceDivData = null;
@@ -580,6 +584,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Series-chart overall-trend toggle.
     const seriesTrendCb = document.getElementById('series-show-overall-trend');
     if (seriesTrendCb) seriesTrendCb.checked = showSeriesOverallTrend;
+
+    // Show-legend toggle (shared across race + series charts).
+    ['race-show-legend', 'series-show-legend'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = showLegend;
+    });
 });
 
 async function loadDetail(entity, id, {scroll = true} = {}) {
@@ -1768,6 +1778,38 @@ function onSeriesOverallTrendChange(cb) {
     onSeriesDivisionChange();
 }
 
+function onShowLegendChange(cb) {
+    showLegend = cb.checked;
+    sessionStorage.setItem(SHOW_LEGEND_KEY, String(showLegend));
+    ['race-show-legend', 'series-show-legend'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el !== cb) el.checked = showLegend;
+    });
+    const update = legendLayoutSettings();
+    ['race-division-chart', 'series-chart'].forEach(id => {
+        const div = document.getElementById(id);
+        if (div && div.data) Plotly.relayout(id, update);
+    });
+}
+
+// Returns layout fragments controlling the legend. When shown, the legend is overlaid
+// in the chart's top-right corner so toggling it does not change the plot area's height.
+function legendLayoutSettings() {
+    if (showLegend) {
+        return {
+            showlegend: true,
+            legend: {
+                x: 0.99, y: 0.99,
+                xanchor: 'right', yanchor: 'top',
+                bgcolor: 'rgba(255,255,255,0.85)',
+                bordercolor: '#ccc',
+                borderwidth: 1
+            }
+        };
+    }
+    return {showlegend: false};
+}
+
 async function loadRaceDivChart(raceId, divisionName) {
     if (!raceId || divisionName == null) return;
     const params = new URLSearchParams({ raceId, divisionName });
@@ -2150,8 +2192,8 @@ function renderDivisionChart(data) {
         },
         yaxis: { title: 'Time (min)', tickformat: '.1f',
                  rangemode: getDivChartYFromZero() ? 'tozero' : 'normal' },
-        legend: {orientation: 'h', y: -0.25},
-        margin: {t: 30, b: 80, l: 60, r: 20},
+        ...legendLayoutSettings(),
+        margin: {t: 30, b: 50, l: 60, r: 20},
         hovermode: 'closest',
         annotations: allAnnotations
     };
@@ -2520,8 +2562,8 @@ function renderSeriesChartForDivision(divName, opts) {
             title: 'PF Corrected Time (min)', tickformat: '.1f',
             rangemode: getDivChartYFromZero() ? 'tozero' : 'normal'
         },
-        legend: {orientation: 'h', y: -0.25},
-        margin: {t: 30, b: 80, l: 60, r: 20},
+        ...legendLayoutSettings(),
+        margin: {t: 30, b: 50, l: 60, r: 20},
         hovermode: 'closest'
     };
 
