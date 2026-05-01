@@ -1662,7 +1662,7 @@ function setupRaceDivisionChart(raceId, raceJson) {
     preferredDivision = null;
     select.value = preferred;
     loadRaceDivChart(raceId, preferred);
-    loadRaceHandicapCalc(raceId);
+    loadRaceHandicapCalc(raceId, preferred);
 }
 
 function updateRaceNav() {
@@ -1718,7 +1718,9 @@ function nextBoat() {
 
 function onRaceDivisionChange() {
     if (!currentDivRaceId) return;
-    loadRaceDivChart(currentDivRaceId, document.getElementById('race-division-select').value);
+    const divName = document.getElementById('race-division-select').value;
+    loadRaceDivChart(currentDivRaceId, divName);
+    applyRaceCalcDivision(divName);
 }
 
 function onRaceRfChange() {
@@ -2186,20 +2188,32 @@ function raceCalc() {
     return raceCalcController;
 }
 
-async function loadRaceHandicapCalc(raceId) {
+// Cached /api/comparison/race-boats response so division changes can re-filter
+// without a network round trip.
+let lastRaceBoatsResponse = null;
+
+async function loadRaceHandicapCalc(raceId, divName) {
     if (!raceId) return;
-    const data = await fetchJson('/api/comparison/race-boats?raceId=' + encodeURIComponent(raceId));
+    lastRaceBoatsResponse = await fetchJson('/api/comparison/race-boats?raceId=' + encodeURIComponent(raceId));
+    applyRaceCalcDivision(divName);
+}
+
+function applyRaceCalcDivision(divName) {
+    const data = lastRaceBoatsResponse;
     if (!data || !data.boats) return;
-    const boats = data.boats.map(b => ({
-        id: b.id,
-        name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
-        sailNumber: b.sailNumber || null,
-        boatName: b.name || null,
-        division: b.division || null,
-        pf: b.pf,
-        rf: b.rf,
-        bestFit: null
-    }));
+    const allDivisions = !divName || divName === '__all__';
+    const boats = data.boats
+        .filter(b => allDivisions || (b.division || '') === divName)
+        .map(b => ({
+            id: b.id,
+            name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
+            sailNumber: b.sailNumber || null,
+            boatName: b.name || null,
+            division: b.division || null,
+            pf: b.pf,
+            rf: b.rf,
+            bestFit: null
+        }));
     raceCalc().setBoats(boats);
     // Re-render division chart so the allocated line picks up any applied entries.
     if (lastRaceDivData) renderDivisionChart(lastRaceDivData);

@@ -170,6 +170,7 @@ designs:
     aliases:
     - "Bic Open Skiff"
     - "Bic Open Bic"
+    - "Bic"
   opti:
     canonicalName: "Opti"
     aliases:
@@ -193,6 +194,8 @@ designs:
     canonicalName: "FARR 36"
     aliases:
     - "Mumm36"
+    - "Farr Mumm 36"
+    - "farrmumm36"
   sydney36:
     canonicalName: "Sydney 36"
     aliases:
@@ -244,6 +247,317 @@ designs:
     aliases:
     - "Elliot 6"
     - "elliot6"
+  elliott52:
+    canonicalName: "Elliott 52"
+    aliases:
+      - "Elliot 52"
+      - "elliot52"
+  etchells:
+    canonicalName: "Etchells"
+    aliases:
+      - "Etchell"
+      - "ETCHELL OD"
+      - "etchellod"
+  expressmultihullsgbesportsdeck:
+    canonicalName: "Express Multihulls GBE Sportsdeck"
+    aliases:
+      - "Express Mulithulls GBE Sports Deck"
+      - "expressmulithullsgbesportsdeck"
+  farr30:
+    canonicalName: "Farr 30"
+    aliases:
+      - "Farr Mumm 30"
+      - "farrmumm30"
+      - "FARR 30 OD"
+      - "farr30od"
+  jeanneausunodyssey440:
+    canonicalName: "Jeanneau Sun Odyssey 440"
+    aliases:
+      - "SUN ODYSSEY 440"
+      - "sunodyssey440"
+  jeanneausunodyssey349:
+    canonicalName: "Jeanneau Sun Odyssey 349"
+    aliases:
+      - "SUN ODYSSEY 349"
+      - "sunodyssey349"
+  jeanneausunodyssey469:
+    canonicalName: "Jeanneau Sun Odyssey 469"
+    aliases:
+      - "SUN ODYSSEY 469"
+      - "sunodyssey469"
+  jeanneaugrandsoleil43:
+    canonicalName: "Jeanneau Grand Soleil 43"
+    aliases:
+      - "GRAND SOLEIL 43"
+      - "grandsoleil43"
+  dufour360grandlarge:
+    canonicalName: "Dufour 360 Grand Large"
+    aliases:
+      - "Dufour 360 Grand Larg"
+      - "dufour360grandlarg"
+  bavaria34:
+    canonicalName: "Bavaria 34"
+    aliases:
+      - "Germany Bavaria 34"
+      - "germanybavaria34"
+  bavaria34cruiser:
+    canonicalName: "Bavaria 34 Cruiser"
+    aliases:
+      - "Bavaria 34C"
+      - "bavaria34c"
+  bavaria42cruiser:
+    canonicalName: "Bavaria 42  Cruiser"
+    aliases:
+      - "Bavaria 42C"
+      - "bavaria42c"
+  bavaria42vision:
+    canonicalName: "Bavaria 42 Vision"
+    aliases:
+      - "Bavaria Vision 42"
+      - "bavariavision42"
+  tasar:
+    canonicalName: "Tasar"
+    aliases:
+      - "Tasar Tasar"
+      - "tasartasar"
+  fareast23r:
+    canonicalName: "FarEast 23R"
+    aliases:
+      - "Fareast Fareast 23R"
+      - "fareastfareast23r"
+  melges24:
+    canonicalName: "MELGES 24"
+    aliases:
+      - "Melges M24"
+      - "melgesm24"
+  farr30modified:
+    canonicalName: "Farr 30 Modified"
+    aliases:
+      - "Mod Farr 30"
+      - "modfarr30"
+      - "Farr 30 Modified2"
+      - "farr30modified2"
+      - "Mumm/Farr 30 (Modified)"
+  farr36modified:
+    canonicalName: "Farr 36 Modified"
+    aliases:
+      - "Modified Mumm 36"
+      - "modifiedmumm36"
+      - "Mumm 36 Modified"
+      - "mumm36modified"
+  farr40modified:
+    canonicalName: "Farr 40 Modified"
+    aliases:
+      - "Farr 40 (modified)"
+      - "Farr 40 Mod"
+      - "farr40mod"
+      - "Farr 40 OD Mod IRC"
+      - "farr40odmodirc"
+  etchellsmodified:
+    canonicalName: "Etchells Modified"
+    aliases:
+      - "Modified Etchells"
+      - "modifiedetchells"
+  mountgaym30modified:
+    canonicalName: "Mount Gay 30 Modified"
+    aliases:
+      - "Mount Gay (Modified) 30"
+      - "mountgaymodified30"
+  farr30modified2:
+    canonicalName: "Farr 30 Modified2"
+    aliases:
+      - "Mumm/Farr 30 (Modified)"
+      - "mummfarr30modified"
+  magic25modified25:
+    canonicalName: "Magic 25 Modified"
+    aliases:
+      - "Magic Modified 25"
+      - "magicmodified25"
+  adams10modified:
+    canonicalName: "Adams 10 Modified"
+    aliases:
+      - "Adams 10 (modified)"
+  alanandrewstp52modified:
+    canonicalName: "Alan Andrews TP 52 Modified"
+    aliases:
+      - "Alan Andrews TP 52 (modified)"
+  sydney36crmodified:
+    canonicalName: "Sydney 36CR Modified"
+    aliases:
+      - "Sydney 36CR Mod"
+      - "sydney36crmod"
+  sydney39crmodified:
+    canonicalName: "Sydney 39cr Modified"
+    aliases:
+      - "Sydney 39cr Mod"
+      - "sydney39crmod"
+  young88modified:
+    canonicalName: "Young 88 Modified"
+    aliases:
+      - "Young 88 (mod)"
+      - "young88mod"
+  s80modified:
+    canonicalName: "S80 Modified"
+    aliases:
+      - "S80 Mod"
+      - "s80mod"
+  ross780modified:
+    canonicalName: "Ross 780 Modified"
+    aliases:
+      - "Ross 780 Mod"
+      - "ross780mod"
+  magic25modified:
+    canonicalName: "Magic 25 Modified"
+    aliases:
+      - "Magic 25 Modified"
+      - "magic25modified25"
+  sportsdidi26modified:
+    canonicalName: "Sports Didi 26 Modified"
+    aliases:
+      - "Sports Didi 26 mod for cruising"
+      - "sportsdidi26modforcruising"
+  "30squaremetremodified":
+    canonicalName: "30 Square Metre Modified"
+    aliases:
+      - "Modified 30 Square Metre"
+      - "modified30squaremetre"
+  joubert42modified:
+    canonicalName: "Joubert 42 Modified"
+    aliases:
+      - "Joubert Mod. 42"
+      - "joubertmod42"
+  ic45modified:
+    canonicalName: "IC 45 Modified"
+    aliases:
+      - "IC 45 MOD"
+      - "ic45mod"
+  farr116modified:
+    canonicalName: "Farr 11.6 Modified"
+    aliases:
+      - "Farr 11.6 Mod"
+      - "farr116mod"
+  adams105modified:
+    canonicalName: "Adams 10.5 Modified"
+    aliases:
+      - "Adams 10.5 Mod"
+      - "adams105mod"
+  illingworthprimrosemodified:
+    canonicalName: "Illingworth & Primrose Modified"
+    aliases:
+      - "Illingworth & Primrose (Quilky modified)"
+      - "illingworthprimrosequilkymodified"
+  imssloop95modified:
+    canonicalName: "IMS SLOOP 9.5 Modified"
+    aliases:
+      - "IMS SLOOP 9.5(MOD)"
+      - "imssloop95mod"
+  williamscustom3:
+    canonicalName: "Williams Custom 3"
+    aliases:
+      - "Williams Williams Custom 3"
+      - "williamswilliamscustom3"
+  bakewellwhite40:
+    canonicalName: "Bakewell-White 40"
+    aliases:
+      - "BAKWELL-WHITE 40"
+      - "bakwellwhite40"
+  xyachtsx50:
+    canonicalName: "X-Yachts X-50"
+    aliases:
+      - "X 50"
+      - "x50"
+  xyachtsx332:
+    canonicalName: "X-Yachts X-332"
+    aliases:
+      - "X 332"
+      - "x332"
+  xyachtsx41:
+    canonicalName: "X-Yachts X-41"
+    aliases:
+      - "X-41"
+      - "x41"
+  xyachtsx412:
+    canonicalName: "X-Yachts X412"
+    aliases:
+      - "X 412"
+      - "x412"
+  xyachtsx43:
+    canonicalName: "X-Yachts X-43"
+    aliases:
+      - "X4^3"
+      - "x43"
+  xyachtx55:
+    canonicalName: "X Yacht X-55"
+    aliases:
+      - "X-55"
+      - "x55"
+  jboatsj122e:
+    canonicalName: "J Boats J/122E"
+    aliases:
+      - "J122e"
+  alajuela38:
+    canonicalName: "Alajuela 38"
+    aliases:
+      - "Alejelua 38"
+      - "alejelua38"
+  volvo70:
+    canonicalName: "Volvo 70"
+    aliases:
+      - "Volvo Open 70"
+      - "volvoopen70"
+  tp52:
+    canonicalName: "TP 52"
+    aliases:
+      - "TransPac 52"
+      - "transpac52"
+  thompsont7:
+    canonicalName: "Thompson T7"
+    aliases:
+      - "THOMPSON 7"
+      - "thompson7"
+  thompsont8:
+    canonicalName: "THOMPSON T8"
+    aliases:
+      - "Thompson 8"
+      - "thompson8"
+  international30squaremetre:
+    canonicalName: "International 30 Square Metre"
+    aliases:
+      - "30 Square Metre"
+      - "30squaremetre"
+      - "30 sq metre"
+      - "30sqmetre"
+  bruceclark42:
+    canonicalName: "Bruce Clark 42"
+    aliases:
+      - "Bruce Clarke 42"
+      - "bruceclarke42"
+  australclubman8:
+    canonicalName: "Austral Clubman 8"
+    aliases:
+      - "Austral Yachts Clubman 8"
+      - "australyachtsclubman8"
+      - "Austral Clubman"
+      - "australclubman"
+  carmenprototypenord3:
+    canonicalName: "Carmen Prototype No RD3 Custom"
+    aliases:
+      - "Carmen Prototype No RD3"
+  carmenprototypenord3custom:
+    canonicalName: "Carmen Prototype No RD3 Custom"
+    aliases:
+      - "Carmen Prototype No RD3 Custom"
+      - "carmenprototypenord3"
+  catalina34markii:
+    canonicalName: "Catalina 34 Mark II"
+    aliases:
+      - "Catalina 34 Mk 11"
+      - "catalina34mk11"
+  clubman8:
+    canonicalName: "Clubman 8"
+    aliases:
+      - "Clubman 8 Clubman 8"
+      - "clubman8clubman8"
 boats:
   "0404-navyone":
     canonicalName: "Navy One"
@@ -256,11 +570,6 @@ boats:
       name: "navyone"
     - sailNumber: "0404"
       name: "navybone"
-  "1088-nortonwhitecorum":
-    canonicalName: "Norton White Corum"
-    aliases:
-    - sailNumber: null
-      name: "Corum"
   "1014-wildthing":
     canonicalName: "Wild Thing"
     aliases:
@@ -297,11 +606,6 @@ boats:
       name: "Andoo Comanche"
     - sailNumber: null
       name: "Master Lock Comanche"
-  AUS10001-hamiltonislandwildoats:
-    canonicalName: "HAMILTON ISLAND WILD OATS"
-    aliases:
-    - sailNumber: null
-      name: "Hamilton Island Wild Oats"
   SM9535-celestial:
     canonicalName: "Celestial"
     aliases:
@@ -395,13 +699,6 @@ boats:
     aliases:
     - sailNumber: "UNKNOWN"
       name: "gt"
-  "44361AUS4788-okavangodelta":
-    canonicalName: "Okavango Delta"
-    aliases:
-    - sailNumber: "44361"
-      name: "okavangodelta"
-    - sailNumber: "JAUS44361AUS4788"
-      name: "okavangodelta"
   "44371309-onlyajourney":
     canonicalName: "Only a Journey"
     aliases:
@@ -586,210 +883,164 @@ boats:
     aliases:
     - sailNumber: "9596"
       name: "loco"
-  "4-dscrsquest4":
-    canonicalName: "DSC RS Quest 4"
+  "1049-alu":
+    canonicalName: "ALU"
     aliases:
-    - sailNumber: "04"
-      name: "dscrsquest4"
-  "35-hitnrun":
-    canonicalName: "HIT N RUN"
+      - sailNumber: "1045"
+        name: "alu"
+  "226-botanyaccess":
+    canonicalName: "Botany Access"
     aliases:
-    - sailNumber: "035"
-      name: "hitnrun"
-  "25-matador":
-    canonicalName: "Matador"
-    aliases:
-    - sailNumber: "025"
-      name: "matador"
-  "400-vento":
-    canonicalName: "Vento"
-    aliases:
-    - sailNumber: "00400"
-      name: "vento"
-  "112-joli":
-    canonicalName: "Joli"
-    aliases:
-    - sailNumber: "0112"
-      name: "joli"
-  "7-shakennotstirred":
-    canonicalName: "Shaken not Stirred"
-    aliases:
-    - sailNumber: "007"
-      name: "shakennotstirred"
-  "214444-four":
-    canonicalName: "Four"
-    aliases:
-    - sailNumber: "0214444"
-      name: "four"
-  "38-tribute":
-    canonicalName: "Tribute"
-    aliases:
-    - sailNumber: "038"
-      name: "tribute"
-  "14-seafox":
-    canonicalName: "Sea Fox"
-    aliases:
-    - sailNumber: "014"
-      name: "seafox"
-  "19-wubaray":
-    canonicalName: "Wubaray"
-    aliases:
-    - sailNumber: "019"
-      name: "wubaray"
-  "86-dragonfly":
-    canonicalName: "Dragonfly"
-    aliases:
-    - sailNumber: "0086"
-      name: "dragonfly"
-  "18-blink":
-    canonicalName: "Blink"
-    aliases:
-    - sailNumber: "018"
-      name: "blink"
-  "103-theedge":
-    canonicalName: "The Edge"
-    aliases:
-    - sailNumber: "0103"
-      name: "theedge"
-  "3-dscrsquest3":
-    canonicalName: "DSC RS Quest 3"
-    aliases:
-    - sailNumber: "03"
-      name: "dscrsquest3"
-  "67-twicetempted":
-    canonicalName: "Twice Tempted"
-    aliases:
-    - sailNumber: "067"
-      name: "twicetempted"
-  "5-intrigue":
-    canonicalName: "Intrigue"
-    aliases:
-      - sailNumber: "05"
-        name: "intrigue"
-  "823-noma":
-    canonicalName: "Noma"
-    aliases:
-      - sailNumber: "0823"
-        name: "noma"
-  "60-nawi":
-    canonicalName: "Nawi"
-    aliases:
-      - sailNumber: "060"
-        name: "nawi"
-  "412-mojo":
-    canonicalName: "Mojo"
-    aliases:
-      - sailNumber: "0412"
-        name: "mojo"
-  "75-trex":
-    canonicalName: "Trex"
-    aliases:
-      - sailNumber: "075"
-        name: "trex"
-  "33-azure":
-    canonicalName: "Azure"
-    aliases:
-      - sailNumber: "033"
-        name: "azure"
-  "20-pingu":
-    canonicalName: "Pingu"
-    aliases:
-      - sailNumber: "020"
-        name: "pingu"
-  "68-sidewinder":
-    canonicalName: "Sidewinder"
-    aliases:
-      - sailNumber: "068"
-        name: "sidewinder"
-  "3-noahsii":
-    canonicalName: "Noahs II"
-    aliases:
-      - sailNumber: "03"
-        name: "noahsii"
-  "95-anarchy":
-    canonicalName: "Anarchy"
-    aliases:
-      - sailNumber: "095"
-        name: "anarchy"
-  "88-adelax":
-    canonicalName: "Adela X"
-    aliases:
-      - sailNumber: "0088"
-        name: "adelax"
-  "3-navigator":
-    canonicalName: "Navigator"
-    aliases:
-      - sailNumber: "003"
-        name: "navigator"
-  "349-bluebottle":
-    canonicalName: "Bluebottle"
-    aliases:
-      - sailNumber: "0349"
-        name: "bluebottle"
-  "75-pilgar":
-    canonicalName: "Pilgar"
-    aliases:
-      - sailNumber: "075"
-        name: "pilgar"
-  "1-independence":
-    canonicalName: "Independence"
-    aliases:
-      - sailNumber: "01"
-        name: "independence"
+      - sailNumber: "226"
+        name: "botanyaccessmc38"
   "18-phantom377":
     canonicalName: "Phantom377"
     aliases:
       - sailNumber: "018"
         name: "phantom377"
-      - sailNumber: "018"
-        name: "phantom"
-  "122-rumchaser":
-    canonicalName: "Rumchaser"
+    - sailNumber: "018"
+      name: "phantom"
+  "1001-wildthing100":
+    canonicalName: "Wild Thing 100"
     aliases:
-      - sailNumber: "0122"
-        name: "rumchaser"
-  "0-thetipsyunicorn":
-    canonicalName: "The Tipsy Unicorn"
+      - sailNumber: "100"
+        name: "wildthing100"
+  "8010-wildgoats2":
+    canonicalName: "Wild Goats 2"
     aliases:
-      - sailNumber: "000"
-        name: "thetipsyunicorn"
-  "67-aetosiii":
-    canonicalName: "Aetos III"
+      - sailNumber: "8050"
+        name: "wildgoats2"
+  "215574-blouse":
+    canonicalName: "#blouse"
     aliases:
-      - sailNumber: "067"
-        name: "aetosiii"
-  "38-seremisa":
-    canonicalName: "Seremisa"
+      - sailNumber: "215574215547"
+        name: "blouse"
+      - sailNumber: "215574"
+        name: "blousegm"
+  "4788-okavangodelta":
+    canonicalName: "Okavango Delta"
     aliases:
-      - sailNumber: "0038"
-        name: "seremisa"
-  "11-vivalavita":
-    canonicalName: "Viva La Vita"
+      - sailNumber: "4436"
+        name: "okavangodelta"
+      - sailNumber: "443614437"
+        name: "okavangodelta"
+      - sailNumber: "44361AUS4788"
+        name: "okavangodelta"
+      - sailNumber: "44361"
+        name: "okavangodelta"
+      - sailNumber: "JAUS44361AUS4788"
+        name: "okavangodelta"
+      - sailNumber: "4437"
+        name: "okavangodelta"
+      - sailNumber: "44364437"
+        name: "okavangodelta"
+  "1088-corum":
+    canonicalName: "Corum"
     aliases:
-      - sailNumber: "0011"
-        name: "vivalavita"
-  "30-cuckoosnest":
-    canonicalName: "Cuckoo's Nest"
+      - sailNumber: "1088"
+        name: "nortonwhitecorum"
+  HHH-sko:
+    canonicalName: "S.K.O"
     aliases:
-      - sailNumber: "030"
-        name: "cuckoosnest"
-  "78-intrigue2":
-    canonicalName: "Intrigue 2"
+      - sailNumber: "HHHH"
+        name: "sko20"
+  "2407-manlysailingaqualuna":
+    canonicalName: "Manly Sailing - Aqualuna"
     aliases:
-      - sailNumber: "078"
-        name: "intrigue2"
-  "900-ultime":
-    canonicalName: "Ultime"
+      - sailNumber: "2407"
+        name: "allsailaqualuna"
+  "9542-buggalugs":
+    canonicalName: "Buggalugs"
     aliases:
-      - sailNumber: "0900"
-        name: "ultime"
-  "7-amity":
-    canonicalName: "Amity"
+      - sailNumber: "9542123FFFF"
+        name: "buggalugs"
+  "112-yeahbaby":
+    canonicalName: "Yeah Baby"
     aliases:
-      - sailNumber: "07"
-        name: "amity"
-  "400-andiamo":
-    canonicalName: "Andiamo"
+      - sailNumber: "112"
+        name: "titlespaceyeahbaby"
+      - sailNumber: "112"
+        name: "volstaryeahbaby"
+      - sailNumber: "112"
+        name: "voltstaryeahbaby"
+  B34-1111:
+    canonicalName: "11:11"
     aliases:
-      - sailNumber: "0400"
-        name: "andiamo"
+      - sailNumber: "SB1111"
+        name: "1111"
+  "7777-calibre":
+    canonicalName: "Calibre"
+    aliases:
+      - sailNumber: "7777"
+        name: "calibre12"
+      - sailNumber: "777"
+        name: "calibre38"
+  "400C-jedi":
+    canonicalName: "Jedi"
+    aliases:
+      - sailNumber: "400Y"
+        name: "jedi"
+  "294-lovewar":
+    canonicalName: "Love & War"
+    aliases:
+      - sailNumber: "294"
+        name: "loveandwar"
+  DAUS192-abracadabra:
+    canonicalName: "Abracadabra"
+    aliases:
+      - sailNumber: "DAUS220"
+        name: "abracadabra"
+      - sailNumber: "DAUS148"
+        name: "abracadabra"
+  HKG2630-aegean66:
+    canonicalName: "Aegean66"
+    aliases:
+      - sailNumber: "HKG999"
+        name: "aegean66"
+  HKG1358-arewethereyet:
+    canonicalName: "Are We There Yet"
+    aliases:
+      - sailNumber: "EHKG1358"
+        name: "arewethereyet"
+  "90-avantgarde":
+    canonicalName: "Avant Garde"
+    aliases:
+      - sailNumber: "90"
+        name: "avanteguard"
+      - sailNumber: "90"
+        name: "avantegurad"
+  R148-bluevolvo:
+    canonicalName: "BLUE VOLVO"
+    aliases:
+      - sailNumber: "148"
+        name: "bluevolvo"
+  MH36-allegra:
+    canonicalName: "Allegra"
+    aliases:
+      - sailNumber: "MARLOW36"
+        name: "allegra"
+  MH142-flo:
+    canonicalName: "FLO"
+    aliases:
+      - sailNumber: "0"
+        name: "flo"
+  MH247-happyhour:
+    canonicalName: "Happy Hour"
+    aliases:
+      - sailNumber: "MH2471"
+        name: "happyhour"
+  "8182-kairani":
+    canonicalName: "Kai Rani"
+    aliases:
+      - sailNumber: "8171"
+        name: "kairani"
+  "6607-wirrajurnd":
+    canonicalName: "Wirrajurnd"
+    aliases:
+      - sailNumber: "6607"
+        name: "wirrajunnd"
+  "744PEARSON8-allthegearandnoidea":
+    canonicalName: "All the Gear and No Idea"
+    aliases:
+      - sailNumber: "744PEARSON"
+        name: "allthegearandnoidea"

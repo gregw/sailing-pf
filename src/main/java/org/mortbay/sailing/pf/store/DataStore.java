@@ -383,7 +383,48 @@ public class DataStore
         // We have multiple boats with the same sailNo, name but different designs, so we don't know which one this is?
         LOG.warn("Ambiguous boat match: sailNo={} name={} design={} — {} candidates with different designs",
             normSailNo, normName, designId, matches.size());
+        logAmbiguousMatch(source, normSailNo, normName, designId, matches);
         return null;
+    }
+
+    /**
+     * Append a single tab-separated record describing an ambiguous boat match to
+     * {@code <dataRoot>/log/ambiguous-boats.log}. Each record names the source importer,
+     * the incoming sail/name/design, and the list of existing candidate boats (boatId:designId).
+     * Failures are reported via {@code LOG.warn} and never propagate — logging must not
+     * break an import.
+     */
+    private void logAmbiguousMatch(String source, String normSailNo, String normName,
+                                   String designId, List<Boat> candidates)
+    {
+        try
+        {
+            Path logDir = root.resolve("log");
+            Files.createDirectories(logDir);
+            Path file = logDir.resolve("ambiguous-boats.log");
+            StringBuilder sb = new StringBuilder();
+            sb.append(Instant.now())
+                .append('\t').append(source == null ? "" : source)
+                .append('\t').append(normSailNo)
+                .append('\t').append(normName)
+                .append('\t').append(isBlank(designId) ? "(none)" : designId)
+                .append('\t');
+            for (int i = 0; i < candidates.size(); i++)
+            {
+                if (i > 0)
+                    sb.append(',');
+                Boat c = candidates.get(i);
+                sb.append(c.id()).append(':').append(c.designId() == null ? "(none)" : c.designId());
+            }
+            sb.append('\n');
+            Files.writeString(file, sb.toString(),
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.APPEND);
+        }
+        catch (IOException e)
+        {
+            LOG.warn("Failed to append to ambiguous-boats.log: {}", e.getMessage());
+        }
     }
 
     // --- findOrCreateBoat helpers ---

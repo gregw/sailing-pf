@@ -32,7 +32,8 @@ clubs:
     - "CYCA/SDYC"
     topyacht:
     - "https://cyca.com.au/results/2019/bwps_1920/index.htm"
-    boats: null
+    boats:
+      - "1-back2black-reichelpughgp42"
   cycsa.com.au:
     shortName: "CYCSA"
     state: "SA"
@@ -275,7 +276,10 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
-    boats: null
+    boats:
+      - "5656-mondo-sydney38"
+      - "2407-manlysailingaqualuna-force24"
+      - "MH137-plumcrazy-adamsmiller3012tonner"
   mhyc.com.au:
     shortName: "MHYC"
     state: "NSW"
@@ -296,8 +300,7 @@ clubs:
     aliases: []
     topyacht:
     - "https://www.topyacht.net.au/results/sasc/2023/club/index.htm"
-    boats:
-      - "1255-melody-swansondart"
+    boats: null
   rpeyc.com.au:
     shortName: "RPEYC"
     state: "NSW"
@@ -526,7 +529,8 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
-    boats: null
+    boats:
+      - "BLANKSAILNUMBER-smokin"
   williamstownsailingclub.org.au:
     shortName: "WSC"
     state: "VIC"
@@ -874,7 +878,8 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
-    boats: null
+    boats:
+      - "530-thedrivers"
   sailportstephens.com.au:
     shortName: "SPS"
     state: "NSW"
@@ -945,8 +950,31 @@ boatClubOverrides:
 - sailNumber: "MYC10"
   name: "Joss"
   clubId: "myc.org.au"
-- sailNumber: "1255"
-  name: "Melody"
-  clubId: "sasc.com.au"
+- sailNumber: "MH137"
+  name: "Plum Crazy"
+  clubId: "myc.org.au"
 noclub:
+  - "1255-melody-swansondart"
+  - "1161-wildlife-etchells"
   - "6689-copernicus-radford12"
+  - "1088-corum-farr36modified"
+  - "HHH-sko-elliott6"
+  - "12844-upup"
+  - "46075-savannahgirl-swan46"
+  - "5865-pintaii-beneteaufirst317"
+  - "V2-vanilla2-dufour560gl"
+  - "EKA15-swift-cruisingetchells"
+  - "DAUS179-imagination"
+  - "NH555-gramarye-tophatmk3"
+  - "5522-infraction-bavariamatch42"
+  - "4-crazysailing"
+  - "7115-idlefrets-sonata7"
+  - "YAUS59-evie-yngling"
+  - "6479-misky-northshore340"
+  - "1919-losthorizon-archambaultgrandsurprise"
+  - "9448-cannonball"
+  - "6776-danceswithwaves-beneteaufirst407"
+  - "11634-fishface"
+  - "7060-spiritbird-farr30"
+  - "1487-jindavik-etchells"
+  - "1992-itcouldbebunnies-sabre"

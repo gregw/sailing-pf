@@ -1,5 +1,12 @@
 package org.mortbay.sailing.pf.store;
 
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mortbay.sailing.pf.data.Boat;
@@ -11,14 +18,11 @@ import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
 
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DataStoreTest {
 
@@ -386,6 +390,50 @@ class DataStoreTest {
         assertEquals("MYC7-daydreaming", boat.id());
         assertEquals("Day Dreaming", boat.name());
         assertEquals(1, store.boats().size());
+    }
+
+    /**
+     * When two boats share the same sail+name but have different designs, an incoming
+     * design-less record can't be unambiguously matched. The existing behaviour is to
+     * return null. The added behaviour is to also append a tab-separated record describing
+     * the conflict to {@code <dataRoot>/log/ambiguous-boats.log} so an admin can review.
+     */
+    @Test
+    void findOrCreateBoatLogsAmbiguousMatchToFile(@TempDir Path tempDir) throws Exception
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        // Two boats with same normalised sail+name but different designs.
+        Design tp52 = new Design("tp52", "TP52", List.of(), List.of(), null, null);
+        Design farr40 = new Design("farr40", "Farr 40", List.of(), List.of(), null, null);
+        store.putDesign(tp52);
+        store.putDesign(farr40);
+        // Sail numbers are stored post-AUS-prefix-strip (see findOrCreateBoatCreatesNewBoat).
+        Boat boatA = new Boat("1234-ragingbull-tp52", "1234", "Raging Bull",
+            "tp52", null, List.of(), List.of(), null, null);
+        Boat boatB = new Boat("1234-ragingbull-farr40", "1234", "Raging Bull",
+            "farr40", null, List.of(), List.of(), null, null);
+        store.putBoat(boatA);
+        store.putBoat(boatB);
+
+        // Design-less third record cannot pick between them — returns null.
+        Boat result = store.findOrCreateBoat("AUS1234", "Raging Bull", null, null, "sailsys");
+        assertNull(result);
+
+        // The ambiguous-match log should have been created and contain a single record
+        // naming the source, normalised sail+name, "(none)" for the missing design, and
+        // both candidate boatIds with their designIds.
+        Path logFile = tempDir.resolve("log/ambiguous-boats.log");
+        assertTrue(Files.exists(logFile), "ambiguous-boats.log should exist");
+        String contents = Files.readString(logFile);
+        assertTrue(contents.contains("\tsailsys\t"), "source field present: " + contents);
+        assertTrue(contents.contains("\t1234\t"), "normSail field present: " + contents);
+        assertTrue(contents.contains("\tragingbull\t"), "normName field present: " + contents);
+        assertTrue(contents.contains("\t(none)\t"), "missing design rendered as (none): " + contents);
+        assertTrue(contents.contains("1234-ragingbull-tp52:tp52"),
+            "first candidate id:design present: " + contents);
+        assertTrue(contents.contains("1234-ragingbull-farr40:farr40"),
+            "second candidate id:design present: " + contents);
     }
 
     // --- findUniqueClubByShortName ---

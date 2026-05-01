@@ -1,5 +1,18 @@
 package org.mortbay.sailing.pf.store;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.TreeMap;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
@@ -7,18 +20,6 @@ import org.eclipse.jetty.util.StringUtil;
 import org.mortbay.sailing.pf.importer.IdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.TreeMap;
 
 /**
  * Reads {@code /aliases.yaml} from the classpath and provides lookup methods
@@ -210,21 +211,44 @@ public class Aliases
                         continue;
                     }
 
-                    List<SailNumberName> aliases = new ArrayList<>();
+                    // Bucket each YAML entry into full / sail-only / name-only, then expand.
+                    // The cross-combinations rule: a sail-only alias may pair with the canonical
+                    // name AND with every name-only alias; a name-only alias may pair with the
+                    // canonical sail AND with every sail-only alias (which is the same set of
+                    // crosses, covered by the sail-only loop). We never emit sail×sail or
+                    // name×name pairs — that would explode quadratically for a boat with many
+                    // aliases of the same kind.
+                    List<SailNumberName> fullAliases = new ArrayList<>();
+                    List<String> sailOnly = new ArrayList<>();
+                    List<String> nameOnly = new ArrayList<>();
                     for (SailNumberName snn : e.getValue().aliases)
                     {
-                        if (snn.sailNumber != null && !snn.sailNumber.isBlank())
+                        boolean hasSail = snn.sailNumber != null && !snn.sailNumber.isBlank();
+                        boolean hasName = snn.name != null && !snn.name.isBlank();
+                        if (hasSail && hasName)
+                            fullAliases.add(new SailNumberName(
+                                IdGenerator.normaliseSailNumber(snn.sailNumber),
+                                IdGenerator.normaliseName(snn.name)));
+                        else if (hasSail)
+                            sailOnly.add(IdGenerator.normaliseSailNumber(snn.sailNumber));
+                        else if (hasName)
+                            nameOnly.add(IdGenerator.normaliseName(snn.name));
+                    }
+
+                    LinkedHashSet<SailNumberName> expanded = new LinkedHashSet<>(fullAliases);
+                    for (String s : sailOnly)
+                    {
+                        expanded.add(new SailNumberName(s, normName));
+                        for (String n : nameOnly)
                         {
-                            if (snn.name != null && !snn.name.isBlank())
-                                aliases.add(new SailNumberName(IdGenerator.normaliseSailNumber(snn.sailNumber), IdGenerator.normaliseName(snn.name)));
-                            else
-                                aliases.add(new SailNumberName(IdGenerator.normaliseSailNumber(snn.sailNumber), normName));
-                        }
-                        else if (snn.name != null && !snn.name.isBlank())
-                        {
-                            aliases.add(new SailNumberName(canonicalSail, IdGenerator.normaliseName(snn.name)));
+                            expanded.add(new SailNumberName(s, n));
                         }
                     }
+                    for (String n : nameOnly)
+                    {
+                        expanded.add(new SailNumberName(canonicalSail, n));
+                    }
+                    List<SailNumberName> aliases = new ArrayList<>(expanded);
 
                     final SailNumberName canonical = new SailNumberName(canonicalSail, normName);
                     final BoatEntry normalised = new BoatEntry(entry.canonicalName, aliases);

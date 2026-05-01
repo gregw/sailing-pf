@@ -340,30 +340,15 @@ window.HandicapCalc = (function () {
                 }
             });
 
-            // Delta columns
-            const allDeltas = [];
-            const collect = (ftKey, factorAccessor) => {
-                const stats = ftStats[ftKey];
-                if (!stats || stats.ratios.length <= 1) return;
-                calcBoats.forEach(boat => {
-                    const fv = factorAccessor(boat);
-                    if (fv == null) return;
-                    const a = anchorByBoat.get(boat.id);
-                    if (a) {
-                        const predicted = fv * stats.R;
-                        allDeltas.push(Math.abs(a.value - predicted));
-                    }
-                });
-            };
-            collect('pf', b => b.pf);
-            collect('rf', b => b.rf);
-            const maxAbsDelta = allDeltas.length > 0 ? Math.max(...allDeltas) : 0.05;
-            const deltaColor = absDelta => `hsl(${120 * (1 - Math.min(absDelta / maxAbsDelta, 1))}, 60%, 38%)`;
-            const formatDelta = delta => {
+            // Delta columns. Colour uses fitColor(deviation) — the same input as the TCF
+            // cell on the same row — so both cells reflect the same fit quality on the
+            // same absolute scale (0..5% green→red), independent of which other boats
+            // happen to be in the current view.
+            const formatDelta = (delta, deviation) => {
                 if (Math.abs(delta) < 0.00005) return '0';
                 const arrow = delta > 0 ? '↑' : '↓';
                 const sign = delta > 0 ? '+' : '−';
-                const color = deltaColor(Math.abs(delta));
+                const color = fitColor(deviation);
                 return `<span style="font-size:0.75rem;color:${color};font-weight:bold;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
             };
             const renderDelta = (ftKey, deltaCol, factorAccessor) => {
@@ -383,7 +368,9 @@ window.HandicapCalc = (function () {
                     if (a) {
                         const predicted = fv * stats.R;
                         const delta = a.value - predicted;
-                        cell.innerHTML = formatDelta(delta);
+                        const r = stats.ratioMap.get(boat.id);
+                        const deviation = r != null ? Math.abs(r - stats.R) / stats.R : 0;
+                        cell.innerHTML = formatDelta(delta, deviation);
                         cell.title = `Entered: ${a.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
                     } else {
                         cell.textContent = '';

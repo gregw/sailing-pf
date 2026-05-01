@@ -42,7 +42,7 @@ importers:
   runAtStartup: true
 - name: "save-database"
   mode: "run"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: true
 schedule:
   days:
@@ -54,8 +54,8 @@ outlierSigma: null
 recentRaceReimportDays: 30
 
 # --- SailSys importer ---
-sailsysNextRaceId: 32414
-sailsysEndRaceId: 41288
+sailsysNextRaceId: 32678
+sailsysEndRaceId: 41340
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
@@ -102,5 +102,5 @@ authAllowedDomain: null
 # --- Server ports ---
 adminPort: 8888
 userPort: 8080
-natGatewayIp: null
+natGatewayIp: "10.19.25.1"
 

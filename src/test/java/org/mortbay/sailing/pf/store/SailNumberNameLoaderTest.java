@@ -1,12 +1,16 @@
 package org.mortbay.sailing.pf.store;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SailNumberNameLoaderTest
 {
@@ -204,5 +208,110 @@ class SailNumberNameLoaderTest
         // "AUS" alone (no trailing digit) should not be stripped
         Aliases.Loaded empty = Aliases.Loaded.EMPTY;
         assertTrue(empty.lookupBoat("AUS", "someboat").isEmpty());
+    }
+
+    // --- Combinatorial expansion of partial aliases ---
+
+    /**
+     * A sail-only alias and a name-only alias under the same boat must produce three
+     * derived match keys: (sailAlias, canonicalName), (canonicalSail, nameAlias), AND the
+     * cross (sailAlias, nameAlias). The cross is the new behaviour.
+     */
+    @Test
+    void sailOnlyAndNameOnlyGenerateCrossPair(@TempDir Path tempDir) throws Exception
+    {
+        Aliases.addAliases(tempDir, "AUS1234", "Raging Bull",
+            List.of(
+                new Aliases.SailNumberName("5656", null),    // sail-only
+                new Aliases.SailNumberName(null, "rbull")    // name-only
+            ));
+        Aliases.Loaded seed = Aliases.load(tempDir);
+
+        // (sailAlias, canonicalName)
+        Optional<Aliases.BoatMatch> a = seed.lookupBoat("5656", "ragingbull");
+        assertTrue(a.isPresent(), "(5656, ragingbull) should resolve");
+        assertEquals("AUS1234", a.get().normSailNumber());
+        assertEquals("ragingbull", a.get().normName());
+
+        // (canonicalSail, nameAlias)
+        Optional<Aliases.BoatMatch> b = seed.lookupBoat("AUS1234", "rbull");
+        assertTrue(b.isPresent(), "(AUS1234, rbull) should resolve");
+        assertEquals("AUS1234", b.get().normSailNumber());
+        assertEquals("ragingbull", b.get().normName());
+
+        // (sailAlias, nameAlias) — the cross, missing before the rule was added
+        Optional<Aliases.BoatMatch> cross = seed.lookupBoat("5656", "rbull");
+        assertTrue(cross.isPresent(), "(5656, rbull) cross should resolve");
+        assertEquals("AUS1234", cross.get().normSailNumber());
+        assertEquals("ragingbull", cross.get().normName());
+    }
+
+    /**
+     * Two sail-only aliases (no name-only) must NOT produce sail×sail crosses — only
+     * each paired with the canonical name. Asymmetric rule prevents quadratic blow-up.
+     */
+    @Test
+    void twoSailOnlyAliasesDoNotCross(@TempDir Path tempDir) throws Exception
+    {
+        Aliases.addAliases(tempDir, "AUS1234", "Raging Bull",
+            List.of(
+                new Aliases.SailNumberName("5656", null),
+                new Aliases.SailNumberName("7777", null)
+            ));
+        Aliases.Loaded seed = Aliases.load(tempDir);
+
+        assertTrue(seed.lookupBoat("5656", "ragingbull").isPresent());
+        assertTrue(seed.lookupBoat("7777", "ragingbull").isPresent());
+        // No name-only alias was declared, so no other name should resolve via the sail aliases.
+        assertTrue(seed.lookupBoat("5656", "7777").isEmpty(),
+            "(5656, 7777) must not resolve — sail×sail is forbidden");
+        assertTrue(seed.lookupBoat("7777", "5656").isEmpty(),
+            "(7777, 5656) must not resolve — sail×sail is forbidden");
+    }
+
+    /**
+     * Two name-only aliases (no sail-only) must NOT produce name×name crosses — only
+     * each paired with the canonical sail.
+     */
+    @Test
+    void twoNameOnlyAliasesDoNotCross(@TempDir Path tempDir) throws Exception
+    {
+        Aliases.addAliases(tempDir, "AUS1234", "Raging Bull",
+            List.of(
+                new Aliases.SailNumberName(null, "rbull"),
+                new Aliases.SailNumberName(null, "thebull")
+            ));
+        Aliases.Loaded seed = Aliases.load(tempDir);
+
+        assertTrue(seed.lookupBoat("AUS1234", "rbull").isPresent());
+        assertTrue(seed.lookupBoat("AUS1234", "thebull").isPresent());
+        // No sail-only alias was declared, so the names should not cross-pair with each other.
+        assertTrue(seed.lookupBoat("rbull", "thebull").isEmpty(),
+            "(rbull, thebull) must not resolve — name×name is forbidden");
+    }
+
+    /**
+     * One sail-only + two name-only. The sail-only alias must cross with BOTH name-only
+     * aliases (linear in the number of name-onlys, not quadratic in the total).
+     */
+    @Test
+    void oneSailOnlyCrossesAllNameOnly(@TempDir Path tempDir) throws Exception
+    {
+        Aliases.addAliases(tempDir, "AUS1234", "Raging Bull",
+            List.of(
+                new Aliases.SailNumberName("5656", null),
+                new Aliases.SailNumberName(null, "rbull"),
+                new Aliases.SailNumberName(null, "thebull")
+            ));
+        Aliases.Loaded seed = Aliases.load(tempDir);
+
+        // sail-only × canonical name
+        assertTrue(seed.lookupBoat("5656", "ragingbull").isPresent());
+        // sail-only × each name-only
+        assertTrue(seed.lookupBoat("5656", "rbull").isPresent(), "5656 × rbull cross");
+        assertTrue(seed.lookupBoat("5656", "thebull").isPresent(), "5656 × thebull cross");
+        // canonical sail × each name-only
+        assertTrue(seed.lookupBoat("AUS1234", "rbull").isPresent());
+        assertTrue(seed.lookupBoat("AUS1234", "thebull").isPresent());
     }
 }
