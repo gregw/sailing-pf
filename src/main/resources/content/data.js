@@ -2298,7 +2298,9 @@ function applyRaceCalcDivision(divName) {
             boatName: b.name || null,
             division: b.division || null,
             pf: b.pf,
+            pfWeight: b.pfWeight,
             rf: b.rf,
+            rfWeight: b.rfWeight,
             bestFit: null
         }));
     raceCalc().setBoats(boats);
@@ -2391,7 +2393,9 @@ function buildSeriesCalcBoats(data, divName) {
                     sailNumber: f.sailNumber || null,
                     boatName: f.name || null,
                     pf: f.pf,
+                    pfWeight: f.pfWeight,
                     rf: f.rf != null ? f.rf : null,
+                    rfWeight: f.rfWeight,
                     bestFit: null
                 });
             });

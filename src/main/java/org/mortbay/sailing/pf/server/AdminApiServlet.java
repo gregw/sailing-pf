@@ -1852,6 +1852,8 @@ public class AdminApiServlet extends HttpServlet
                     };
                     Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
                     Double rfVal = rfFactor != null && !Double.isNaN(rfFactor.value()) ? rfFactor.value() : null;
+                    Double pfWeight = pfFactor != null && !Double.isNaN(pfFactor.weight()) ? pfFactor.weight() : null;
+                    Double rfWeight = rfFactor != null && !Double.isNaN(rfFactor.weight()) ? rfFactor.weight() : null;
                     if (pfVal == null)
                         continue;
 
@@ -1861,7 +1863,9 @@ public class AdminApiServlet extends HttpServlet
                     row.put("sailNumber", bd.boat().sailNumber());
                     row.put("variant", fVariant);
                     row.put("pf", pfVal);
+                    row.put("pfWeight", pfWeight);
                     row.put("rf", rfVal);
+                    row.put("rfWeight", rfWeight);
                     row.put("division", div.name());
                     byBoat.put(f.boatId(), row);
                 }
@@ -2123,6 +2127,8 @@ public class AdminApiServlet extends HttpServlet
                     double elapsedSec = f.elapsedTime().toSeconds();
                     Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
                     Double rfVal = rfFactor != null && !Double.isNaN(rfFactor.value()) ? rfFactor.value() : null;
+                    Double pfWeight = pfFactor != null && !Double.isNaN(pfFactor.weight()) ? pfFactor.weight() : null;
+                    Double rfWeight = rfFactor != null && !Double.isNaN(rfFactor.weight()) ? rfFactor.weight() : null;
 
                     Map<String, Object> fm = new LinkedHashMap<>();
                     fm.put("boatId", f.boatId());
@@ -2130,7 +2136,9 @@ public class AdminApiServlet extends HttpServlet
                     fm.put("sailNumber", bd.boat().sailNumber());
                     fm.put("elapsed", elapsedSec);
                     fm.put("pf", pfVal);
+                    fm.put("pfWeight", pfWeight);
                     fm.put("rf", rfVal);
+                    fm.put("rfWeight", rfWeight);
                     fm.put("pfCorrected", pfVal != null && pfVal > 0 ? elapsedSec * pfVal : null);
                     finishers.add(fm);
                 }

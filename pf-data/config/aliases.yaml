@@ -898,8 +898,8 @@ boats:
     aliases:
       - sailNumber: "018"
         name: "phantom377"
-    - sailNumber: "018"
-      name: "phantom"
+      - sailNumber: "018"
+        name: "phantom"
   "1001-wildthing100":
     canonicalName: "Wild Thing 100"
     aliases:
