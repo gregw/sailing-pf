@@ -11,8 +11,9 @@
 //   getEnteredValues()         — Map(boatId → handicap)
 //   recalc()                   — force recalculation of scaled columns
 //
-// Boats passed to setBoats must have: { id, name, sailNumber, boatName, pf, rf, bestFit?, color? }.
-// pf is required; rf and bestFit may be null.
+// Boats passed to setBoats must have: { id, name, sailNumber, boatName, pf, rf, bestFit?, color?, pfWeight?, rfWeight? }.
+// pf is required; rf and bestFit may be null. pfWeight/rfWeight (when present) weight each anchor's
+// contribution to the consensus scale factor used for predictions.
 //
 // cfg = {
 //   section,                        // section <div> wrapping the calculator (show/hide handled here)
@@ -93,6 +94,29 @@ window.HandicapCalc = (function () {
         if (cv < 0.025) return `Scaled from consensus — spread ${pct}% (moderate confidence)`;
         if (cv < 0.05) return `Scaled from consensus — spread ${pct}% (low confidence)`;
         return `Scaled from consensus — spread ${pct}% (very low confidence)`;
+    }
+
+    // Mirrors data.js — colour/tooltip for a factor's underlying weight (0..1).
+    function weightColor(w) {
+        const cw = Math.min(w ?? 0, 1);
+        if (cw >= 0.5) {
+            const t = (cw - 0.5) * 2;
+            return `rgb(${Math.round(120 * (1 - t))},${Math.round(120 + 40 * t)},${Math.round(120 * (1 - t))})`;
+        }
+        const t = cw * 2;
+        return `rgb(${Math.round(220 - 100 * t)},${Math.round(30 + 90 * t)},${Math.round(30 + 90 * t)})`;
+    }
+
+    function weightLabel(w) {
+        if (w == null) return 'No data';
+        if (w >= 0.85) return `Weight: ${w.toFixed(2)} — high confidence`;
+        if (w >= 0.6) return `Weight: ${w.toFixed(2)} — moderate confidence`;
+        if (w >= 0.35) return `Weight: ${w.toFixed(2)} — low confidence`;
+        return `Weight: ${w.toFixed(2)} — very low confidence`;
+    }
+
+    function weightFieldFor(ft) {
+        return ft === 'pf' ? 'pfWeight' : ft === 'rf' ? 'rfWeight' : null;
     }
 
     // --- PP pentagon hover popup ---------------------------------------------------
@@ -344,6 +368,12 @@ window.HandicapCalc = (function () {
                             td.dataset.boatId = b.id;
                             td.dataset.factorType = c.key;
                             td.dataset.origValue = v != null ? String(v) : '';
+                            const wField = weightFieldFor(c.key);
+                            const w = wField ? b[wField] : null;
+                            if (v != null && w != null) {
+                                td.style.color = weightColor(w);
+                                td.title = weightLabel(w);
+                            }
                         }
                         tr.appendChild(td);
                     }
@@ -356,11 +386,19 @@ window.HandicapCalc = (function () {
         }
 
         function restoreAll() {
+            const byId = new Map(calcBoats.map(b => [b.id, b]));
             valueCells().forEach(td => {
                 const origStr = td.dataset.origValue;
                 td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
-                td.style.color = '';
-                td.title = '';
+                const wField = weightFieldFor(td.dataset.factorType);
+                const w = wField ? byId.get(td.dataset.boatId)?.[wField] : null;
+                if (origStr && w != null) {
+                    td.style.color = weightColor(w);
+                    td.title = weightLabel(w);
+                } else {
+                    td.style.color = '';
+                    td.title = '';
+                }
             });
             section.querySelectorAll('.pf-calc-value[data-factor-type$="Delta"]').forEach(td => {
                 td.textContent = '';
@@ -404,18 +442,24 @@ window.HandicapCalc = (function () {
 
             const ftStats = {};
             for (const ft of ftSet) {
+                const weightField = (ft === 'pf') ? 'pfWeight' : (ft === 'rf') ? 'rfWeight' : null;
                 const ratios = [];
                 for (const a of anchors) {
                     const orig = a.boat[ft];
-                    if (orig != null && orig !== 0) ratios.push({boatId: a.boat.id, r: a.value / orig});
+                    if (orig != null && orig !== 0) {
+                        const wRaw = weightField ? a.boat[weightField] : null;
+                        const w = (wRaw != null && wRaw > 0) ? wRaw : 1;
+                        ratios.push({boatId: a.boat.id, r: a.value / orig, w});
+                    }
                 }
                 if (ratios.length === 0) {
                     ftStats[ft] = null;
                     continue;
                 }
-                const R = ratios.reduce((s, x) => s + x.r, 0) / ratios.length;
+                const wSum = ratios.reduce((s, x) => s + x.w, 0);
+                const R = ratios.reduce((s, x) => s + x.w * x.r, 0) / wSum;
                 const S = ratios.length > 1
-                    ? Math.sqrt(ratios.reduce((s, x) => s + (x.r - R) ** 2, 0) / ratios.length)
+                    ? Math.sqrt(ratios.reduce((s, x) => s + x.w * (x.r - R) ** 2, 0) / wSum)
                     : 0;
                 const cv = R > 0 ? S / R : 0;
                 ftStats[ft] = {ratios, R, S, cv, ratioMap: new Map(ratios.map(x => [x.boatId, x.r]))};

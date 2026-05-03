@@ -476,7 +476,9 @@ function renderHandicapCalc(data) {
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
             pf: pfFactor ? pfFactor.value : null,
+            pfWeight: pfFactor ? pfFactor.weight : null,
             rf: rfFactor ? rfFactor.value : null,
+            rfWeight: rfFactor ? rfFactor.weight : null,
             bestFit
         };
     });
