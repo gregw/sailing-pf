@@ -376,7 +376,6 @@ window.HandicapCalc = (function () {
             }
 
             section.style.display = '';
-            table.innerHTML = '';
 
             // Static (non-input) columns — sortable.
             const staticCols = [
@@ -391,7 +390,10 @@ window.HandicapCalc = (function () {
             const validSortKeys = new Set([...staticCols.map(c => c.key), 'input']);
             if (!validSortKeys.has(calcSort.col)) calcSort = {col: 'pf', dir: 'desc'};
 
+            // Sort BEFORE clearing the table — computeDeltas() reads anchor values from
+            // existing input elements, so the DOM must still be intact at this point.
             sortCalcBoats();
+            table.innerHTML = '';
 
             const thead = document.createElement('thead');
             const hdrTr = document.createElement('tr');
