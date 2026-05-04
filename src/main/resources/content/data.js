@@ -1941,19 +1941,7 @@ function renderDivisionChart(data) {
         const intercept = (sy - slope * sx) / n;
         const xMin = Math.min(...pts.map(p => p.x));
         const xMax = Math.max(...pts.map(p => p.x));
-        const baseWidth = (opts && opts.baseWidth) ?? 2.5;
-        const hoverWidth = (opts && opts.hoverWidth) ?? 5;
-        const hoverText = `${name} (slope ${slope.toFixed(2)})`;
-        return {
-            x: [xMin, xMax],
-            y: [slope * xMin + intercept, slope * xMax + intercept],
-            mode: 'lines', type: 'scatter', name,
-            line: {dash: 'dashdot', color, width: baseWidth},
-            text: [hoverText, hoverText],
-            hoverinfo: 'text',
-            hoverlabel: {namelength: -1},
-            meta: {trendLine: true, baseWidth, hoverWidth}
-        };
+        return trendLineTrace(slope, intercept, xMin, xMax, name, color, opts);
     }
 
     // Build all traces + annotations for one division group. With "All" selected,
@@ -2678,19 +2666,11 @@ function computeSeriesOverallTrend(data, divName) {
     const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
     const medX = median(allX);
     const medY = median(allY);
+    const intercept = medY - avgSlope * medX;
     const xMin = Math.min(...allX);
     const xMax = Math.max(...allX);
-    // Line: y = avgSlope * (x - medX) + medY, across the observed X range.
-    return {
-        x: [xMin, xMax],
-        y: [avgSlope * (xMin - medX) + medY, avgSlope * (xMax - medX) + medY],
-        mode: 'lines', type: 'scatter',
-        name: `Overall trend (slope ${avgSlope.toFixed(2)})`,
-        line: { dash: 'dot', color: '#333', width: 3 },
-        hoverinfo: 'name',
-        hoverlabel: {namelength: -1},
-        meta: {trendLine: true, baseWidth: 3, hoverWidth: 6}
-    };
+    return trendLineTrace(avgSlope, intercept, xMin, xMax, 'Overall trend', '#333',
+        {dash: 'dot', baseWidth: 3, hoverWidth: 6});
 }
 
 /**
@@ -2720,18 +2700,11 @@ function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
     const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
     const medX = median(allX);
     const medY = median(allY);
+    const intercept = medY - avgSlope * medX;
     const xMin = Math.min(...allX);
     const xMax = Math.max(...allX);
-    return {
-        x: [xMin, xMax],
-        y: [avgSlope * (xMin - medX) + medY, avgSlope * (xMax - medX) + medY],
-        mode: 'lines', type: 'scatter',
-        name: `Allocated trend (slope ${avgSlope.toFixed(2)})`,
-        line: {dash: 'dashdot', color: '#a04020', width: 4},
-        hoverinfo: 'name',
-        hoverlabel: {namelength: -1},
-        meta: {trendLine: true, baseWidth: 4, hoverWidth: 8}
-    };
+    return trendLineTrace(avgSlope, intercept, xMin, xMax, 'Allocated trend', '#a04020',
+        {dash: 'dashdot', baseWidth: 4, hoverWidth: 8});
 }
 
 function olsSlope(xs, ys) {

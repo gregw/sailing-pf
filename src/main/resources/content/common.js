@@ -124,6 +124,43 @@ function lightenColor(hex, amount) {
     return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
 }
 
+/**
+ * Build a Plotly trace for a regression / trend line from a slope, intercept, and x range.
+ * Used by both the race-division chart and the series chart so they look and behave
+ * identically. The trace samples 30 interpolated points so hover fires along the entire
+ * visible line — a 2-point line only triggers hover at its endpoints, which is hard to
+ * hit. The legend label and hover text both include the slope.
+ *
+ * opts: {dash, baseWidth, hoverWidth, showlegend}
+ */
+function trendLineTrace(slope, intercept, xMin, xMax, baseName, color, opts) {
+    opts = opts || {};
+    const dash = opts.dash || 'dashdot';
+    const baseWidth = opts.baseWidth ?? 2.5;
+    const hoverWidth = opts.hoverWidth ?? 5;
+    const showlegend = opts.showlegend !== false;
+    const N = 30;
+    const xs = new Array(N);
+    const ys = new Array(N);
+    for (let i = 0; i < N; i++) {
+        const x = xMin + (xMax - xMin) * (i / (N - 1));
+        xs[i] = x;
+        ys[i] = slope * x + intercept;
+    }
+    const fullName = `${baseName} (slope ${slope.toFixed(2)})`;
+    return {
+        x: xs, y: ys,
+        mode: 'lines', type: 'scatter',
+        name: fullName,
+        showlegend,
+        line: {dash, color, width: baseWidth},
+        text: xs.map(() => fullName),
+        hoverinfo: 'text',
+        hoverlabel: {namelength: -1},
+        meta: {trendLine: true, baseWidth, hoverWidth}
+    };
+}
+
 /** Reference std dev in log space at weight = 1.0.  See .claude/error_bars.md. */
 const SIGMA_0 = 0.020;
 
