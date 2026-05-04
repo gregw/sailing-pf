@@ -304,6 +304,32 @@ window.HandicapCalc = (function () {
             recalc();
         }
 
+        // Delta = entered - predicted. Predicted = boat[ftKey] * R, where R is the
+        // weighted mean of (entered/boat[ftKey]) across focused-set anchors. Mirrors
+        // scaleMulti so a sort on PFΔ/RFΔ orders by exactly the values shown in the cells.
+        // Only anchors get a delta; non-anchors (and the single-anchor case) return null.
+        function computeDeltas(ftKey) {
+            const wField = ftKey === 'pf' ? 'pfWeight' : 'rfWeight';
+            const anchors = [];
+            focusedInputCells().forEach(inp => {
+                const v = parseFloat(inp.value);
+                if (isNaN(v)) return;
+                const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
+                if (!boat || boat[ftKey] == null || boat[ftKey] === 0) return;
+                const wRaw = boat[wField];
+                const w = (wRaw != null && wRaw > 0) ? wRaw : 1;
+                anchors.push({boat, value: v, w});
+            });
+            const out = new Map();
+            if (anchors.length < 2) return out;
+            const wSum = anchors.reduce((s, a) => s + a.w, 0);
+            const R = anchors.reduce((s, a) => s + a.w * (a.value / a.boat[ftKey]), 0) / wSum;
+            anchors.forEach(a => {
+                out.set(a.boat.id, a.value - a.boat[ftKey] * R);
+            });
+            return out;
+        }
+
         function sortCalcBoats() {
             const {col, dir} = calcSort;
             const mul = dir === 'asc' ? 1 : -1;
@@ -312,11 +338,17 @@ window.HandicapCalc = (function () {
             } else if (col === 'input') {
                 calcBoats.sort((a, b) => mul * ((a.pf ?? 0) - (b.pf ?? 0)));
             } else if (col === 'pfDelta' || col === 'rfDelta') {
-                const deltaValues = new Map();
-                section.querySelectorAll(`.pf-calc-value[data-factor-type="${col}"]`).forEach(td => {
-                    deltaValues.set(td.dataset.boatId, parseFloat(td.textContent) || 0);
+                const deltas = computeDeltas(col === 'pfDelta' ? 'pf' : 'rf');
+                calcBoats.sort((a, b) => {
+                    const da = deltas.get(a.id);
+                    const db = deltas.get(b.id);
+                    // Boats without a delta (non-anchors, or all rows when fewer than two
+                    // anchors are entered) sort to the end regardless of direction.
+                    if (da == null && db == null) return 0;
+                    if (da == null) return 1;
+                    if (db == null) return -1;
+                    return mul * (da - db);
                 });
-                calcBoats.sort((a, b) => mul * ((deltaValues.get(a.id) ?? 0) - (deltaValues.get(b.id) ?? 0)));
             } else {
                 calcBoats.sort((a, b) => {
                     const av = a[col], bv = b[col];

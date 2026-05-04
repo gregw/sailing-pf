@@ -1943,13 +1943,14 @@ function renderDivisionChart(data) {
         const xMax = Math.max(...pts.map(p => p.x));
         const baseWidth = (opts && opts.baseWidth) ?? 2.5;
         const hoverWidth = (opts && opts.hoverWidth) ?? 5;
+        const hoverText = `${name} (slope ${slope.toFixed(2)})`;
         return {
             x: [xMin, xMax],
             y: [slope * xMin + intercept, slope * xMax + intercept],
             mode: 'lines', type: 'scatter', name,
             line: {dash: 'dashdot', color, width: baseWidth},
-            showlegend: false,
-            hoverinfo: 'name',
+            text: [hoverText, hoverText],
+            hoverinfo: 'text',
             hoverlabel: {namelength: -1},
             meta: {trendLine: true, baseWidth, hoverWidth}
         };
