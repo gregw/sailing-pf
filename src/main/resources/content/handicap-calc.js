@@ -2,13 +2,19 @@
 
 // Shared handicap calculator. Exposed as window.HandicapCalc.
 //
+// Supports N "sets" of allocated handicaps (e.g. start-of-series, end-of-series).
+// One set is "focused" at any time: load / clear / upload / download and direct
+// typing target the focused set. The scaled-PF/RF/Δ preview columns are also
+// driven by the focused set. Charts that want to plot every set call getAllSets().
+//
 // HandicapCalc.create(cfg) returns a controller with:
 //   setBoats(newBoats)         — render with new boat list (preserves matching entries by id)
-//   setHandicapsByMatch(rows)  — fill inputs from [{sailno, name, handicap}] via sail-no / name match,
+//   setHandicapsByMatch(rows)  — fill focused-set inputs from [{sailno, name, handicap}],
 //                                returns count matched
-//   clearAll()                 — clear all inputs and re-render
-//   getEnteredHandicaps()      — current entries as [{sailno, name, handicap}]
-//   getEnteredValues()         — Map(boatId → handicap)
+//   clearAll()                 — clear focused-set inputs and re-render
+//   getEnteredHandicaps()      — focused-set entries as [{sailno, name, handicap}]
+//   getEnteredValues()         — focused-set Map(boatId → handicap)
+//   getAllSets()               — [{name, color, focused, values: Map(boatId → handicap)}] for charts
 //   recalc()                   — force recalculation of scaled columns
 //
 // Boats passed to setBoats must have: { id, name, sailNumber, boatName, pf, rf, bestFit?, color?, pfWeight?, rfWeight? }.
@@ -117,6 +123,14 @@ window.HandicapCalc = (function () {
 
     function weightFieldFor(ft) {
         return ft === 'pf' ? 'pfWeight' : ft === 'rf' ? 'rfWeight' : null;
+    }
+
+    // Palette for allocated-handicap sets. Index 0 keeps the historic dashed-orange so
+    // single-set users see no change; subsequent sets cycle through distinct hues.
+    const SET_PALETTE = ['#a04020', '#1565c0', '#2e7d32', '#6a1b9a', '#b8860b', '#00838f'];
+
+    function setColor(idx) {
+        return SET_PALETTE[idx % SET_PALETTE.length];
     }
 
     // --- PP pentagon hover popup ---------------------------------------------------
@@ -236,12 +250,58 @@ window.HandicapCalc = (function () {
         let calcBoats = [];
         let calcSort = {col: 'pf', dir: 'desc'};
 
+        // Sets — one column per set, focused set drives load/clear/typing/scaled-preview.
+        let sets = [{name: 'Allocated'}];
+        let focusedIdx = 0;
+        let nextSetN = 2;
+
         function valueCells() {
             return section.querySelectorAll('.pf-calc-value');
         }
 
+        // All inputs across all sets.
         function inputCells() {
             return section.querySelectorAll('.pf-calc-input');
+        }
+
+        // Inputs for a specific set index.
+        function setInputCells(idx) {
+            return section.querySelectorAll(`.pf-calc-input[data-set-idx="${idx}"]`);
+        }
+
+        function focusedInputCells() {
+            return setInputCells(focusedIdx);
+        }
+
+        function focusedInputFor(boatId) {
+            return section.querySelector(
+                `.pf-calc-input[data-boat-id="${boatId}"][data-set-idx="${focusedIdx}"]`);
+        }
+
+        function addSet() {
+            sets.push({name: `Set ${nextSetN++}`});
+            focusedIdx = sets.length - 1;
+            render();
+            saveToSession();
+            recalc();
+        }
+
+        function removeSet(idx) {
+            if (sets.length <= 1) return;
+            sets.splice(idx, 1);
+            if (focusedIdx >= sets.length) focusedIdx = sets.length - 1;
+            else if (focusedIdx > idx) focusedIdx--;
+            render();
+            saveToSession();
+            recalc();
+        }
+
+        function setFocus(idx) {
+            if (idx < 0 || idx >= sets.length || idx === focusedIdx) return;
+            focusedIdx = idx;
+            render();
+            saveToSession();
+            recalc();
         }
 
         function sortCalcBoats() {
@@ -269,9 +329,12 @@ window.HandicapCalc = (function () {
         }
 
         function render() {
-            const enteredValues = new Map();
+            // Capture current entered values per (setIdx, boatId) so we can preserve them
+            // across re-renders triggered by sort / focus / add-set / remove-set.
+            const entered = new Map();   // key: `${setIdx}|${boatId}` → string
             inputCells().forEach(inp => {
-                if (inp.value !== '') enteredValues.set(inp.dataset.boatId, inp.value);
+                if (inp.value !== '')
+                    entered.set(`${inp.dataset.setIdx}|${inp.dataset.boatId}`, inp.value);
             });
 
             if (calcBoats.length === 0) {
@@ -283,106 +346,209 @@ window.HandicapCalc = (function () {
             section.style.display = '';
             table.innerHTML = '';
 
-            const cols = [
+            // Static (non-input) columns — sortable.
+            const staticCols = [
                 {key: 'name', label: 'Boat', align: 'left'},
-                {key: 'input', label: 'Enter handicap', align: 'center'},
                 {key: 'pf', label: 'PF', align: 'right'},
                 {key: 'pfDelta', label: 'PFΔ', align: 'right'},
                 {key: 'rf', label: 'RF', align: 'right'},
                 {key: 'rfDelta', label: 'RFΔ', align: 'right'},
             ];
-            if (cfg.showBestFit) cols.push({key: 'bestFit', label: 'Best Fit', align: 'right'});
+            if (cfg.showBestFit) staticCols.push({key: 'bestFit', label: 'Best Fit', align: 'right'});
 
-            if (!cols.some(c => c.key === calcSort.col)) calcSort = {col: 'pf', dir: 'desc'};
+            const validSortKeys = new Set([...staticCols.map(c => c.key), 'input']);
+            if (!validSortKeys.has(calcSort.col)) calcSort = {col: 'pf', dir: 'desc'};
 
             sortCalcBoats();
 
             const thead = document.createElement('thead');
             const hdrTr = document.createElement('tr');
-            cols.forEach(c => {
-                const th = document.createElement('th');
-                const isActive = c.key === calcSort.col;
-                const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
-                th.textContent = c.label + arrow;
-                th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};cursor:pointer;user-select:none;`
-                    + (isActive ? 'font-weight:bold;' : '');
-                th.addEventListener('click', () => {
-                    if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-                    else calcSort = {col: c.key, dir: c.key === 'name' ? 'asc' : 'desc'};
-                    render();
-                });
-                hdrTr.appendChild(th);
-            });
+
+            // Boat name column (static, sortable).
+            hdrTr.appendChild(makeSortableTh(staticCols[0]));
+
+            // One header per set: name + focus radio + remove button.
+            sets.forEach((s, i) => hdrTr.appendChild(makeSetHeaderTh(s, i)));
+
+            // "+ Add column" header — only shown once at least one set has entries, so
+            // adding a second column makes sense (you have something to compare against).
+            const anyEntries = Array.from(entered.keys()).length > 0;
+            const addTh = document.createElement('th');
+            addTh.style.cssText = 'padding:2px 4px;text-align:center;';
+            if (anyEntries) {
+                const addBtn = document.createElement('button');
+                addBtn.type = 'button';
+                addBtn.textContent = '+';
+                addBtn.title = 'Add another allocated-handicap column';
+                addBtn.style.cssText = 'font-size:0.85rem;padding:0 6px;cursor:pointer;line-height:1.4;';
+                addBtn.addEventListener('click', addSet);
+                addTh.appendChild(addBtn);
+            }
+            hdrTr.appendChild(addTh);
+
+            // Remaining static columns (PF / PFΔ / RF / RFΔ / Best Fit).
+            staticCols.slice(1).forEach(c => hdrTr.appendChild(makeSortableTh(c)));
+
             thead.appendChild(hdrTr);
             table.appendChild(thead);
 
             const tbody = document.createElement('tbody');
             calcBoats.forEach(b => {
                 const tr = document.createElement('tr');
-                cols.forEach(c => {
-                    if (c.key === 'name') {
-                        const tdName = document.createElement('td');
-                        const color = b.color || '#888';
-                        tdName.style.cssText = `color:${color};font-weight:bold;`;
-                        const link = document.createElement('a');
-                        link.href = `data.html?tab=boats&boatId=${encodeURIComponent(b.id)}`;
-                        link.textContent = b.name;
-                        link.style.cssText = 'color:inherit;text-decoration:none;';
-                        link.title = 'Click to view boat details — hover for performance profile';
-                        const cached = profileCache.get(b.id);
-                        if (cached) cached.then(p => {
-                            if (p === null) link.title = 'Click to view boat details — no performance profile available';
-                        });
-                        link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
-                        link.addEventListener('mouseleave', hidePentagonPopup);
-                        tdName.appendChild(link);
-                        tr.appendChild(tdName);
-                    } else if (c.key === 'input') {
-                        const tdInput = document.createElement('td');
-                        tdInput.style.cssText = 'padding:2px 4px;text-align:center;';
-                        const input = document.createElement('input');
-                        input.type = 'number';
-                        input.step = '0.0001';
-                        input.min = '0.1';
-                        input.max = '2.0';
-                        input.className = 'pf-calc-input';
-                        input.dataset.boatId = b.id;
-                        input.placeholder = 'enter…';
-                        input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
-                        if (enteredValues.has(b.id)) input.value = enteredValues.get(b.id);
-                        input.addEventListener('input', recalc);
-                        tdInput.appendChild(input);
-                        tr.appendChild(tdInput);
-                    } else {
-                        const td = document.createElement('td');
-                        td.className = 'pf-calc-value';
-                        td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
-                        if (c.key === 'pfDelta' || c.key === 'rfDelta') {
-                            td.textContent = '';
-                            td.dataset.boatId = b.id;
-                            td.dataset.factorType = c.key;
-                            td.dataset.origValue = '';
-                        } else {
-                            const v = b[c.key];
-                            td.textContent = v != null ? v.toFixed(4) : '—';
-                            td.dataset.boatId = b.id;
-                            td.dataset.factorType = c.key;
-                            td.dataset.origValue = v != null ? String(v) : '';
-                            const wField = weightFieldFor(c.key);
-                            const w = wField ? b[wField] : null;
-                            if (v != null && w != null) {
-                                td.style.color = weightColor(w);
-                                td.title = weightLabel(w);
-                            }
-                        }
-                        tr.appendChild(td);
-                    }
-                });
+                tr.appendChild(makeBoatNameCell(b));
+                sets.forEach((_, i) => tr.appendChild(makeInputCell(b, i, entered)));
+                // Empty filler aligning with the "+ Add" header.
+                const filler = document.createElement('td');
+                tr.appendChild(filler);
+                staticCols.slice(1).forEach(c => tr.appendChild(makeStaticCell(b, c)));
                 tbody.appendChild(tr);
             });
             table.appendChild(tbody);
 
-            if (enteredValues.size > 0) recalc();
+            // The bare render places original values in scaled cells; if any focused-set
+            // input has a value (preserved across re-render or freshly applied), recalc
+            // will overlay scaled / delta values.
+            if (Array.from(entered.keys()).some(k => k.startsWith(`${focusedIdx}|`))) recalc();
+        }
+
+        function makeSortableTh(c) {
+            const th = document.createElement('th');
+            const isActive = c.key === calcSort.col;
+            const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+            th.textContent = c.label + arrow;
+            th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};cursor:pointer;user-select:none;`
+                + (isActive ? 'font-weight:bold;' : '');
+            th.addEventListener('click', () => {
+                if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
+                else calcSort = {col: c.key, dir: c.key === 'name' ? 'asc' : 'desc'};
+                render();
+            });
+            return th;
+        }
+
+        function makeSetHeaderTh(set, idx) {
+            const th = document.createElement('th');
+            th.style.cssText = 'padding:2px 4px;text-align:center;font-size:0.8rem;color:#555;';
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
+
+            // Top row: focus radio + name + (× when removable).
+            const topRow = document.createElement('div');
+            topRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = `pf-calc-focus-${section.id || ''}`;
+            radio.checked = idx === focusedIdx;
+            radio.title = `Focus ${set.name} for load / clear / upload / download`;
+            radio.style.cssText = 'margin:0;cursor:pointer;';
+            radio.addEventListener('change', () => {
+                if (radio.checked) setFocus(idx);
+            });
+            topRow.appendChild(radio);
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = set.name;
+            nameSpan.style.cssText = `color:${setColor(idx)};font-weight:${idx === focusedIdx ? 'bold' : 'normal'};`;
+            topRow.appendChild(nameSpan);
+
+            if (sets.length > 1) {
+                const rm = document.createElement('button');
+                rm.type = 'button';
+                rm.textContent = '×';
+                rm.title = `Remove ${set.name}`;
+                rm.style.cssText = 'font-size:0.85rem;padding:0 4px;cursor:pointer;line-height:1;background:none;border:1px solid #ccc;color:#888;border-radius:2px;';
+                rm.addEventListener('click', () => removeSet(idx));
+                topRow.appendChild(rm);
+            }
+            wrap.appendChild(topRow);
+
+            // Sortable label row — clicking sorts by this set's input value (focused-set
+            // sort key is shared across sets to avoid an explosion of sort keys).
+            const sortLbl = document.createElement('span');
+            const isActive = calcSort.col === 'input';
+            const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+            sortLbl.textContent = 'Enter handicap' + arrow;
+            sortLbl.style.cssText = 'cursor:pointer;user-select:none;font-size:0.75rem;'
+                + (isActive ? 'font-weight:bold;' : '');
+            sortLbl.addEventListener('click', () => {
+                if (calcSort.col === 'input') calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
+                else calcSort = {col: 'input', dir: 'desc'};
+                render();
+            });
+            wrap.appendChild(sortLbl);
+
+            th.appendChild(wrap);
+            return th;
+        }
+
+        function makeBoatNameCell(b) {
+            const tdName = document.createElement('td');
+            const color = b.color || '#888';
+            tdName.style.cssText = `color:${color};font-weight:bold;`;
+            const link = document.createElement('a');
+            link.href = `data.html?tab=boats&boatId=${encodeURIComponent(b.id)}`;
+            link.textContent = b.name;
+            link.style.cssText = 'color:inherit;text-decoration:none;';
+            link.title = 'Click to view boat details — hover for performance profile';
+            const cached = profileCache.get(b.id);
+            if (cached) cached.then(p => {
+                if (p === null) link.title = 'Click to view boat details — no performance profile available';
+            });
+            link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
+            link.addEventListener('mouseleave', hidePentagonPopup);
+            tdName.appendChild(link);
+            return tdName;
+        }
+
+        function makeInputCell(b, setIdx, enteredMap) {
+            const tdInput = document.createElement('td');
+            tdInput.style.cssText = 'padding:2px 4px;text-align:center;';
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.step = '0.0001';
+            input.min = '0.1';
+            input.max = '2.0';
+            input.className = 'pf-calc-input';
+            input.dataset.boatId = b.id;
+            input.dataset.setIdx = String(setIdx);
+            input.placeholder = 'enter…';
+            const isFocused = setIdx === focusedIdx;
+            input.style.cssText = 'width:90px;font-family:monospace;text-align:right;'
+                + (isFocused ? '' : 'background:#f7f7f7;color:#666;');
+            const prev = enteredMap.get(`${setIdx}|${b.id}`);
+            if (prev != null) input.value = prev;
+            input.addEventListener('input', recalc);
+            input.addEventListener('focus', () => {
+                if (setIdx !== focusedIdx) setFocus(setIdx);
+            });
+            tdInput.appendChild(input);
+            return tdInput;
+        }
+
+        function makeStaticCell(b, c) {
+            const td = document.createElement('td');
+            td.className = 'pf-calc-value';
+            td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
+            if (c.key === 'pfDelta' || c.key === 'rfDelta') {
+                td.textContent = '';
+                td.dataset.boatId = b.id;
+                td.dataset.factorType = c.key;
+                td.dataset.origValue = '';
+            } else {
+                const v = b[c.key];
+                td.textContent = v != null ? v.toFixed(4) : '—';
+                td.dataset.boatId = b.id;
+                td.dataset.factorType = c.key;
+                td.dataset.origValue = v != null ? String(v) : '';
+                const wField = weightFieldFor(c.key);
+                const w = wField ? b[wField] : null;
+                if (v != null && w != null) {
+                    td.style.color = weightColor(w);
+                    td.title = weightLabel(w);
+                }
+            }
+            return td;
         }
 
         function restoreAll() {
@@ -551,7 +717,7 @@ window.HandicapCalc = (function () {
 
         function recalc() {
             const anchors = [];
-            inputCells().forEach(inp => {
+            focusedInputCells().forEach(inp => {
                 const v = parseFloat(inp.value);
                 if (!isNaN(v)) {
                     const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
@@ -565,31 +731,45 @@ window.HandicapCalc = (function () {
             if (cfg.onChange) cfg.onChange();
         }
 
+        // Session schema:
+        //   { version: 2, focused: 0, sets: [{name, entries: [{sailno, name, handicap}]}] }
+        // Old single-array format auto-migrated to one set named "Allocated".
         function readSession() {
-            if (!cfg.sessionKey) return [];
+            if (!cfg.sessionKey) return null;
             try {
                 const json = sessionStorage.getItem(cfg.sessionKey);
-                if (!json) return [];
+                if (!json) return null;
                 const data = JSON.parse(json);
-                return Array.isArray(data) ? data : [];
+                if (Array.isArray(data))
+                    return {version: 2, focused: 0, sets: [{name: 'Allocated', entries: data}]};
+                if (data && Array.isArray(data.sets))
+                    return data;
+                return null;
             } catch (e) {
-                return [];
+                return null;
             }
         }
 
-        // Merge with existing session entries so boats not currently shown (e.g. from a
-        // different race/division on another page) keep their handicap.
+        // Merge each set's current entries with previously-remembered entries (for boats
+        // not currently shown — e.g. another division on another page). Persists the full
+        // multi-set shape so other pages sharing this sessionKey see the same columns.
         function saveToSession() {
             if (!cfg.sessionKey) return;
-            const current = getEnteredHandicaps();
             const remembered = readSession();
-            const isCurrent = item => current.some(c =>
-                (c.sailno && c.sailno === item.sailno) ||
-                (!c.sailno && c.name && c.name === item.name));
-            const merged = remembered.filter(r => !isCurrent(r)).concat(current);
+            const out = {version: 2, focused: focusedIdx, sets: []};
+            sets.forEach((s, i) => {
+                const current = getSetEntries(i);
+                const prev = remembered && remembered.sets[i] ? remembered.sets[i].entries : [];
+                const isCurrent = item => current.some(c =>
+                    (c.sailno && c.sailno === item.sailno) ||
+                    (!c.sailno && c.name && c.name === item.name));
+                const merged = prev.filter(r => !isCurrent(r)).concat(current);
+                out.sets.push({name: s.name, entries: merged});
+            });
             try {
-                if (merged.length > 0)
-                    sessionStorage.setItem(cfg.sessionKey, JSON.stringify(merged));
+                const anyEntries = out.sets.some(s => s.entries.length > 0);
+                if (anyEntries || out.sets.length > 1)
+                    sessionStorage.setItem(cfg.sessionKey, JSON.stringify(out));
                 else
                     sessionStorage.removeItem(cfg.sessionKey);
             } catch (e) { /* quota or disabled storage — ignore */
@@ -599,7 +779,25 @@ window.HandicapCalc = (function () {
         function loadFromSession() {
             if (!cfg.sessionKey) return;
             const data = readSession();
-            if (data.length > 0) setHandicapsByMatch(data);
+            if (!data) return;
+
+            // Reshape `sets` and focus to match what's persisted.
+            sets = data.sets.map(s => ({name: s.name || 'Allocated'}));
+            if (sets.length === 0) sets = [{name: 'Allocated'}];
+            focusedIdx = Math.max(0, Math.min(sets.length - 1, data.focused | 0));
+            // Ensure auto-naming continues from the highest existing "Set N".
+            nextSetN = Math.max(2, ...sets.map(s => {
+                const m = /^Set\s+(\d+)$/.exec(s.name);
+                return m ? parseInt(m[1], 10) + 1 : 0;
+            }));
+            render();
+
+            // Apply each set's entries to its column inputs.
+            sets.forEach((_, i) => {
+                const entries = data.sets[i] ? data.sets[i].entries : [];
+                if (entries && entries.length > 0) applyEntriesToSet(i, entries);
+            });
+            recalc();
         }
 
         function setBoats(newBoats, opts) {
@@ -609,10 +807,10 @@ window.HandicapCalc = (function () {
             loadFromSession();
         }
 
-        // Match imported rows to calc boats in passes, strongest criteria first, so that an
-        // item with a known name+sailno locks in its boat before another same-sailno item can
-        // claim it via sailno-only. Each boat is matched at most once.
-        function setHandicapsByMatch(rows) {
+        // Match imported rows into a specific set's input column. Same multi-pass logic as
+        // before — strongest criteria first so a known name+sailno locks in its boat before
+        // a same-sailno-only item can claim it. Each boat is matched at most once per call.
+        function applyEntriesToSet(setIdx, rows) {
             let matched = 0;
             const used = new Set();
             const items = rows.filter(r => r.handicap != null);
@@ -620,16 +818,14 @@ window.HandicapCalc = (function () {
 
             function applyTo(boat, item) {
                 used.add(boat.id);
-                const inp = section.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
+                const inp = section.querySelector(
+                    `.pf-calc-input[data-boat-id="${boat.id}"][data-set-idx="${setIdx}"]`);
                 if (inp) {
                     inp.value = String(item.handicap);
                     matched++;
                 }
             }
 
-            // Pass: candidate predicate(item, boat). For each item, if exactly one
-            // unused boat matches, claim it. If multiple match and the item carries a
-            // division, prefer the one with the same division (if unique).
             function pass(predicate) {
                 const leftover = [];
                 remaining.forEach(item => {
@@ -653,44 +849,42 @@ window.HandicapCalc = (function () {
                 it.sailno && it.name &&
                 sailnoMatch(b.sailNumber, it.sailno) &&
                 normaliseDesignName(b.boatName) === normaliseDesignName(it.name));
-
             // 2. sailno + division
             pass((it, b) =>
                 it.sailno && it.division != null &&
                 sailnoMatch(b.sailNumber, it.sailno) &&
                 normaliseDesignName(b.division) === normaliseDesignName(it.division));
-
-            // 3. sailno alone (only when unambiguous, or division disambiguates inside pass)
+            // 3. sailno alone
             pass((it, b) =>
                 it.sailno && sailnoMatch(b.sailNumber, it.sailno));
-
-            // 4. name alone (last resort for boats whose sail number is missing/garbled)
+            // 4. name alone
             pass((it, b) => {
                 if (!it.name) return false;
                 const tn = normaliseDesignName(it.name);
                 return tn !== '' && normaliseDesignName(b.boatName) === tn;
             });
 
+            return matched;
+        }
+
+        // Public: load rows into the focused set.
+        function setHandicapsByMatch(rows) {
+            const matched = applyEntriesToSet(focusedIdx, rows);
             recalc();
             return matched;
         }
 
+        // Clear the focused set's inputs only. Other sets keep their values.
         function clearAll() {
-            inputCells().forEach(inp => {
+            focusedInputCells().forEach(inp => {
                 inp.value = '';
             });
-            if (cfg.sessionKey) {
-                try {
-                    sessionStorage.removeItem(cfg.sessionKey);
-                } catch (e) { /* ignore */
-                }
-            }
-            recalc();
+            recalc();   // recalc → saveToSession will rewrite the session minus the cleared set
         }
 
-        function getEnteredHandicaps() {
+        function getSetEntries(setIdx) {
             const out = [];
-            inputCells().forEach(inp => {
+            setInputCells(setIdx).forEach(inp => {
                 const v = parseFloat(inp.value);
                 if (!isNaN(v)) {
                     const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
@@ -704,30 +898,51 @@ window.HandicapCalc = (function () {
             return out;
         }
 
-        function getEnteredValues() {
+        function getSetValues(setIdx) {
             const m = new Map();
-            inputCells().forEach(inp => {
+            setInputCells(setIdx).forEach(inp => {
                 const v = parseFloat(inp.value);
                 if (!isNaN(v)) m.set(inp.dataset.boatId, v);
             });
             return m;
         }
 
-        // Merge a fetched/loaded row set into session storage so entries for boats not
-        // currently shown (e.g. other divisions) are remembered and applied later when the
-        // visible boat list changes. Existing entries with the same sailno or name are
-        // replaced by the incoming row.
+        function getEnteredHandicaps() {
+            return getSetEntries(focusedIdx);
+        }
+
+        function getEnteredValues() {
+            return getSetValues(focusedIdx);
+        }
+
+        function getAllSets() {
+            return sets.map((s, i) => ({
+                name: s.name,
+                color: setColor(i),
+                focused: i === focusedIdx,
+                values: getSetValues(i)
+            }));
+        }
+
+        // Merge fetched rows into the FOCUSED set's session entries so off-screen boats
+        // (e.g. other divisions) are remembered and applied when the boat list changes.
+        // Existing entries in that set with the same sailno or name are replaced.
         function rememberFetchedRows(rows) {
             if (!cfg.sessionKey) return;
             const incoming = (rows || []).filter(r => r != null && r.handicap != null);
             if (incoming.length === 0) return;
-            const existing = readSession();
+            const stored = readSession() || {version: 2, focused: focusedIdx, sets: []};
+            // Pad sets to match current length.
+            while (stored.sets.length < sets.length)
+                stored.sets.push({name: sets[stored.sets.length].name, entries: []});
+            const target = stored.sets[focusedIdx];
             const replaced = item => incoming.some(r =>
                 (r.sailno && r.sailno === item.sailno) ||
                 (!r.sailno && r.name && r.name === item.name));
-            const merged = existing.filter(e => !replaced(e)).concat(incoming);
+            target.entries = (target.entries || []).filter(e => !replaced(e)).concat(incoming);
+            stored.focused = focusedIdx;
             try {
-                sessionStorage.setItem(cfg.sessionKey, JSON.stringify(merged));
+                sessionStorage.setItem(cfg.sessionKey, JSON.stringify(stored));
             } catch (e) { /* quota or disabled storage — ignore */
             }
         }
@@ -856,7 +1071,7 @@ window.HandicapCalc = (function () {
         if (cfg.fileInput) cfg.fileInput.addEventListener('change', doFile);
         if (cfg.downloadBtn) cfg.downloadBtn.addEventListener('click', doDownload);
 
-        return {setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues, recalc};
+        return {setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues, getAllSets, recalc};
     }
 
     return {

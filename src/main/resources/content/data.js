@@ -1871,13 +1871,10 @@ function renderDivisionChart(data) {
     const allFinishers = (data.finishers || []).filter(f => f.pf != null && f.elapsed > 0);
     if (allFinishers.length === 0) return;
 
-    // Allocated handicaps from the race-tab calculator (one calculator covers all
-    // race boats, so this map is global across divisions).
-    const allocByBoat = new Map();
-    document.querySelectorAll('#pf-calc .pf-calc-input').forEach(inp => {
-        const v = parseFloat(inp.value);
-        if (!isNaN(v)) allocByBoat.set(inp.dataset.boatId, v);
-    });
+    // Allocated handicaps from the race-tab calculator. One calculator covers all race
+    // boats, so each set's value map is global across divisions.
+    const allocSets = raceCalc().getAllSets();   // [{name, color, focused, values}]
+    const focusedAllocValues = (allocSets.find(s => s.focused) || allocSets[0] || {values: new Map()}).values;
 
     // Group by division. Backend includes a "division" field on each finisher when
     // called with __all__; for a single-division request all finishers share the
@@ -1893,7 +1890,7 @@ function renderDivisionChart(data) {
 
     // X-factor selector options reflect data across all groups.
     const anyRf = allFinishers.some(f => f.rf != null && f.rfCorrected != null);
-    const anyAlloc = allFinishers.some(f => allocByBoat.has(f.boatId));
+    const anyAlloc = allocSets.some(s => allFinishers.some(f => s.values.has(f.boatId)));
     const xSelect = document.getElementById('race-div-xfactor');
     if (xSelect) {
         const opts = ['---', 'PF',
@@ -1967,22 +1964,27 @@ function renderDivisionChart(data) {
         const elapsedColor = lightenColor('#555', lighten);
         const pfColor = lightenColor('#2255aa', lighten);
         const rfColor = lightenColor('#c47900', lighten);
-        const allocColor = lightenColor('#a04020', lighten);
         const suffix = divLabel ? ` — ${divLabel}` : '';
 
         const rfFinishers = finishers
             .map(f => ({f, rf: f.rf, rfCorrMin: f.rfCorrected != null ? f.rfCorrected / 60 : null}))
             .filter(o => o.rf != null && o.rfCorrMin != null)
             .sort((a, b) => a.rf - b.rf);
-        const allocPts = finishers
-            .filter(f => allocByBoat.has(f.boatId))
-            .map(f => ({
-                f,
-                name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
-                handicap: allocByBoat.get(f.boatId),
-                correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
-            }))
-            .sort((a, b) => a.handicap - b.handicap);
+
+        // Per-set allocated points (sorted by handicap) for this division group.
+        const allocBundles = allocSets.map(s => ({
+            ...s,
+            color: lightenColor(s.color, lighten),
+            pts: finishers
+                .filter(f => s.values.has(f.boatId))
+                .map(f => ({
+                    f,
+                    name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
+                    handicap: s.values.get(f.boatId),
+                    correctedMin: f.elapsed * s.values.get(f.boatId) / 60
+                }))
+                .sort((a, b) => a.handicap - b.handicap)
+        })).filter(b => b.pts.length > 0);
 
         const traces = [];
         let annotations = [];
@@ -2031,24 +2033,26 @@ function renderDivisionChart(data) {
 
             addPodiumTraces(traces, finishers, xs, pfCorr, pfColor);
 
-            if (allocPts.length > 0) {
-                const allocXs = allocPts.map(p => p.handicap);
-                const allocYs = allocPts.map(p => p.correctedMin);
+            allocBundles.forEach(b => {
+                const allocXs = b.pts.map(p => p.handicap);
+                const allocYs = b.pts.map(p => p.correctedMin);
+                const traceName = (allocBundles.length > 1
+                    ? `${b.name} corrected` : 'Allocated handicap corrected') + suffix;
                 traces.push({
                     x: allocXs, y: allocYs,
                     mode: 'lines+markers', type: 'scatter',
-                    name: 'Allocated handicap corrected' + suffix,
-                    legendgroup: 'alloc' + suffix,
-                    line: {dash: 'longdash', color: allocColor, width: 2},
+                    name: traceName,
+                    legendgroup: `alloc:${b.name}` + suffix,
+                    line: {dash: 'longdash', color: b.color, width: 2},
                     marker: {size: 8, symbol: 'square'},
-                    text: allocPts.map(p =>
-                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
+                    text: b.pts.map(p =>
+                        `${esc(p.name)}<br>${esc(b.name)}: ${p.handicap.toFixed(4)}`
                         + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
                     hoverinfo: 'text',
-                    customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+                    customdata: b.pts.map(p => ({boatId: p.f.boatId}))
                 });
-                addAllocPodiumTraces(traces, allocPts, allocXs, allocYs, allocColor);
-            }
+                if (b.focused) addAllocPodiumTraces(traces, b.pts, allocXs, allocYs, b.color);
+            });
 
             if (showRaceTrendLine) {
                 const elapsedTrend = buildTrendTrace(
@@ -2063,13 +2067,15 @@ function renderDivisionChart(data) {
                         'RF corr trend' + suffix, rfColor);
                     if (rfTrend) traces.push(rfTrend);
                 }
-                if (allocPts.length > 0) {
+                allocBundles.forEach(b => {
+                    const traceName = (allocBundles.length > 1
+                        ? `${b.name} corr trend` : 'Allocated corr trend') + suffix;
                     const allocTrend = buildTrendTrace(
-                        allocPts.map(p => ({x: p.handicap, y: p.correctedMin})),
-                        'Allocated corr trend' + suffix, allocColor,
+                        b.pts.map(p => ({x: p.handicap, y: p.correctedMin})),
+                        traceName, b.color,
                         {baseWidth: 3.5, hoverWidth: 7});
                     if (allocTrend) traces.push(allocTrend);
-                }
+                });
             }
 
             annotations = finishers.map((f, i) => {
@@ -2088,7 +2094,7 @@ function renderDivisionChart(data) {
             // a given boat form a vertical line.
             const getX = f => {
                 if (raceDivXFactor === 'RF') return f.rf;
-                if (raceDivXFactor === 'Allocated') return allocByBoat.get(f.boatId);
+                if (raceDivXFactor === 'Allocated') return focusedAllocValues.get(f.boatId);
                 return f.pf;
             };
             const plotFinishers = finishers
@@ -2104,18 +2110,28 @@ function renderDivisionChart(data) {
             const elapsed = plotFinishers.map(f => f.elapsed / 60);
             const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
             const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
-            const allocCorr = plotFinishers.map(f => {
-                const h = allocByBoat.get(f.boatId);
-                return h != null ? f.elapsed * h / 60 : null;
-            });
-            const allocFiltered = plotFinishers
-                .map((f, i) => ({
-                    f, x: xs[i], y: allocCorr[i],
-                    name: names[i],
-                    handicap: allocByBoat.get(f.boatId),
-                    correctedMin: allocCorr[i]
-                }))
-                .filter(p => p.y != null);
+            // Per-set corrected times for this division group, aligned to plot xs.
+            const allocBundlesAtX = allocSets.map(s => {
+                const corr = plotFinishers.map(f => {
+                    const h = s.values.get(f.boatId);
+                    return h != null ? f.elapsed * h / 60 : null;
+                });
+                const filtered = plotFinishers
+                    .map((f, i) => ({
+                        f, x: xs[i], y: corr[i],
+                        name: names[i],
+                        handicap: s.values.get(f.boatId),
+                        correctedMin: corr[i]
+                    }))
+                    .filter(p => p.y != null);
+                return {
+                    name: s.name,
+                    color: lightenColor(s.color, lighten),
+                    focused: s.focused,
+                    corr,
+                    filtered
+                };
+            }).filter(b => b.filtered.length > 0);
             const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
 
             traces.push(
@@ -2142,27 +2158,31 @@ function renderDivisionChart(data) {
                     text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
                 });
             }
-            if (allocFiltered.length > 0) {
+            allocBundlesAtX.forEach(b => {
+                const traceName = (allocBundlesAtX.length > 1
+                    ? `${b.name} corrected` : 'Allocated handicap corrected') + suffix;
                 traces.push({
-                    x: allocFiltered.map(p => p.x),
-                    y: allocFiltered.map(p => p.y),
+                    x: b.filtered.map(p => p.x),
+                    y: b.filtered.map(p => p.y),
                     mode: 'lines+markers', type: 'scatter',
-                    name: 'Allocated handicap corrected' + suffix,
-                    legendgroup: 'alloc' + suffix,
-                    line: {dash: 'longdash', color: allocColor, width: 2},
+                    name: traceName,
+                    legendgroup: `alloc:${b.name}` + suffix,
+                    line: {dash: 'longdash', color: b.color, width: 2},
                     marker: {size: 8, symbol: 'square'},
-                    text: allocFiltered.map(p =>
-                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
+                    text: b.filtered.map(p =>
+                        `${esc(p.name)}<br>${esc(b.name)}: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
                     hoverinfo: 'text',
-                    customdata: allocFiltered.map(p => ({boatId: p.f.boatId}))
+                    customdata: b.filtered.map(p => ({boatId: p.f.boatId}))
                 });
-            }
+            });
 
             addPodiumTraces(traces, plotFinishers, xs, pfCorr, pfColor);
-            if (allocFiltered.length > 0) {
-                addAllocPodiumTraces(traces, allocFiltered,
-                    allocFiltered.map(p => p.x), allocFiltered.map(p => p.y), allocColor);
-            }
+            allocBundlesAtX.forEach(b => {
+                if (b.focused) {
+                    addAllocPodiumTraces(traces, b.filtered,
+                        b.filtered.map(p => p.x), b.filtered.map(p => p.y), b.color);
+                }
+            });
 
             if (showRaceTrendLine) {
                 const elapsedTrend = buildTrendTrace(
@@ -2179,13 +2199,15 @@ function renderDivisionChart(data) {
                         'RF corr trend' + suffix, rfColor);
                     if (rfTrend) traces.push(rfTrend);
                 }
-                if (allocCorr.some(v => v != null)) {
+                allocBundlesAtX.forEach(b => {
+                    const traceName = (allocBundlesAtX.length > 1
+                        ? `${b.name} corr trend` : 'Allocated corr trend') + suffix;
                     const allocTrend = buildTrendTrace(
-                        plotFinishers.map((f, i) => ({x: xs[i], y: allocCorr[i]})),
-                        'Allocated corr trend' + suffix, allocColor,
+                        plotFinishers.map((f, i) => ({x: xs[i], y: b.corr[i]})),
+                        traceName, b.color,
                         {baseWidth: 3.5, hoverWidth: 7});
                     if (allocTrend) traces.push(allocTrend);
-                }
+                });
             }
 
             annotations = plotFinishers.map((f, i) => {
@@ -2421,7 +2443,7 @@ function renderSeriesChartForDivision(divName, opts) {
     if (!opts || opts.refreshCalc !== false) {
         seriesPfCalc().setBoats(buildSeriesCalcBoats(data, divName));
     }
-    const allocByBoat = seriesPfCalc().getEnteredValues();
+    const allocSets = seriesPfCalc().getAllSets();   // [{name, color, focused, values}]
 
     // Colour palette for races
     const raceColors = [
@@ -2502,36 +2524,45 @@ function renderSeriesChartForDivision(divName, opts) {
                 customdata: boatCustom
             });
 
-            // Allocated-handicap corrected line for this (race, division)
-            const allocPts = finishers
-                .filter(f => allocByBoat.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
-                .map(f => ({
-                    f,
-                    handicap: allocByBoat.get(f.boatId),
-                    correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
-                }))
-                .sort((a, b) => a.f.pf - b.f.pf);
-            if (allocPts.length > 0) {
-                const allocLegendKey = allDivisions ? `allocated-${groupDivName}` : 'allocated';
+            // Allocated-handicap corrected line(s) for this (race, division) — one per set.
+            // Single-set keeps the existing race-coloured dashed line; multi-set switches to
+            // the set's palette colour so different sets are distinguishable across races.
+            allocSets.forEach(s => {
+                const allocPts = finishers
+                    .filter(f => s.values.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
+                    .map(f => ({
+                        f,
+                        handicap: s.values.get(f.boatId),
+                        correctedMin: f.elapsed * s.values.get(f.boatId) / 60
+                    }))
+                    .sort((a, b) => a.f.pf - b.f.pf);
+                if (allocPts.length === 0) return;
+                const allocColor = allocSets.length > 1
+                    ? lightenColor(s.color, lighten) : color;
+                const allocLegendKey = (allDivisions ? `allocated-${groupDivName}` : 'allocated')
+                    + `:${s.name}`;
+                const traceLabel = allocSets.length > 1
+                    ? `${s.name}${allDivisions ? ' — ' + (groupDivName || 'Results') : ''}`
+                    : (allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected');
                 traces.push({
                     x: allocPts.map(p => p.f.pf),
                     y: allocPts.map(p => p.correctedMin),
                     mode: 'lines+markers', type: 'scatter',
-                    name: allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected',
+                    name: traceLabel,
                     legendgroup: allocLegendKey,
                     showlegend: !allocatedLegendShownFor.has(allocLegendKey),
-                    line: {dash: 'dash', color: color, width: 1.5},
+                    line: {dash: 'dash', color: allocColor, width: 1.5},
                     marker: {size: 5, symbol: 'square'},
                     text: allocPts.map(p =>
                         `${p.f.sailNumber ? p.f.sailNumber + ' ' : ''}${esc(p.f.name || '')}<br>${esc(raceLabel)}`
                         + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
-                        + `<br>Allocated: ${p.handicap.toFixed(4)}`
+                        + `<br>${esc(s.name)}: ${p.handicap.toFixed(4)}`
                         + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
                     hoverinfo: 'text',
                     customdata: allocPts.map(p => ({boatId: p.f.boatId}))
                 });
                 allocatedLegendShownFor.add(allocLegendKey);
-            }
+            });
 
             // Podium markers (1st/2nd/3rd fastest corrected times in this group)
             for (let p = 0; p < Math.min(3, sorted.length); p++) {
@@ -2579,14 +2610,18 @@ function renderSeriesChartForDivision(divName, opts) {
                 }
                 traces.push(trend);
             }
-            const allocTrend = computeSeriesAllocatedTrend(data, dn, allocByBoat);
-            if (allocTrend) {
+            allocSets.forEach(s => {
+                const allocTrend = computeSeriesAllocatedTrend(data, dn, s.values);
+                if (!allocTrend) return;
+                const baseName = allocSets.length > 1 ? s.name : 'Allocated';
                 if (allDivisions) {
-                    allocTrend.name = `Allocated ${dn || 'Results'} — ${allocTrend.name}`;
-                    allocTrend.line.color = lightenColor('#a04020', lighten);
+                    allocTrend.name = `${baseName} ${dn || 'Results'} — ${allocTrend.name.replace(/^Allocated /, '')}`;
+                } else if (allocSets.length > 1) {
+                    allocTrend.name = allocTrend.name.replace(/^Allocated /, `${s.name} `);
                 }
+                allocTrend.line.color = lightenColor(s.color, lighten);
                 traces.push(allocTrend);
-            }
+            });
         });
     }
 
