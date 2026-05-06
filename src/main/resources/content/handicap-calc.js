@@ -323,6 +323,38 @@ window.HandicapCalc = (function () {
 
         function removeSet(idx) {
             if (sets.length <= 1) return;
+            // Re-key existing DOM inputs so render's "preserve entered values" pass picks
+            // up the surviving columns under their new indices and discards the removed
+            // column's values. Without this, removing column 0 would carry its values onto
+            // the surviving column (which becomes the new index 0).
+            inputCells().forEach(inp => {
+                const i = parseInt(inp.dataset.setIdx, 10);
+                if (i === idx) inp.value = '';
+                else if (i > idx) inp.dataset.setIdx = String(i - 1);
+            });
+            // Rewrite session storage now (before splice / save) so the removed column's
+            // entries — including cross-page boats not currently shown — are dropped, and
+            // the surviving columns' entries shift down to match the new indices.
+            if (cfg.sessionKey) {
+                const remembered = readSession();
+                if (remembered && Array.isArray(remembered.sets) && idx < remembered.sets.length) {
+                    const surviving = remembered.sets.filter((_, i) => i !== idx);
+                    const newFocused = focusedIdx > idx ? focusedIdx - 1
+                        : focusedIdx === idx ? Math.min(focusedIdx, surviving.length - 1)
+                            : focusedIdx;
+                    try {
+                        const anyEntries = surviving.some(s => s.entries && s.entries.length > 0);
+                        if (!anyEntries && surviving.length <= 1) {
+                            sessionStorage.removeItem(cfg.sessionKey);
+                        } else {
+                            sessionStorage.setItem(cfg.sessionKey, JSON.stringify({
+                                version: 2, focused: Math.max(0, newFocused), sets: surviving
+                            }));
+                        }
+                    } catch (e) { /* quota or disabled storage — ignore */
+                    }
+                }
+            }
             sets.splice(idx, 1);
             if (focusedIdx >= sets.length) focusedIdx = sets.length - 1;
             else if (focusedIdx > idx) focusedIdx--;
@@ -838,20 +870,29 @@ window.HandicapCalc = (function () {
             }
         }
 
-        // Merge each set's current entries with previously-remembered entries (for boats
-        // not currently shown — e.g. another division on another page). Persists the full
-        // multi-set shape so other pages sharing this sessionKey see the same columns.
+        // For each set, the entries we save are: every current input value (for boats
+        // currently shown), plus any previously-remembered entry for a boat that is NOT
+        // currently shown (cross-page persistence — another division on another page).
+        // Filtering prev by "shown on this page" rather than "has a current value" means
+        // clearing an input actually removes its session entry instead of resurrecting it
+        // on the next page load.
         function saveToSession() {
             if (!cfg.sessionKey) return;
             const remembered = readSession();
+            const shownSailnos = new Set();
+            const shownNames = new Set();
+            calcBoats.forEach(b => {
+                if (b.sailNumber) shownSailnos.add(b.sailNumber);
+                else if (b.boatName) shownNames.add(b.boatName);
+            });
+            const isShown = item =>
+                (item.sailno && shownSailnos.has(item.sailno)) ||
+                (!item.sailno && item.name && shownNames.has(item.name));
             const out = {version: 2, focused: focusedIdx, sets: []};
             sets.forEach((s, i) => {
                 const current = getSetEntries(i);
                 const prev = remembered && remembered.sets[i] ? remembered.sets[i].entries : [];
-                const isCurrent = item => current.some(c =>
-                    (c.sailno && c.sailno === item.sailno) ||
-                    (!c.sailno && c.name && c.name === item.name));
-                const merged = prev.filter(r => !isCurrent(r)).concat(current);
+                const merged = prev.filter(r => !isShown(r)).concat(current);
                 out.sets.push({name: s.name, entries: merged});
             });
             try {
