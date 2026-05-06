@@ -1003,12 +1003,31 @@ window.HandicapCalc = (function () {
             return matched;
         }
 
-        // Clear the focused set's inputs only. Other sets keep their values.
+        // Clear the focused set entirely — visible inputs *and* any persisted entries for
+        // boats not currently shown (e.g. boats from other divisions/races sharing this
+        // sessionKey). Other sets are untouched.
         function clearAll() {
             focusedInputCells().forEach(inp => {
                 inp.value = '';
             });
-            recalc();   // recalc → saveToSession will rewrite the session minus the cleared set
+            if (cfg.sessionKey) {
+                const remembered = readSession();
+                if (remembered && Array.isArray(remembered.sets) && remembered.sets[focusedIdx]) {
+                    remembered.sets[focusedIdx] = {
+                        name: remembered.sets[focusedIdx].name,
+                        entries: []
+                    };
+                    try {
+                        const anyEntries = remembered.sets.some(s => s.entries && s.entries.length > 0);
+                        if (!anyEntries && remembered.sets.length <= 1)
+                            sessionStorage.removeItem(cfg.sessionKey);
+                        else
+                            sessionStorage.setItem(cfg.sessionKey, JSON.stringify(remembered));
+                    } catch (e) { /* quota or disabled storage — ignore */
+                    }
+                }
+            }
+            recalc();
         }
 
         function getSetEntries(setIdx) {
