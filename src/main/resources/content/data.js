@@ -1792,8 +1792,10 @@ function onShowLegendChange(cb) {
     });
 }
 
-// Thickens a trend line when hovered and restores it on unhover. Trend traces opt in
-// by setting meta.trendLine = true with baseWidth + hoverWidth values.
+// Thickens a trend line when hovered and restores it on unhover (trend traces opt in
+// by setting meta.trendLine = true with baseWidth + hoverWidth values), and shows the
+// performance-profile pentagon popup when hovering a boat point (any trace whose
+// customdata carries a boatId), matching the boat-name hover in the handicap calculator.
 function attachTrendHoverHandlers(chartId) {
     const div = document.getElementById(chartId);
     if (!div || !div.on) return;
@@ -1803,15 +1805,32 @@ function attachTrendHoverHandlers(chartId) {
         const pt = ev.points && ev.points[0];
         if (!pt) return;
         const trace = div.data && div.data[pt.curveNumber];
-        if (!trace || !trace.meta || !trace.meta.trendLine) return;
-        Plotly.restyle(chartId, {'line.width': trace.meta.hoverWidth}, [pt.curveNumber]);
+        if (trace && trace.meta && trace.meta.trendLine) {
+            Plotly.restyle(chartId, {'line.width': trace.meta.hoverWidth}, [pt.curveNumber]);
+            return;
+        }
+        const boatId = pt.customdata && pt.customdata.boatId;
+        if (!boatId || !window.HandicapCalc || !window.HandicapCalc.showPentagonPopupAt) return;
+        const me = ev.event;
+        const x = me && me.clientX != null ? me.clientX : 0;
+        const y = me && me.clientY != null ? me.clientY : 0;
+        const color = (trace && trace.line && trace.line.color)
+            || (trace && trace.marker && trace.marker.color)
+            || '#1f77b4';
+        window.HandicapCalc.showPentagonPopupAt(x, y, boatId, color);
     });
     div.on('plotly_unhover', ev => {
         const pt = ev.points && ev.points[0];
         if (!pt) return;
         const trace = div.data && div.data[pt.curveNumber];
-        if (!trace || !trace.meta || !trace.meta.trendLine) return;
-        Plotly.restyle(chartId, {'line.width': trace.meta.baseWidth}, [pt.curveNumber]);
+        if (trace && trace.meta && trace.meta.trendLine) {
+            Plotly.restyle(chartId, {'line.width': trace.meta.baseWidth}, [pt.curveNumber]);
+            return;
+        }
+        if (pt.customdata && pt.customdata.boatId
+            && window.HandicapCalc && window.HandicapCalc.hidePentagonPopup) {
+            window.HandicapCalc.hidePentagonPopup();
+        }
     });
 }
 

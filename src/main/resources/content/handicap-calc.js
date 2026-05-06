@@ -165,8 +165,7 @@ window.HandicapCalc = (function () {
         return p;
     }
 
-    function positionPopup(linkEl) {
-        const rect = linkEl.getBoundingClientRect();
+    function positionPopupAtRect(rect) {
         const w = 200, h = 180;
         let left = rect.right + 8;
         let top = rect.top - 4;
@@ -208,18 +207,15 @@ window.HandicapCalc = (function () {
         Plotly.newPlot(container, [trace], layout, {displayModeBar: false, staticPlot: true});
     }
 
-    function showPentagonPopup(linkEl, boatId, color) {
+    function schedulePopup(rect, boatId, color, onResolve) {
         clearTimeout(popupHideTimer);
         clearTimeout(popupShowTimer);
         popupBoatId = boatId;
         popupShowTimer = setTimeout(async () => {
             const profile = await fetchProfile(boatId);
             if (popupBoatId !== boatId) return; // user moved on
-            if (!profile) {
-                linkEl.title = 'Click to view boat details — no performance profile available';
-                return;
-            }
-            linkEl.title = 'Click to view boat details — hover for performance profile';
+            if (onResolve) onResolve(profile);
+            if (!profile) return;
             const el = ensurePopup();
             el.innerHTML = '';
             const overall = profile.overallScore != null ? profile.overallScore.toFixed(3) : '—';
@@ -230,10 +226,22 @@ window.HandicapCalc = (function () {
             chart.style.cssText = 'width:200px;height:160px;';
             el.appendChild(chart);
             el.appendChild(score);
-            positionPopup(linkEl);
+            positionPopupAtRect(rect);
             el.style.display = 'block';
             renderMiniPentagon(chart, profile, color);
         }, 250);
+    }
+
+    function showPentagonPopup(linkEl, boatId, color) {
+        schedulePopup(linkEl.getBoundingClientRect(), boatId, color, profile => {
+            linkEl.title = profile
+                ? 'Click to view boat details — hover for performance profile'
+                : 'Click to view boat details — no performance profile available';
+        });
+    }
+
+    function showPentagonPopupAt(x, y, boatId, color) {
+        schedulePopup({left: x, right: x, top: y, bottom: y}, boatId, color);
     }
 
     function hidePentagonPopup() {
@@ -1111,5 +1119,6 @@ window.HandicapCalc = (function () {
     return {
         create,
         normaliseSailNumber, stripPrefix, normaliseDesignName, sailnoMatch,
+        showPentagonPopupAt, hidePentagonPopup,
     };
 })();
