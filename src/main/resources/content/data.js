@@ -1817,7 +1817,12 @@ function attachTrendHoverHandlers(chartId) {
         const color = (trace && trace.line && trace.line.color)
             || (trace && trace.marker && trace.marker.color)
             || '#1f77b4';
-        window.HandicapCalc.showPentagonPopupAt(x, y, boatId, color);
+        // pt.text is the per-point string Plotly populates from trace.text; we use
+        // it as the immediate popup content since the trace has hoverinfo:'none'
+        // (so Plotly renders no native bubble).
+        const text = (typeof pt.text === 'string' && pt.text)
+            || (Array.isArray(trace && trace.text) ? trace.text[pt.pointIndex] : null);
+        window.HandicapCalc.showPentagonPopupAt(x, y, boatId, color, text);
     });
     div.on('plotly_unhover', ev => {
         const pt = ev.points && ev.points[0];
@@ -2019,14 +2024,14 @@ function renderDivisionChart(data) {
                     legendgroup: 'elapsed' + suffix,
                     line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
                     text: hoverTexts('Elapsed', elapsed, names),
-                    hoverinfo: 'text', customdata: boatCustom
+                    hoverinfo: 'none', customdata: boatCustom
                 },
                 {
                     x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
                     legendgroup: 'pf' + suffix,
                     line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
                     error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
-                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'none', customdata: boatCustom
                 }
             );
             if (showRaceRfLine && rfFinishers.length > 0) {
@@ -2035,11 +2040,11 @@ function renderDivisionChart(data) {
                     legendgroup: 'rf' + suffix,
                     line: {dash: 'dot', color: rfColor, width: 1.5}, marker: {size: 7},
                     error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
-                    text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
+                    text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'none', customdata: rfCustom
                 });
             }
 
-            addPodiumTraces(traces, finishers, xs, pfCorr, pfColor);
+            addPodiumTraces(traces, finishers, xs, pfCorr, pfColor, 'none');
 
             allocBundles.forEach(b => {
                 const allocXs = b.pts.map(p => p.handicap);
@@ -2056,10 +2061,10 @@ function renderDivisionChart(data) {
                     text: b.pts.map(p =>
                         `${esc(p.name)}<br>${esc(b.name)}: ${p.handicap.toFixed(4)}`
                         + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
-                    hoverinfo: 'text',
+                    hoverinfo: 'none',
                     customdata: b.pts.map(p => ({boatId: p.f.boatId}))
                 });
-                if (b.focused) addAllocPodiumTraces(traces, b.pts, allocXs, allocYs, b.color);
+                if (b.focused) addAllocPodiumTraces(traces, b.pts, allocXs, allocYs, b.color, 'none');
             });
 
             if (showRaceTrendLine) {
@@ -2147,14 +2152,14 @@ function renderDivisionChart(data) {
                     x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
                     legendgroup: 'elapsed' + suffix,
                     line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
-                    text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'text', customdata: boatCustom
+                    text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'none', customdata: boatCustom
                 },
                 {
                     x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
                     legendgroup: 'pf' + suffix,
                     line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
                     error_y: yErrArrays(plotFinishers, 'pf', 'rfWeight'),
-                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'none', customdata: boatCustom
                 }
             );
             if (showRaceRfLine && rfCorr.some(v => v != null)) {
@@ -2163,7 +2168,7 @@ function renderDivisionChart(data) {
                     legendgroup: 'rf' + suffix,
                     line: {dash: 'dot', color: rfColor, width: 1.5}, marker: {size: 7},
                     error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
-                    text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
+                    text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'none', customdata: boatCustom
                 });
             }
             allocBundlesAtX.forEach(b => {
@@ -2179,16 +2184,16 @@ function renderDivisionChart(data) {
                     marker: {size: 8, symbol: 'square'},
                     text: b.filtered.map(p =>
                         `${esc(p.name)}<br>${esc(b.name)}: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
-                    hoverinfo: 'text',
+                    hoverinfo: 'none',
                     customdata: b.filtered.map(p => ({boatId: p.f.boatId}))
                 });
             });
 
-            addPodiumTraces(traces, plotFinishers, xs, pfCorr, pfColor);
+            addPodiumTraces(traces, plotFinishers, xs, pfCorr, pfColor, 'none');
             allocBundlesAtX.forEach(b => {
                 if (b.focused) {
                     addAllocPodiumTraces(traces, b.filtered,
-                        b.filtered.map(p => p.x), b.filtered.map(p => p.y), b.color);
+                        b.filtered.map(p => p.x), b.filtered.map(p => p.y), b.color, 'none');
                 }
             });
 
@@ -2528,7 +2533,7 @@ function renderSeriesChartForDivision(divName, opts) {
                 line: {dash: 'solid', color: color, width: 1.5},
                 marker: {size: 5},
                 text: texts,
-                hoverinfo: 'text',
+                hoverinfo: 'none',
                 customdata: boatCustom
             });
 
@@ -2566,7 +2571,7 @@ function renderSeriesChartForDivision(divName, opts) {
                         + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
                         + `<br>${esc(s.name)}: ${p.handicap.toFixed(4)}`
                         + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
-                    hoverinfo: 'text',
+                    hoverinfo: 'none',
                     customdata: allocPts.map(p => ({boatId: p.f.boatId}))
                 });
                 allocatedLegendShownFor.add(allocLegendKey);
@@ -2591,7 +2596,7 @@ function renderSeriesChartForDivision(divName, opts) {
                     + `<br>${esc(raceLabel)}`
                     + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
                     + `<br>PF corrected: ${fmtTime(f.pfCorrected)}`],
-                    hoverinfo: 'text',
+                    hoverinfo: 'none',
                     customdata: [{boatId: f.boatId}]
                 });
                 podiumLegendShownFor.add(podiumKey);

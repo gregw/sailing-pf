@@ -145,11 +145,14 @@ window.HandicapCalc = (function () {
         if (popupEl) return popupEl;
         popupEl = document.createElement('div');
         popupEl.id = 'pf-pentagon-popup';
+        // Sized to content — width/height are deliberately unset so the popup can
+        // start small with just text and grow once the pentagon is appended.
         popupEl.style.cssText = [
             'position:fixed', 'z-index:10000', 'display:none',
             'background:#fff', 'border:1px solid #888', 'border-radius:4px',
-            'box-shadow:0 2px 8px rgba(0,0,0,0.18)', 'padding:4px',
-            'pointer-events:none', 'font-family:sans-serif'
+            'box-shadow:0 2px 8px rgba(0,0,0,0.18)', 'padding:6px',
+            'pointer-events:none', 'font-family:sans-serif',
+            'font-size:0.8rem', 'line-height:1.3', 'color:#222'
         ].join(';');
         document.body.appendChild(popupEl);
         return popupEl;
@@ -165,16 +168,20 @@ window.HandicapCalc = (function () {
         return p;
     }
 
+    // Re-clamps the popup so it stays on-screen after content changes. Reads the
+    // popup's actual bounding box (so it must already be display:block) and
+    // re-anchors relative to `rect` (the trigger element / cursor point).
     function positionPopupAtRect(rect) {
-        const w = 200, h = 180;
+        if (!popupEl) return;
+        const r = popupEl.getBoundingClientRect();
+        const w = r.width || 200;
+        const h = r.height || 40;
         let left = rect.right + 8;
         let top = rect.top - 4;
         if (left + w > window.innerWidth - 4) left = Math.max(4, rect.left - w - 8);
         if (top + h > window.innerHeight - 4) top = Math.max(4, window.innerHeight - h - 4);
         popupEl.style.left = left + 'px';
         popupEl.style.top = top + 'px';
-        popupEl.style.width = w + 'px';
-        popupEl.style.height = h + 'px';
     }
 
     function renderMiniPentagon(container, profile, color) {
@@ -207,41 +214,61 @@ window.HandicapCalc = (function () {
         Plotly.newPlot(container, [trace], layout, {displayModeBar: false, staticPlot: true});
     }
 
-    function schedulePopup(rect, boatId, color, onResolve) {
+    // Two-stage popup: when `text` is supplied it is rendered immediately, the
+    // popup is shown, and a 250 ms timer fetches the performance profile. When
+    // the profile resolves the pentagon + PP score are appended to the same
+    // popup. Without `text` the popup stays hidden until the profile resolves
+    // (legacy behaviour for the calculator boat-name link).
+    function schedulePopup(rect, boatId, color, opts) {
         clearTimeout(popupHideTimer);
         clearTimeout(popupShowTimer);
         popupBoatId = boatId;
+        const text = opts && opts.text;
+        const onResolve = opts && opts.onResolve;
+
+        const el = ensurePopup();
+        el.innerHTML = '';
+        if (text) {
+            const textEl = document.createElement('div');
+            textEl.style.cssText = 'padding:2px 4px;';
+            textEl.innerHTML = text;
+            el.appendChild(textEl);
+            el.style.display = 'block';
+            positionPopupAtRect(rect);
+        }
+
         popupShowTimer = setTimeout(async () => {
             const profile = await fetchProfile(boatId);
             if (popupBoatId !== boatId) return; // user moved on
             if (onResolve) onResolve(profile);
-            if (!profile) return;
-            const el = ensurePopup();
-            el.innerHTML = '';
+            if (!profile) return; // popup may already be showing text-only — leave it.
+            const chart = document.createElement('div');
+            chart.style.cssText = 'width:200px;height:160px;margin:2px auto 0;';
+            el.appendChild(chart);
             const overall = profile.overallScore != null ? profile.overallScore.toFixed(3) : '—';
             const score = document.createElement('div');
-            score.style.cssText = 'position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:0.75rem;color:#555;';
+            score.style.cssText = 'text-align:center;font-size:0.75rem;color:#555;padding:0 4px 2px;';
             score.textContent = `PP: ${overall}`;
-            const chart = document.createElement('div');
-            chart.style.cssText = 'width:200px;height:160px;';
-            el.appendChild(chart);
             el.appendChild(score);
-            positionPopupAtRect(rect);
             el.style.display = 'block';
             renderMiniPentagon(chart, profile, color);
+            // Re-clamp now that the popup is taller — keeps it on-screen.
+            positionPopupAtRect(rect);
         }, 250);
     }
 
     function showPentagonPopup(linkEl, boatId, color) {
-        schedulePopup(linkEl.getBoundingClientRect(), boatId, color, profile => {
-            linkEl.title = profile
-                ? 'Click to view boat details — hover for performance profile'
-                : 'Click to view boat details — no performance profile available';
+        schedulePopup(linkEl.getBoundingClientRect(), boatId, color, {
+            onResolve: profile => {
+                linkEl.title = profile
+                    ? 'Click to view boat details — hover for performance profile'
+                    : 'Click to view boat details — no performance profile available';
+            }
         });
     }
 
-    function showPentagonPopupAt(x, y, boatId, color) {
-        schedulePopup({left: x, right: x, top: y, bottom: y}, boatId, color);
+    function showPentagonPopupAt(x, y, boatId, color, text) {
+        schedulePopup({left: x, right: x, top: y, bottom: y}, boatId, color, {text});
     }
 
     function hidePentagonPopup() {

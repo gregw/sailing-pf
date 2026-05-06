@@ -56,7 +56,10 @@ function fmtTime(seconds) {
  */
 // Allocated-handicap podium: ranks `allocPts` (each with name, handicap, correctedMin)
 // by corrected time and pushes star/diamond/triangle markers in the allocated-line color.
-function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs, color = '#a04020') {
+// `hoverInfo` lets callers suppress the native Plotly tooltip ('none') when they
+// render their own popup using `pt.text`. Defaults to 'text' so existing callers
+// keep getting Plotly's bubble.
+function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs, color = '#a04020', hoverInfo = 'text') {
     const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
     const PODIUM_SIZES = [14, 12, 11];
     const PODIUM_LABELS = ['1st', '2nd', '3rd'];
@@ -73,13 +76,13 @@ function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs, color = '#a040
                 color, line: {color: '#fff', width: 1.5}
             },
             text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
-            hoverinfo: 'text',
+            hoverinfo: hoverInfo,
             customdata: p.f ? [{boatId: p.f.boatId}] : undefined
         });
     }
 }
 
-function addPodiumTraces(traces, finishers, xs, pfCorr, color = '#2255aa') {
+function addPodiumTraces(traces, finishers, xs, pfCorr, color = '#2255aa', hoverInfo = 'text') {
     const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
     const PODIUM_SIZES = [14, 12, 11];
     const PODIUM_LABELS = ['1st', '2nd', '3rd'];
@@ -101,7 +104,7 @@ function addPodiumTraces(traces, finishers, xs, pfCorr, color = '#2255aa') {
             },
             text: [`${PODIUM_LABELS[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}`
             + `<br>PF corrected: ${fmtTime(pfCorr[idx] * 60)}`],
-            hoverinfo: 'text',
+            hoverinfo: hoverInfo,
             customdata: [{boatId: f.boatId}]
         });
     }
