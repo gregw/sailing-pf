@@ -370,8 +370,23 @@ window.HandicapCalc = (function () {
             const mul = dir === 'asc' ? 1 : -1;
             if (col === 'name') {
                 calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
-            } else if (col === 'input') {
-                calcBoats.sort((a, b) => mul * ((a.pf ?? 0) - (b.pf ?? 0)));
+            } else if (col.startsWith('input:')) {
+                // Sort by the values entered in this specific set's input column.
+                // Boats with no entry sort to the end regardless of direction.
+                const idx = parseInt(col.slice('input:'.length), 10);
+                const values = new Map();
+                setInputCells(idx).forEach(inp => {
+                    const v = parseFloat(inp.value);
+                    if (!isNaN(v)) values.set(inp.dataset.boatId, v);
+                });
+                calcBoats.sort((a, b) => {
+                    const va = values.get(a.id);
+                    const vb = values.get(b.id);
+                    if (va == null && vb == null) return 0;
+                    if (va == null) return 1;
+                    if (vb == null) return -1;
+                    return mul * (va - vb);
+                });
             } else if (col === 'pfDelta' || col === 'rfDelta') {
                 const deltas = computeDeltas(col === 'pfDelta' ? 'pf' : 'rf');
                 calcBoats.sort((a, b) => {
@@ -422,8 +437,10 @@ window.HandicapCalc = (function () {
             ];
             if (cfg.showBestFit) staticCols.push({key: 'bestFit', label: 'Best Fit', align: 'right'});
 
-            const validSortKeys = new Set([...staticCols.map(c => c.key), 'input']);
-            if (!validSortKeys.has(calcSort.col)) calcSort = {col: 'pf', dir: 'desc'};
+            const validSortKeys = new Set(staticCols.map(c => c.key));
+            const inputMatch = /^input:(\d+)$/.exec(calcSort.col);
+            const inputValid = inputMatch && parseInt(inputMatch[1], 10) < sets.length;
+            if (!validSortKeys.has(calcSort.col) && !inputValid) calcSort = {col: 'pf', dir: 'desc'};
 
             // Sort BEFORE clearing the table — computeDeltas() reads anchor values from
             // existing input elements, so the DOM must still be intact at this point.
@@ -532,17 +549,19 @@ window.HandicapCalc = (function () {
             }
             wrap.appendChild(topRow);
 
-            // Sortable label row — clicking sorts by this set's input value (focused-set
-            // sort key is shared across sets to avoid an explosion of sort keys).
+            // Sortable label row — clicking sorts by the values entered in this
+            // specific set's column. Each set has its own sort key so a click on
+            // column N sorts by column N's entries, not the focused column's.
+            const sortKey = `input:${idx}`;
             const sortLbl = document.createElement('span');
-            const isActive = calcSort.col === 'input';
+            const isActive = calcSort.col === sortKey;
             const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
             sortLbl.textContent = 'Enter handicap' + arrow;
             sortLbl.style.cssText = 'cursor:pointer;user-select:none;font-size:0.75rem;'
                 + (isActive ? 'font-weight:bold;' : '');
             sortLbl.addEventListener('click', () => {
-                if (calcSort.col === 'input') calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-                else calcSort = {col: 'input', dir: 'desc'};
+                if (calcSort.col === sortKey) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
+                else calcSort = {col: sortKey, dir: 'desc'};
                 render();
             });
             wrap.appendChild(sortLbl);
