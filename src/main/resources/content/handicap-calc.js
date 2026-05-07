@@ -870,29 +870,34 @@ window.HandicapCalc = (function () {
             }
         }
 
-        // For each set, the entries we save are: every current input value (for boats
-        // currently shown), plus any previously-remembered entry for a boat that is NOT
-        // currently shown (cross-page persistence — another division on another page).
-        // Filtering prev by "shown on this page" rather than "has a current value" means
-        // clearing an input actually removes its session entry instead of resurrecting it
-        // on the next page load.
+        // For each set, replace any prev entry for a boat that has a value in `current`,
+        // and keep every other prev entry untouched — even for boats that ARE currently
+        // shown but happen to have an empty input. Only explicit Clear All / column removal
+        // wipe entries; manually clearing an input is a no-op for the session, so the value
+        // can come back from storage when the calculator is re-rendered.
+        //
+        // Sailno comparison normalises (uppercase, strip prefixes / leading zeros) so that
+        // different formats from fetch sources (e.g. "AUS7232") and stored boat sailNumbers
+        // ("7232") don't accumulate as duplicate entries.
         function saveToSession() {
             if (!cfg.sessionKey) return;
             const remembered = readSession();
-            const shownSailnos = new Set();
-            const shownNames = new Set();
-            calcBoats.forEach(b => {
-                if (b.sailNumber) shownSailnos.add(b.sailNumber);
-                else if (b.boatName) shownNames.add(b.boatName);
-            });
-            const isShown = item =>
-                (item.sailno && shownSailnos.has(item.sailno)) ||
-                (!item.sailno && item.name && shownNames.has(item.name));
+            const sailKey = s => s ? stripPrefix(normaliseSailNumber(s)) : '';
+            const nameKey = n => n ? normaliseDesignName(n) : '';
             const out = {version: 2, focused: focusedIdx, sets: []};
             sets.forEach((s, i) => {
                 const current = getSetEntries(i);
                 const prev = remembered && remembered.sets[i] ? remembered.sets[i].entries : [];
-                const merged = prev.filter(r => !isShown(r)).concat(current);
+                const isReplaced = item => current.some(c => {
+                    const cs = sailKey(c.sailno), is = sailKey(item.sailno);
+                    if (cs && is) return cs === is;
+                    if (!cs && !is) {
+                        const cn = nameKey(c.name), in_ = nameKey(item.name);
+                        return cn !== '' && cn === in_;
+                    }
+                    return false;
+                });
+                const merged = prev.filter(r => !isReplaced(r)).concat(current);
                 out.sets.push({name: s.name, entries: merged});
             });
             try {
