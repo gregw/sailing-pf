@@ -28,7 +28,9 @@ let boatDebounce    = null;
 let lastChartData   = null;
 let inlineDivisionData = null; // most recently loaded /api/comparison/division payload
 const INLINE_DIV_XFACTOR_KEY = 'pf.inlineDiv.xFactor';
+const INLINE_DIV_SHOW_ELAPSED_KEY = 'pf.inlineDiv.showElapsed';
 let inlineDivXFactor = sessionStorage.getItem(INLINE_DIV_XFACTOR_KEY) || '---';
+let inlineShowElapsed = sessionStorage.getItem(INLINE_DIV_SHOW_ELAPSED_KEY) !== 'false';
 let inlineDivisionRaceId = null;
 let inlineDivisionName = null;
 let inlineDivisionSeriesId = null;
@@ -546,6 +548,12 @@ function onInlineDivXFactorChange() {
     renderInlineDivisionChart();
 }
 
+function onInlineShowElapsedChange(cb) {
+    inlineShowElapsed = cb.checked;
+    sessionStorage.setItem(INLINE_DIV_SHOW_ELAPSED_KEY, inlineShowElapsed ? 'true' : 'false');
+    renderInlineDivisionChart();
+}
+
 function renderInlineDivisionChart() {
     const data = inlineDivisionData;
     if (!data) return;
@@ -556,6 +564,10 @@ function renderInlineDivisionChart() {
     }
 
     const rfFinishersList = finishers.filter(f => f.rf != null && f.rfCorrected != null);
+
+    // Calc-driven visibility flags: PF / RF corrected and per-set Allocated lines.
+    const showPf = pfCalc().getShowPf();
+    const showRf = pfCalc().getShowRf();
 
     // Allocated-handicap data: one bundle per set from the calculator.
     const allocSets = pfCalc().getAllSets().map(s => {
@@ -568,10 +580,15 @@ function renderInlineDivisionChart() {
                 correctedMin: f.elapsed * s.values.get(f.boatId) / 60
             }))
             .sort((a, b) => a.handicap - b.handicap);
-        return {name: s.name, color: s.color, focused: s.focused, values: s.values, pts};
+        return {name: s.name, color: s.color, focused: s.focused, show: s.show, values: s.values, pts};
     });
     const allocSetsWithPts = allocSets.filter(s => s.pts.length > 0);
+    const visibleAllocSets = allocSetsWithPts.filter(s => s.show);
     const focusedAlloc = allocSets.find(s => s.focused) || allocSets[0];
+
+    // Sync the Elapsed tickbox UI so its state survives reloads / nav.
+    const elapsedCb = document.getElementById('bcfc-show-elapsed');
+    if (elapsedCb) elapsedCb.checked = inlineShowElapsed;
 
     // Rebuild the x-factor selector with options valid for this data.
     const xSelect = document.getElementById('bcfc-div-xfactor');
@@ -601,24 +618,23 @@ function renderInlineDivisionChart() {
         const elapsed = finishers.map(f => f.elapsed / 60);
         const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
 
-        traces = [
-            {
-                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
-                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])),
-                hoverinfo: 'text'
-            },
-            {
-                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
-                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
-                text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])),
-                hoverinfo: 'text'
-            }
-        ];
+        traces = [];
+        if (inlineShowElapsed) traces.push({
+            x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+            line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+            text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])),
+            hoverinfo: 'text'
+        });
+        if (showPf) traces.push({
+            x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+            line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+            text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])),
+            hoverinfo: 'text'
+        });
 
-        addPodiumTraces(traces, finishers, xs, pfCorr);
+        if (showPf) addPodiumTraces(traces, finishers, xs, pfCorr);
 
-        allocSetsWithPts.forEach(s => {
+        visibleAllocSets.forEach(s => {
             const allocXs = s.pts.map(p => p.handicap);
             const allocYs = s.pts.map(p => p.correctedMin);
             const traceName = allocSetsWithPts.length > 1
@@ -637,12 +653,17 @@ function renderInlineDivisionChart() {
             if (s.focused) addAllocPodiumTraces(traces, s.pts, allocXs, allocYs, s.color);
         });
 
-        annotations = finishers.map((f, i) => ({
-            x: xs[i], y: Math.max(...[elapsed[i], pfCorr[i]].filter(v => v != null)),
-            text: f.name, textangle: -90,
-            xanchor: 'center', yanchor: 'bottom', yshift: 6,
-            showarrow: false, cliponaxis: false, font: {size: 11}
-        }));
+        annotations = finishers.map((f, i) => {
+            const ys = [];
+            if (inlineShowElapsed && elapsed[i] != null) ys.push(elapsed[i]);
+            if (showPf && pfCorr[i] != null) ys.push(pfCorr[i]);
+            return {
+                x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0,
+                text: f.name, textangle: -90,
+                xanchor: 'center', yanchor: 'bottom', yshift: 6,
+                showarrow: false, cliponaxis: false, font: {size: 11}
+            };
+        });
 
         xAxisTitle = 'Handicap (PF)';
 
@@ -666,28 +687,27 @@ function renderInlineDivisionChart() {
         const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
         const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
 
-        traces = [
-            {
-                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
-                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])), hoverinfo: 'text'
-            },
-            {
-                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
-                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
-                text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])), hoverinfo: 'text'
-            },
-            ...(rfCorr.some(v => v != null) ? [{
-                x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
-                line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
-                text: names.map((n, i) => hoverText(n, 'RF corrected', rfCorr[i])), hoverinfo: 'text'
-            }] : [])
-        ];
+        traces = [];
+        if (inlineShowElapsed) traces.push({
+            x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+            line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+            text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])), hoverinfo: 'text'
+        });
+        if (showPf) traces.push({
+            x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+            line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+            text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])), hoverinfo: 'text'
+        });
+        if (showRf && rfCorr.some(v => v != null)) traces.push({
+            x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+            line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+            text: names.map((n, i) => hoverText(n, 'RF corrected', rfCorr[i])), hoverinfo: 'text'
+        });
 
-        addPodiumTraces(traces, plotFinishers, xs, pfCorr);
+        if (showPf) addPodiumTraces(traces, plotFinishers, xs, pfCorr);
 
-        // One allocated trace per non-empty set; podium markers only for the focused set.
-        allocSetsWithPts.forEach(s => {
+        // One allocated trace per non-empty visible set; podium markers only for the focused set.
+        visibleAllocSets.forEach(s => {
             const allocCorr = plotFinishers.map(f => {
                 const h = s.values.get(f.boatId);
                 return h != null ? f.elapsed * h / 60 : null;
@@ -720,9 +740,12 @@ function renderInlineDivisionChart() {
         });
 
         annotations = plotFinishers.map((f, i) => {
-            const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+            const ys = [];
+            if (inlineShowElapsed && elapsed[i] != null) ys.push(elapsed[i]);
+            if (showPf && pfCorr[i] != null) ys.push(pfCorr[i]);
+            if (showRf && rfCorr[i] != null) ys.push(rfCorr[i]);
             return {
-                x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0, text: f.name, textangle: -90,
                 xanchor: 'center', yanchor: 'bottom', yshift: 6,
                 showarrow: false, cliponaxis: false, font: {size: 11}
             };

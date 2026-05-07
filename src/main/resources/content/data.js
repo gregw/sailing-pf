@@ -299,8 +299,10 @@ const state = {
 
 let currentDivRaceId = null;
 // Race-division-chart toggles — persisted in sessionStorage so they survive tab
-// switches and page reloads within a session. Defaults: RF line on, the rest off.
-const RACE_RF_KEY    = 'pf.divChart.showRf';
+// switches and page reloads within a session. Defaults: Elapsed on, the rest off.
+// PF / RF / per-set Allocated visibility now live in the handicap-calc table headers,
+// not as separate checkboxes here.
+const RACE_ELAPSED_KEY = 'pf.divChart.showElapsed';
 const RACE_ERR_KEY   = 'pf.divChart.showErrorBars';
 const RACE_TREND_KEY = 'pf.divChart.showTrend';
 const RACE_DIV_XFACTOR_KEY = 'pf.divChart.xFactor';
@@ -308,7 +310,8 @@ function sessionBool(key, dflt) {
     const v = sessionStorage.getItem(key);
     return v === null ? dflt : v === 'true';
 }
-let showRaceRfLine    = sessionBool(RACE_RF_KEY,    true);
+
+let showRaceElapsed = sessionBool(RACE_ELAPSED_KEY, true);
 let showRaceErrorBars = sessionBool(RACE_ERR_KEY,   false);
 let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
 const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
@@ -574,11 +577,11 @@ document.addEventListener('DOMContentLoaded', () => {
     DIV_Y_CHECKBOX_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.checked = yFrom; });
 
     // Race-division-chart toggles.
-    const rfCb    = document.getElementById('race-show-rf');
-    const errCb   = document.getElementById('race-show-error-bars');
+    const elapsedCb = document.getElementById('race-show-elapsed');
+    const errCb = document.getElementById('race-show-error-bars');
     const trendCb = document.getElementById('race-show-trend');
-    if (rfCb)    rfCb.checked    = showRaceRfLine;
-    if (errCb)   errCb.checked   = showRaceErrorBars;
+    if (elapsedCb) elapsedCb.checked = showRaceElapsed;
+    if (errCb) errCb.checked = showRaceErrorBars;
     if (trendCb) trendCb.checked = showRaceTrendLine;
 
     // Series-chart overall-trend toggle.
@@ -1748,9 +1751,9 @@ function onRaceDivisionChange() {
     applyRaceCalcDivision(divName);
 }
 
-function onRaceRfChange() {
-    showRaceRfLine = document.getElementById('race-show-rf').checked;
-    sessionStorage.setItem(RACE_RF_KEY, String(showRaceRfLine));
+function onRaceElapsedChange() {
+    showRaceElapsed = document.getElementById('race-show-elapsed').checked;
+    sessionStorage.setItem(RACE_ELAPSED_KEY, String(showRaceElapsed));
     onRaceDivisionChange();
 }
 
@@ -1896,9 +1899,12 @@ function renderDivisionChart(data) {
     if (allFinishers.length === 0) return;
 
     // Allocated handicaps from the race-tab calculator. One calculator covers all race
-    // boats, so each set's value map is global across divisions.
-    const allocSets = raceCalc().getAllSets();   // [{name, color, focused, values}]
+    // boats, so each set's value map is global across divisions. Visibility flags
+    // (PF/RF/per-set Allocated) come from the calc's table-header tickboxes.
+    const allocSets = raceCalc().getAllSets();   // [{name, color, focused, show, values}]
     const focusedAllocValues = (allocSets.find(s => s.focused) || allocSets[0] || {values: new Map()}).values;
+    const showPfLine = raceCalc().getShowPf();
+    const showRfLine = raceCalc().getShowRf();
 
     // Group by division. Backend includes a "division" field on each finisher when
     // called with __all__; for a single-division request all finishers share the
@@ -1984,8 +1990,10 @@ function renderDivisionChart(data) {
             .filter(o => o.rf != null && o.rfCorrMin != null)
             .sort((a, b) => a.rf - b.rf);
 
-        // Per-set allocated points (sorted by handicap) for this division group.
-        const allocBundles = allocSets.map(s => ({
+        // Per-set allocated points (sorted by handicap) for this division group. Sets
+        // hidden via the calc-header tickbox are dropped here so neither the trace nor
+        // the trend line is built for them.
+        const allocBundles = allocSets.filter(s => s.show !== false).map(s => ({
             ...s,
             color: lightenColor(s.color, lighten),
             pts: finishers
@@ -2017,24 +2025,22 @@ function renderDivisionChart(data) {
 
             const boatCustom = finishers.map(f => ({boatId: f.boatId}));
 
-            traces.push(
-                {
-                    x: xs, y: elapsed,
-                    mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
-                    legendgroup: 'elapsed' + suffix,
-                    line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
-                    text: hoverTexts('Elapsed', elapsed, names),
-                    hoverinfo: 'none', customdata: boatCustom
-                },
-                {
-                    x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
-                    legendgroup: 'pf' + suffix,
-                    line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
-                    error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
-                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'none', customdata: boatCustom
-                }
-            );
-            if (showRaceRfLine && rfFinishers.length > 0) {
+            if (showRaceElapsed) traces.push({
+                x: xs, y: elapsed,
+                mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
+                legendgroup: 'elapsed' + suffix,
+                line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
+                text: hoverTexts('Elapsed', elapsed, names),
+                hoverinfo: 'none', customdata: boatCustom
+            });
+            if (showPfLine) traces.push({
+                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
+                legendgroup: 'pf' + suffix,
+                line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
+                error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
+                text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'none', customdata: boatCustom
+            });
+            if (showRfLine && rfFinishers.length > 0) {
                 traces.push({
                     x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected' + suffix,
                     legendgroup: 'rf' + suffix,
@@ -2044,7 +2050,7 @@ function renderDivisionChart(data) {
                 });
             }
 
-            addPodiumTraces(traces, finishers, xs, pfCorr, pfColor, 'none');
+            if (showPfLine) addPodiumTraces(traces, finishers, xs, pfCorr, pfColor, 'none');
 
             allocBundles.forEach(b => {
                 const allocXs = b.pts.map(p => p.handicap);
@@ -2068,13 +2074,17 @@ function renderDivisionChart(data) {
             });
 
             if (showRaceTrendLine) {
-                const elapsedTrend = buildTrendTrace(
-                    finishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend' + suffix, elapsedColor);
-                if (elapsedTrend) traces.push(elapsedTrend);
-                const pfTrend = buildTrendTrace(
-                    finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend' + suffix, pfColor);
-                if (pfTrend) traces.push(pfTrend);
-                if (showRaceRfLine && rfFinishers.length > 0) {
+                if (showRaceElapsed) {
+                    const elapsedTrend = buildTrendTrace(
+                        finishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend' + suffix, elapsedColor);
+                    if (elapsedTrend) traces.push(elapsedTrend);
+                }
+                if (showPfLine) {
+                    const pfTrend = buildTrendTrace(
+                        finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend' + suffix, pfColor);
+                    if (pfTrend) traces.push(pfTrend);
+                }
+                if (showRfLine && rfFinishers.length > 0) {
                     const rfTrend = buildTrendTrace(
                         rfFinishers.map((o, i) => ({x: rfXs[i], y: rfCorr[i]})),
                         'RF corr trend' + suffix, rfColor);
@@ -2092,15 +2102,17 @@ function renderDivisionChart(data) {
             }
 
             annotations = finishers.map((f, i) => {
-                const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+                const ys = [];
+                if (showRaceElapsed && elapsed[i] != null) ys.push(elapsed[i]);
+                if (showPfLine && pfCorr[i] != null) ys.push(pfCorr[i]);
                 return {
-                    x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                    x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0, text: f.name, textangle: -90,
                     xanchor: 'center', yanchor: 'bottom', yshift: 6,
                     showarrow: false, cliponaxis: false, font: {size: 11}
                 };
             });
 
-            xAxisTitle = showRaceRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF';
+            xAxisTitle = showRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF';
 
         } else {
             // Common-factor mode: all traces use the same x-axis factor, so all dots for
@@ -2124,7 +2136,8 @@ function renderDivisionChart(data) {
             const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
             const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
             // Per-set corrected times for this division group, aligned to plot xs.
-            const allocBundlesAtX = allocSets.map(s => {
+            // Hidden sets (calc-header tickbox unchecked) are dropped here.
+            const allocBundlesAtX = allocSets.filter(s => s.show !== false).map(s => {
                 const corr = plotFinishers.map(f => {
                     const h = s.values.get(f.boatId);
                     return h != null ? f.elapsed * h / 60 : null;
@@ -2147,22 +2160,20 @@ function renderDivisionChart(data) {
             }).filter(b => b.filtered.length > 0);
             const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
 
-            traces.push(
-                {
-                    x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
-                    legendgroup: 'elapsed' + suffix,
-                    line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
-                    text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'none', customdata: boatCustom
-                },
-                {
-                    x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
-                    legendgroup: 'pf' + suffix,
-                    line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
-                    error_y: yErrArrays(plotFinishers, 'pf', 'rfWeight'),
-                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'none', customdata: boatCustom
-                }
-            );
-            if (showRaceRfLine && rfCorr.some(v => v != null)) {
+            if (showRaceElapsed) traces.push({
+                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
+                legendgroup: 'elapsed' + suffix,
+                line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
+                text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'none', customdata: boatCustom
+            });
+            if (showPfLine) traces.push({
+                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
+                legendgroup: 'pf' + suffix,
+                line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
+                error_y: yErrArrays(plotFinishers, 'pf', 'rfWeight'),
+                text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'none', customdata: boatCustom
+            });
+            if (showRfLine && rfCorr.some(v => v != null)) {
                 traces.push({
                     x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected' + suffix,
                     legendgroup: 'rf' + suffix,
@@ -2189,7 +2200,7 @@ function renderDivisionChart(data) {
                 });
             });
 
-            addPodiumTraces(traces, plotFinishers, xs, pfCorr, pfColor, 'none');
+            if (showPfLine) addPodiumTraces(traces, plotFinishers, xs, pfCorr, pfColor, 'none');
             allocBundlesAtX.forEach(b => {
                 if (b.focused) {
                     addAllocPodiumTraces(traces, b.filtered,
@@ -2198,15 +2209,19 @@ function renderDivisionChart(data) {
             });
 
             if (showRaceTrendLine) {
-                const elapsedTrend = buildTrendTrace(
-                    plotFinishers.map((f, i) => ({x: xs[i], y: elapsed[i]})),
-                    'Elapsed trend' + suffix, elapsedColor);
-                if (elapsedTrend) traces.push(elapsedTrend);
-                const pfTrend = buildTrendTrace(
-                    plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})),
-                    'PF corr trend' + suffix, pfColor);
-                if (pfTrend) traces.push(pfTrend);
-                if (showRaceRfLine && rfCorr.some(v => v != null)) {
+                if (showRaceElapsed) {
+                    const elapsedTrend = buildTrendTrace(
+                        plotFinishers.map((f, i) => ({x: xs[i], y: elapsed[i]})),
+                        'Elapsed trend' + suffix, elapsedColor);
+                    if (elapsedTrend) traces.push(elapsedTrend);
+                }
+                if (showPfLine) {
+                    const pfTrend = buildTrendTrace(
+                        plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})),
+                        'PF corr trend' + suffix, pfColor);
+                    if (pfTrend) traces.push(pfTrend);
+                }
+                if (showRfLine && rfCorr.some(v => v != null)) {
                     const rfTrend = buildTrendTrace(
                         plotFinishers.map((f, i) => ({x: xs[i], y: rfCorr[i]})),
                         'RF corr trend' + suffix, rfColor);
@@ -2224,9 +2239,12 @@ function renderDivisionChart(data) {
             }
 
             annotations = plotFinishers.map((f, i) => {
-                const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+                const ys = [];
+                if (showRaceElapsed && elapsed[i] != null) ys.push(elapsed[i]);
+                if (showPfLine && pfCorr[i] != null) ys.push(pfCorr[i]);
+                if (showRfLine && rfCorr[i] != null) ys.push(rfCorr[i]);
                 return {
-                    x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                    x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0, text: f.name, textangle: -90,
                     xanchor: 'center', yanchor: 'bottom', yshift: 6,
                     showarrow: false, cliponaxis: false, font: {size: 11}
                 };
@@ -2456,7 +2474,10 @@ function renderSeriesChartForDivision(divName, opts) {
     if (!opts || opts.refreshCalc !== false) {
         seriesPfCalc().setBoats(buildSeriesCalcBoats(data, divName));
     }
-    const allocSets = seriesPfCalc().getAllSets();   // [{name, color, focused, values}]
+    // [{name, color, focused, show, values}] — `show` flags come from calc-header tickboxes.
+    const allocSets = seriesPfCalc().getAllSets();
+    const visibleAllocSets = allocSets.filter(s => s.show !== false);
+    const showPfLine = seriesPfCalc().getShowPf();
 
     // Colour palette for races
     const raceColors = [
@@ -2525,7 +2546,7 @@ function renderSeriesChartForDivision(divName, opts) {
             );
             const boatCustom = finishers.map(f => ({boatId: f.boatId}));
 
-            traces.push({
+            if (showPfLine) traces.push({
                 x: xs, y: ys,
                 mode: 'lines+markers', type: 'scatter',
                 name: traceName,
@@ -2540,7 +2561,7 @@ function renderSeriesChartForDivision(divName, opts) {
             // Allocated-handicap corrected line(s) for this (race, division) — one per set.
             // Single-set keeps the existing race-coloured dashed line; multi-set switches to
             // the set's palette colour so different sets are distinguishable across races.
-            allocSets.forEach(s => {
+            visibleAllocSets.forEach(s => {
                 const allocPts = finishers
                     .filter(f => s.values.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
                     .map(f => ({
@@ -2550,11 +2571,11 @@ function renderSeriesChartForDivision(divName, opts) {
                     }))
                     .sort((a, b) => a.f.pf - b.f.pf);
                 if (allocPts.length === 0) return;
-                const allocColor = allocSets.length > 1
+                const allocColor = visibleAllocSets.length > 1
                     ? lightenColor(s.color, lighten) : color;
                 const allocLegendKey = (allDivisions ? `allocated-${groupDivName}` : 'allocated')
                     + `:${s.name}`;
-                const traceLabel = allocSets.length > 1
+                const traceLabel = visibleAllocSets.length > 1
                     ? `${s.name}${allDivisions ? ' — ' + (groupDivName || 'Results') : ''}`
                     : (allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected');
                 traces.push({
@@ -2577,7 +2598,9 @@ function renderSeriesChartForDivision(divName, opts) {
                 allocatedLegendShownFor.add(allocLegendKey);
             });
 
-            // Podium markers (1st/2nd/3rd fastest corrected times in this group)
+            // Podium markers (1st/2nd/3rd fastest corrected times in this group). Hidden
+            // when the PF dataset itself is hidden — they sit on the PF-corrected line.
+            if (!showPfLine) return;
             for (let p = 0; p < Math.min(3, sorted.length); p++) {
                 const f = finishers[sorted[p].i];
                 const podiumKey = podiumLabels[p];
@@ -2611,25 +2634,29 @@ function renderSeriesChartForDivision(divName, opts) {
 
     if (showSeriesOverallTrend) {
         // One trend line per division. In "All" mode: one trend per division (combining
-        // its races across the series); in single-division mode: one trend.
+        // its races across the series); in single-division mode: one trend. Trends echo
+        // the dataset visibility so the PF and per-set Allocated trends disappear with
+        // their data.
         const trendDivs = allDivisions ? seriesDivOrder : [divName];
         trendDivs.forEach((dn, i) => {
             const lighten = allDivisions ? Math.min(0.4, i * 0.18) : 0;
-            const trend = computeSeriesOverallTrend(data, dn);
-            if (trend) {
-                if (allDivisions) {
-                    trend.name = `Overall ${dn || 'Results'} — ${trend.name}`;
-                    trend.line.color = lightenColor('#333', lighten);
+            if (showPfLine) {
+                const trend = computeSeriesOverallTrend(data, dn);
+                if (trend) {
+                    if (allDivisions) {
+                        trend.name = `Overall ${dn || 'Results'} — ${trend.name}`;
+                        trend.line.color = lightenColor('#333', lighten);
+                    }
+                    traces.push(trend);
                 }
-                traces.push(trend);
             }
-            allocSets.forEach(s => {
+            visibleAllocSets.forEach(s => {
                 const allocTrend = computeSeriesAllocatedTrend(data, dn, s.values);
                 if (!allocTrend) return;
-                const baseName = allocSets.length > 1 ? s.name : 'Allocated';
+                const baseName = visibleAllocSets.length > 1 ? s.name : 'Allocated';
                 if (allDivisions) {
                     allocTrend.name = `${baseName} ${dn || 'Results'} — ${allocTrend.name.replace(/^Allocated /, '')}`;
-                } else if (allocSets.length > 1) {
+                } else if (visibleAllocSets.length > 1) {
                     allocTrend.name = allocTrend.name.replace(/^Allocated /, `${s.name} `);
                 }
                 allocTrend.line.color = lightenColor(s.color, lighten);

@@ -14,7 +14,8 @@
 //   clearAll()                 — clear focused-set inputs and re-render
 //   getEnteredHandicaps()      — focused-set entries as [{sailno, name, handicap}]
 //   getEnteredValues()         — focused-set Map(boatId → handicap)
-//   getAllSets()               — [{name, color, focused, values: Map(boatId → handicap)}] for charts
+//   getAllSets()               — [{name, color, focused, show, values: Map(boatId → handicap)}] for charts
+//   getShowPf() / getShowRf()  — booleans set by tickboxes in the PF / RF column headers
 //   recalc()                   — force recalculation of scaled columns
 //
 // Boats passed to setBoats must have: { id, name, sailNumber, boatName, pf, rf, bestFit?, color?, pfWeight?, rfWeight? }.
@@ -286,9 +287,13 @@ window.HandicapCalc = (function () {
         let calcSort = {col: 'pf', dir: 'desc'};
 
         // Sets — one column per set, focused set drives load/clear/typing/scaled-preview.
-        let sets = [{name: 'Allocated'}];
+        // `show` per set (default true) drives whether consumers (charts) plot that set's
+        // allocated-corrected dataset; same idea for showPf / showRf at the controller level.
+        let sets = [{name: 'Allocated', show: true}];
         let focusedIdx = 0;
         let nextSetN = 2;
+        let showPf = true;
+        let showRf = true;
 
         function valueCells() {
             return section.querySelectorAll('.pf-calc-value');
@@ -314,7 +319,7 @@ window.HandicapCalc = (function () {
         }
 
         function addSet() {
-            sets.push({name: `Set ${nextSetN++}`});
+            sets.push({name: `Set ${nextSetN++}`, show: true});
             focusedIdx = sets.length - 1;
             render();
             saveToSession();
@@ -344,11 +349,13 @@ window.HandicapCalc = (function () {
                             : focusedIdx;
                     try {
                         const anyEntries = surviving.some(s => s.entries && s.entries.length > 0);
-                        if (!anyEntries && surviving.length <= 1) {
+                        const anyHidden = !showPf || !showRf || surviving.some(s => s.show === false);
+                        if (!anyEntries && surviving.length <= 1 && !anyHidden) {
                             sessionStorage.removeItem(cfg.sessionKey);
                         } else {
                             sessionStorage.setItem(cfg.sessionKey, JSON.stringify({
-                                version: 2, focused: Math.max(0, newFocused), sets: surviving
+                                version: 2, focused: Math.max(0, newFocused),
+                                showPf, showRf, sets: surviving
                             }));
                         }
                     } catch (e) { /* quota or disabled storage — ignore */
@@ -504,8 +511,15 @@ window.HandicapCalc = (function () {
             }
             hdrTr.appendChild(addTh);
 
-            // Remaining static columns (PF / PFΔ / RF / RFΔ / Best Fit).
-            staticCols.slice(1).forEach(c => hdrTr.appendChild(makeSortableTh(c)));
+            // Remaining static columns (PF / PFΔ / RF / RFΔ / Best Fit). PF / RF columns
+            // get a "show in chart" tickbox above the sort label so charts can hide each
+            // dataset on demand.
+            staticCols.slice(1).forEach(c => {
+                if (c.key === 'pf' || c.key === 'rf')
+                    hdrTr.appendChild(makeFactorHeaderTh(c));
+                else
+                    hdrTr.appendChild(makeSortableTh(c));
+            });
 
             thead.appendChild(hdrTr);
             table.appendChild(thead);
@@ -544,15 +558,66 @@ window.HandicapCalc = (function () {
             return th;
         }
 
+        // Header for the PF / RF columns — a small "show" tickbox above the sortable label.
+        // The tickbox controls whether external charts plot the corresponding corrected-time
+        // dataset; toggling fires onChange so consumers can re-render.
+        function makeFactorHeaderTh(c) {
+            const th = document.createElement('th');
+            th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};`;
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = c.key === 'pf' ? showPf : showRf;
+            cb.title = `Show ${c.label} corrected dataset in chart`;
+            cb.style.cssText = 'margin:0;cursor:pointer;';
+            cb.addEventListener('change', () => {
+                if (c.key === 'pf') showPf = cb.checked;
+                else showRf = cb.checked;
+                saveToSession();
+                if (cfg.onChange) cfg.onChange();
+            });
+            wrap.appendChild(cb);
+
+            const isActive = c.key === calcSort.col;
+            const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+            const lbl = document.createElement('span');
+            lbl.textContent = c.label + arrow;
+            lbl.style.cssText = 'cursor:pointer;user-select:none;'
+                + (isActive ? 'font-weight:bold;' : '');
+            lbl.addEventListener('click', () => {
+                if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
+                else calcSort = {col: c.key, dir: c.key === 'name' ? 'asc' : 'desc'};
+                render();
+            });
+            wrap.appendChild(lbl);
+
+            th.appendChild(wrap);
+            return th;
+        }
+
         function makeSetHeaderTh(set, idx) {
             const th = document.createElement('th');
             th.style.cssText = 'padding:2px 4px;text-align:center;font-size:0.8rem;color:#555;';
             const wrap = document.createElement('div');
             wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
 
-            // Top row: focus radio + name + (× when removable).
+            // Top row: show tickbox + focus radio + name + (× when removable).
             const topRow = document.createElement('div');
             topRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+            const showCb = document.createElement('input');
+            showCb.type = 'checkbox';
+            showCb.checked = set.show !== false;
+            showCb.title = `Show ${set.name} corrected dataset in chart`;
+            showCb.style.cssText = 'margin:0;cursor:pointer;';
+            showCb.addEventListener('change', () => {
+                set.show = showCb.checked;
+                saveToSession();
+                if (cfg.onChange) cfg.onChange();
+            });
+            topRow.appendChild(showCb);
 
             const radio = document.createElement('input');
             radio.type = 'radio';
@@ -772,21 +837,18 @@ window.HandicapCalc = (function () {
                     td.title = 'Scaled from single entered value — no consensus spread available';
                     return;
                 }
+                // Every value cell shows the per-factor consensus prediction
+                // (origVal * R) — including anchor rows, so PF / RF / Best Fit each
+                // reflect their own scale. The Δ column carries the residual between
+                // entered and predicted for anchor rows.
+                td.textContent = (origVal * stats.R).toFixed(4);
                 const isAnchor = anchorIds.has(boatId);
-                if (isAnchor) {
-                    const a = anchorByBoat.get(boatId);
-                    td.textContent = a.value.toFixed(4);
-                    const r = stats.ratioMap.get(boatId);
-                    if (r != null) {
-                        const deviation = Math.abs(r - stats.R) / stats.R;
-                        td.style.color = fitColor(deviation);
-                        td.title = fitLabel(deviation);
-                    } else {
-                        td.style.color = '';
-                        td.title = '';
-                    }
+                const r = isAnchor ? stats.ratioMap.get(boatId) : null;
+                if (isAnchor && r != null) {
+                    const deviation = Math.abs(r - stats.R) / stats.R;
+                    td.style.color = fitColor(deviation);
+                    td.title = fitLabel(deviation);
                 } else {
-                    td.textContent = (origVal * stats.R).toFixed(4);
                     td.style.color = confidenceColor(stats.cv);
                     td.title = confidenceLabel(stats.cv);
                 }
@@ -884,7 +946,7 @@ window.HandicapCalc = (function () {
             const remembered = readSession();
             const sailKey = s => s ? stripPrefix(normaliseSailNumber(s)) : '';
             const nameKey = n => n ? normaliseDesignName(n) : '';
-            const out = {version: 2, focused: focusedIdx, sets: []};
+            const out = {version: 2, focused: focusedIdx, showPf, showRf, sets: []};
             sets.forEach((s, i) => {
                 const current = getSetEntries(i);
                 const prev = remembered && remembered.sets[i] ? remembered.sets[i].entries : [];
@@ -898,11 +960,12 @@ window.HandicapCalc = (function () {
                     return false;
                 });
                 const merged = prev.filter(r => !isReplaced(r)).concat(current);
-                out.sets.push({name: s.name, entries: merged});
+                out.sets.push({name: s.name, show: s.show !== false, entries: merged});
             });
             try {
                 const anyEntries = out.sets.some(s => s.entries.length > 0);
-                if (anyEntries || out.sets.length > 1)
+                const anyHidden = !showPf || !showRf || out.sets.some(s => !s.show);
+                if (anyEntries || out.sets.length > 1 || anyHidden)
                     sessionStorage.setItem(cfg.sessionKey, JSON.stringify(out));
                 else
                     sessionStorage.removeItem(cfg.sessionKey);
@@ -916,9 +979,11 @@ window.HandicapCalc = (function () {
             if (!data) return;
 
             // Reshape `sets` and focus to match what's persisted.
-            sets = data.sets.map(s => ({name: s.name || 'Allocated'}));
-            if (sets.length === 0) sets = [{name: 'Allocated'}];
+            sets = data.sets.map(s => ({name: s.name || 'Allocated', show: s.show !== false}));
+            if (sets.length === 0) sets = [{name: 'Allocated', show: true}];
             focusedIdx = Math.max(0, Math.min(sets.length - 1, data.focused | 0));
+            if (typeof data.showPf === 'boolean') showPf = data.showPf;
+            if (typeof data.showRf === 'boolean') showRf = data.showRf;
             // Ensure auto-naming continues from the highest existing "Set N".
             nextSetN = Math.max(2, ...sets.map(s => {
                 const m = /^Set\s+(\d+)$/.exec(s.name);
@@ -1020,11 +1085,14 @@ window.HandicapCalc = (function () {
                 if (remembered && Array.isArray(remembered.sets) && remembered.sets[focusedIdx]) {
                     remembered.sets[focusedIdx] = {
                         name: remembered.sets[focusedIdx].name,
+                        show: remembered.sets[focusedIdx].show !== false,
                         entries: []
                     };
                     try {
                         const anyEntries = remembered.sets.some(s => s.entries && s.entries.length > 0);
-                        if (!anyEntries && remembered.sets.length <= 1)
+                        const anyHidden = remembered.showPf === false || remembered.showRf === false
+                            || remembered.sets.some(s => s.show === false);
+                        if (!anyEntries && remembered.sets.length <= 1 && !anyHidden)
                             sessionStorage.removeItem(cfg.sessionKey);
                         else
                             sessionStorage.setItem(cfg.sessionKey, JSON.stringify(remembered));
@@ -1073,8 +1141,17 @@ window.HandicapCalc = (function () {
                 name: s.name,
                 color: setColor(i),
                 focused: i === focusedIdx,
+                show: s.show !== false,
                 values: getSetValues(i)
             }));
+        }
+
+        function getShowPf() {
+            return showPf;
+        }
+
+        function getShowRf() {
+            return showRf;
         }
 
         // Merge fetched rows into the FOCUSED set's session entries so off-screen boats
@@ -1084,10 +1161,13 @@ window.HandicapCalc = (function () {
             if (!cfg.sessionKey) return;
             const incoming = (rows || []).filter(r => r != null && r.handicap != null);
             if (incoming.length === 0) return;
-            const stored = readSession() || {version: 2, focused: focusedIdx, sets: []};
+            const stored = readSession()
+                || {version: 2, focused: focusedIdx, showPf, showRf, sets: []};
             // Pad sets to match current length.
-            while (stored.sets.length < sets.length)
-                stored.sets.push({name: sets[stored.sets.length].name, entries: []});
+            while (stored.sets.length < sets.length) {
+                const i = stored.sets.length;
+                stored.sets.push({name: sets[i].name, show: sets[i].show !== false, entries: []});
+            }
             const target = stored.sets[focusedIdx];
             const replaced = item => incoming.some(r =>
                 (r.sailno && r.sailno === item.sailno) ||
@@ -1224,7 +1304,10 @@ window.HandicapCalc = (function () {
         if (cfg.fileInput) cfg.fileInput.addEventListener('change', doFile);
         if (cfg.downloadBtn) cfg.downloadBtn.addEventListener('click', doDownload);
 
-        return {setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues, getAllSets, recalc};
+        return {
+            setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues,
+            getAllSets, getShowPf, getShowRf, recalc
+        };
     }
 
     return {

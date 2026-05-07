@@ -363,7 +363,8 @@
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
         <label>Division: <select id="race-division-select" onchange="onRaceDivisionChange()"></select></label>
         <span id="race-variant-label" style="font-size:0.9rem;color:#555;"></span>
-        <label><input type="checkbox" id="race-show-rf" checked onchange="onRaceRfChange()"> RF line</label>
+          <label title="Show the Elapsed time line in the chart"><input type="checkbox" id="race-show-elapsed" checked onchange="onRaceElapsedChange()">
+              Elapsed</label>
         <label><input type="checkbox" id="race-show-error-bars" onchange="onRaceErrorBarsChange()"> Error bars</label>
           <label><input type="checkbox" id="race-show-trend" onchange="onRaceTrendChange()"> Trend lines</label>
         <label title="Start the time axis at zero so bar heights are directly comparable">
