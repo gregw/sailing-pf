@@ -55,7 +55,7 @@ recentRaceReimportDays: 30
 
 # --- SailSys importer ---
 sailsysNextRaceId: 32678
-sailsysEndRaceId: 41340
+sailsysEndRaceId: 41399
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365

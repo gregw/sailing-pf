@@ -352,7 +352,7 @@ boatDesignOverrides:
 - designId: "farr36modified"
   canonicalName: "Farr 36 Modified"
   boats:
-    - sailNumber: "1088"
-      name: "Corum"
-      from: null
-      until: null
+  - sailNumber: "1088"
+    name: "Corum"
+    from: null
+    until: null
