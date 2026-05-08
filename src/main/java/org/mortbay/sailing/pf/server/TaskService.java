@@ -1,22 +1,5 @@
 package org.mortbay.sailing.pf.server;
 
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
-import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.eclipse.jetty.client.HttpClient;
-import org.mortbay.sailing.pf.analysis.ConversionGraph;
-import org.mortbay.sailing.pf.analysis.PfConfig;
-import org.mortbay.sailing.pf.importer.AmsImporter;
-import org.mortbay.sailing.pf.importer.ImporterLog;
-import org.mortbay.sailing.pf.importer.BwpsImporter;
-import org.mortbay.sailing.pf.importer.OrcImporter;
-import org.mortbay.sailing.pf.importer.SailSysImporter;
-import org.mortbay.sailing.pf.importer.TopYachtImporter;
-import org.mortbay.sailing.pf.store.DataStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,16 +11,33 @@ import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
-
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.eclipse.jetty.client.HttpClient;
+import org.mortbay.sailing.pf.analysis.ConversionGraph;
+import org.mortbay.sailing.pf.analysis.PfConfig;
+import org.mortbay.sailing.pf.importer.AmsImporter;
+import org.mortbay.sailing.pf.importer.BwpsImporter;
+import org.mortbay.sailing.pf.importer.ImporterLog;
+import org.mortbay.sailing.pf.importer.OrcImporter;
+import org.mortbay.sailing.pf.importer.SailSysImporter;
+import org.mortbay.sailing.pf.importer.TopYachtImporter;
+import org.mortbay.sailing.pf.store.DataStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TaskService
 {
@@ -149,7 +149,8 @@ public class TaskService
                                String authAllowedDomain,         // null → no domain restriction
                                Integer adminPort,                // null → default 8888
                                Integer userPort,                 // null → default 8080
-                               String natGatewayIp)              // null → no gateway protection
+                               String natGatewayIp,              // null → no gateway protection
+                               Map<String, Instant> lastRunTimes) // null → empty
     {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
@@ -204,6 +205,7 @@ public class TaskService
     private volatile int adminPort = 8888;
     private volatile int userPort = 8080;
     private volatile String natGatewayIp = null;
+    private final Map<String, Instant> lastRunTimes = new ConcurrentHashMap<>();
 
     public TaskService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
@@ -273,6 +275,8 @@ public class TaskService
             if (config.adminPort() != null) adminPort = config.adminPort();
             if (config.userPort() != null) userPort = config.userPort();
             natGatewayIp = config.natGatewayIp();
+            if (config.lastRunTimes() != null)
+                lastRunTimes.putAll(config.lastRunTimes());
             if (globalSchedule != null && !globalSchedule.days().isEmpty())
                 armSchedule();
             LOG.info("Loaded admin config from {}", configFile);
@@ -407,6 +411,11 @@ public void stop()
     public List<ImporterEntry> importerEntries()
     {
         return List.copyOf(importerEntries);
+    }
+
+    public Map<String, Instant> lastRunTimes()
+    {
+        return Map.copyOf(lastRunTimes);
     }
 
     public GlobalSchedule globalSchedule()
@@ -601,6 +610,8 @@ public void stop()
 
     private void runImporter(String name, String mode, int startId) throws Exception
     {
+        lastRunTimes.put(name + "/" + mode, Instant.now());
+        persistConfig();
         if (IMPORTER_NAMES.contains(name))
             ImporterLog.open(dataRoot.resolve("log"), name);
         try
@@ -710,7 +721,8 @@ public void stop()
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,
                     googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
-                    adminPort, userPort, natGatewayIp));
+                    adminPort, userPort, natGatewayIp,
+                    new LinkedHashMap<>(lastRunTimes)));
             Files.writeString(configFile, addConfigComments(yaml));
         }
         catch (IOException e)

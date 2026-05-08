@@ -2493,18 +2493,21 @@ public class AdminApiServlet extends HttpServlet
     {
         TaskService.ImportStatus status = _taskService.currentStatus();
         Integer sailsysNextRaceId = _taskService.sailsysNextRaceId();
+        Map<String, java.time.Instant> lastRunTimes = _taskService.lastRunTimes();
         List<Map<String, Object>> entries = new ArrayList<>();
         for (TaskService.ImporterEntry e : _taskService.importerEntries())
         {
             boolean isRunning = status != null
                 && e.name().equals(status.importerName())
                 && e.mode().equals(status.mode());
+            java.time.Instant lastRun = lastRunTimes.get(e.name() + "/" + e.mode());
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("name", e.name());
             row.put("mode", e.mode());
             row.put("includeInSchedule", e.includeInSchedule());
             row.put("runAtStartup", e.runAtStartup());
             row.put("status", isRunning ? "running" : "idle");
+            row.put("lastRun", lastRun != null ? lastRun.toString() : null);
             row.put("nextStartId", "sailsys-races".equals(e.name()) ? sailsysNextRaceId : null);
             entries.add(row);
         }

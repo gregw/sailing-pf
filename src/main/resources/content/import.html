@@ -23,6 +23,9 @@
           <th></th>
           <th>Task <a href="ui-tips.md#col-importer-task" class="info-btn" data-tip="Task name and run mode (api = fetch from network, run = compute locally)." target="_blank">ⓘ</a></th>
           <th>Status <a href="ui-tips.md#col-importer-status" class="info-btn" data-tip="Current status of this task: idle or running." target="_blank">ⓘ</a></th>
+            <th>Last run
+                <a href="ui-tips.md#col-importer-last-run" class="info-btn" data-tip="Local time at which this task last started running." target="_blank">ⓘ</a>
+            </th>
           <th style="text-align:center">Run <a href="ui-tips.md#col-importer-run" class="info-btn" data-tip="Run this task now. For sailsys-races, optionally set the starting race ID." target="_blank">ⓘ</a></th>
           <th style="text-align:center" title="Include this task in the automatic scheduled run">In schedule <a href="ui-tips.md#col-importer-in-schedule" class="info-btn" data-tip="Tick to include this task in the automatic scheduled run." target="_blank">ⓘ</a></th>
           <th style="text-align:center" title="Run this task automatically when the server starts">On start <a href="ui-tips.md#col-importer-on-start" class="info-btn" data-tip="Tick to run this task automatically when the server starts." target="_blank">ⓘ</a></th>
@@ -31,7 +34,7 @@
       <tbody id="importers-body"></tbody>
       <tfoot>
         <tr>
-          <td colspan="4"></td>
+            <td colspan="5"></td>
           <td style="text-align:center">
             <button onclick="runScheduleNow()" title="Run all ticked In Schedule tasks immediately, in order"
                     style="background:#1a6b2a;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">

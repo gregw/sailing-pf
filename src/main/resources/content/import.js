@@ -38,6 +38,15 @@ function displayName(name) {
     return DISPLAY_NAMES[name] || name;
 }
 
+function formatLastRun(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+        + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 async function loadImporters() {
     const data = await fetchJson('/api/importers');
     if (!data) return;
@@ -130,6 +139,7 @@ function buildRow(entry) {
       <td>${esc(displayName(entry.name))} ${infoBtn('task-' + entry.name, taskTip(entry.name))}</td>
       <td><span class="badge ${isRunning ? 'badge-running' : 'badge-idle'}"
                id="badge-${esc(key)}">${esc(entry.status)}</span>${progressField}</td>
+      <td style="white-space:nowrap;font-family:monospace;font-size:0.9em;color:#555">${esc(formatLastRun(entry.lastRun))}</td>
       <td style="text-align:center">${runStopBtns}</td>
       <td style="text-align:center"><input type="checkbox" id="sched-${esc(key)}"
                title="Include in the automatic scheduled run"
