@@ -612,8 +612,9 @@ function renderInlineDivisionChart() {
     let traces, annotations, xAxisTitle;
 
     if (inlineDivXFactor === '---') {
-        // Natural mode: each trace at its own factor's x-axis.
-        const xs = finishers.map(f => f.pf);
+        // Natural mode: each trace at 1/factor on the x-axis so the elapsed line is
+        // (approximately) straight rather than hyperbolic. Faster boats sit on the left.
+        const xs = finishers.map(f => f.pf > 0 ? 1 / f.pf : null);
         const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
         const elapsed = finishers.map(f => f.elapsed / 60);
         const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
@@ -635,7 +636,7 @@ function renderInlineDivisionChart() {
         if (showPf) addPodiumTraces(traces, finishers, xs, pfCorr);
 
         visibleAllocSets.forEach(s => {
-            const allocXs = s.pts.map(p => p.handicap);
+            const allocXs = s.pts.map(p => p.handicap > 0 ? 1 / p.handicap : null);
             const allocYs = s.pts.map(p => p.correctedMin);
             const traceName = allocSetsWithPts.length > 1
                 ? `${s.name} corrected` : 'Allocated handicap corrected';
@@ -665,16 +666,19 @@ function renderInlineDivisionChart() {
             };
         });
 
-        xAxisTitle = 'Handicap (PF)';
+        xAxisTitle = '1/PF';
 
     } else {
-        // Common-factor mode: all traces share the same x-axis factor.
+        // Common-factor mode: all traces share the same x-axis factor (inverted to
+        // 1/factor so the elapsed line is straight rather than hyperbolic).
         // For "Allocated" x-axis, use the focused set's values to define x.
         const xByFocusedAlloc = focusedAlloc ? focusedAlloc.values : new Map();
         const getX = f => {
-            if (inlineDivXFactor === 'RF') return f.rf;
-            if (inlineDivXFactor === 'Allocated') return xByFocusedAlloc.get(f.boatId);
-            return f.pf;
+            const raw =
+                inlineDivXFactor === 'RF' ? f.rf :
+                    inlineDivXFactor === 'Allocated' ? xByFocusedAlloc.get(f.boatId) :
+                        f.pf;
+            return (raw != null && raw > 0) ? 1 / raw : null;
         };
         const plotFinishers = finishers
             .filter(f => getX(f) != null)
@@ -751,7 +755,7 @@ function renderInlineDivisionChart() {
             };
         });
 
-        xAxisTitle = inlineDivXFactor === 'Allocated' ? 'Allocated Handicap' : inlineDivXFactor;
+        xAxisTitle = inlineDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + inlineDivXFactor;
     }
 
     const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;

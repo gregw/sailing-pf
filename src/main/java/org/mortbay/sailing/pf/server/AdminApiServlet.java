@@ -1874,10 +1874,14 @@ public class AdminApiServlet extends HttpServlet
                     if (pfVal == null)
                         continue;
 
+                    String designId = bd.boat().designId();
+                    Design design = designId != null ? store.designs().get(designId) : null;
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", f.boatId());
                     row.put("name", bd.boat().name());
                     row.put("sailNumber", bd.boat().sailNumber());
+                    row.put("designId", designId);
+                    row.put("designName", design != null ? design.canonicalName() : null);
                     row.put("variant", fVariant);
                     row.put("pf", pfVal);
                     row.put("pfWeight", pfWeight);
@@ -2147,10 +2151,14 @@ public class AdminApiServlet extends HttpServlet
                     Double pfWeight = pfFactor != null && !Double.isNaN(pfFactor.weight()) ? pfFactor.weight() : null;
                     Double rfWeight = rfFactor != null && !Double.isNaN(rfFactor.weight()) ? rfFactor.weight() : null;
 
+                    String designId = bd.boat().designId();
+                    Design design = designId != null ? store.designs().get(designId) : null;
                     Map<String, Object> fm = new LinkedHashMap<>();
                     fm.put("boatId", f.boatId());
                     fm.put("name", bd.boat().name());
                     fm.put("sailNumber", bd.boat().sailNumber());
+                    fm.put("designId", designId);
+                    fm.put("designName", design != null ? design.canonicalName() : null);
                     fm.put("elapsed", elapsedSec);
                     fm.put("pf", pfVal);
                     fm.put("pfWeight", pfWeight);

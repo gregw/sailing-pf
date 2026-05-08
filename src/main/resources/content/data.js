@@ -2024,22 +2024,23 @@ function renderDivisionChart(data) {
         let xAxisTitle;
 
         if (raceDivXFactor === '---') {
-            // Natural mode: each line is plotted at its own factor's x. Elapsed sits at
-            // x = BCF (referenceTime / elapsed) so a 1.000 reference boat lands at x=1.
-            // PF / RF corrected and Allocated keep their own x (PF, RF, handicap).
-            const xs = finishers.map(f => f.pf);
+            // Natural mode: each line is plotted at its own factor's x, inverted (1/factor)
+            // so the elapsed line is straight rather than hyperbolic. Elapsed sits at
+            // x = 1/BCF = elapsed/T₀ — exactly linear in elapsed. PF / RF corrected and
+            // Allocated land at 1/PF, 1/RF, 1/handicap respectively.
+            const xs = finishers.map(f => f.pf != null && f.pf > 0 ? 1 / f.pf : null);
             const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
             const elapsed = finishers.map(f => f.elapsed / 60);
             const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
 
-            const rfXs = rfFinishers.map(o => o.rf);
+            const rfXs = rfFinishers.map(o => o.rf > 0 ? 1 / o.rf : null);
             const rfCorr = rfFinishers.map(o => o.rfCorrMin);
             const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
             const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
 
-            // Elapsed is plotted at its own per-finisher BCF — drop finishers without one.
+            // Elapsed is plotted at 1/BCF for each finisher — drop finishers without a BCF.
             const elapsedRows = finishers
-                .map((f, i) => ({f, x: f.bcf, y: elapsed[i], name: names[i]}))
+                .map((f, i) => ({f, x: f.bcf != null && f.bcf > 0 ? 1 / f.bcf : null, y: elapsed[i], name: names[i]}))
                 .filter(r => r.x != null);
             const elapsedXs = elapsedRows.map(r => r.x);
             const elapsedYs = elapsedRows.map(r => r.y);
@@ -2076,7 +2077,7 @@ function renderDivisionChart(data) {
             if (showPfLine) addPodiumTraces(traces, finishers, xs, pfCorr, pfColor, 'none');
 
             allocBundles.forEach(b => {
-                const allocXs = b.pts.map(p => p.handicap);
+                const allocXs = b.pts.map(p => p.handicap > 0 ? 1 / p.handicap : null);
                 const allocYs = b.pts.map(p => p.correctedMin);
                 const traceName = (allocBundles.length > 1
                     ? `${b.name} corrected` : 'Allocated handicap corrected') + suffix;
@@ -2117,15 +2118,15 @@ function renderDivisionChart(data) {
                     const traceName = (allocBundles.length > 1
                         ? `${b.name} corr trend` : 'Allocated corr trend') + suffix;
                     const allocTrend = buildTrendTrace(
-                        b.pts.map(p => ({x: p.handicap, y: p.correctedMin})),
+                        b.pts.map(p => ({x: p.handicap > 0 ? 1 / p.handicap : null, y: p.correctedMin})),
                         traceName, b.color,
                         {baseWidth: 3.5, hoverWidth: 7});
                     if (allocTrend) traces.push(allocTrend);
                 });
             }
 
-            // Annotations are anchored at each boat's PF (the PF-corrected x). Elapsed is
-            // plotted at its BCF x in natural mode, so it isn't co-located with the label
+            // Annotations are anchored at each boat's 1/PF (the PF-corrected x). Elapsed is
+            // plotted at its 1/BCF x in natural mode, so it isn't co-located with the label
             // and is excluded from the y-positioning calculation.
             annotations = finishers.map((f, i) => {
                 const ys = [];
@@ -2137,22 +2138,25 @@ function renderDivisionChart(data) {
                 };
             });
 
-            xAxisTitle = showRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF';
+            xAxisTitle = showRfLine && rfFinishers.length > 0 ? '1/PF, 1/RF' : '1/PF';
 
         } else {
-            // Common-factor mode: all traces use the same x-axis factor, so all dots for
-            // a given boat form a vertical line.
+            // Common-factor mode: all traces use the same x-axis factor (inverted to
+            // 1/factor so the elapsed line is straight rather than hyperbolic). All
+            // dots for a given boat form a vertical line at that boat's 1/factor.
             const getX = f => {
-                if (raceDivXFactor === 'RF') return f.rf;
-                if (raceDivXFactor === 'BCF') return f.bcf;
-                if (raceDivXFactor === 'Allocated') return focusedAllocValues.get(f.boatId);
-                return f.pf;
+                const raw =
+                    raceDivXFactor === 'RF' ? f.rf :
+                        raceDivXFactor === 'BCF' ? f.bcf :
+                            raceDivXFactor === 'Allocated' ? focusedAllocValues.get(f.boatId) :
+                                f.pf;
+                return (raw != null && raw > 0) ? 1 / raw : null;
             };
             const plotFinishers = finishers
                 .filter(f => getX(f) != null)
                 .sort((a, b) => getX(a) - getX(b));
             if (plotFinishers.length === 0) {
-                xAxisTitle = raceDivXFactor === 'Allocated' ? 'Allocated Handicap' : raceDivXFactor;
+                xAxisTitle = raceDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + raceDivXFactor;
                 return {traces, annotations, xAxisTitle};
             }
 
@@ -2276,14 +2280,14 @@ function renderDivisionChart(data) {
                 };
             });
 
-            xAxisTitle = raceDivXFactor === 'Allocated' ? 'Allocated Handicap' : raceDivXFactor;
+            xAxisTitle = raceDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + raceDivXFactor;
         }
         return {traces, annotations, xAxisTitle};
     }
 
     let allTraces = [];
     let allAnnotations = [];
-    let xAxisTitle = 'PF';
+    let xAxisTitle = '1/PF';
     groupEntries.forEach(([divName, groupFinishers], divIdx) => {
         const lighten = isMulti ? Math.min(0.5, divIdx * 0.18) : 0;
         const divLabel = isMulti ? (divName || 'Results') : null;
@@ -2368,23 +2372,81 @@ function applyRaceCalcDivision(divName) {
     const data = lastRaceBoatsResponse;
     if (!data || !data.boats) return;
     const allDivisions = !divName || divName === '__all__';
-    const boats = data.boats
-        .filter(b => allDivisions || (b.division || '') === divName)
-        .map(b => ({
-            id: b.id,
-            name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
-            sailNumber: b.sailNumber || null,
-            boatName: b.name || null,
-            division: b.division || null,
-            pf: b.pf,
-            pfWeight: b.pfWeight,
-            rf: b.rf,
-            rfWeight: b.rfWeight,
-            bestFit: null
-        }));
+    const filtered = data.boats.filter(b => allDivisions || (b.division || '') === divName);
+    const boats = filtered.map(b => ({
+        id: b.id,
+        name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
+        sailNumber: b.sailNumber || null,
+        boatName: b.name || null,
+        division: b.division || null,
+        pf: b.pf,
+        pfWeight: b.pfWeight,
+        rf: b.rf,
+        rfWeight: b.rfWeight,
+        bestFit: null
+    }));
     raceCalc().setBoats(boats);
+    renderCompareButtons('race-compare-btn-container',
+        filtered.map(b => ({
+            id: b.id,
+            label: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
+            designId: b.designId || null,
+            designName: b.designName || null,
+        })));
     // Re-render division chart so the allocated line picks up any applied entries.
     if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+}
+
+// ---- Compare Boats / Compare Designs buttons (below handicap calculator) ----
+
+const COMPARE_PALETTE = [
+    '#3a7ec4', '#e67e22', '#27ae60', '#8e44ad', '#c0392b',
+    '#16a085', '#d35400', '#2c3e50', '#f39c12', '#1abc9c'
+];
+
+// rows: [{id, label, designId, designName}]
+function renderCompareButtons(containerId, rows) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    if (!rows || rows.length === 0) return;
+
+    const boatBtn = document.createElement('button');
+    boatBtn.textContent = `Compare ${rows.length} boat${rows.length === 1 ? '' : 's'}…`;
+    boatBtn.style.cssText = 'padding:4px 12px;';
+    boatBtn.onclick = () => {
+        const items = rows.map((r, i) => ({
+            type: 'boat',
+            id: r.id,
+            label: r.label,
+            color: COMPARE_PALETTE[i % COMPARE_PALETTE.length]
+        }));
+        sessionStorage.setItem('pf-comparison-items', JSON.stringify(items));
+        window.location.href = '/comparison.html';
+    };
+    container.appendChild(boatBtn);
+
+    const seenDesigns = new Map();
+    rows.forEach(r => {
+        if (r.designId && !seenDesigns.has(r.designId))
+            seenDesigns.set(r.designId, r.designName || r.designId);
+    });
+    if (seenDesigns.size > 0) {
+        const designBtn = document.createElement('button');
+        designBtn.textContent = `Compare ${seenDesigns.size} design${seenDesigns.size === 1 ? '' : 's'}…`;
+        designBtn.style.cssText = 'margin-left:0.5rem;padding:4px 12px;';
+        designBtn.onclick = () => {
+            const items = [...seenDesigns.entries()].map(([id, label], i) => ({
+                type: 'design',
+                id,
+                label,
+                color: COMPARE_PALETTE[i % COMPARE_PALETTE.length]
+            }));
+            sessionStorage.setItem('pf-designComparison-items', JSON.stringify(items));
+            window.location.href = '/design-comparison.html';
+        };
+        container.appendChild(designBtn);
+    }
 }
 
 // ---- Series chart ----
@@ -2430,6 +2492,7 @@ async function loadSeriesChart(seriesId) {
         document.getElementById('series-division-select').innerHTML = '';
         Plotly.purge('series-chart');
         seriesPfCalc().setBoats([]);
+        renderCompareButtons('series-compare-btn-container', []);
         return;
     }
 
@@ -2471,6 +2534,8 @@ function buildSeriesCalcBoats(data, divName) {
                     name: f.sailNumber ? `${f.sailNumber} ${f.name || ''}`.trim() : (f.name || f.boatId),
                     sailNumber: f.sailNumber || null,
                     boatName: f.name || null,
+                    designId: f.designId || null,
+                    designName: f.designName || null,
                     pf: f.pf,
                     pfWeight: f.pfWeight,
                     rf: f.rf != null ? f.rf : null,
@@ -2498,7 +2563,15 @@ function renderSeriesChartForDivision(divName, opts) {
     seriesCurrentDivision = divName;
 
     if (!opts || opts.refreshCalc !== false) {
-        seriesPfCalc().setBoats(buildSeriesCalcBoats(data, divName));
+        const calcBoats = buildSeriesCalcBoats(data, divName);
+        seriesPfCalc().setBoats(calcBoats);
+        renderCompareButtons('series-compare-btn-container',
+            calcBoats.map(b => ({
+                id: b.id,
+                label: b.name,
+                designId: b.designId,
+                designName: b.designName,
+            })));
     }
     // [{name, color, focused, show, values}] — `show` flags come from calc-header tickboxes.
     const allocSets = seriesPfCalc().getAllSets();
@@ -2563,7 +2636,9 @@ function renderSeriesChartForDivision(divName, opts) {
             const sorted = finishers.map((f, i) => ({i, t: f.pfCorrected}))
                 .sort((a, b) => a.t - b.t);
 
-            const xs = finishers.map(f => f.pf);
+            // x = 1/PF so the elapsed line (and PF-corrected line) read as time-like:
+            // faster boats sit on the left, slower on the right. PF-corrected stays flat.
+            const xs = finishers.map(f => f.pf > 0 ? 1 / f.pf : null);
             const ys = finishers.map(f => f.pfCorrected / 60);
             const texts = finishers.map(f =>
                 `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
@@ -2584,16 +2659,16 @@ function renderSeriesChartForDivision(divName, opts) {
                 customdata: boatCustom
             });
 
-            // Optional Elapsed line per (race, division), plotted at x=BCF so a 1.000
-            // reference boat lands at x=1. Skipped when the series-tab Elapsed tickbox
-            // is off, or when finishers don't carry BCF (e.g. older cached payloads).
+            // Optional Elapsed line per (race, division), plotted at x=1/BCF so it
+            // is a straight line (elapsed = T₀ × 1/BCF). Skipped when the series-tab
+            // Elapsed tickbox is off, or finishers don't carry BCF (older cached payloads).
             if (showSeriesElapsed) {
                 const elapsedRows = finishers
-                    .filter(f => f.bcf != null && f.elapsed != null && f.elapsed > 0)
+                    .filter(f => f.bcf != null && f.bcf > 0 && f.elapsed != null && f.elapsed > 0)
                     .slice()
-                    .sort((a, b) => a.bcf - b.bcf);
+                    .sort((a, b) => (1 / a.bcf) - (1 / b.bcf));
                 if (elapsedRows.length > 0) {
-                    const eXs = elapsedRows.map(f => f.bcf);
+                    const eXs = elapsedRows.map(f => 1 / f.bcf);
                     const eYs = elapsedRows.map(f => f.elapsed / 60);
                     const eTexts = elapsedRows.map(f =>
                         `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
@@ -2634,7 +2709,7 @@ function renderSeriesChartForDivision(divName, opts) {
                     ? `${s.name}${allDivisions ? ' — ' + (groupDivName || 'Results') : ''}`
                     : (allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected');
                 traces.push({
-                    x: allocPts.map(p => p.f.pf),
+                    x: allocPts.map(p => p.f.pf > 0 ? 1 / p.f.pf : null),
                     y: allocPts.map(p => p.correctedMin),
                     mode: 'lines+markers', type: 'scatter',
                     name: traceLabel,
@@ -2660,7 +2735,7 @@ function renderSeriesChartForDivision(divName, opts) {
                 const f = finishers[sorted[p].i];
                 const podiumKey = podiumLabels[p];
                 traces.push({
-                    x: [f.pf], y: [f.pfCorrected / 60],
+                    x: [f.pf > 0 ? 1 / f.pf : null], y: [f.pfCorrected / 60],
                     mode: 'markers', type: 'scatter',
                     name: podiumKey,
                     legendgroup: podiumKey,
@@ -2721,7 +2796,7 @@ function renderSeriesChartForDivision(divName, opts) {
     }
 
     const layout = {
-        xaxis: {title: 'PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'},
+        xaxis: {title: '1/PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'},
         yaxis: {
             title: 'PF Corrected Time (min)', tickformat: '.1f',
             rangemode: getDivChartYFromZero() ? 'tozero' : 'normal'
@@ -2758,9 +2833,9 @@ function computeSeriesOverallTrend(data, divName) {
     const allY = [];
     data.races.forEach(race => {
         const finishers = getRaceFinishers(race, divName)
-            .filter(f => f.pf != null && f.pfCorrected != null);
+            .filter(f => f.pf != null && f.pf > 0 && f.pfCorrected != null);
         if (finishers.length < 2) return;
-        const xs = finishers.map(f => f.pf);
+        const xs = finishers.map(f => 1 / f.pf);
         const ys = finishers.map(f => f.pfCorrected / 60);
         allX.push(...xs);
         allY.push(...ys);
@@ -2792,9 +2867,9 @@ function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
     const allY = [];
     data.races.forEach(race => {
         const finishers = getRaceFinishers(race, divName).filter(f =>
-            f.pf != null && f.elapsed != null && f.elapsed > 0 && allocByBoat.has(f.boatId));
+            f.pf != null && f.pf > 0 && f.elapsed != null && f.elapsed > 0 && allocByBoat.has(f.boatId));
         if (finishers.length < 2) return;
-        const xs = finishers.map(f => f.pf);
+        const xs = finishers.map(f => 1 / f.pf);
         const ys = finishers.map(f => f.elapsed * allocByBoat.get(f.boatId) / 60);
         allX.push(...xs);
         allY.push(...ys);
