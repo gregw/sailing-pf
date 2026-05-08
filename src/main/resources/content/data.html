@@ -467,6 +467,9 @@
       <div id="series-chart-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
         <label>Division: <select id="series-division-select" onchange="onSeriesDivisionChange()"></select></label>
+          <label title="Show the Elapsed time line per race in the chart">
+              <input type="checkbox" id="series-show-elapsed" onchange="onSeriesElapsedChange()"> Elapsed
+          </label>
         <label title="Start the time axis at zero">
             <input type="checkbox" id="series-y-from-zero" checked onchange="onDivChartYFromZeroChange(this)"> From 0m
         </label>

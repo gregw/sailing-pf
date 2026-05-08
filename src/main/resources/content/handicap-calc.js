@@ -497,7 +497,13 @@ window.HandicapCalc = (function () {
 
             // "+ Add column" header — only shown once at least one set has entries, so
             // adding a second column makes sense (you have something to compare against).
-            const anyEntries = Array.from(entered.keys()).length > 0;
+            // Sources for "has entries": current DOM inputs (entered), session storage
+            // (covers freshly-loaded calcs whose inputs are populated AFTER render), or
+            // multiple existing sets (always allow adding more).
+            const stored = readSession();
+            const anyEntries = entered.size > 0
+                || sets.length > 1
+                || (stored && stored.sets && stored.sets.some(s => s.entries && s.entries.length > 0));
             const addTh = document.createElement('th');
             addTh.style.cssText = 'padding:2px 4px;text-align:center;';
             if (anyEntries) {

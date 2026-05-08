@@ -35,6 +35,7 @@ import org.jsoup.select.Elements;
 import org.mortbay.sailing.pf.analysis.BoatDerived;
 import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
+import org.mortbay.sailing.pf.analysis.DivisionPf;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
 import org.mortbay.sailing.pf.analysis.PerformanceProfile;
 import org.mortbay.sailing.pf.analysis.PfQuality;
@@ -1719,6 +1720,20 @@ public class AdminApiServlet extends HttpServlet
             selectedDivisions = List.of(single);
         }
 
+        // Per-division reference times (T₀) for BCF — back-calc factor per finisher,
+        // referenceTime / elapsed. Look up from the analysis cache once per request.
+        var rd = cache.raceDerived().get(raceId);
+        Map<String, Double> refSecsByDivName = new java.util.HashMap<>();
+        if (rd != null && rd.divisionPfs() != null)
+        {
+            for (DivisionPf dpf : rd.divisionPfs())
+            {
+                if (dpf.referenceTimeNanos() > 0)
+                    refSecsByDivName.put(dpf.divisionName(),
+                        dpf.referenceTimeNanos() / 1_000_000_000.0);
+            }
+        }
+
         int totalFinishers = 0;
         List<Map<String, Object>> finishers = new ArrayList<>();
         Set<String> variantsUsed = new java.util.LinkedHashSet<>();
@@ -1727,6 +1742,7 @@ public class AdminApiServlet extends HttpServlet
             if (div.finishers() == null)
                 continue;
             totalFinishers += div.finishers().size();
+            Double refSec = refSecsByDivName.get(div.name());
             for (var f : div.finishers())
             {
                 BoatDerived bd = cache.boatDerived().get(f.boatId());
@@ -1768,6 +1784,7 @@ public class AdminApiServlet extends HttpServlet
                 fm.put("rfWeight", rfFactor != null ? rfFactor.weight() : null);
                 fm.put("pfCorrected", pfVal != null && pfVal > 0 ? elapsedSec * pfVal : null);
                 fm.put("rfCorrected", rfVal != null && rfVal > 0 ? elapsedSec * rfVal : null);
+                fm.put("bcf", refSec != null && refSec > 0 && elapsedSec > 0 ? refSec / elapsedSec : null);
                 finishers.add(fm);
             }
         }

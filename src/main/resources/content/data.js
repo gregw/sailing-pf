@@ -316,6 +316,8 @@ let showRaceErrorBars = sessionBool(RACE_ERR_KEY,   false);
 let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
 const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
 let showSeriesOverallTrend = sessionBool(SERIES_OVERALL_TREND_KEY, false);
+const SERIES_ELAPSED_KEY = 'pf.divChart.seriesShowElapsed';
+let showSeriesElapsed = sessionBool(SERIES_ELAPSED_KEY, false);
 // Shared between race-division and series charts; default off so the plot area stays
 // constant in height as the user flips between divisions.
 const SHOW_LEGEND_KEY = 'pf.divChart.showLegend';
@@ -584,9 +586,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (errCb) errCb.checked = showRaceErrorBars;
     if (trendCb) trendCb.checked = showRaceTrendLine;
 
-    // Series-chart overall-trend toggle.
+    // Series-chart overall-trend + elapsed toggles.
     const seriesTrendCb = document.getElementById('series-show-overall-trend');
     if (seriesTrendCb) seriesTrendCb.checked = showSeriesOverallTrend;
+    const seriesElapsedCb = document.getElementById('series-show-elapsed');
+    if (seriesElapsedCb) seriesElapsedCb.checked = showSeriesElapsed;
 
     // Show-legend toggle (shared across race + series charts).
     ['race-show-legend', 'series-show-legend'].forEach(id => {
@@ -1781,6 +1785,12 @@ function onSeriesOverallTrendChange(cb) {
     onSeriesDivisionChange();
 }
 
+function onSeriesElapsedChange() {
+    showSeriesElapsed = document.getElementById('series-show-elapsed').checked;
+    sessionStorage.setItem(SERIES_ELAPSED_KEY, String(showSeriesElapsed));
+    if (seriesChartData) renderSeriesChartForDivision(seriesCurrentDivision, {refreshCalc: false});
+}
+
 function onShowLegendChange(cb) {
     showLegend = cb.checked;
     sessionStorage.setItem(SHOW_LEGEND_KEY, String(showLegend));
@@ -1920,11 +1930,13 @@ function renderDivisionChart(data) {
 
     // X-factor selector options reflect data across all groups.
     const anyRf = allFinishers.some(f => f.rf != null && f.rfCorrected != null);
+    const anyBcf = allFinishers.some(f => f.bcf != null);
     const anyAlloc = allocSets.some(s => allFinishers.some(f => s.values.has(f.boatId)));
     const xSelect = document.getElementById('race-div-xfactor');
     if (xSelect) {
         const opts = ['---', 'PF',
             ...(anyRf ? ['RF'] : []),
+            ...(anyBcf ? ['BCF'] : []),
             ...(anyAlloc ? ['Allocated'] : [])
         ];
         if (!opts.includes(raceDivXFactor)) raceDivXFactor = '---';
@@ -2012,7 +2024,9 @@ function renderDivisionChart(data) {
         let xAxisTitle;
 
         if (raceDivXFactor === '---') {
-            // Natural mode: elapsed always at x=PF; corrected traces use their own factor.
+            // Natural mode: each line is plotted at its own factor's x. Elapsed sits at
+            // x = BCF (referenceTime / elapsed) so a 1.000 reference boat lands at x=1.
+            // PF / RF corrected and Allocated keep their own x (PF, RF, handicap).
             const xs = finishers.map(f => f.pf);
             const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
             const elapsed = finishers.map(f => f.elapsed / 60);
@@ -2023,15 +2037,24 @@ function renderDivisionChart(data) {
             const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
             const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
 
+            // Elapsed is plotted at its own per-finisher BCF — drop finishers without one.
+            const elapsedRows = finishers
+                .map((f, i) => ({f, x: f.bcf, y: elapsed[i], name: names[i]}))
+                .filter(r => r.x != null);
+            const elapsedXs = elapsedRows.map(r => r.x);
+            const elapsedYs = elapsedRows.map(r => r.y);
+            const elapsedNames = elapsedRows.map(r => r.name);
+            const elapsedCustom = elapsedRows.map(r => ({boatId: r.f.boatId}));
+
             const boatCustom = finishers.map(f => ({boatId: f.boatId}));
 
-            if (showRaceElapsed) traces.push({
-                x: xs, y: elapsed,
+            if (showRaceElapsed && elapsedRows.length > 0) traces.push({
+                x: elapsedXs, y: elapsedYs,
                 mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
                 legendgroup: 'elapsed' + suffix,
                 line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
-                text: hoverTexts('Elapsed', elapsed, names),
-                hoverinfo: 'none', customdata: boatCustom
+                text: hoverTexts('Elapsed', elapsedYs, elapsedNames),
+                hoverinfo: 'none', customdata: elapsedCustom
             });
             if (showPfLine) traces.push({
                 x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
@@ -2074,9 +2097,9 @@ function renderDivisionChart(data) {
             });
 
             if (showRaceTrendLine) {
-                if (showRaceElapsed) {
+                if (showRaceElapsed && elapsedRows.length > 0) {
                     const elapsedTrend = buildTrendTrace(
-                        finishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend' + suffix, elapsedColor);
+                        elapsedRows.map(r => ({x: r.x, y: r.y})), 'Elapsed trend' + suffix, elapsedColor);
                     if (elapsedTrend) traces.push(elapsedTrend);
                 }
                 if (showPfLine) {
@@ -2101,9 +2124,11 @@ function renderDivisionChart(data) {
                 });
             }
 
+            // Annotations are anchored at each boat's PF (the PF-corrected x). Elapsed is
+            // plotted at its BCF x in natural mode, so it isn't co-located with the label
+            // and is excluded from the y-positioning calculation.
             annotations = finishers.map((f, i) => {
                 const ys = [];
-                if (showRaceElapsed && elapsed[i] != null) ys.push(elapsed[i]);
                 if (showPfLine && pfCorr[i] != null) ys.push(pfCorr[i]);
                 return {
                     x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0, text: f.name, textangle: -90,
@@ -2119,6 +2144,7 @@ function renderDivisionChart(data) {
             // a given boat form a vertical line.
             const getX = f => {
                 if (raceDivXFactor === 'RF') return f.rf;
+                if (raceDivXFactor === 'BCF') return f.bcf;
                 if (raceDivXFactor === 'Allocated') return focusedAllocValues.get(f.boatId);
                 return f.pf;
             };
@@ -2557,6 +2583,35 @@ function renderSeriesChartForDivision(divName, opts) {
                 hoverinfo: 'none',
                 customdata: boatCustom
             });
+
+            // Optional Elapsed line per (race, division), plotted at x=BCF so a 1.000
+            // reference boat lands at x=1. Skipped when the series-tab Elapsed tickbox
+            // is off, or when finishers don't carry BCF (e.g. older cached payloads).
+            if (showSeriesElapsed) {
+                const elapsedRows = finishers
+                    .filter(f => f.bcf != null && f.elapsed != null && f.elapsed > 0)
+                    .slice()
+                    .sort((a, b) => a.bcf - b.bcf);
+                if (elapsedRows.length > 0) {
+                    const eXs = elapsedRows.map(f => f.bcf);
+                    const eYs = elapsedRows.map(f => f.elapsed / 60);
+                    const eTexts = elapsedRows.map(f =>
+                        `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
+                        + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                        + `<br>Elapsed: ${fmtTime(f.elapsed)}`);
+                    traces.push({
+                        x: eXs, y: eYs,
+                        mode: 'lines+markers', type: 'scatter',
+                        name: traceName + ' (elapsed)',
+                        legendgroup: groupKey + ':elapsed',
+                        line: {dash: 'dash', color: color, width: 1},
+                        marker: {size: 4},
+                        text: eTexts,
+                        hoverinfo: 'none',
+                        customdata: elapsedRows.map(f => ({boatId: f.boatId}))
+                    });
+                }
+            }
 
             // Allocated-handicap corrected line(s) for this (race, division) — one per set.
             // Single-set keeps the existing race-coloured dashed line; multi-set switches to
