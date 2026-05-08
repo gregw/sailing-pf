@@ -6,15 +6,15 @@
 importers:
 - name: "orc"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "ams"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
@@ -55,7 +55,7 @@ recentRaceReimportDays: 30
 
 # --- SailSys importer ---
 sailsysNextRaceId: 32678
-sailsysEndRaceId: 41399
+sailsysEndRaceId: 34327
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
@@ -103,4 +103,14 @@ authAllowedDomain: null
 adminPort: 8888
 userPort: 8080
 natGatewayIp: "10.19.25.1"
+lastRunTimes:
+  bwps/api: "2026-05-08T22:35:42.534129126Z"
+  analysis/run: "2026-05-08T23:02:37.709160903Z"
+  pf-optimise/run: "2026-05-08T23:02:39.139510757Z"
+  save-database/run: "2026-05-08T23:02:42.984964818Z"
+  build-indexes/run: "2026-05-08T23:02:37.325114954Z"
+  reference-factors/run: "2026-05-08T23:02:38.451818637Z"
+  sailsys-races/run: "2026-05-08T22:35:54.411017349Z"
+  ams/api: "2026-05-08T22:35:41.563519548Z"
+  orc/api: "2026-05-08T22:35:31.767174831Z"
 

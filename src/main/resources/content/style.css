@@ -29,7 +29,8 @@ a { color: #2255aa; }
 .site-nav a:hover { color: #2255aa; }
 .site-nav a.nav-home { font-weight: bold; font-size: 1.1rem; margin-right: 0.5rem; color: #111; }
 
-.site-nav a.active {
+.site-nav a.active,
+.site-nav .nav-dropdown-trigger.active {
     color: #2255aa;
     font-weight: 600;
     background: #eaf0fb;
@@ -37,6 +38,79 @@ a { color: #2255aa; }
     border-radius: 3px;
     border-bottom: 2px solid #2255aa;
     margin-bottom: -2px;
+}
+
+/* Nav dropdown (Boats / Designs) */
+.nav-dropdown {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.nav-dropdown-trigger {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: #333;
+    cursor: pointer;
+}
+
+.nav-dropdown-trigger:hover {
+    color: #2255aa;
+}
+
+.nav-caret {
+    font-size: 0.75em;
+    margin-left: 0.15rem;
+    opacity: 0.7;
+}
+
+/* Invisible hover bridge below the trigger so the cursor can travel down to the
+   menu without ever leaving .nav-dropdown's :hover zone. */
+.nav-dropdown::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 0.5rem;
+}
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 8rem;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    z-index: 50;
+    padding: 0.25rem 0;
+}
+
+.nav-dropdown-menu a {
+    display: block;
+    padding: 0.4rem 0.9rem;
+    text-decoration: none;
+    color: #333;
+}
+
+.nav-dropdown-menu a:hover {
+    background: #eaf0fb;
+    color: #2255aa;
+}
+
+.nav-dropdown.open .nav-dropdown-menu {
+    display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .nav-dropdown:hover .nav-dropdown-menu {
+        display: block;
+    }
 }
 
 /* Landing page */
@@ -262,6 +336,34 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
     }
     .site-nav a.nav-home { margin-right: 0; }
     .site-nav .auth-widget { margin-left: 0; width: 100%; text-align: center; }
+
+    /* Inline-expand dropdowns: tap-to-open is awkward on a wrapped nav */
+    .nav-dropdown {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.3rem;
+    }
+
+    .nav-caret {
+        display: none;
+    }
+
+    .nav-dropdown-menu {
+        display: inline-flex;
+        position: static;
+        gap: 0.5rem;
+        background: none;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        min-width: 0;
+    }
+
+    .nav-dropdown-menu a {
+        padding: 0;
+    }
 
     h1 { font-size: 1.3rem; }
 

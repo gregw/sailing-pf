@@ -182,12 +182,59 @@ function errorBounds(factor, weight) {
     };
 }
 
-// Mark the current page's nav link as active
+// Mark the current page's nav link as active. For dropdown groups, also light up
+// the parent trigger so e.g. /comparison.html highlights the "Boats ▾" pill.
 (function() {
     const page = location.pathname.split('/').pop() || 'index.html';
     document.querySelectorAll('.site-nav a').forEach(a => {
         const href = a.getAttribute('href').split('/').pop();
-        if (href === page) a.classList.add('active');
+        if (href === page) {
+            a.classList.add('active');
+            const trigger = a.closest('.nav-dropdown')?.querySelector('.nav-dropdown-trigger');
+            if (trigger) trigger.classList.add('active');
+        }
+    });
+})();
+
+// Nav dropdowns. On hover-capable devices the menu opens on hover (CSS only) and
+// clicking the trigger jumps straight to the first item ("Browse"). On touch the
+// click toggles the menu open; outside-click or Escape closes.
+(function () {
+    const triggers = document.querySelectorAll('.nav-dropdown-trigger');
+    if (triggers.length === 0) return;
+    const hoverable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    function closeAll() {
+        document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+            d.classList.remove('open');
+            d.querySelector('.nav-dropdown-trigger')?.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    triggers.forEach(trigger => {
+        trigger.addEventListener('click', e => {
+            const dd = trigger.closest('.nav-dropdown');
+            if (!dd) return;
+            e.preventDefault();
+            if (hoverable) {
+                const first = dd.querySelector('.nav-dropdown-menu a');
+                if (first) window.location.href = first.getAttribute('href');
+                return;
+            }
+            const wasOpen = dd.classList.contains('open');
+            closeAll();
+            if (!wasOpen) {
+                dd.classList.add('open');
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.nav-dropdown')) closeAll();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeAll();
     });
 })();
 

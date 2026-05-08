@@ -3,11 +3,23 @@
     <span><a href="/import.html">Tasks</a><a href="/ui-tips.md#page-tasks" class="info-btn" data-tip="Import and processing tasks, scheduling, and configuration for data ingestion." target="_blank">ⓘ</a></span>
     <span><a href="/analysis.html">Analysis</a><a href="/ui-tips.md#page-analysis" class="info-btn" data-tip="Handicap conversion network and regression analysis between handicap systems." target="_blank">ⓘ</a></span>
     <span><a href="/clubs.html">Clubs</a><a href="/ui-tips.md#table-clubs" class="info-btn" data-tip="Sailing clubs: source of race data; club ID is the club's website domain." target="_blank">ⓘ</a></span>
-    <span><a href="/boats.html">Boats</a><a href="/ui-tips.md#table-boats" class="info-btn" data-tip="All boats in the database: sail number, name, design, reference factor and PF." target="_blank">ⓘ</a></span>
-    <span><a href="/designs.html">Designs</a><a href="/ui-tips.md#table-designs" class="info-btn" data-tip="Boat designs (classes): canonical name, design-level reference factor, and maker." target="_blank">ⓘ</a></span>
+    <span class="nav-dropdown">
+        <button type="button" class="nav-dropdown-trigger" aria-haspopup="true" aria-expanded="false">Boats <span class="nav-caret">▾</span></button>
+        <a href="/ui-tips.md#table-boats" class="info-btn" data-tip="All boats in the database: sail number, name, design, reference factor and PF." target="_blank">ⓘ</a>
+        <div class="nav-dropdown-menu" role="menu">
+            <a href="/boats.html" role="menuitem">Browse</a>
+            <a href="/comparison.html" role="menuitem">Compare</a>
+        </div>
+    </span>
+    <span class="nav-dropdown">
+        <button type="button" class="nav-dropdown-trigger" aria-haspopup="true" aria-expanded="false">Designs <span class="nav-caret">▾</span></button>
+        <a href="/ui-tips.md#table-designs" class="info-btn" data-tip="Boat designs (classes): canonical name, design-level reference factor, and maker." target="_blank">ⓘ</a>
+        <div class="nav-dropdown-menu" role="menu">
+            <a href="/designs.html" role="menuitem">Browse</a>
+            <a href="/design-comparison.html" role="menuitem">Compare</a>
+        </div>
+    </span>
     <span><a href="/series.html">Series</a><a href="/ui-tips.md#table-series" class="info-btn" data-tip="Named series of races: club, name, date range and race count." target="_blank">ⓘ</a></span>
     <span><a href="/races.html">Races</a><a href="/ui-tips.md#table-races" class="info-btn" data-tip="Individual race results imported from SailSys, TopYacht, and BWPS." target="_blank">ⓘ</a></span>
-    <span><a href="/comparison.html">Compare Boats</a><a href="/ui-tips.md#page-comparison" class="info-btn" data-tip="Compare back-calculated factors for multiple boats over time." target="_blank">ⓘ</a></span>
-    <span><a href="/design-comparison.html">Compare Designs</a><a href="/ui-tips.md#page-design-comparison" class="info-btn" data-tip="Scatter plot comparing corrected elapsed times between two design classes." target="_blank">ⓘ</a></span>
     <span><a href="/docs.md">Documentation</a></span>
 </nav>
