@@ -102,9 +102,7 @@ td { padding: 4px 8px; border-bottom: 1px solid #eee; }
 td.id-col { max-width: 20em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Date columns - ensure minimum width for YYYY-MM-DD format */
-#col-series-first,
-#col-series-last,
-#col-race-date {
+td.date-col, th.date-col {
     min-width: 11ch;
     white-space: nowrap;
 }

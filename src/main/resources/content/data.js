@@ -182,8 +182,20 @@ const COLUMNS = {
     series: [
         clubColumn('col-series-club', 'club'),
         { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.', cls: 'id-col' },
-        { label: 'First',     key: 'firstDate', anchor: 'col-series-first',   tip: 'Date of the first race in this series.' },
-        { label: 'Last',      key: 'lastDate',  anchor: 'col-series-last',    tip: 'Date of the last race in this series.' },
+        {
+            label: 'First',
+            key: 'firstDate',
+            anchor: 'col-series-first',
+            tip: 'Date of the first race in this series.',
+            cls: 'date-col'
+        },
+        {
+            label: 'Last',
+            key: 'lastDate',
+            anchor: 'col-series-last',
+            tip: 'Date of the last race in this series.',
+            cls: 'date-col'
+        },
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-series-races',
           tip: 'Number of races in this series; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
@@ -191,7 +203,7 @@ const COLUMNS = {
     ],
     races: [
         { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.', cls: 'id-col' },
-        { label: 'Date',      key: 'date',      anchor: 'col-race-date',      tip: 'Race date.' },
+        {label: 'Date', key: 'date', anchor: 'col-race-date', tip: 'Race date.', cls: 'date-col'},
         clubColumn('col-race-club', 'clubId'),
         { label: 'Series',    type: 'action', sortKey: 'seriesName', anchor: 'col-race-series',
           tip: 'Series this race belongs to; click to jump to it on the Series tab.',
@@ -305,7 +317,9 @@ let currentDivRaceId = null;
 const RACE_ELAPSED_KEY = 'pf.divChart.showElapsed';
 const RACE_ERR_KEY   = 'pf.divChart.showErrorBars';
 const RACE_TREND_KEY = 'pf.divChart.showTrend';
-const RACE_DIV_XFACTOR_KEY = 'pf.divChart.xFactor';
+// Shared x-axis factor selection across races + series tab division charts.
+const DIV_XFACTOR_KEY = 'pf.divChart.xFactor';
+const DIV_XFACTOR_SELECT_IDS = ['race-div-xfactor', 'series-div-xfactor'];
 function sessionBool(key, dflt) {
     const v = sessionStorage.getItem(key);
     return v === null ? dflt : v === 'true';
@@ -323,7 +337,7 @@ let showSeriesElapsed = sessionBool(SERIES_ELAPSED_KEY, false);
 const SHOW_LEGEND_KEY = 'pf.divChart.showLegend';
 let showLegend = sessionBool(SHOW_LEGEND_KEY, false);
 let preferredDivision = null;
-let raceDivXFactor = sessionStorage.getItem(RACE_DIV_XFACTOR_KEY) || '---';
+let divXFactor = sessionStorage.getItem(DIV_XFACTOR_KEY) || '---';
 let lastRaceDivData = null;
 
 function isWriteAllowed() { return window.pfAuth?.authenticated; }
@@ -449,12 +463,14 @@ function renderHeaders(entity) {
     html += '<th style="width:2rem"></th>';
     html += cols.map(col => {
         const info = col.anchor ? infoBtn(col.anchor, col.tip || '') : '';
-        if (col.type === 'toggle') return `<th>${esc(col.label)}${info}</th>`;
+        const clsAttr = col.cls ? ` class="${col.cls}"` : '';
+        if (col.type === 'toggle') return `<th${clsAttr}>${esc(col.label)}${info}</th>`;
         const sortKey  = col.sortKey || col.key;
-        if (col.type === 'action' && !col.sortKey) return `<th>${esc(col.label)}${info}</th>`;
+        if (col.type === 'action' && !col.sortKey) return `<th${clsAttr}>${esc(col.label)}${info}</th>`;
         const isActive = sortKey === active;
         const arrow    = isActive ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
-        return `<th class="sortable${isActive ? ' sort-active' : ''}"
+        const sortableCls = `sortable${isActive ? ' sort-active' : ''}${col.cls ? ' ' + col.cls : ''}`;
+        return `<th class="${sortableCls}"
                     onclick="sortBy('${entity}', '${sortKey}')">${esc(col.label)}${arrow}${info}</th>`;
     }).join('');
     thead.innerHTML = html;
@@ -1773,10 +1789,18 @@ function onRaceTrendChange() {
     onRaceDivisionChange();
 }
 
-function onRaceDivXFactorChange() {
-    raceDivXFactor = document.getElementById('race-div-xfactor').value;
-    sessionStorage.setItem(RACE_DIV_XFACTOR_KEY, raceDivXFactor);
+function onDivXFactorChange(sel) {
+    divXFactor = sel.value;
+    sessionStorage.setItem(DIV_XFACTOR_KEY, divXFactor);
+    DIV_XFACTOR_SELECT_IDS.forEach(id => {
+        const other = document.getElementById(id);
+        if (other && other !== sel
+            && [...other.options].some(o => o.value === divXFactor))
+            other.value = divXFactor;
+    });
     if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+    if (seriesChartData && seriesCurrentDivision != null)
+        renderSeriesChartForDivision(seriesCurrentDivision, {refreshCalc: false});
 }
 
 function onSeriesOverallTrendChange(cb) {
@@ -1939,12 +1963,12 @@ function renderDivisionChart(data) {
             ...(anyBcf ? ['BCF'] : []),
             ...(anyAlloc ? ['Allocated'] : [])
         ];
-        if (!opts.includes(raceDivXFactor)) raceDivXFactor = '---';
+        if (!opts.includes(divXFactor)) divXFactor = '---';
         if (xSelect.options.length !== opts.length ||
             [...xSelect.options].map(o => o.value).join() !== opts.join()) {
             xSelect.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
         }
-        xSelect.value = raceDivXFactor;
+        xSelect.value = divXFactor;
     }
 
     // Vertical error bars on corrected times: factor uncertainty propagates multiplicatively
@@ -2023,7 +2047,7 @@ function renderDivisionChart(data) {
         let annotations = [];
         let xAxisTitle;
 
-        if (raceDivXFactor === '---') {
+        if (divXFactor === '---') {
             // Natural mode: each line is plotted at its own factor's x, inverted (1/factor)
             // so the elapsed line is straight rather than hyperbolic. Elapsed sits at
             // x = 1/BCF = elapsed/T₀ — exactly linear in elapsed. PF / RF corrected and
@@ -2146,9 +2170,9 @@ function renderDivisionChart(data) {
             // dots for a given boat form a vertical line at that boat's 1/factor.
             const getX = f => {
                 const raw =
-                    raceDivXFactor === 'RF' ? f.rf :
-                        raceDivXFactor === 'BCF' ? f.bcf :
-                            raceDivXFactor === 'Allocated' ? focusedAllocValues.get(f.boatId) :
+                    divXFactor === 'RF' ? f.rf :
+                        divXFactor === 'BCF' ? f.bcf :
+                            divXFactor === 'Allocated' ? focusedAllocValues.get(f.boatId) :
                                 f.pf;
                 return (raw != null && raw > 0) ? 1 / raw : null;
             };
@@ -2156,7 +2180,7 @@ function renderDivisionChart(data) {
                 .filter(f => getX(f) != null)
                 .sort((a, b) => getX(a) - getX(b));
             if (plotFinishers.length === 0) {
-                xAxisTitle = raceDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + raceDivXFactor;
+                xAxisTitle = divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor;
                 return {traces, annotations, xAxisTitle};
             }
 
@@ -2280,7 +2304,7 @@ function renderDivisionChart(data) {
                 };
             });
 
-            xAxisTitle = raceDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + raceDivXFactor;
+            xAxisTitle = divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor;
         }
         return {traces, annotations, xAxisTitle};
     }
@@ -2580,6 +2604,46 @@ function renderSeriesChartForDivision(divName, opts) {
     const showRfLine = seriesPfCalc().getShowRf();
     let anyRfData = false;
 
+    // X-factor selector: collect available factors across all currently-shown finishers,
+    // populate the dropdown, then build a per-line x mapping. In default mode ('---')
+    // each line uses its own natural factor (PF/RF/BCF/PF). In common mode every line
+    // is plotted at 1/divXFactor, so corrected-time lines tilt and the elapsed line
+    // straightens out only when divXFactor matches its natural factor.
+    const focusedAlloc = visibleAllocSets.find(s => s.focused) || null;
+    const allShownFinishers = [];
+    data.races.forEach(r => (r.divisions || []).forEach(d => {
+        if (divName === '__all__' || (d.name || '') === divName)
+            (d.finishers || []).forEach(f => allShownFinishers.push(f));
+    }));
+    const anyRfOpt = allShownFinishers.some(f => f.rf != null && f.rfCorrected != null);
+    const anyBcfOpt = allShownFinishers.some(f => f.bcf != null);
+    const anyAllocOpt = !!focusedAlloc
+        && allShownFinishers.some(f => focusedAlloc.values.has(f.boatId));
+    const seriesXSelect = document.getElementById('series-div-xfactor');
+    if (seriesXSelect) {
+        const xOpts = ['---', 'PF',
+            ...(anyRfOpt ? ['RF'] : []),
+            ...(anyBcfOpt ? ['BCF'] : []),
+            ...(anyAllocOpt ? ['Allocated'] : [])
+        ];
+        if (!xOpts.includes(divXFactor)) divXFactor = '---';
+        if (seriesXSelect.options.length !== xOpts.length ||
+            [...seriesXSelect.options].map(o => o.value).join() !== xOpts.join()) {
+            seriesXSelect.innerHTML = xOpts.map(o => `<option value="${o}">${o}</option>`).join('');
+        }
+        seriesXSelect.value = divXFactor;
+    }
+    const useCommon = divXFactor !== '---';
+
+    function xOf(f, lineFactor) {
+        const factor = useCommon ? divXFactor : lineFactor;
+        const raw = factor === 'RF' ? f.rf
+            : factor === 'BCF' ? f.bcf
+                : factor === 'Allocated' ? (focusedAlloc ? focusedAlloc.values.get(f.boatId) : null)
+                    : f.pf;
+        return (raw != null && raw > 0) ? 1 / raw : null;
+    }
+
     // Colour palette for races
     const raceColors = [
         '#2255aa', '#c47900', '#2ca02c', '#d62728', '#9467bd',
@@ -2630,17 +2694,18 @@ function renderSeriesChartForDivision(divName, opts) {
                 : raceLabel;
 
             const finishers = (div.finishers || [])
-                .filter(f => f.pf != null && f.pfCorrected != null)
+                .filter(f => f.pf != null && f.pfCorrected != null && xOf(f, 'PF') != null)
                 .slice()
-                .sort((a, b) => a.pf - b.pf);
+                .sort((a, b) => xOf(a, 'PF') - xOf(b, 'PF'));
             if (finishers.length === 0) return;
 
             const sorted = finishers.map((f, i) => ({i, t: f.pfCorrected}))
                 .sort((a, b) => a.t - b.t);
 
-            // x = 1/PF so the elapsed line (and PF-corrected line) read as time-like:
-            // faster boats sit on the left, slower on the right. PF-corrected stays flat.
-            const xs = finishers.map(f => f.pf > 0 ? 1 / f.pf : null);
+            // Default ('---') mode: each line plots at its own factor — PF here, RF/BCF/PF
+            // for the lines below — so corrected lines stay flat and elapsed is straight.
+            // Common mode: all lines plot at 1/divXFactor, so divergences become visible.
+            const xs = finishers.map(f => xOf(f, 'PF'));
             const ys = finishers.map(f => f.pfCorrected / 60);
             const texts = finishers.map(f =>
                 `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
@@ -2661,16 +2726,16 @@ function renderSeriesChartForDivision(divName, opts) {
                 customdata: boatCustom
             });
 
-            // RF corrected line per (race, division), plotted at x=1/RF per finisher
-            // (each line at its own factor — same convention as the natural-mode division
-            // chart). Hidden via the calc-header RF tickbox.
+            // RF corrected line per (race, division). In default mode plotted at x=1/RF
+            // per finisher (each line at its own factor — same convention as the natural-mode
+            // division chart); in common mode plotted at xOf using the chosen factor.
             const rfRows = finishers
-                .filter(f => f.rf != null && f.rf > 0 && f.rfCorrected != null)
+                .filter(f => f.rf != null && f.rf > 0 && f.rfCorrected != null && xOf(f, 'RF') != null)
                 .slice()
-                .sort((a, b) => (1 / a.rf) - (1 / b.rf));
+                .sort((a, b) => xOf(a, 'RF') - xOf(b, 'RF'));
             if (rfRows.length > 0) anyRfData = true;
             if (showRfLine && rfRows.length > 0) {
-                const rXs = rfRows.map(f => 1 / f.rf);
+                const rXs = rfRows.map(f => xOf(f, 'RF'));
                 const rYs = rfRows.map(f => f.rfCorrected / 60);
                 const rTexts = rfRows.map(f =>
                     `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
@@ -2689,16 +2754,17 @@ function renderSeriesChartForDivision(divName, opts) {
                 });
             }
 
-            // Optional Elapsed line per (race, division), plotted at x=1/BCF so it
-            // is a straight line (elapsed = T₀ × 1/BCF). Skipped when the series-tab
-            // Elapsed tickbox is off, or finishers don't carry BCF (older cached payloads).
+            // Optional Elapsed line per (race, division). In default mode plotted at
+            // x=1/BCF so it is a straight line (elapsed = T₀ × 1/BCF); in common mode
+            // plotted at xOf using the chosen factor. Skipped when the series-tab Elapsed
+            // tickbox is off, or finishers don't carry BCF (older cached payloads).
             if (showSeriesElapsed) {
                 const elapsedRows = finishers
-                    .filter(f => f.bcf != null && f.bcf > 0 && f.elapsed != null && f.elapsed > 0)
+                    .filter(f => f.bcf != null && f.bcf > 0 && f.elapsed != null && f.elapsed > 0 && xOf(f, 'BCF') != null)
                     .slice()
-                    .sort((a, b) => (1 / a.bcf) - (1 / b.bcf));
+                    .sort((a, b) => xOf(a, 'BCF') - xOf(b, 'BCF'));
                 if (elapsedRows.length > 0) {
-                    const eXs = elapsedRows.map(f => 1 / f.bcf);
+                    const eXs = elapsedRows.map(f => xOf(f, 'BCF'));
                     const eYs = elapsedRows.map(f => f.elapsed / 60);
                     const eTexts = elapsedRows.map(f =>
                         `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
@@ -2723,13 +2789,14 @@ function renderSeriesChartForDivision(divName, opts) {
             // the set's palette colour so different sets are distinguishable across races.
             visibleAllocSets.forEach(s => {
                 const allocPts = finishers
-                    .filter(f => s.values.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
+                    .filter(f => s.values.has(f.boatId) && f.elapsed != null && f.elapsed > 0
+                        && xOf(f, 'PF') != null)
                     .map(f => ({
                         f,
                         handicap: s.values.get(f.boatId),
                         correctedMin: f.elapsed * s.values.get(f.boatId) / 60
                     }))
-                    .sort((a, b) => a.f.pf - b.f.pf);
+                    .sort((a, b) => xOf(a.f, 'PF') - xOf(b.f, 'PF'));
                 if (allocPts.length === 0) return;
                 const allocColor = visibleAllocSets.length > 1
                     ? lightenColor(s.color, lighten) : color;
@@ -2739,7 +2806,7 @@ function renderSeriesChartForDivision(divName, opts) {
                     ? `${s.name}${allDivisions ? ' — ' + (groupDivName || 'Results') : ''}`
                     : (allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected');
                 traces.push({
-                    x: allocPts.map(p => p.f.pf > 0 ? 1 / p.f.pf : null),
+                    x: allocPts.map(p => xOf(p.f, 'PF')),
                     y: allocPts.map(p => p.correctedMin),
                     mode: 'lines+markers', type: 'scatter',
                     name: traceLabel,
@@ -2765,7 +2832,7 @@ function renderSeriesChartForDivision(divName, opts) {
                 const f = finishers[sorted[p].i];
                 const podiumKey = podiumLabels[p];
                 traces.push({
-                    x: [f.pf > 0 ? 1 / f.pf : null], y: [f.pfCorrected / 60],
+                    x: [xOf(f, 'PF')], y: [f.pfCorrected / 60],
                     mode: 'markers', type: 'scatter',
                     name: podiumKey,
                     legendgroup: podiumKey,
@@ -2798,10 +2865,11 @@ function renderSeriesChartForDivision(divName, opts) {
         // the dataset visibility so the PF and per-set Allocated trends disappear with
         // their data.
         const trendDivs = allDivisions ? seriesDivOrder : [divName];
+        const trendGetX = f => xOf(f, 'PF');
         trendDivs.forEach((dn, i) => {
             const lighten = allDivisions ? Math.min(0.4, i * 0.18) : 0;
             if (showPfLine) {
-                const trend = computeSeriesOverallTrend(data, dn);
+                const trend = computeSeriesOverallTrend(data, dn, trendGetX);
                 if (trend) {
                     if (allDivisions) {
                         trend.name = `Overall ${dn || 'Results'} — ${trend.name}`;
@@ -2811,7 +2879,7 @@ function renderSeriesChartForDivision(divName, opts) {
                 }
             }
             visibleAllocSets.forEach(s => {
-                const allocTrend = computeSeriesAllocatedTrend(data, dn, s.values);
+                const allocTrend = computeSeriesAllocatedTrend(data, dn, s.values, trendGetX);
                 if (!allocTrend) return;
                 const baseName = visibleAllocSets.length > 1 ? s.name : 'Allocated';
                 if (allDivisions) {
@@ -2827,7 +2895,9 @@ function renderSeriesChartForDivision(divName, opts) {
 
     const layout = {
         xaxis: {
-            title: showRfLine && anyRfData ? '1/PF, 1/RF' : '1/PF',
+            title: useCommon
+                ? (divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor)
+                : (showRfLine && anyRfData ? '1/PF, 1/RF' : '1/PF'),
             rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
         },
         yaxis: {
@@ -2860,16 +2930,19 @@ function renderSeriesChartForDivision(divName, opts) {
  * division. Returns null if there is insufficient data (fewer than two races with at
  * least two qualifying finishers each).
  */
-function computeSeriesOverallTrend(data, divName) {
+function computeSeriesOverallTrend(data, divName, getX) {
     const slopes = [];
     const allX = [];
     const allY = [];
     data.races.forEach(race => {
         const finishers = getRaceFinishers(race, divName)
             .filter(f => f.pf != null && f.pf > 0 && f.pfCorrected != null);
-        if (finishers.length < 2) return;
-        const xs = finishers.map(f => 1 / f.pf);
-        const ys = finishers.map(f => f.pfCorrected / 60);
+        const pts = finishers
+            .map(f => ({x: getX(f), y: f.pfCorrected / 60}))
+            .filter(p => p.x != null);
+        if (pts.length < 2) return;
+        const xs = pts.map(p => p.x);
+        const ys = pts.map(p => p.y);
         allX.push(...xs);
         allY.push(...ys);
         const s = olsSlope(xs, ys);
@@ -2893,7 +2966,7 @@ function computeSeriesOverallTrend(data, divName) {
  * allocated handicaps are entered, or when fewer than two races have at least two
  * allocated finishers.
  */
-function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
+function computeSeriesAllocatedTrend(data, divName, allocByBoat, getX) {
     if (!allocByBoat || allocByBoat.size === 0) return null;
     const slopes = [];
     const allX = [];
@@ -2901,9 +2974,12 @@ function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
     data.races.forEach(race => {
         const finishers = getRaceFinishers(race, divName).filter(f =>
             f.pf != null && f.pf > 0 && f.elapsed != null && f.elapsed > 0 && allocByBoat.has(f.boatId));
-        if (finishers.length < 2) return;
-        const xs = finishers.map(f => 1 / f.pf);
-        const ys = finishers.map(f => f.elapsed * allocByBoat.get(f.boatId) / 60);
+        const pts = finishers
+            .map(f => ({x: getX(f), y: f.elapsed * allocByBoat.get(f.boatId) / 60}))
+            .filter(p => p.x != null);
+        if (pts.length < 2) return;
+        const xs = pts.map(p => p.x);
+        const ys = pts.map(p => p.y);
         allX.push(...xs);
         allY.push(...ys);
         const s = olsSlope(xs, ys);
