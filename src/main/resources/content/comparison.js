@@ -943,7 +943,7 @@ function renderElapsedChart(divId, data, colorA, colorB) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata || !pt.customdata.raceId) return;
-        window.location.href = 'data.html?' + new URLSearchParams({ tab: 'races', raceId: pt.customdata.raceId });
+        window.location.href = 'races.html?' + new URLSearchParams({id: pt.customdata.raceId});
     });
 }
 

@@ -60,14 +60,23 @@ function clubDisplay(item) {
 }
 
 /**
- * Cross-tab navigation: click a club cell outside the Clubs tab to land on the Clubs
- * tab filtered to that single club.
+ * Cross-page navigation. Builds a URL like `<entity>.html?<params>` and navigates.
+ * Used by row "action" cells that link to a different entity's page.
  */
+function gotoEntity(entity, params) {
+    const usp = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => {
+        if (v != null) usp.set(k, v);
+    });
+    const qs = usp.toString();
+    window.location.href = entity + '.html' + (qs ? '?' + qs : '');
+}
+
+/** Click a club cell to open the Clubs page searched for that one club. */
 function openClubTab(item) {
     const id = item.clubId;
     if (!id) return;
-    setFilter('clubs', 'id', id, 'Club: ' + (item.clubShortName || id));
-    switchTab('clubs');
+    gotoEntity('clubs', {q: id});
 }
 
 /** Shared Club action column used on boats / series / races tabs. */
@@ -96,12 +105,7 @@ const COLUMNS = {
           ].filter(Boolean).join(' '),
           action: item => {
               if (!item.designId) return;
-              state.searches['designs'] = item.designId;
-              state.pages['designs'] = 0;
-              const q = document.getElementById('q-designs');
-              if (q) q.value = item.designId;
-              switchTab('designs');
-              loadList('designs', 0);
+              gotoEntity('designs', {q: item.designId});
           } },
         { label: 'RF',  anchor: 'col-boat-rf', sortKey: 'spinRef',
           tip: 'Reference Factor for the selected variant — IRC-equivalent handicap derived from certificates or median performance. Colour: green = high confidence, red = low.',
@@ -128,8 +132,11 @@ const COLUMNS = {
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
           tip: 'Number of recorded finishes; click to view this boat\'s races.',
           render: item => item.finishes ? String(item.finishes) : '',
-          action: item => { setFilter('races', 'boatId', item.id,
-                            'Races for ' + (item.name || item.id)); switchTab('races'); } },
+            action: item => gotoEntity('races', {
+                boatId: item.id,
+                label: 'Races for ' + (item.name || item.id)
+            })
+        },
     ],
     designs: [
         { label: 'ID',     sortKey: 'id',           anchor: 'col-design-id',     tip: 'Unique design identifier (normalised class name).', cls: 'id-col',
@@ -155,8 +162,11 @@ const COLUMNS = {
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
           render: item => item.boats ? String(item.boats) : '',
-          action: item => { setFilter('boats', 'designId', item.id,
-                            'Boats of design ' + (item.canonicalName || item.id)); switchTab('boats'); } },
+            action: item => gotoEntity('boats', {
+                designId: item.id,
+                label: 'Boats of design ' + (item.canonicalName || item.id)
+            })
+        },
     ],
     clubs: [
         { label: 'ID',        key: 'id',        anchor: 'col-club-id',    tip: 'Club identifier (website domain).', cls: 'id-col' },
@@ -166,18 +176,27 @@ const COLUMNS = {
         { label: 'Boats',     type: 'action', sortKey: 'boats', anchor: 'col-club-boats',
           tip: 'Number of boats registered at this club; click to show these boats in the boats table.',
           render: item => item.boats != null ? String(item.boats) : '',
-          action: item => { setFilter('boats', 'clubId', item.id,
-                            'Boats at ' + (item.shortName || item.id)); switchTab('boats'); } },
+            action: item => gotoEntity('boats', {
+                clubId: item.id,
+                label: 'Boats at ' + (item.shortName || item.id)
+            })
+        },
         { label: 'Series',    type: 'action', sortKey: 'series', anchor: 'col-club-series',
           tip: 'Number of series run by this club; click to show these series in the series table.',
           render: item => item.series != null ? String(item.series) : '',
-          action: item => { setFilter('series', 'clubId', item.id,
-                            'Series at ' + (item.shortName || item.id)); switchTab('series'); } },
+            action: item => gotoEntity('series', {
+                clubId: item.id,
+                label: 'Series at ' + (item.shortName || item.id)
+            })
+        },
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-club-races',
           tip: 'Number of races imported from this club; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
-          action: item => { setFilter('races', 'clubId', item.id,
-                            'Races at ' + (item.shortName || item.id)); switchTab('races'); } },
+            action: item => gotoEntity('races', {
+                clubId: item.id,
+                label: 'Races at ' + (item.shortName || item.id)
+            })
+        },
     ],
     series: [
         clubColumn('col-series-club', 'club'),
@@ -199,7 +218,11 @@ const COLUMNS = {
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-series-races',
           tip: 'Number of races in this series; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
-          action: item => { setFilter('races', 'seriesId', item.id, 'Series: ' + (item.name || item.id)); switchTab('races'); } },
+            action: item => gotoEntity('races', {
+                seriesId: item.id,
+                label: 'Series: ' + (item.name || item.id)
+            })
+        },
     ],
     races: [
         { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.', cls: 'id-col' },
@@ -211,10 +234,7 @@ const COLUMNS = {
           btnClass: item => item.seriesExcluded ? 'excluded-link' : '',
           action: item => {
               if (!item.seriesId) return;
-              setFilter('series', 'id', item.seriesId,
-                  'Series: ' + (item.seriesName || item.seriesId));
-              switchTab('series');
-              loadDetail('series', item.seriesId);
+              gotoEntity('series', {id: item.seriesId});
           } },
         { label: 'Race',      key: 'name',      anchor: 'col-race-name',      tip: 'Race name or number within the series.' },
         { label: 'Finishers', key: 'finishers',    anchor: 'col-race-finishers',   tip: 'Total finishers across all divisions in this race.' },
@@ -275,11 +295,10 @@ function setBoatVariant(v) {
     loadList('boats', 0);
 }
 
-// Session-persisted per-tab search terms ("as if just typed") and active tab.
+// Session-persisted per-page search terms ("as if just typed").
 // Cleared only by the [×] button next to the search field, or by an inbound URL
 // that names a specific item to display.
 const SEARCH_KEY_PREFIX = 'pf.search.';
-const ACTIVE_TAB_KEY = 'pf.activeTab';
 const TAB_ENTITIES = ['clubs', 'boats', 'designs', 'series', 'races'];
 
 function loadPersistedSearches() {
@@ -298,7 +317,7 @@ const state = {
     totals:   { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
     searchTimers: {},
     searches: loadPersistedSearches(),  // per-tab search terms, persisted across navigation
-    activeTab: sessionStorage.getItem(ACTIVE_TAB_KEY) || 'boats',
+    activeTab: window.PF_ENTITY || 'boats',
     selected:     { boats: new Set(), designs: new Set(), clubs: new Set(), series: new Set(), races: new Set() },   // IDs of checked rows
     selectedData: { boats: new Map(), designs: new Map(), clubs: new Map(), series: new Map(), races: new Map() },   // id → item for action panel
     filter: { boats: null, designs: null, clubs: null, races: null, series: null },
@@ -342,20 +361,14 @@ let lastRaceDivData = null;
 
 function isWriteAllowed() { return window.pfAuth?.authenticated; }
 
-function switchTab(entity) {
-    TAB_ENTITIES.forEach(e => {
-        document.getElementById('tab-btn-' + e).classList.toggle('active', e === entity);
-        document.getElementById('panel-' + e).classList.toggle('active', e === entity);
-    });
+// Initialise this page for its single entity (set by window.PF_ENTITY in each HTML).
+// Foreign-entity navigation goes through gotoEntity() — a real page load — not this.
+function initEntityPage(entity) {
     state.activeTab = entity;
-    sessionStorage.setItem(ACTIVE_TAB_KEY, entity);
-    // Restore persisted search term for this tab
     const q = document.getElementById('q-' + entity);
     if (q && state.searches[entity] !== undefined) q.value = state.searches[entity];
     updateFilterBanner(entity);
     updateFilterControls(entity);
-    // Always reload — tbody may be empty (first visit) or hold rows from a prior search
-    // that no longer matches the restored search term.
     loadList(entity, 0);
 }
 
@@ -826,9 +839,7 @@ function renderResidualChart(residuals) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata || !pt.customdata.raceId) return;
-        const params = new URLSearchParams({ tab: 'races', raceId: pt.customdata.raceId });
-        if (pt.customdata.seriesId) params.set('seriesId', pt.customdata.seriesId);
-        window.location.href = 'data.html?' + params;
+        gotoEntity('races', {id: pt.customdata.raceId});
     });
 }
 
@@ -2344,8 +2355,7 @@ function renderDivisionChart(data) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata || !pt.customdata.boatId) return;
-        window.location.href = 'data.html?' +
-            new URLSearchParams({ tab: 'boats', boatId: pt.customdata.boatId });
+        gotoEntity('boats', {id: pt.customdata.boatId});
     });
 }
 
@@ -2918,8 +2928,7 @@ function renderSeriesChartForDivision(divName, opts) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata || !pt.customdata.boatId) return;
-        window.location.href = 'data.html?' +
-            new URLSearchParams({tab: 'boats', boatId: pt.customdata.boatId});
+        gotoEntity('boats', {id: pt.customdata.boatId});
     });
 }
 
@@ -3297,46 +3306,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ---- Initial load ----
 //
-// Order of precedence:
-//   1. URL contains a specific target (raceId, boatId, seriesId, clubId, designId):
-//      switch to the matching tab, CLEAR that tab's persisted search, load the list,
-//      and load the detail for the target.
-//   2. URL contains only `tab=<entity>`: switch to that tab and restore its persisted
-//      search.
-//   3. No URL args: switch to the persisted active tab (default 'boats') and restore
-//      its persisted search.
+// The page entity is set by window.PF_ENTITY in each HTML file. URL params on top:
+//   ?id=<X>          → load detail for this entity (loadDetail).
+//   ?<other>Id=<X>   → setFilter for the foreign key (designId / clubId / seriesId /
+//                      boatId), with optional &label=<text> for the filter banner.
+//   ?q=<text>        → seed the search box (clears any persisted search).
+//   none of the above → restore the persisted search and list.
 function initFromUrlOrSession() {
+    const entity = window.PF_ENTITY || 'boats';
     const params = new URLSearchParams(location.search);
-    const idParamToEntity = {
-        raceId: 'races',
-        boatId: 'boats',
-        seriesId: 'series',
-        clubId: 'clubs',
-        designId: 'designs',
-    };
-    let detailEntity = null;
-    let detailId = null;
-    for (const [param, entity] of Object.entries(idParamToEntity)) {
-        const v = params.get(param);
-        if (v) {
-            detailEntity = entity;
-            detailId = v;
-            break;
-        }
-    }
 
-    if (detailEntity && detailId) {
-        // Specific target: clear search for that tab, then switch + load detail.
-        state.searches[detailEntity] = '';
-        sessionStorage.removeItem(SEARCH_KEY_PREFIX + detailEntity);
-        switchTab(detailEntity);
-        loadDetail(detailEntity, detailId);
+    const id = params.get('id');
+    if (id) {
+        // Specific target: clear persisted search, init list, then load detail.
+        state.searches[entity] = '';
+        sessionStorage.removeItem(SEARCH_KEY_PREFIX + entity);
+        initEntityPage(entity);
+        loadDetail(entity, id);
         return;
     }
 
-    const tabArg = params.get('tab');
-    const initialTab = (tabArg && TAB_ENTITIES.includes(tabArg)) ? tabArg : state.activeTab;
-    switchTab(initialTab);
+    const FILTER_KEYS = ['designId', 'clubId', 'seriesId', 'boatId'];
+    for (const key of FILTER_KEYS) {
+        const v = params.get(key);
+        if (v) {
+            const label = params.get('label') || `${key}: ${v}`;
+            state.filter[entity] = {param: key, value: v, label};
+            state.searches[entity] = '';
+            sessionStorage.removeItem(SEARCH_KEY_PREFIX + entity);
+            initEntityPage(entity);
+            return;
+        }
+    }
+
+    const q = params.get('q');
+    if (q != null) {
+        state.searches[entity] = q;
+        sessionStorage.setItem(SEARCH_KEY_PREFIX + entity, q);
+    }
+    initEntityPage(entity);
 }
 
 initFromUrlOrSession();

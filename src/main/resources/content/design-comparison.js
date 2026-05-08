@@ -381,10 +381,12 @@ function renderChart(data) {
         const pt = eventData.points[0];
         if (!pt.customdata) return;
         const { raceId, seriesId } = pt.customdata;
-        const p = new URLSearchParams({ tab: 'races' });
-        if (seriesId)     p.set('seriesId', seriesId);
-        else if (raceId)  p.set('raceId',   raceId);
-        window.location.href = 'data.html?' + p;
+        // seriesId wins: filter races by series; otherwise open the single race detail.
+        if (seriesId) {
+            window.location.href = 'races.html?' + new URLSearchParams({seriesId});
+        } else if (raceId) {
+            window.location.href = 'races.html?' + new URLSearchParams({id: raceId});
+        }
     });
 
     renderHandicapCalc(data);
@@ -817,7 +819,7 @@ function renderElapsedChart(divId, data, colorA, colorB) {
         if (!eventData.points || !eventData.points.length) return;
         const pt = eventData.points[0];
         if (!pt.customdata || !pt.customdata.raceId) return;
-        window.location.href = 'data.html?' + new URLSearchParams({ tab: 'races', raceId: pt.customdata.raceId });
+        window.location.href = 'races.html?' + new URLSearchParams({id: pt.customdata.raceId});
     });
 }
 

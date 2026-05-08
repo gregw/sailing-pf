@@ -678,7 +678,7 @@ window.HandicapCalc = (function () {
             const color = b.color || '#888';
             tdName.style.cssText = `color:${color};font-weight:bold;`;
             const link = document.createElement('a');
-            link.href = `data.html?tab=boats&boatId=${encodeURIComponent(b.id)}`;
+            link.href = `boats.html?id=${encodeURIComponent(b.id)}`;
             link.textContent = b.name;
             link.style.cssText = 'color:inherit;text-decoration:none;';
             link.title = 'Click to view boat details — hover for performance profile';
