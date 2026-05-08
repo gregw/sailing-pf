@@ -105,7 +105,7 @@ td.id-col { max-width: 20em; overflow: hidden; text-overflow: ellipsis; white-sp
 #col-series-first,
 #col-series-last,
 #col-race-date {
-    min-width: 7.7em;
+    min-width: 11ch;
     white-space: nowrap;
 }
 
