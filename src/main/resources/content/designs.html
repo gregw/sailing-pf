@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PF — Designs</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- INCLUDE _nav.html -->
+
+<div id="import-banner" class="import-warning-banner" style="display:none">
+    Data import/analysis in progress — results may be incomplete or stale
+</div>
+
+<div id="panel-designs" class="tab-panel active">
+    <div id="filter-banner-designs" class="filter-banner" style="display:none"></div>
+    <div class="search-row">
+        <input type="text" id="q-designs" placeholder="Search by id or name…" oninput="debounceSearch('designs')">
+        <button class="search-clear-btn" title="Clear search" onclick="clearSearch('designs')">✕</button>
+        <button onclick="doSearch('designs')">Search</button>
+        <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')">
+            Show excluded</label>
+        <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-designs" onchange="doSearch('designs')"> Hide
+            empty</label>&nbsp;;
+        <label style="margin-left:0.5rem;">Design
+            <i>ignored</i><a href="ui-tips.md#ignored-design" class="info-btn" data-tip="Ignored Design: A design that is ignored (e.g. 'design1')" target="_blank" onclick="event.stopPropagation()">ⓘ</a>
+            or
+            <span style="text-decoration:line-through">custom</span><a href="ui-tips.md#custom-design" class="info-btn" data-tip="Custom Design: Custom or modified designs are not assigned an RF" target="_blank" onclick="event.stopPropagation()">ⓘ</a></label>
+    </div>
+    <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;">
+        <table>
+            <thead>
+            <tr id="thead-designs"></tr>
+            </thead>
+            <tbody id="tbody-designs"></tbody>
+        </table>
+    </div>
+    <div class="scroll-status" id="scroll-status-designs"></div>
+
+    <div id="merge-bar-designs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+        <span id="merge-bar-count-designs"></span>
+        <button id="edit-btn-designs" onclick="showEditDesignPanel()" style="margin-left:0.5rem;display:none;">Edit…</button>
+        <button id="edit-request-btn-designs" onclick="showEditDesignPanel()" style="margin-left:0.5rem;display:none;">Request
+            edit…
+        </button>
+        <button id="merge-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;">Merge…</button>
+        <button id="merge-request-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;display:none;">
+            Request merge…
+        </button>
+        <button id="exclude-btn-designs" onclick="showExcludePanel('designs', true)" style="margin-left:0.5rem;display:none;">
+            Exclude…
+        </button>
+        <button id="include-btn-designs" onclick="showExcludePanel('designs', false)" style="margin-left:0.5rem;display:none;">
+            Include…
+        </button>
+        <button id="ignore-btn-designs" onclick="showIgnorePanel(true)" style="margin-left:0.5rem;display:none;">Ignore…
+        </button>
+        <button id="unignore-btn-designs" onclick="showIgnorePanel(false)" style="margin-left:0.5rem;display:none;">Do Not
+            Ignore…
+        </button>
+        <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="edit-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="edit-panel-title-designs">Edit Design</strong>
+        <div id="edit-design-warning" style="margin:0.4rem 0;font-size:0.9rem;color:#8a4500;"></div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
+            <label for="edit-design-id">ID:</label>
+            <input type="text" id="edit-design-id" style="font-family:monospace;padding:3px 6px;">
+            <label for="edit-design-name">Canonical name:</label>
+            <input type="text" id="edit-design-name" style="font-family:monospace;padding:3px 6px;">
+        </div>
+        <div id="edit-design-email-row" style="display:none; margin-bottom:0.5rem;">
+            <label for="edit-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="edit-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="edit-design-message-row" style="display:none; margin-bottom:0.5rem;">
+            <label for="edit-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="edit-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
+        </div>
+        <button id="edit-design-save-btn" onclick="saveDesignEdit()">Save</button>
+        <button id="edit-design-request-btn" onclick="requestDesignEdit()" style="display:none;">Request</button>
+        <button onclick="hideEditDesignPanel()" style="margin-left:0.5rem;">Cancel</button>
+        <div id="edit-status-designs" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
+    <div id="ignore-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="ignore-panel-title-designs"></strong>
+        <div id="ignore-list-designs" style="margin:0.6rem 0;"></div>
+        <div id="ignore-warning-designs" style="display:none;margin:0.4rem 0;font-size:0.9rem;color:#8a4500;"></div>
+        <div id="ignore-email-row-designs" style="display:none; margin-bottom:0.5rem;">
+            <label for="ignore-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="ignore-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="ignore-message-row-designs" style="display:none; margin-bottom:0.5rem;">
+            <label for="ignore-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="ignore-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+        </div>
+        <button id="ignore-confirm-designs" onclick="performIgnore()">Confirm</button>
+        <button id="ignore-request-confirm-designs" onclick="requestIgnore()" style="display:none;">Submit request</button>
+        <button onclick="hideIgnorePanel()" style="margin-left:0.5rem;">Cancel</button>
+        <div id="ignore-status-designs" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
+    <div id="exclude-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="exclude-panel-title-designs"></strong>
+        <div id="exclude-list-designs" style="margin:0.6rem 0;"></div>
+        <div id="exclude-email-row-designs" style="display:none; margin-bottom:0.5rem;">
+            <label for="exclude-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="exclude-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="exclude-message-row-designs" style="display:none; margin-bottom:0.5rem;">
+            <label for="exclude-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="exclude-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+        </div>
+        <button id="exclude-confirm-designs" onclick="performExclude('designs')">Confirm</button>
+        <button id="exclude-request-confirm-designs" onclick="requestExclude('designs')" style="display:none;">Submit request
+        </button>
+        <button onclick="hideExcludePanel('designs')" style="margin-left:0.5rem;">Cancel</button>
+        <div id="exclude-status-designs" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
+    <div id="merge-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong>Select the canonical design to keep:</strong>
+        <div id="merge-radio-list-designs" style="margin:0.6rem 0;"></div>
+        <div id="merge-email-row-designs" style="display:none; margin-bottom:0.5rem;">
+            <label for="merge-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="merge-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="merge-message-row-designs" style="display:none; margin-bottom:0.5rem;">
+            <label for="merge-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="merge-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for merge…"></textarea>
+        </div>
+        <button id="merge-confirm-designs" onclick="performMerge('designs')">Confirm merge</button>
+        <button id="merge-request-confirm-designs" onclick="requestMerge('designs')" style="display:none;">Request merge
+        </button>
+        <button onclick="hideMergePanel('designs')" style="margin-left:0.5rem;">Cancel</button>
+        <div id="merge-status-designs" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
+    <div class="detail-panel" id="detail-designs">
+        <div id="pre-designs" class="json-tree"></div>
+    </div>
+</div>
+
+<script>window.PF_ENTITY = 'designs';</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="common.js"></script>
+<script src="handicap-calc.js"></script>
+<script src="data.js"></script>
+</body>
+</html>

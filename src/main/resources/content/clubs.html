@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PF — Clubs</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- INCLUDE _nav.html -->
+
+<div id="import-banner" class="import-warning-banner" style="display:none">
+    Data import/analysis in progress — results may be incomplete or stale
+</div>
+
+<div id="panel-clubs" class="tab-panel active">
+    <div id="filter-banner-clubs" class="filter-banner" style="display:none"></div>
+    <div class="search-row">
+        <input type="text" id="q-clubs" placeholder="Search by id, short name or long name…" oninput="debounceSearch('clubs')">
+        <button class="search-clear-btn" title="Clear search" onclick="clearSearch('clubs')">✕</button>
+        <button onclick="doSearch('clubs')">Search</button>
+        <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show
+            excluded</label>
+        <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-clubs" onchange="doSearch('clubs')"> Hide empty</label>
+    </div>
+    <div class="table-scroll" style="height:calc(55vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;">
+        <table>
+            <thead>
+            <tr id="thead-clubs"></tr>
+            </thead>
+            <tbody id="tbody-clubs"></tbody>
+        </table>
+    </div>
+    <div class="scroll-status" id="scroll-status-clubs"></div>
+
+    <div id="merge-bar-clubs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+        <span id="merge-bar-count-clubs"></span>
+        <button id="exclude-btn-clubs" onclick="showExcludePanel('clubs', true)" style="margin-left:0.5rem;display:none;">
+            Exclude…
+        </button>
+        <button id="include-btn-clubs" onclick="showExcludePanel('clubs', false)" style="margin-left:0.5rem;display:none;">
+            Include…
+        </button>
+        <button onclick="clearSelection('clubs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="exclude-panel-title-clubs"></strong>
+        <div id="exclude-list-clubs" style="margin:0.6rem 0;"></div>
+        <div id="exclude-email-row-clubs" style="display:none; margin-bottom:0.5rem;">
+            <label for="exclude-email-clubs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="exclude-email-clubs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="exclude-message-row-clubs" style="display:none; margin-bottom:0.5rem;">
+            <label for="exclude-message-clubs" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="exclude-message-clubs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+        </div>
+        <button id="exclude-confirm-clubs" onclick="performExclude('clubs')">Confirm</button>
+        <button id="exclude-request-confirm-clubs" onclick="requestExclude('clubs')" style="display:none;">Submit request
+        </button>
+        <button onclick="hideExcludePanel('clubs')" style="margin-left:0.5rem;">Cancel</button>
+        <div id="exclude-status-clubs" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
+    <div class="detail-panel" id="detail-clubs">
+        <div id="pre-clubs" class="json-tree"></div>
+    </div>
+</div>
+
+<script>window.PF_ENTITY = 'clubs';</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="common.js"></script>
+<script src="handicap-calc.js"></script>
+<script src="data.js"></script>
+</body>
+</html>

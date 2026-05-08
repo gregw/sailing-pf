@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PF — Series</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- INCLUDE _nav.html -->
+
+<div id="import-banner" class="import-warning-banner" style="display:none">
+    Data import/analysis in progress — results may be incomplete or stale
+</div>
+
+<div id="panel-series" class="tab-panel active">
+    <div id="filter-banner-series" class="filter-banner" style="display:none"></div>
+    <div class="search-row">
+        <input type="text" id="q-series" placeholder="Search by club or series name…" oninput="debounceSearch('series')">
+        <button class="search-clear-btn" title="Clear search" onclick="clearSearch('series')">✕</button>
+        <button onclick="doSearch('series')">Search</button>
+        <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-series" onchange="doSearch('series')"> Show
+            excluded</label>
+        <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-empty-series" checked onchange="doSearch('series')">
+            Exclude empty</label>
+    </div>
+    <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;">
+        <table>
+            <thead>
+            <tr id="thead-series"></tr>
+            </thead>
+            <tbody id="tbody-series"></tbody>
+        </table>
+    </div>
+    <div class="scroll-status" id="scroll-status-series"></div>
+
+    <div id="merge-bar-series" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
+        <span id="merge-bar-count-series"></span>
+        <button id="exclude-btn-series" onclick="showExcludePanel('series', true)" style="margin-left:0.5rem;display:none;">
+            Exclude…
+        </button>
+        <button id="include-btn-series" onclick="showExcludePanel('series', false)" style="margin-left:0.5rem;display:none;">
+            Include…
+        </button>
+        <button onclick="clearSelection('series')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="exclude-panel-series" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="exclude-panel-title-series"></strong>
+        <div id="exclude-list-series" style="margin:0.6rem 0;"></div>
+        <div id="exclude-email-row-series" style="display:none; margin-bottom:0.5rem;">
+            <label for="exclude-email-series" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="exclude-email-series" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="exclude-message-row-series" style="display:none; margin-bottom:0.5rem;">
+            <label for="exclude-message-series" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="exclude-message-series" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+        </div>
+        <button id="exclude-confirm-series" onclick="performExclude('series')">Confirm</button>
+        <button id="exclude-request-confirm-series" onclick="requestExclude('series')" style="display:none;">Submit request
+        </button>
+        <button onclick="hideExcludePanel('series')" style="margin-left:0.5rem;">Cancel</button>
+        <div id="exclude-status-series" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
+    <div id="series-chart-section" style="display:none; margin-top:1rem;">
+        <div id="series-chart-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
+        <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
+            <label>Division: <select id="series-division-select" onchange="onSeriesDivisionChange()"></select></label>
+            <label title="Show the Elapsed time line per race in the chart">
+                <input type="checkbox" id="series-show-elapsed" onchange="onSeriesElapsedChange()"> Elapsed
+            </label>
+            <label title="Start the time axis at zero">
+                <input type="checkbox" id="series-y-from-zero" checked onchange="onDivChartYFromZeroChange(this)"> From 0m
+            </label>
+            <label title="Start the PF axis at zero">
+                <input type="checkbox" id="series-x-from-zero" onchange="onDivChartXFromZeroChange(this)"> From 0.0F
+            </label>
+            <label title="Line through the median PF / PF-corrected time point, with the average slope of the per-race trends">
+                <input type="checkbox" id="series-show-overall-trend" onchange="onSeriesOverallTrendChange(this)"> Overall trend
+            </label>
+            <label title="Show the legend overlaid on the chart">
+                <input type="checkbox" id="series-show-legend" onchange="onShowLegendChange(this)"> Legend
+            </label>
+            <label>X-axis: <select id="series-div-xfactor" onchange="onDivXFactorChange(this)"></select></label>
+        </div>
+        <div id="series-chart" style="width:100%;height:500px;"></div>
+
+        <div id="series-pf-calc" style="display:none; margin-top:1.25rem;">
+            <h3 style="margin:0 0 0.5rem;">Handicap Calculator
+                <a href="ui-tips.md#table-pf-calc" class="info-btn"
+                   data-tip="Enter a handicap for any boat — PF and RF columns are scaled by ratio. Allocated handicaps are persisted in this browser session and shared with the boat-comparison page; each race in the chart above gains a dashed line of its allocated-handicap corrected times."
+                   target="_blank">ⓘ</a></h3>
+            <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
+                Enter a handicap for any boat — the chart above gains a dashed line of corrected times for each race.
+            </p>
+            <table class="pf-calc-table"></table>
+            <div id="series-compare-btn-container" style="margin-top:0.5rem;"></div>
+            <div id="series-fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
+                <div style="margin-bottom:0.8rem;">
+                    <label for="series-handicap-url">Fetch handicaps from:</label>
+                    <input type="url" id="series-handicap-url" placeholder="https://example.com/handicaps.json" style="margin-left:0.5rem;width:400px;padding:4px;">
+                    <button id="series-fetch-handicaps-btn" style="margin-left:0.5rem;padding:4px 12px;">Fetch</button>
+                    <div id="series-fetch-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+                </div>
+                <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
+                <div style="margin-bottom:0.8rem;">
+                    <label for="series-handicap-file">Load handicaps from file:</label>
+                    <input type="file" id="series-handicap-file" accept=".json" style="margin-left:0.5rem;">
+                    <div id="series-file-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+                </div>
+                <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
+                <div>
+                    <button id="series-download-handicaps-btn" style="padding:4px 12px;">Download handicaps as JSON</button>
+                    <button id="series-clear-handicaps-btn" style="margin-left:0.5rem;padding:4px 12px;">Clear all</button>
+                    <div id="series-download-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="detail-panel" id="detail-series"></div>
+</div>
+
+<script>window.PF_ENTITY = 'series';</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="common.js"></script>
+<script src="handicap-calc.js"></script>
+<script src="data.js"></script>
+</body>
+</html>
