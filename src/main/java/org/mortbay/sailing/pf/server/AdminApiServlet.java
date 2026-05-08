@@ -2122,9 +2122,24 @@ public class AdminApiServlet extends HttpServlet
             Race race = store.races().get(raceId);
             if (race == null || race.divisions() == null) continue;
 
+            // Per-division reference times (T₀) for BCF — same recipe as the division
+            // endpoint: bcf = T₀ / elapsed so a 1.000 reference boat lands at x=1.
+            var rd = cache.raceDerived().get(raceId);
+            Map<String, Double> refSecsByDivName = new java.util.HashMap<>();
+            if (rd != null && rd.divisionPfs() != null)
+            {
+                for (DivisionPf dpf : rd.divisionPfs())
+                {
+                    if (dpf.referenceTimeNanos() > 0)
+                        refSecsByDivName.put(dpf.divisionName(),
+                            dpf.referenceTimeNanos() / 1_000_000_000.0);
+                }
+            }
+
             List<Map<String, Object>> divisionsData = new ArrayList<>();
             for (Division div : race.divisions())
             {
+                Double refSec = refSecsByDivName.get(div.name());
                 List<Map<String, Object>> finishers = new ArrayList<>();
                 for (Finisher f : div.finishers())
                 {
@@ -2165,6 +2180,8 @@ public class AdminApiServlet extends HttpServlet
                     fm.put("rf", rfVal);
                     fm.put("rfWeight", rfWeight);
                     fm.put("pfCorrected", pfVal != null && pfVal > 0 ? elapsedSec * pfVal : null);
+                    fm.put("rfCorrected", rfVal != null && rfVal > 0 ? elapsedSec * rfVal : null);
+                    fm.put("bcf", refSec != null && refSec > 0 && elapsedSec > 0 ? refSec / elapsedSec : null);
                     finishers.add(fm);
                 }
 

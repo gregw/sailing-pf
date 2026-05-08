@@ -2577,6 +2577,8 @@ function renderSeriesChartForDivision(divName, opts) {
     const allocSets = seriesPfCalc().getAllSets();
     const visibleAllocSets = allocSets.filter(s => s.show !== false);
     const showPfLine = seriesPfCalc().getShowPf();
+    const showRfLine = seriesPfCalc().getShowRf();
+    let anyRfData = false;
 
     // Colour palette for races
     const raceColors = [
@@ -2658,6 +2660,34 @@ function renderSeriesChartForDivision(divName, opts) {
                 hoverinfo: 'none',
                 customdata: boatCustom
             });
+
+            // RF corrected line per (race, division), plotted at x=1/RF per finisher
+            // (each line at its own factor — same convention as the natural-mode division
+            // chart). Hidden via the calc-header RF tickbox.
+            const rfRows = finishers
+                .filter(f => f.rf != null && f.rf > 0 && f.rfCorrected != null)
+                .slice()
+                .sort((a, b) => (1 / a.rf) - (1 / b.rf));
+            if (rfRows.length > 0) anyRfData = true;
+            if (showRfLine && rfRows.length > 0) {
+                const rXs = rfRows.map(f => 1 / f.rf);
+                const rYs = rfRows.map(f => f.rfCorrected / 60);
+                const rTexts = rfRows.map(f =>
+                    `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
+                    + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                    + `<br>RF corrected: ${fmtTime(f.rfCorrected)}`);
+                traces.push({
+                    x: rXs, y: rYs,
+                    mode: 'lines+markers', type: 'scatter',
+                    name: traceName + ' (RF)',
+                    legendgroup: groupKey + ':rf',
+                    line: {dash: 'dot', color: color, width: 1.25},
+                    marker: {size: 4},
+                    text: rTexts,
+                    hoverinfo: 'none',
+                    customdata: rfRows.map(f => ({boatId: f.boatId}))
+                });
+            }
 
             // Optional Elapsed line per (race, division), plotted at x=1/BCF so it
             // is a straight line (elapsed = T₀ × 1/BCF). Skipped when the series-tab
@@ -2796,7 +2826,10 @@ function renderSeriesChartForDivision(divName, opts) {
     }
 
     const layout = {
-        xaxis: {title: '1/PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'},
+        xaxis: {
+            title: showRfLine && anyRfData ? '1/PF, 1/RF' : '1/PF',
+            rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
+        },
         yaxis: {
             title: 'PF Corrected Time (min)', tickformat: '.1f',
             rangemode: getDivChartYFromZero() ? 'tozero' : 'normal'
