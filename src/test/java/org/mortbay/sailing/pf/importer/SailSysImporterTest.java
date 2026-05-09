@@ -1,18 +1,5 @@
 package org.mortbay.sailing.pf.importer;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.mortbay.sailing.pf.data.Boat;
-import org.mortbay.sailing.pf.data.Certificate;
-import org.mortbay.sailing.pf.data.Club;
-import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.Finisher;
-import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.data.Series;
-import org.mortbay.sailing.pf.store.DataStore;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,7 +7,23 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Certificate;
+import org.mortbay.sailing.pf.data.Club;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.store.DataStore;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SailSysImporterTest
 {
@@ -80,7 +83,7 @@ class SailSysImporterTest
     @Test
     void phsRaceImportedWithoutCertificateNumber()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         boolean result = importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -105,7 +108,7 @@ class SailSysImporterTest
         // Race claims both PHS (id=5) and ORCc (id=13) in handicappings,
         // but boats only have PHS/Scratch calculations (handicapDefinitionId=5),
         // not ORCc (id=13).  Should import as PHS with all finishers present.
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         String json = """
@@ -143,7 +146,7 @@ class SailSysImporterTest
     {
         // Simulates race 34328 (PHS series, 3 boats) then race 40906 (ORC series, 2 boats
         // overlapping + 1 ORC-only boat not in PHS).  Same club, date, number → same raceId.
-        Club sps = new Club("sailportstephens.com.au", "SPS", "Sail Port Stephens", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club sps = new Club("sailportstephens.com.au", "SPS", "Sail Port Stephens", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(sps);
 
         // First import: PHS series with 3 boats, no measurement data
@@ -225,7 +228,7 @@ class SailSysImporterTest
     @Test
     void ircRaceImportedWithCertificateNumber()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         boolean result = importer.processRaceJson(raceJson(2, 4, "2020-09-13T00:00:00.000",
@@ -256,7 +259,7 @@ class SailSysImporterTest
     @Test
     void ircRaceReusesExistingCertificateBySystemAndValue()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         Certificate existingCert = new Certificate("IRC", 2020, 1.071, false, false, false, false, "CERT-12345", null);
@@ -291,7 +294,7 @@ class SailSysImporterTest
     @Test
     void seriesCreatedOnFirstRace()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -310,7 +313,7 @@ class SailSysImporterTest
     @Test
     void seriesUpdatedOnSubsequentRace()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -332,7 +335,7 @@ class SailSysImporterTest
     @Test
     void dnsFinishersExcluded()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -354,7 +357,7 @@ class SailSysImporterTest
         Path racesDir = tempDir.resolve("races-input");
         Files.createDirectories(racesDir);
 
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         Files.writeString(racesDir.resolve("race-000001.json"),
@@ -373,7 +376,7 @@ class SailSysImporterTest
 
         DataStore testStore = new DataStore(tempDir.resolve("pf-data"));
         testStore.start();
-        Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
         testStore.putClub(myc2);
         SailSysImporter testImporter = new SailSysImporter(testStore, null);
 

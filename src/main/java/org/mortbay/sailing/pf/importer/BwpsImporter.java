@@ -1,25 +1,5 @@
 package org.mortbay.sailing.pf.importer;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.eclipse.jetty.client.ContentResponse;
-import org.eclipse.jetty.client.HttpClient;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import org.mortbay.sailing.pf.data.Boat;
-import org.mortbay.sailing.pf.data.Certificate;
-import org.mortbay.sailing.pf.data.Club;
-import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.Finisher;
-import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.data.Series;
-import org.mortbay.sailing.pf.store.DataStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,6 +19,26 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.HttpClient;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Certificate;
+import org.mortbay.sailing.pf.data.Club;
+import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.store.DataStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Imports race results for the CYCA Blue Water Pointscore (BWPS) from three data sources:
@@ -1270,6 +1270,7 @@ public class BwpsImporter
             if (seed == null)
                 return;
             club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
+                seed.email(),
                 seed.aliases() != null ? seed.aliases() : List.of(),
                 seed.topyachtUrls() != null ? seed.topyachtUrls() : List.of(),
                 List.of(), null);
@@ -1304,7 +1305,7 @@ public class BwpsImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+            club.email(), club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
     }
 
     private boolean isRecentRace(LocalDate date)

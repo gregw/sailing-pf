@@ -22,6 +22,7 @@ public record Club(
     String longName,            // e.g. "Manly Yacht Club"
     String state,               // Australian state code, e.g. "NSW", "VIC"; null if unknown
     boolean excluded,           // true if excluded from analysis (e.g. multihull club, non-Australian)
+    String email,               // club contact email address; null if unknown
     List<String> aliases,       // alternate short names or former domains
     List<String> topyachtUrls,  // TopYacht club index page URLs to scan for results
     List<Series> series,        // series run by this club
@@ -32,13 +33,13 @@ public record Club(
     @Override
     public Club withLoadedAt(Instant t)
     {
-        return new Club(id, shortName, longName, state, excluded, aliases, topyachtUrls, series, t);
+        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtUrls, series, t);
     }
 
     /** Returns a copy with the excluded flag changed. */
     public Club withExcluded(boolean excluded)
     {
-        return new Club(id, shortName, longName, state, excluded, aliases, topyachtUrls, series, loadedAt);
+        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtUrls, series, loadedAt);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -51,7 +52,7 @@ public record Club(
             return false;
         return Objects.equals(id, c.id) && Objects.equals(shortName, c.shortName)
             && Objects.equals(longName, c.longName) && Objects.equals(state, c.state)
-            && excluded == c.excluded
+            && excluded == c.excluded && Objects.equals(email, c.email)
             && Objects.equals(aliases, c.aliases) && Objects.equals(topyachtUrls, c.topyachtUrls)
             && Objects.equals(series, c.series);
     }
@@ -59,7 +60,7 @@ public record Club(
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, shortName, longName, state, excluded, aliases, topyachtUrls, series);
+        return Objects.hash(id, shortName, longName, state, excluded, email, aliases, topyachtUrls, series);
     }
 
     @Override
@@ -71,6 +72,7 @@ public record Club(
             ", longName='" + longName + '\'' +
             ", state='" + state + '\'' +
             ", excluded=" + excluded +
+            ", email='" + email + '\'' +
             ", aliases=" + aliases +
             ", topyachtUrls=" + topyachtUrls +
             ", series=" + series +

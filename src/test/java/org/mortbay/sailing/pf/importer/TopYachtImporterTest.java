@@ -1,5 +1,10 @@
 package org.mortbay.sailing.pf.importer;
 
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,12 +20,11 @@ import org.mortbay.sailing.pf.importer.TopYachtImporter.ParsedRace;
 import org.mortbay.sailing.pf.importer.TopYachtImporter.ParsedRow;
 import org.mortbay.sailing.pf.store.DataStore;
 
-import java.nio.file.Path;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TopYachtImporterTest
 {
@@ -31,7 +35,7 @@ class TopYachtImporterTest
     /** Minimal club with no TopYacht URLs (we call processors directly). */
     private static final Club TEST_CLUB = new Club(
         "bsyc.com.au", "BSYC", "Brighton & Seacliff Yacht Club", "SA", false,
-        List.of(), List.of(), List.of(), null);
+        null, List.of(), List.of(), List.of(), null);
 
     @BeforeEach
     void setUp()
@@ -395,7 +399,7 @@ class TopYachtImporterTest
     {
         // Add a second club to the store so it can be resolved
         Club dss = new Club("dssinc.org.au", "DSS", "Derwent Sailing Squadron", "TAS", false,
-            List.of(), List.of(), List.of(), null);
+            null, List.of(), List.of(), List.of(), null);
         store.putClub(dss);
 
         String html = resultsHtml("PHS results  Start : 12:25", List.of(

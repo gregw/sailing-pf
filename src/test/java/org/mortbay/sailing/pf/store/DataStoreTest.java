@@ -128,7 +128,7 @@ class DataStoreTest {
 
         Series series = new Series("myc.com.au/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001"));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, false, List.of(), List.of(), List.of(series), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, false, null, List.of(), List.of(), List.of(series), null);
         store2.putClub(club);
         store2.stop();
 
@@ -215,7 +215,7 @@ class DataStoreTest {
     void clubWithSeriesRoundTrip(@TempDir Path tempDir) {
         Series series = new Series("myc.com.au/club-championship", "Club Championship", false,
                 List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"));
-        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, false, List.of(), List.of(), List.of(series), null);
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", null, false, null, List.of(), List.of(), List.of(series), null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -237,7 +237,7 @@ class DataStoreTest {
     @Test
     void clubWithPathIdRoundTrip(@TempDir Path tempDir) {
         Club club = new Club("rycv.com.au/ppnyc", "PPNYC", "Port Phillip North Yacht Clubs",
-                "VIC", false, List.of(), List.of(), List.of(), null);
+            "VIC", false, null, List.of(), List.of(), List.of(), null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -443,7 +443,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Club club = new Club("test.example.com", "TYC", "Test Yacht Club", "NSW", false,
-                List.of(), List.of(), List.of(), null);
+            null, List.of(), List.of(), List.of(), null);
         store.putClub(club);
 
         Club found = store.findUniqueClubByShortName("Test Yacht Club", null, "test");
@@ -457,7 +457,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Club club = new Club("test.example.com", "TYC", "Test Yacht Club", "NSW", false,
-                List.of("TYC/OTHER"), List.of(), List.of(), null);
+            null, List.of("TYC/OTHER"), List.of(), List.of(), null);
         store.putClub(club);
 
         Club found = store.findUniqueClubByShortName("TYC/OTHER", null, "test");
@@ -473,8 +473,8 @@ class DataStoreTest {
         // Searching "Y" should return B (shortName match wins over longName match of A)
         DataStore store = new DataStore(tempDir);
         store.start();
-        Club clubA = new Club("a.example.com", "X", "Y", "NSW", false, List.of(), List.of(), List.of(), null);
-        Club clubB = new Club("b.example.com", "Y", "Z", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club clubA = new Club("a.example.com", "X", "Y", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club clubB = new Club("b.example.com", "Y", "Z", "NSW", false, null, List.of(), List.of(), List.of(), null);
         store.putClub(clubA);
         store.putClub(clubB);
 
@@ -489,7 +489,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         Club club = new Club("test.example.com", "TYC", "Test Yacht Club", "NSW", false,
-                List.of(), List.of(), List.of(), null);
+            null, List.of(), List.of(), List.of(), null);
         store.putClub(club);
 
         Club found = store.findUniqueClubByShortName("TYC/OTHER", null, "test");

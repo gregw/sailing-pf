@@ -1,980 +1,1077 @@
 clubs:
   bbsc.org.au:
-    shortName: "BBSC"
-    state: "NSW"
-    fullName: "Batemans Bay Sailing Club"
+    shortName: BBSC
+    state: NSW
+    fullName: Batemans Bay Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@bbsc.org.au
   byc.org.au:
-    shortName: "BYC"
-    state: "TAS"
-    fullName: "Bellerive Yacht Club"
+    shortName: BYC
+    state: TAS
+    fullName: Bellerive Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@byc.org.au
   ballaratyachtclub.com.au:
-    shortName: "BYC"
-    state: "VIC"
-    fullName: "Ballarat Yacht Club"
+    shortName: BYC
+    state: VIC
+    fullName: Ballarat Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@ballaratyachtclub.com.au
   cyca.com.au:
-    shortName: "CYCA"
-    state: "NSW"
-    fullName: "Cruising Yacht Club of Australia"
+    shortName: CYCA
+    state: NSW
+    fullName: Cruising Yacht Club of Australia
     excluded: null
     aliases:
-    - "CYCA/SDYC"
+      - CYCA/SDYC
     topyacht:
-    - "https://cyca.com.au/results/2019/bwps_1920/index.htm"
+      - https://cyca.com.au/results/2019/bwps_1920/index.htm
     boats:
-    - "1-back2black-reichelpughgp42"
+      - 1-back2black-reichelpughgp42
+    email: sailing@cyca.com.au
   cycsa.com.au:
-    shortName: "CYCSA"
-    state: "SA"
-    fullName: "Cruising Yacht Club of SA"
+    shortName: CYCSA
+    state: SA
+    fullName: Cruising Yacht Club of SA
     excluded: null
     aliases: []
     topyacht:
-    - "http://cycsa.com.au/results/2017/index.htm"
-    - "https://topyacht.net.au/results/cycsa/2020/club/index.htm"
-    - "https://topyacht.net.au/results/cycsa/2021/club/index.htm"
-    - "https://topyacht.net.au/results/cycsa/2022/club/index.htm"
-    - "https://topyacht.net.au/results/cycsa/2025/club/index.htm"
+      - http://cycsa.com.au/results/2017/index.htm
+      - https://topyacht.net.au/results/cycsa/2020/club/index.htm
+      - https://topyacht.net.au/results/cycsa/2021/club/index.htm
+      - https://topyacht.net.au/results/cycsa/2022/club/index.htm
+      - https://topyacht.net.au/results/cycsa/2025/club/index.htm
     boats: null
+    email: sailing@cycsa.com.au
   hbyc.org.au:
-    shortName: "HBYC"
-    state: "VIC"
-    fullName: "Hobsons Bay Yacht Club"
+    shortName: HBYC
+    state: VIC
+    fullName: Hobsons Bay Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@hbyc.org.au
   hastingsyachtclub.org.au:
-    shortName: "HYC"
-    state: "VIC"
-    fullName: "Hastings Yacht Club"
+    shortName: HYC
+    state: VIC
+    fullName: Hastings Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@hastingsyachtclub.org.au
   mcys.com.au:
-    shortName: "MCYS"
-    state: "VIC"
-    fullName: "Martha Cove Yacht Squadron"
+    shortName: MCYS
+    state: VIC
+    fullName: Martha Cove Yacht Squadron
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@mcys.com.au
   morningtonyc.net.au:
-    shortName: "MYC"
-    state: "VIC"
-    fullName: "Mornington Yacht Club"
+    shortName: MYC
+    state: VIC
+    fullName: Mornington Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@morningtonyc.net.au
   portadelaidesailingclub.com:
-    shortName: "PASC"
-    state: "SA"
-    fullName: "Port Adelaide Sailing Club"
+    shortName: PASC
+    state: SA
+    fullName: Port Adelaide Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@portadelaidesailingclub.com
   gyc.com.au:
-    shortName: "PCSC"
-    state: "QLD"
-    fullName: "Port Curtis Sailing Club"
+    shortName: PCSC
+    state: QLD
+    fullName: Port Curtis Sailing Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/pcsc/2020/club/index.htm"
-    - "https://www.topyacht.net.au/results/pcsc/2021/club/index.htm"
-    - "https://www.topyacht.net.au/results/pcsc/2022/club/index.htm"
+      - https://www.topyacht.net.au/results/pcsc/2020/club/index.htm
+      - https://www.topyacht.net.au/results/pcsc/2021/club/index.htm
+      - https://www.topyacht.net.au/results/pcsc/2022/club/index.htm
     boats: null
+    email: sailing@gyc.com.au
   pdyc.org.au:
-    shortName: "PDYC"
-    state: "TAS"
-    fullName: "Port Dalrymple Yacht Club"
+    shortName: PDYC
+    state: TAS
+    fullName: Port Dalrymple Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@pdyc.org.au
   plyc.com.au:
-    shortName: "PLYC"
-    state: "SA"
-    fullName: "Port Lincoln Yacht Club"
+    shortName: PLYC
+    state: SA
+    fullName: Port Lincoln Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://topyacht.net.au/results/plyc/lincolnweek/2024/"
-    - "https://topyacht.net.au/results/plyc/lincolnweek/2025/"
-    - "https://topyacht.net.au/results/plyc/lincolnweek/2026/"
+      - https://topyacht.net.au/results/plyc/lincolnweek/2024/
+      - https://topyacht.net.au/results/plyc/lincolnweek/2025/
+      - https://topyacht.net.au/results/plyc/lincolnweek/2026/
     boats: null
+    email: sailing@plyc.com.au
   unknown.domain.14:
-    shortName: "RBYC"
-    state: "TAS"
-    fullName: ""
+    shortName: RBYC
+    state: TAS
+    fullName: ''
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: null
   rbyc.org.au:
-    shortName: "RBYC"
-    state: "VIC"
-    fullName: "Royal Brighton Yacht Club"
+    shortName: RBYC
+    state: VIC
+    fullName: Royal Brighton Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rbyc.org.au
   rfbyc.asn.au:
-    shortName: "RFBYC"
-    state: "WA"
-    fullName: "Royal Freshwater Bay Yacht Club"
+    shortName: RFBYC
+    state: WA
+    fullName: Royal Freshwater Bay Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rfbyc.asn.au
   rgyc.com.au:
-    shortName: "RGYC"
-    state: "VIC"
-    fullName: "Royal Geelong Yacht Club"
+    shortName: RGYC
+    state: VIC
+    fullName: Royal Geelong Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://topyacht.net.au/results/rgyc/2020-2021_keel_boat_club_series/"
-    - "https://topyacht.net.au/results/rgyc/2021-2022_keel_boat_club_series/"
-    - "https://topyacht.net.au/results/rgyc/2022-2023_keel_boat_club_series/"
-    - "https://topyacht.net.au/results/rgyc/2023-2024_keel_boat_club_series/"
-    - "https://topyacht.net.au/results/rgyc/2024-2025_keel_boat_club_series/"
-    - "https://topyacht.net.au/results/rgyc/2025-2026_keel_boat_club_series/"
-    - "https://www.topyacht.net.au/results/2022/fos/index.htm"
-    - "https://www.topyacht.net.au/results/2023/fos/index.htm"
-    - "https://www.topyacht.net.au/results/2024/fos/index.htm"
-    - "https://www.topyacht.net.au/results/2025/fos/index.htm"
-    - "https://www.topyacht.net.au/results/2026/fos/index.htm"
+      - https://topyacht.net.au/results/rgyc/2020-2021_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2021-2022_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2022-2023_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2023-2024_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2024-2025_keel_boat_club_series/
+      - https://topyacht.net.au/results/rgyc/2025-2026_keel_boat_club_series/
+      - https://www.topyacht.net.au/results/2022/fos/index.htm
+      - https://www.topyacht.net.au/results/2023/fos/index.htm
+      - https://www.topyacht.net.au/results/2024/fos/index.htm
+      - https://www.topyacht.net.au/results/2025/fos/index.htm
+      - https://www.topyacht.net.au/results/2026/fos/index.htm
     boats: null
+    email: sailing@rgyc.com.au
   rmys.com.au:
-    shortName: "RMYS"
-    state: "VIC"
-    fullName: "Royal Melbourne Yacht Squadron"
+    shortName: RMYS
+    state: VIC
+    fullName: Royal Melbourne Yacht Squadron
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/rmys/2022/awkr22/index.htm"
+      - https://www.topyacht.net.au/results/rmys/2022/awkr22/index.htm
     boats: null
+    email: sailing@rmys.com.au
   rqys.com.au:
-    shortName: "RQYS"
-    state: "QLD"
-    fullName: "Royal Queensland Yacht Squadron"
+    shortName: RQYS
+    state: QLD
+    fullName: Royal Queensland Yacht Squadron
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rqys.com.au
   rsays.com.au:
-    shortName: "RSAYS"
-    state: "SA"
-    fullName: "Royal South Australian Yacht Squadron"
+    shortName: RSAYS
+    state: SA
+    fullName: Royal South Australian Yacht Squadron
     excluded: null
     aliases: []
     topyacht:
-    - "https://topyacht.net.au/results/rsays/2022/vxonestate/index.htm"
+      - https://topyacht.net.au/results/rsays/2022/vxonestate/index.htm
     boats: null
+    email: sailing@rsays.com.au
   ryct.org.au:
-    shortName: "RYCT"
-    state: "TAS"
-    fullName: "Royal Yacht Club of Tasmania"
+    shortName: RYCT
+    state: TAS
+    fullName: Royal Yacht Club of Tasmania
     excluded: null
     aliases: []
     topyacht:
-    - "http://results.ryct.org.au/bruny20/"
-    - "http://results.ryct.org.au/bruny22/"
-    - "http://results.ryct.org.au/bruny23/"
-    - "http://results.ryct.org.au/ccharbour22/"
-    - "http://results.ryct.org.au/ccharbour23/"
-    - "http://results.ryct.org.au/cclong23/"
-    - "http://results.ryct.org.au/cclong24/"
-    - "http://results.ryct.org.au/channel20/"
-    - "http://results.ryct.org.au/channel21/"
-    - "http://results.ryct.org.au/channel22/"
-    - "http://results.ryct.org.au/channel23/"
-    - "http://results.ryct.org.au/drgstates20/"
-    - "http://results.ryct.org.au/drgstates21/"
-    - "http://results.ryct.org.au/drgstates22/"
-    - "http://results.ryct.org.au/drgstates23/"
+      - http://results.ryct.org.au/bruny20/
+      - http://results.ryct.org.au/bruny22/
+      - http://results.ryct.org.au/bruny23/
+      - http://results.ryct.org.au/ccharbour22/
+      - http://results.ryct.org.au/ccharbour23/
+      - http://results.ryct.org.au/cclong23/
+      - http://results.ryct.org.au/cclong24/
+      - http://results.ryct.org.au/channel20/
+      - http://results.ryct.org.au/channel21/
+      - http://results.ryct.org.au/channel22/
+      - http://results.ryct.org.au/channel23/
+      - http://results.ryct.org.au/drgstates20/
+      - http://results.ryct.org.au/drgstates21/
+      - http://results.ryct.org.au/drgstates22/
+      - http://results.ryct.org.au/drgstates23/
     boats: null
+    email: sailing@ryct.org.au
   unknown.domain.22:
-    shortName: "RYCV"
-    state: "SA"
-    fullName: ""
+    shortName: RYCV
+    state: SA
+    fullName: ''
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: null
   rycv.com.au:
-    shortName: "RYCV"
-    state: "VIC"
-    fullName: "Royal Yacht Club of Victoria"
+    shortName: RYCV
+    state: VIC
+    fullName: Royal Yacht Club of Victoria
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/rycv/2020/summer/index-summer.htm"
-    - "https://www.topyacht.net.au/results/rycv/2021/summer/index-summer.htm"
-    - "https://www.topyacht.net.au/results/rycv/2021/winter/index-winter.htm"
-    - "https://www.topyacht.net.au/results/rycv/2022/summer/index-summer.htm"
-    - "https://www.topyacht.net.au/results/rycv/2022/winter/index-winter.htm"
-    - "https://www.topyacht.net.au/results/rycv/2023/summer/index-summer.htm"
-    - "https://www.topyacht.net.au/results/rycv/2023/winter/index-winter.htm"
-    - "https://www.topyacht.net.au/results/rycv/2024/summer/index-summer.htm"
-    - "https://www.topyacht.net.au/results/rycv/2024/winter/index-winter.htm"
-    - "https://www.topyacht.net.au/results/rycv/2025/summer/index-summer.htm"
+      - https://www.topyacht.net.au/results/rycv/2020/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2021/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2021/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2022/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2022/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2023/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2023/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2024/summer/index-summer.htm
+      - https://www.topyacht.net.au/results/rycv/2024/winter/index-winter.htm
+      - https://www.topyacht.net.au/results/rycv/2025/summer/index-summer.htm
     boats: null
+    email: sailing@rycv.com.au
   sbsc.net.au:
-    shortName: "SBSC"
-    state: "VIC"
-    fullName: "Safety Beach Sailing Club"
+    shortName: SBSC
+    state: VIC
+    fullName: Safety Beach Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@sbsc.net.au
   unknown.domain.25:
-    shortName: "SBYC"
-    state: "VIC"
-    fullName: ""
+    shortName: SBYC
+    state: VIC
+    fullName: ''
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: null
   syc.com.au:
-    shortName: "SYC"
-    state: "VIC"
-    fullName: "Sandringham Yacht Club"
+    shortName: SYC
+    state: VIC
+    fullName: Sandringham Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://topyacht.net.au/results/syc/2024/kblt/"
-    - "https://topyacht.net.au/results/syc/2025/kblt/"
-    - "https://topyacht.net.au/results/syc/2026/kblt/"
-    - "https://www.topyacht.net.au/results/2020/sailsandy/index.htm"
-    - "https://www.topyacht.net.au/results/2021/sailsandy/index.htm"
-    - "https://www.topyacht.net.au/results/2022/sailsandy/index.htm"
-    - "https://www.topyacht.net.au/results/2023/sailsandy/index.htm"
-    - "https://www.topyacht.net.au/results/2024/sailsandy/index.htm"
-    - "https://www.topyacht.net.au/results/2025/sailsandy/index.htm"
-    - "https://www.topyacht.net.au/results/2026/sailsandy/index.htm"
+      - https://topyacht.net.au/results/syc/2024/kblt/
+      - https://topyacht.net.au/results/syc/2025/kblt/
+      - https://topyacht.net.au/results/syc/2026/kblt/
+      - https://www.topyacht.net.au/results/2020/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2021/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2022/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2023/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2024/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2025/sailsandy/index.htm
+      - https://www.topyacht.net.au/results/2026/sailsandy/index.htm
     boats: null
+    email: sailing@syc.com.au
   myc.org.au:
-    shortName: "MYC"
-    state: "NSW"
-    fullName: "Manly Yacht Club"
+    shortName: MYC
+    state: NSW
+    fullName: Manly Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats:
-    - "5656-mondo-sydney38"
-    - "2407-manlysailingaqualuna-force24"
-    - "MH137-plumcrazy-adamsmiller3012tonner"
+      - 5656-mondo-sydney38
+      - 2407-manlysailingaqualuna-force24
+      - MH137-plumcrazy-adamsmiller3012tonner
+    email: sailing@manly.yacht.club
   mhyc.com.au:
-    shortName: "MHYC"
-    state: "NSW"
-    fullName: "Middle Harbour Yacht Club"
+    shortName: MHYC
+    state: NSW
+    fullName: Middle Harbour Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.mhyc.com.au/files/results/2020/champsregattas/index.htm"
-    - "https://www.mhyc.com.au/files/results/2021/champsregattas/index.htm"
-    - "https://www.mhyc.com.au/files/results/2020/club/index.htm"
-    - "https://www.mhyc.com.au/files/results/2021/club/index.htm"
+      - https://www.mhyc.com.au/files/results/2020/champsregattas/index.htm
+      - https://www.mhyc.com.au/files/results/2021/champsregattas/index.htm
+      - https://www.mhyc.com.au/files/results/2020/club/index.htm
+      - https://www.mhyc.com.au/files/results/2021/club/index.htm
     boats: null
+    email: sailing@mhyc.com.au
   sasc.com.au:
-    shortName: "SASC"
-    state: "NSW"
-    fullName: "Sydney Amateur Sailing Club"
+    shortName: SASC
+    state: NSW
+    fullName: Sydney Amateur Sailing Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/sasc/2023/club/index.htm"
+      - https://www.topyacht.net.au/results/sasc/2023/club/index.htm
     boats: null
+    email: sailing@sasc.com.au
   rpeyc.com.au:
-    shortName: "RPEYC"
-    state: "NSW"
-    fullName: "Royal Prince Edward Yacht Club"
+    shortName: RPEYC
+    state: NSW
+    fullName: Royal Prince Edward Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rpeyc.com.au
   rsys.com.au:
-    shortName: "RSYS"
-    state: "NSW"
-    fullName: "Royal Sydney Yacht Squadron"
+    shortName: RSYS
+    state: NSW
+    fullName: Royal Sydney Yacht Squadron
     excluded: null
     aliases:
-    - "RSYSAcademy"
-    - "RSYS - Academy"
+      - RSYSAcademy
+      - RSYS - Academy
     topyacht: null
     boats: null
+    email: sailing@rsys.com.au
   ransa.com.au:
-    shortName: "RANSA"
-    state: "NSW"
-    fullName: "Royal Australian Naval Sailing Association"
+    shortName: RANSA
+    state: NSW
+    fullName: Royal Australian Naval Sailing Association
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@ransa.com.au
   rpayc.com.au:
-    shortName: "RPAYC"
-    state: "NSW"
-    fullName: "Royal Prince Alfred Yacht Club"
+    shortName: RPAYC
+    state: NSW
+    fullName: Royal Prince Alfred Yacht Club
     excluded: null
     aliases:
-    - "RPAYC-OTB"
+      - RPAYC-OTB
     topyacht:
-    - "https://rpayc.com.au/results/2022/club/otb/index.htm"
+      - https://rpayc.com.au/results/2022/club/otb/index.htm
     boats: null
+    email: sailing@rpayc.com.au
   byra.org.au:
-    shortName: "BYRA"
-    state: "NSW"
-    fullName: "Bayview Yacht Racing Association"
+    shortName: BYRA
+    state: NSW
+    fullName: Bayview Yacht Racing Association
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: secretary@byra.org.au
   royalmotor.com.au:
-    shortName: "RMYC"
-    state: "NSW"
-    fullName: "Royal Motor Yacht Club Broken Bay"
+    shortName: RMYC
+    state: NSW
+    fullName: Royal Motor Yacht Club Broken Bay
     excluded: null
     aliases:
-    - "RMYCBB"
+      - RMYCBB
     topyacht: null
     boats: null
+    email: sailing@royalmotor.com.au
   avalonsailingclub.com.au:
-    shortName: "ASC"
-    state: "NSW"
-    fullName: "Avalon Sailing Club"
+    shortName: ASC
+    state: NSW
+    fullName: Avalon Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@avalonsailingclub.com.au
   bbyc.com.au:
-    shortName: "BBYC"
-    state: "NSW"
-    fullName: "Botany Bay Yacht Club"
+    shortName: BBYC
+    state: NSW
+    fullName: Botany Bay Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/botanybay/2022/club_series/"
-    - "https://www.topyacht.net.au/results/botanybay/2023/club_series/"
-    - "https://www.topyacht.net.au/results/botanybay/2024/club_series/"
-    - "https://www.topyacht.net.au/results/botanybay/2025/club_series/"
+      - https://www.topyacht.net.au/results/botanybay/2022/club_series/
+      - https://www.topyacht.net.au/results/botanybay/2023/club_series/
+      - https://www.topyacht.net.au/results/botanybay/2024/club_series/
+      - https://www.topyacht.net.au/results/botanybay/2025/club_series/
     boats: null
+    email: sailing@bbyc.com.au
   cronullasailingclub.com.au:
-    shortName: "CSC"
-    state: "NSW"
-    fullName: "Cronulla Sailing Club"
+    shortName: CSC
+    state: NSW
+    fullName: Cronulla Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@cronullasailingclub.com.au
   rmycph.com.au:
-    shortName: "RMYC (PH)"
-    state: "NSW"
-    fullName: "Royal Motor Yacht Club - Port Hacking"
+    shortName: RMYC (PH)
+    state: NSW
+    fullName: Royal Motor Yacht Club - Port Hacking
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rmycph.com.au
   balmainsailingclub.com.au:
-    shortName: "BSC"
-    state: "NSW"
-    fullName: "Balmain Sailing Club"
+    shortName: BSC
+    state: NSW
+    fullName: Balmain Sailing Club
     excluded: null
     aliases:
-    - "BSC Yacht"
-    - "Balmain Sailing Club - Yacht"
+      - BSC Yacht
+      - Balmain Sailing Club - Yacht
     topyacht:
-    - "https://www.topyacht.net.au/results/balmainsc/2020/kb/index.htm"
-    - "https://www.topyacht.net.au/results/balmainsc/2021/kb/index.htm"
-    - "https://www.topyacht.net.au/results/balmainsc/2022/kb/index.htm"
-    - "https://www.topyacht.net.au/results/balmainsc/2024/kb/index.htm"
-    - "https://www.topyacht.net.au/results/balmainsc/2025/kb/index.htm"
-    - "https://www.topyacht.net.au/results/balmainsc/2026/kb/index.htm"
+      - https://www.topyacht.net.au/results/balmainsc/2020/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2021/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2022/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2024/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2025/kb/index.htm
+      - https://www.topyacht.net.au/results/balmainsc/2026/kb/index.htm
     boats: null
+    email: sailing@balmainsailingclub.com.au
   prsc.org.au:
-    shortName: "PRSC"
-    state: "NSW"
-    fullName: "Parramatta River Sailing Club"
+    shortName: PRSC
+    state: NSW
+    fullName: Parramatta River Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@prsc.org.au
   dsc.org.au:
-    shortName: "DSC"
-    state: "NSW"
-    fullName: "Drummoyne Sailing Club"
+    shortName: DSC
+    state: NSW
+    fullName: Drummoyne Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@dsc.org.au
   ncyc.net.au:
-    shortName: "NCYC"
-    state: "NSW"
-    fullName: "Newcastle Cruising Yacht Club"
+    shortName: NCYC
+    state: NSW
+    fullName: Newcastle Cruising Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/ncyc/2021/sf2021/index.htm"
-    - "https://www.topyacht.net.au/results/ncyc/2022/sf2022/index.htm"
+      - https://www.topyacht.net.au/results/ncyc/2021/sf2021/index.htm
+      - https://www.topyacht.net.au/results/ncyc/2022/sf2022/index.htm
     boats: null
+    email: sailing@ncyc.net.au
   lmyc.com.au:
-    shortName: "LMYC"
-    state: "NSW"
-    fullName: "Lake Macquarie Yacht Club"
+    shortName: LMYC
+    state: NSW
+    fullName: Lake Macquarie Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.lmycraceresults.com.au/results/2021/tyregattas/"
-    - "https://www.lmycraceresults.com.au/results/2022/tyregattas/"
-    - "https://www.lmycraceresults.com.au/results/2023/tyregattas/"
-    - "https://www.lmycraceresults.com.au/results/2024/tyregattas/"
-    - "https://www.lmycraceresults.com.au/results/2025/tyregattas/"
+      - https://www.lmycraceresults.com.au/results/2021/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2022/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2023/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2024/tyregattas/
+      - https://www.lmycraceresults.com.au/results/2025/tyregattas/
     boats: null
+    email: sailing@lmyc.com.au
   gossail.com.au:
-    shortName: "GSC"
-    state: "NSW"
-    fullName: "Gosford Sailing Club"
+    shortName: GSC
+    state: NSW
+    fullName: Gosford Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@gossail.com.au
   orcv.org.au:
-    shortName: "ORCV"
-    state: "VIC"
-    fullName: "Ocean Racing Club of Victoria"
+    shortName: ORCV
+    state: VIC
+    fullName: Ocean Racing Club of Victoria
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.orcv.org.au/results/2022-23/"
-    - "https://www.orcv.org.au/results/2023-24/"
-    - "https://www.orcv.org.au/results/2024-25/"
-    - "https://www.orcv.org.au/results/2025-26/"
+      - https://www.orcv.org.au/results/2022-23/
+      - https://www.orcv.org.au/results/2023-24/
+      - https://www.orcv.org.au/results/2024-25/
+      - https://www.orcv.org.au/results/2025-26/
     boats: null
+    email: sailing@orcv.org.au
   dbyc.com.au:
-    shortName: "DBYC"
-    state: "VIC"
-    fullName: "Davey's Bay Yacht Club"
+    shortName: DBYC
+    state: VIC
+    fullName: Davey's Bay Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@dbyc.com.au
   bys.asn.au:
-    shortName: "BYS"
-    state: "VIC"
-    fullName: "Blairgowrie Yacht Squadron"
+    shortName: BYS
+    state: VIC
+    fullName: Blairgowrie Yacht Squadron
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@bys.asn.au
   queenscliffcruisingyachtclub.org:
-    shortName: "QCYC"
-    state: "VIC"
-    fullName: "Queenscliff Cruising Yacht Club"
+    shortName: QCYC
+    state: VIC
+    fullName: Queenscliff Cruising Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@queenscliffcruisingyachtclub.org
   mccraeyc.com.au:
-    shortName: "McCYC"
-    state: "VIC"
-    fullName: "McCrae Yacht Club"
+    shortName: McCYC
+    state: VIC
+    fullName: McCrae Yacht Club
     excluded: null
     aliases:
-    - "MYC"
+      - MYC
     topyacht: null
     boats: null
+    email: sailing@mccraeyc.com.au
   rosebudyachtclub.au:
-    shortName: "RYC"
-    state: "VIC"
-    fullName: "Rosebud Yacht Club"
+    shortName: RYC
+    state: VIC
+    fullName: Rosebud Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rosebudyachtclub.au
   flindersyc.com.au:
-    shortName: "FYC"
-    state: "VIC"
-    fullName: "Flinders Yacht Club"
+    shortName: FYC
+    state: VIC
+    fullName: Flinders Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@flindersyc.com.au
   mmyc.org.au:
-    shortName: "MMYC"
-    state: "VIC"
-    fullName: "Mount Martha Yacht Club"
+    shortName: MMYC
+    state: VIC
+    fullName: Mount Martha Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@mmyc.org.au
   mordiallocsc.com.au:
-    shortName: "MSC"
-    state: "VIC"
-    fullName: "Mordialloc Sailing Club"
+    shortName: MSC
+    state: VIC
+    fullName: Mordialloc Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats:
-    - "BLANKSAILNUMBER-smokin"
+      - BLANKSAILNUMBER-smokin
+    email: sailing@mordiallocsc.com.au
   williamstownsailingclub.org.au:
-    shortName: "WSC"
-    state: "VIC"
-    fullName: "Williamstown Sailing Club"
+    shortName: WSC
+    state: VIC
+    fullName: Williamstown Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@williamstownsailingclub.org.au
   dssinc.org.au:
-    shortName: "DSS"
-    state: "TAS"
-    fullName: "Derwent Sailing Squadron"
+    shortName: DSS
+    state: TAS
+    fullName: Derwent Sailing Squadron
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@dssinc.org.au
   wmyc.com.au:
-    shortName: "WMSC"
-    state: "QLD"
-    fullName: "Wynnum Manly Sailing Club"
+    shortName: WMSC
+    state: QLD
+    fullName: Wynnum Manly Sailing Club
     excluded: null
     aliases:
-    - "MYC"
-    - "WMYC"
+      - MYC
+      - WMYC
     topyacht: null
     boats: null
+    email: sailing@wmyc.com.au
   qcyc.com.au:
-    shortName: "QCYC"
-    state: "QLD"
-    fullName: "Queensland Cruising Yacht Club"
+    shortName: QCYC
+    state: QLD
+    fullName: Queensland Cruising Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@qcyc.com.au
   southportyachtclub.com.au:
-    shortName: "SYC"
-    state: "QLD"
-    fullName: "Southport Yacht Club"
+    shortName: SYC
+    state: QLD
+    fullName: Southport Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/2020/sailparadise/"
-    - "https://www.topyacht.net.au/results/2021/sailparadise/"
-    - "https://www.topyacht.net.au/results/2022/sailparadise/"
-    - "https://www.topyacht.net.au/results/2023/sailparadise/"
-    - "https://www.topyacht.net.au/results/2024/sailparadise/"
+      - https://www.topyacht.net.au/results/2020/sailparadise/
+      - https://www.topyacht.net.au/results/2021/sailparadise/
+      - https://www.topyacht.net.au/results/2022/sailparadise/
+      - https://www.topyacht.net.au/results/2023/sailparadise/
+      - https://www.topyacht.net.au/results/2024/sailparadise/
     boats: null
+    email: sailing@southportyachtclub.com.au
   mooloolabayachtclub.com.au:
-    shortName: "MYC"
-    state: "QLD"
-    fullName: "Mooloolaba Yacht Club"
+    shortName: MYC
+    state: QLD
+    fullName: Mooloolaba Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@mooloolabayachtclub.com.au
   nyrc.com.au:
-    shortName: "NYRC"
-    state: "QLD"
-    fullName: "Noosa Yacht & Rowing Club"
+    shortName: NYRC
+    state: QLD
+    fullName: Noosa Yacht & Rowing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@nyrc.com.au
   whitsundaysailingclub.com.au:
-    shortName: "WSC"
-    state: "QLD"
-    fullName: "Whitsunday Sailing Club"
+    shortName: WSC
+    state: QLD
+    fullName: Whitsunday Sailing Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/2025/abrw/index.htm"
-    - "https://www.topyacht.net.au/results/2024/abrw/index.htm"
+      - https://www.topyacht.net.au/results/2025/abrw/index.htm
+      - https://www.topyacht.net.au/results/2024/abrw/index.htm
     boats: null
+    email: sailing@whitsundaysailingclub.com.au
   adelaidesailingclub.com.au:
-    shortName: "ASC"
-    state: "SA"
-    fullName: "Adelaide Sailing Club"
+    shortName: ASC
+    state: SA
+    fullName: Adelaide Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@adelaidesailingclub.com.au
   bsyc.com.au:
-    shortName: "BSYC"
-    state: "SA"
-    fullName: "Brighton & Seacliff Yacht Club"
+    shortName: BSYC
+    state: SA
+    fullName: Brighton & Seacliff Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/bsyc/2023/club/index.htm"
-    - "https://www.topyacht.net.au/results/bsyc/2024/club/index.htm"
+      - https://www.topyacht.net.au/results/bsyc/2023/club/index.htm
+      - https://www.topyacht.net.au/results/bsyc/2024/club/index.htm
     boats: null
+    email: sailing@bsyc.com.au
   rpyc.com.au:
-    shortName: "RPYC"
-    state: "WA"
-    fullName: "Royal Perth Yacht Club"
+    shortName: RPYC
+    state: WA
+    fullName: Royal Perth Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rpyc.com.au
   fsc.com.au:
-    shortName: "FSC"
-    state: "WA"
-    fullName: "Fremantle Sailing Club"
+    shortName: FSC
+    state: WA
+    fullName: Fremantle Sailing Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/fsc/2023/kb23/"
-    - "https://www.topyacht.net.au/results/fsc/2024/kb24/"
-    - "https://www.topyacht.net.au/results/fsc/2025/kb25/"
-    - "https://www.topyacht.net.au/results/fsc/2025/kb26/"
+      - https://www.topyacht.net.au/results/fsc/2023/kb23/
+      - https://www.topyacht.net.au/results/fsc/2024/kb24/
+      - https://www.topyacht.net.au/results/fsc/2025/kb25/
+      - https://www.topyacht.net.au/results/fsc/2025/kb26/
     boats: null
+    email: sailing@fsc.com.au
   efyc.com.au:
-    shortName: "EFYC"
-    state: "WA"
-    fullName: "East Fremantle Yacht Club"
+    shortName: EFYC
+    state: WA
+    fullName: East Fremantle Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@efyc.com.au
   nyc.org.au:
-    shortName: "NYC"
-    state: "WA"
-    fullName: "Nedlands Yacht Club"
+    shortName: NYC
+    state: WA
+    fullName: Nedlands Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@nyc.org.au
   hillarysyachtclub.com.au:
-    shortName: "HYC"
-    state: "WA"
-    fullName: "Hillarys Yacht Club"
+    shortName: HYC
+    state: WA
+    fullName: Hillarys Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@hillarysyachtclub.com.au
   sopyc.com.au:
-    shortName: "SoPYC"
-    state: "WA"
-    fullName: "South of Perth Yacht Club"
+    shortName: SoPYC
+    state: WA
+    fullName: South of Perth Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@sopyc.com.au
   pfsyc.com.au:
-    shortName: "PFSYC"
-    state: "WA"
-    fullName: "Perth Flying Squadron Yacht Club"
+    shortName: PFSYC
+    state: WA
+    fullName: Perth Flying Squadron Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@pfsyc.com.au
   darwinsailingclub.com.au:
-    shortName: "DSC"
-    state: "NT"
-    fullName: "Darwin Sailing Club"
+    shortName: DSC
+    state: NT
+    fullName: Darwin Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@darwinsailingclub.com.au
   dbcya.com.au:
-    shortName: "DBCYA"
-    state: "NT"
-    fullName: "Dinah Beach Cruising Yacht Association"
+    shortName: DBCYA
+    state: NT
+    fullName: Dinah Beach Cruising Yacht Association
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@dbcya.com.au
   rycv.com.au/port-phillip-north-yacht-clubs-ppnyc:
-    shortName: "PPNYC"
-    state: "VIC"
-    fullName: "Port Phillip North Yacht Clubs"
+    shortName: PPNYC
+    state: VIC
+    fullName: Port Phillip North Yacht Clubs
     excluded: null
     aliases: null
     topyacht: null
     boats: null
+    email: null
   revolutionise.com.au/goolwaryc:
-    shortName: "GWYC"
-    state: "SA"
-    fullName: "Goolwa Yacht Club"
+    shortName: GWYC
+    state: SA
+    fullName: Goolwa Yacht Club
     excluded: null
     aliases: null
     topyacht: null
     boats: null
+    email: null
   rmyctoronto.com.au:
-    shortName: "RMYCT"
-    state: "NSW"
-    fullName: "Royal Motor Yacht Club Toronto"
+    shortName: RMYCT
+    state: NSW
+    fullName: Royal Motor Yacht Club Toronto
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.raceresults.rmyctoronto.com.au/results/2020_2021/hcwindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2020_2021/regattaindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2021_2022/hcwindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2021_2022/regattaindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2022_2023/hcwindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2023_2024/hcwindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2024_2025/hcwindex.htm"
-    - "https://www.raceresults.rmyctoronto.com.au/results/2025_2026/hcwindex.htm"
+      - https://www.raceresults.rmyctoronto.com.au/results/2020_2021/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2020_2021/regattaindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2021_2022/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2021_2022/regattaindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2022_2023/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2023_2024/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2024_2025/hcwindex.htm
+      - https://www.raceresults.rmyctoronto.com.au/results/2025_2026/hcwindex.htm
     boats: null
+    email: sailing@rmyctoronto.com.au
   gfs.org.au:
-    shortName: "GFS"
-    state: "NSW"
-    fullName: "Greenwich Flying Squadron"
+    shortName: GFS
+    state: NSW
+    fullName: Greenwich Flying Squadron
     excluded: null
     aliases: []
     topyacht:
-    - "https://gfs.org.au/handicapper/results/2020/2020_club_series/index.htm"
-    - "https://gfs.org.au/handicapper/results/2021/2021_club_series/index.htm"
-    - "https://gfs.org.au/handicapper/results/2022/2022_club_series/index.htm"
-    - "https://gfs.org.au/handicapper/results/2023/2023_club_series/index.htm"
+      - https://gfs.org.au/handicapper/results/2020/2020_club_series/index.htm
+      - https://gfs.org.au/handicapper/results/2021/2021_club_series/index.htm
+      - https://gfs.org.au/handicapper/results/2022/2022_club_series/index.htm
+      - https://gfs.org.au/handicapper/results/2023/2023_club_series/index.htm
     boats: null
+    email: sailing@gfs.org.au
   pmyc.asn.au:
-    shortName: "PMYC"
-    state: "VIC"
-    fullName: "Port Melbourne Yacht Club"
+    shortName: PMYC
+    state: VIC
+    fullName: Port Melbourne Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/pmyc/2020/club/index.htm"
-    - "https://www.topyacht.net.au/results/pmyc/2021/club/index.htm"
-    - "https://www.topyacht.net.au/results/pmyc/2022/club/index.htm"
-    - "https://www.topyacht.net.au/results/pmyc/2023/club/index.htm"
-    - "https://www.topyacht.net.au/results/pmyc/2024/club/index.htm"
-    - "https://www.topyacht.net.au/results/pmyc/2025/club/index.htm"
+      - https://www.topyacht.net.au/results/pmyc/2020/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2021/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2022/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2023/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2024/club/index.htm
+      - https://www.topyacht.net.au/results/pmyc/2025/club/index.htm
     boats: null
+    email: sailing@pmyc.asn.au
   gryc.com.au:
-    shortName: "GRYC"
-    state: "SA"
-    fullName: "Goolwa Regatta Yacht Club"
+    shortName: GRYC
+    state: SA
+    fullName: Goolwa Regatta Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/gryc/2020/club/Winter2020/series.htm"
-    - "https://www.topyacht.net.au/results/gryc/2021/club/Winter2021/series.htm"
-    - "https://www.topyacht.net.au/results/gryc/2022/club/Winter2022/series.htm"
-    - "https://www.topyacht.net.au/results/gryc/2025/club/Winter2025/series.htm"
+      - https://www.topyacht.net.au/results/gryc/2020/club/Winter2020/series.htm
+      - https://www.topyacht.net.au/results/gryc/2021/club/Winter2021/series.htm
+      - https://www.topyacht.net.au/results/gryc/2022/club/Winter2022/series.htm
+      - https://www.topyacht.net.au/results/gryc/2025/club/Winter2025/series.htm
     boats: null
+    email: sailing@gryc.com.au
   oceanracingwa.com.au:
-    shortName: "ORWA"
-    state: "WA"
-    fullName: "Ocean Racing Western Australia"
+    shortName: ORWA
+    state: WA
+    fullName: Ocean Racing Western Australia
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/orwa/2021/index.htm"
-    - "https://www.topyacht.net.au/results/orwa/2022/index.htm"
-    - "https://www.topyacht.net.au/results/orwa/2023/index.htm"
+      - https://www.topyacht.net.au/results/orwa/2021/index.htm
+      - https://www.topyacht.net.au/results/orwa/2022/index.htm
+      - https://www.topyacht.net.au/results/orwa/2023/index.htm
     boats: null
+    email: sailing@oceanracingwa.com.au
   classicyacht.com.au:
-    shortName: "CYAA"
-    state: "VIC"
-    fullName: "Classic Yacht Association Australia"
+    shortName: CYAA
+    state: VIC
+    fullName: Classic Yacht Association Australia
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm"
-    - "https://www.topyacht.net.au/results/cyaa/2022/winter/index.htm"
+      - https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm
+      - https://www.topyacht.net.au/results/cyaa/2022/winter/index.htm
     boats: null
+    email: sailing@classicyacht.com.au
   hamiltonisland.com.au:
-    shortName: "HIYC"
-    state: "QLD"
-    fullName: "Hamilton Island Yacht Club"
+    shortName: HIYC
+    state: QLD
+    fullName: Hamilton Island Yacht Club
     excluded: null
     aliases: []
     topyacht:
-    - "https://www.topyacht.net.au/results/2025/hirw/index.htm"
-    - "https://www.topyacht.net.au/results/2024/hirw/index.htm"
-    - "https://www.topyacht.net.au/results/2023/hirw/index.htm"
-    - "https://www.topyacht.net.au/results/2022/hirw/index.htm"
+      - https://www.topyacht.net.au/results/2025/hirw/index.htm
+      - https://www.topyacht.net.au/results/2024/hirw/index.htm
+      - https://www.topyacht.net.au/results/2023/hirw/index.htm
+      - https://www.topyacht.net.au/results/2022/hirw/index.htm
     boats: null
+    email: sailing@hamiltonisland.com.au
   townsvilleyachtclub.com.au:
-    shortName: "TYC"
-    state: "QLD"
-    fullName: "Townsville Yacht Club"
+    shortName: TYC
+    state: QLD
+    fullName: Townsville Yacht Club
     excluded: null
     aliases:
-    - "Townsville Cruising Yacht Club"
-    - "TCYC"
+      - Townsville Cruising Yacht Club
+      - TCYC
     topyacht:
-    - "https://www.topyacht.net.au/results/2022/mirw/index.htm"
-    - "https://www.topyacht.net.au/results/2023/mirw/index.htm"
-    - "https://www.topyacht.net.au/results/2024/mirw/index.htm"
-    - "https://www.topyacht.net.au/results/2025/mirw/index.htm"
+      - https://www.topyacht.net.au/results/2022/mirw/index.htm
+      - https://www.topyacht.net.au/results/2023/mirw/index.htm
+      - https://www.topyacht.net.au/results/2024/mirw/index.htm
+      - https://www.topyacht.net.au/results/2025/mirw/index.htm
     boats: null
+    email: sailing@townsvilleyachtclub.com.au
   app.sailsys.com/au/club/27/profile:
-    shortName: "SHCC"
-    state: "NSW"
-    fullName: "Sydney Harbour Combined Clubs"
+    shortName: SHCC
+    state: NSW
+    fullName: Sydney Harbour Combined Clubs
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: null
   wyc.org.au:
-    shortName: "WYC"
-    state: "NSW"
-    fullName: "Wollongong Yacht Club"
+    shortName: WYC
+    state: NSW
+    fullName: Wollongong Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@wyc.org.au
   pesc.com.au:
-    shortName: "PESC"
-    state: "TAS"
-    fullName: "Port Esperance Sailing Club"
+    shortName: PESC
+    state: TAS
+    fullName: Port Esperance Sailing Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@pesc.com.au
   multihullcruising.org.au:
-    shortName: "MHYC"
-    state: "NSW"
-    fullName: "Multihull Cruising Yacht Club"
+    shortName: MHYC
+    state: NSW
+    fullName: Multihull Cruising Yacht Club
     excluded: true
     aliases: []
     topyacht: null
     boats: null
+    email: null
   rhkyc.org.hk:
-    shortName: "RHKYC"
-    state: "HongKong"
-    fullName: "Royal Hong Kong Yacht Club"
+    shortName: RHKYC
+    state: HongKong
+    fullName: Royal Hong Kong Yacht Club
     excluded: true
     aliases: []
     topyacht: null
     boats: null
+    email: null
   jbcyc.com.au:
-    shortName: "JBCYC"
-    state: "NSW"
-    fullName: "Jervis Bay Cruising Yacht Club"
+    shortName: JBCYC
+    state: NSW
+    fullName: Jervis Bay Cruising Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@jbcyc.com.au
   ketteringyachtclub.org.au:
-    shortName: "KYC"
-    state: "TAS"
-    fullName: "Kettering Yacht Club"
+    shortName: KYC
+    state: TAS
+    fullName: Kettering Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@ketteringyachtclub.org.au
   sailsys.com.au:
-    shortName: "SAILSYS"
-    state: "NSW"
-    fullName: "Sailsys"
+    shortName: SAILSYS
+    state: NSW
+    fullName: Sailsys
     excluded: null
     aliases: []
     topyacht: null
     boats:
-    - "530-thedrivers"
+      - 530-thedrivers
+    email: hello@sailsys.com.au
   sailportstephens.com.au:
-    shortName: "SPS"
-    state: "NSW"
-    fullName: "Sail Port Stephens"
+    shortName: SPS
+    state: NSW
+    fullName: Sail Port Stephens
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@sailportstephens.com.au
   opuacruisingclub.co.nz:
-    shortName: "OCC"
-    state: "NZ"
-    fullName: "Opua Cruising Club"
+    shortName: OCC
+    state: NZ
+    fullName: Opua Cruising Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@opuacruisingclub.co.nz
   tcbyachtclub.wixsite.com:
-    shortName: "TCYC"
-    state: "QLD"
-    fullName: "Tin Can Bay Yacht Club"
+    shortName: TCYC
+    state: QLD
+    fullName: Tin Can Bay Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: tincanbayyachtclub@outlook.com
   iycsailing.asn.au:
-    shortName: "IYC"
-    state: "NSW"
-    fullName: "Illawarra Yacht Club"
+    shortName: IYC
+    state: NSW
+    fullName: Illawarra Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@iycsailing.asn.au
   rpnyc.org.nz:
-    shortName: "RPNYC"
-    state: "NZ"
-    fullName: "Royal Port Nicholson Yacht Club"
+    shortName: RPNYC
+    state: NZ
+    fullName: Royal Port Nicholson Yacht Club
     excluded: null
     aliases: []
     topyacht: null
     boats: null
+    email: sailing@rpnyc.org.nz
   yacht.org.nz:
-    shortName: "TYPBC"
-    state: "NZ"
-    fullName: "Tauranga Yacht & Power Boat Club Inc"
+    shortName: TYPBC
+    state: NZ
+    fullName: Tauranga Yacht & Power Boat Club Inc
     excluded: null
     aliases: null
     topyacht: null
     boats: null
+    email: sailing@yacht.org.nz
 boatClubOverrides:
-- sailNumber: "20"
-  name: "Rhett's Rig"
-  clubId: "sailportstephens.com.au"
-- sailNumber: "125"
-  name: "Bare Necessities"
-  clubId: "wmyc.com.au"
-- sailNumber: "KKKK"
-  name: "Mooloolaba Team Orange"
-  clubId: "mooloolabayachtclub.com.au"
-- sailNumber: "FFF"
-  name: "Mooloolaba Team Orange"
-  clubId: "mooloolabayachtclub.com.au"
-- sailNumber: "J"
-  name: "Mooloolaba Team Orange"
-  clubId: "mooloolabayachtclub.com.au"
-- sailNumber: "K"
-  name: "Mooloolaba Team Orange"
-  clubId: "mooloolabayachtclub.com.au"
-- sailNumber: "MYC10"
-  name: "Joss"
-  clubId: "myc.org.au"
-- sailNumber: "MH137"
-  name: "Plum Crazy"
-  clubId: "myc.org.au"
+  - sailNumber: '20'
+    name: Rhett's Rig
+    clubId: sailportstephens.com.au
+  - sailNumber: '125'
+    name: Bare Necessities
+    clubId: wmyc.com.au
+  - sailNumber: KKKK
+    name: Mooloolaba Team Orange
+    clubId: mooloolabayachtclub.com.au
+  - sailNumber: FFF
+    name: Mooloolaba Team Orange
+    clubId: mooloolabayachtclub.com.au
+  - sailNumber: J
+    name: Mooloolaba Team Orange
+    clubId: mooloolabayachtclub.com.au
+  - sailNumber: K
+    name: Mooloolaba Team Orange
+    clubId: mooloolabayachtclub.com.au
+  - sailNumber: MYC10
+    name: Joss
+    clubId: myc.org.au
+  - sailNumber: MH137
+    name: Plum Crazy
+    clubId: myc.org.au
 noclub:
-- "1255-melody-swansondart"
-- "1161-wildlife-etchells"
-- "6689-copernicus-radford12"
-- "1088-corum-farr36modified"
-- "HHH-sko-elliott6"
-- "12844-upup"
-- "46075-savannahgirl-swan46"
-- "5865-pintaii-beneteaufirst317"
-- "V2-vanilla2-dufour560gl"
-- "EKA15-swift-cruisingetchells"
-- "DAUS179-imagination"
-- "NH555-gramarye-tophatmk3"
-- "5522-infraction-bavariamatch42"
-- "4-crazysailing"
-- "7115-idlefrets-sonata7"
-- "YAUS59-evie-yngling"
-- "6479-misky-northshore340"
-- "1919-losthorizon-archambaultgrandsurprise"
-- "9448-cannonball"
-- "6776-danceswithwaves-beneteaufirst407"
-- "11634-fishface"
-- "7060-spiritbird-farr30"
-- "1487-jindavik-etchells"
-- "1992-itcouldbebunnies-sabre"
+  - 1255-melody-swansondart
+  - 1161-wildlife-etchells
+  - 6689-copernicus-radford12
+  - 1088-corum-farr36modified
+  - HHH-sko-elliott6
+  - 12844-upup
+  - 46075-savannahgirl-swan46
+  - 5865-pintaii-beneteaufirst317
+  - V2-vanilla2-dufour560gl
+  - EKA15-swift-cruisingetchells
+  - DAUS179-imagination
+  - NH555-gramarye-tophatmk3
+  - 5522-infraction-bavariamatch42
+  - 4-crazysailing
+  - 7115-idlefrets-sonata7
+  - YAUS59-evie-yngling
+  - 6479-misky-northshore340
+  - 1919-losthorizon-archambaultgrandsurprise
+  - 9448-cannonball
+  - 6776-danceswithwaves-beneteaufirst407
+  - 11634-fishface
+  - 7060-spiritbird-farr30
+  - 1487-jindavik-etchells
+  - 1992-itcouldbebunnies-sabre

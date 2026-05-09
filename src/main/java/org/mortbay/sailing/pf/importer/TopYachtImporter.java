@@ -1,5 +1,26 @@
 package org.mortbay.sailing.pf.importer;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
 import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.jsoup.Jsoup;
@@ -16,27 +37,6 @@ import org.mortbay.sailing.pf.data.Series;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.Duration;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 /**
  * Imports race results from TopYacht club pages.
@@ -882,6 +882,7 @@ public class TopYachtImporter
             if (seed == null)
                 return;
             club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
+                seed.email(),
                 seed.aliases() != null ? seed.aliases() : List.of(),
                 seed.topyachtUrls() != null ? seed.topyachtUrls() : List.of(),
                 List.of(), null);
@@ -916,7 +917,7 @@ public class TopYachtImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+            club.email(), club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
     }
 
     private static Duration parseElapsed(String text)
