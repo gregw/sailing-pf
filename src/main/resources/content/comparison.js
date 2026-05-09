@@ -666,7 +666,7 @@ function renderInlineDivisionChart() {
             };
         });
 
-        xAxisTitle = '1/PF';
+        xAxisTitle = speedFactorAxisTitle('1/PF');
 
     } else {
         // Common-factor mode: all traces share the same x-axis factor (inverted to
@@ -755,7 +755,7 @@ function renderInlineDivisionChart() {
             };
         });
 
-        xAxisTitle = inlineDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + inlineDivXFactor;
+        xAxisTitle = speedFactorAxisTitle(inlineDivXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + inlineDivXFactor);
     }
 
     const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;

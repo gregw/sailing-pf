@@ -2173,7 +2173,7 @@ function renderDivisionChart(data) {
                 };
             });
 
-            xAxisTitle = showRfLine && rfFinishers.length > 0 ? '1/PF, 1/RF' : '1/PF';
+            xAxisTitle = speedFactorAxisTitle(showRfLine && rfFinishers.length > 0 ? '1/PF, 1/RF' : '1/PF');
 
         } else {
             // Common-factor mode: all traces use the same x-axis factor (inverted to
@@ -2191,7 +2191,7 @@ function renderDivisionChart(data) {
                 .filter(f => getX(f) != null)
                 .sort((a, b) => getX(a) - getX(b));
             if (plotFinishers.length === 0) {
-                xAxisTitle = divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor;
+                xAxisTitle = speedFactorAxisTitle(divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor);
                 return {traces, annotations, xAxisTitle};
             }
 
@@ -2315,14 +2315,14 @@ function renderDivisionChart(data) {
                 };
             });
 
-            xAxisTitle = divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor;
+            xAxisTitle = speedFactorAxisTitle(divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor);
         }
         return {traces, annotations, xAxisTitle};
     }
 
     let allTraces = [];
     let allAnnotations = [];
-    let xAxisTitle = '1/PF';
+    let xAxisTitle = speedFactorAxisTitle('1/PF');
     groupEntries.forEach(([divName, groupFinishers], divIdx) => {
         const lighten = isMulti ? Math.min(0.5, divIdx * 0.18) : 0;
         const divLabel = isMulti ? (divName || 'Results') : null;
@@ -2905,9 +2905,9 @@ function renderSeriesChartForDivision(divName, opts) {
 
     const layout = {
         xaxis: {
-            title: useCommon
+            title: speedFactorAxisTitle(useCommon
                 ? (divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor)
-                : (showRfLine && anyRfData ? '1/PF, 1/RF' : '1/PF'),
+                : (showRfLine && anyRfData ? '1/PF, 1/RF' : '1/PF')),
             rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
         },
         yaxis: {

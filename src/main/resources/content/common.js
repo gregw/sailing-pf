@@ -13,6 +13,14 @@ function infoBtn(anchor, tip) {
     return `<a href="ui-tips.md#${anchor}" class="info-btn" data-tip="${escapedTip}" target="_blank" onclick="event.stopPropagation()">ⓘ</a>`;
 }
 
+// Axis title for a "speed factor" (1/factor) x-axis. The formula argument is the
+// expression after the colon, e.g. '1/PF' or '1/PF, 1/RF'. Plotly renders axis
+// titles inside SVG, where the .info-btn CSS hover tooltip does not fire — so the
+// ⓘ is a plain link to the speed-factor section in UI-Tips.
+function speedFactorAxisTitle(formula) {
+    return `Speed Factor <a href="ui-tips.md#speed-factor" class="info-btn" target="_blank">ⓘ</a>: ${formula}`;
+}
+
 async function fetchJson(url, options) {
     try {
         const resp = await fetch(url, options);
