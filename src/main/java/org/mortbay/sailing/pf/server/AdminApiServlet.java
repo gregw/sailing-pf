@@ -738,6 +738,11 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleClubs(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
+        if ("/emails".equals(sub))
+        {
+            handleClubEmails(req, resp);
+            return;
+        }
         if (sub.isEmpty() || "/".equals(sub))
         {
             int page = parseIntParam(req, "page", 0);
@@ -808,6 +813,59 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJson(resp, club);
         }
+    }
+
+    /**
+     * GET /api/clubs/emails — authenticated; returns email list for selected ids or current filter.
+     */
+    private void handleClubEmails(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        if (!isAuthenticated(req))
+        {
+            resp.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+
+        Map<String, Club> all = new LinkedHashMap<>(store.clubSeed());
+        all.putAll(store.clubs());
+
+        String idsParam = req.getParameter("ids");
+        List<String> emails;
+
+        if (idsParam != null && !idsParam.isBlank())
+        {
+            Set<String> ids = new HashSet<>(Arrays.asList(idsParam.split(",")));
+            emails = ids.stream()
+                .map(id ->
+                {
+                    Club c = all.get(id.trim());
+                    return c != null ? c.email() : null;
+                })
+                .filter(e -> e != null && !e.isBlank())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        }
+        else
+        {
+            String q = req.getParameter("q");
+            String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
+            boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+
+            emails = all.values().stream()
+                .filter(c -> showExcluded || !c.excluded())
+                .filter(c -> lower == null
+                    || c.id().toLowerCase().contains(lower)
+                    || (c.shortName() != null && c.shortName().toLowerCase().contains(lower))
+                    || (c.longName() != null && c.longName().toLowerCase().contains(lower)))
+                .map(Club::email)
+                .filter(e -> e != null && !e.isBlank())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        }
+
+        writeJson(resp, Map.of("emails", emails));
     }
 
     /**

@@ -1096,6 +1096,9 @@ function applyMergeAuthState() {
     if (ecEmail2) ecEmail2.style.display = w ? 'none' : '';
     if (ecMsg2) ecMsg2.style.display = w ? 'none' : '';
 
+    const copyEmailsBtn = document.getElementById('copy-emails-btn');
+    if (copyEmailsBtn) copyEmailsBtn.style.display = w ? '' : 'none';
+
     // Pre-populate email fields with remembered value
     if (!w) {
         const ids = ['edit-email', 'edit-email-designs', 'edit-club-email', 'edit-request-email-clubs'];
@@ -1722,6 +1725,33 @@ function hideEditClubPanel() {
     const panel = document.getElementById('edit-panel-clubs');
     if (panel) panel.style.display = 'none';
     editingClubId = null;
+}
+
+async function copyClubEmails() {
+    const selected = [...state.selected.clubs];
+    let url;
+    if (selected.length > 0) {
+        url = `/api/clubs/emails?ids=${encodeURIComponent(selected.join(','))}`;
+    } else {
+        const q = document.getElementById('q-clubs').value;
+        url = `/api/clubs/emails?q=${encodeURIComponent(q)}`;
+        const showExcludedEl = document.getElementById('show-excluded-clubs');
+        if (showExcludedEl?.checked) url += '&showExcluded=true';
+        const hideEmptyEl = document.getElementById('hide-empty-clubs');
+        if (hideEmptyEl?.checked) url += '&hideEmpty=true';
+    }
+    const data = await fetchJson(url);
+    if (!data) return;
+    const btn = document.getElementById('copy-emails-btn');
+    if (!data.emails.length) {
+        btn.textContent = 'No emails';
+        setTimeout(() => btn.textContent = 'Copy emails', 2000);
+        return;
+    }
+    await navigator.clipboard.writeText(data.emails.join(', '));
+    const orig = btn.textContent;
+    btn.textContent = `Copied ${data.emails.length}`;
+    setTimeout(() => btn.textContent = orig, 2000);
 }
 
 function buildClubEditBody() {

@@ -22,6 +22,9 @@
         <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show
             excluded</label>
         <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-clubs" onchange="doSearch('clubs')"> Hide empty</label>
+        <button id="copy-emails-btn" style="display:none;margin-left:0.5rem;" onclick="copyClubEmails()" title="Copy email addresses of selected clubs (or all visible) to clipboard">
+            Copy emails
+        </button>
     </div>
     <div class="table-scroll" style="height:calc(55vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;">
         <table>
