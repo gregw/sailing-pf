@@ -979,7 +979,7 @@ function clearSelection(entity) {
     hideExcludePanel(entity);
     if (entity === 'boats') {
         hideEditPanel();
-        hideEditClubPanel();
+        hideBoatClubPanel();
     }
     if (entity === 'designs') { hideIgnorePanel(); hideEditDesignPanel(); }
     if (entity === 'clubs') {
@@ -1454,7 +1454,7 @@ function hideEditPanel() {
     editingBoatId = null;
 }
 
-async function showEditClubPanel() {
+async function showBoatClubPanel() {
     const panel = document.getElementById('edit-club-panel-boats');
     const sel = document.getElementById('edit-club-select');
     const ids = Array.from(state.selected.boats);
@@ -1484,7 +1484,7 @@ async function showEditClubPanel() {
     panel.style.display = '';
 }
 
-function hideEditClubPanel() {
+function hideBoatClubPanel() {
     const panel = document.getElementById('edit-club-panel-boats');
     if (panel) panel.style.display = 'none';
 }
@@ -1739,17 +1739,23 @@ async function copyClubEmails() {
         if (hideEmptyEl?.checked) url += '&hideEmpty=true';
     }
     const data = await fetchJson(url);
-    if (!data) return;
+    if (!data || !data.emails) return;
     const btn = document.getElementById('copy-emails-btn');
     if (!data.emails.length) {
         btn.textContent = 'No emails';
         setTimeout(() => btn.textContent = 'Copy emails', 2000);
         return;
     }
-    await navigator.clipboard.writeText(data.emails.join(', '));
-    const orig = btn.textContent;
-    btn.textContent = `Copied ${data.emails.length}`;
-    setTimeout(() => btn.textContent = orig, 2000);
+    const text = data.emails.join(', ');
+    try {
+        await navigator.clipboard.writeText(text);
+        const orig = btn.textContent;
+        btn.textContent = `Copied ${data.emails.length}`;
+        setTimeout(() => btn.textContent = orig, 2000);
+    } catch (e) {
+        console.error('Clipboard write failed:', e);
+        window.prompt(`Copy ${data.emails.length} emails (Ctrl+A, Ctrl+C):`, text);
+    }
 }
 
 function buildClubEditBody() {

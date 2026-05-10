@@ -1,0 +1,9 @@
+# Test fixture YAML for the testdata DataStore. The testdata uses myc.com.au as
+# the club id (see imported/clubs/myc.com.au.json). YAML is the source of truth
+# for longName / state / excluded / email / aliases / topyachtUrls.
+clubs:
+  myc.com.au:
+    shortName: MYC
+    state: NSW
+    fullName: Manly Yacht Club
+    aliases: [ ]
