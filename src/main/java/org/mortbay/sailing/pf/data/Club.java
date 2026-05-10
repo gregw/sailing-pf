@@ -19,12 +19,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 public record Club(
     String id,                  // website domain or domain/path, e.g. "myc.com.au" or "rycv.com.au/ppnyc"
     String shortName,           // e.g. "MYC"
-    String longName,            // e.g. "Manly Yacht Club"
-    String state,               // Australian state code, e.g. "NSW", "VIC"; null if unknown
-    boolean excluded,           // true if excluded from analysis (e.g. multihull club, non-Australian)
-    String email,               // club contact email address; null if unknown
-    List<String> aliases,       // alternate short names or former domains
-    List<String> topyachtUrls,  // TopYacht club index page URLs to scan for results
+    @JsonIgnore String longName,            // sourced from clubs.yaml
+    @JsonIgnore String state,               // sourced from clubs.yaml
+    @JsonIgnore boolean excluded,           // sourced from clubs.yaml
+    @JsonIgnore String email,               // sourced from clubs.yaml
+    @JsonIgnore List<String> aliases,       // sourced from clubs.yaml
+    @JsonIgnore List<String> topyachtUrls,  // sourced from clubs.yaml
     List<Series> series,        // series run by this club
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Club>
@@ -34,12 +34,6 @@ public record Club(
     public Club withLoadedAt(Instant t)
     {
         return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtUrls, series, t);
-    }
-
-    /** Returns a copy with the excluded flag changed. */
-    public Club withExcluded(boolean excluded)
-    {
-        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtUrls, series, loadedAt);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality

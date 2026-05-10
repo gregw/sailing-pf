@@ -841,7 +841,7 @@ public class AdminApiServlet extends HttpServlet
                     Club c = all.get(id.trim());
                     return c != null ? c.email() : null;
                 })
-                .filter(e -> e != null && !e.isBlank())
+                .filter(e -> e != null && !e.isBlank() && e.contains("@"))
                 .distinct()
                 .sorted()
                 .collect(Collectors.toList());
@@ -950,19 +950,35 @@ public class AdminApiServlet extends HttpServlet
             String newEmail = body.containsKey("email")
                 ? nullIfBlank((String)body.get("email")) : club.email();
 
-            if (java.util.Objects.equals(newShortName, club.shortName())
-                && java.util.Objects.equals(newLongName, club.longName())
-                && java.util.Objects.equals(newState, club.state())
-                && java.util.Objects.equals(newEmail, club.email()))
+            boolean shortNameChanged = !java.util.Objects.equals(newShortName, club.shortName());
+            boolean metaChanged = !java.util.Objects.equals(newLongName, club.longName())
+                || !java.util.Objects.equals(newState, club.state())
+                || !java.util.Objects.equals(newEmail, club.email());
+
+            if (!shortNameChanged && !metaChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true));
                 return;
             }
 
-            Club updated = new Club(club.id(), newShortName, newLongName, newState,
-                club.excluded(), newEmail, club.aliases(), club.topyachtUrls(), club.series(), null);
-            store.putClub(updated);
-            store.save();
+            // longName, state, email are YAML-owned — write to clubs.yaml.
+            if (metaChanged)
+                store.updateClubMeta(clubId, newLongName, newState, newEmail);
+
+            // shortName is JSON-owned — rewrite the Club JSON record. Re-fetch first so
+            // we pick up any YAML-side updates from the call above.
+            if (shortNameChanged)
+            {
+                Club fresh = store.clubs().get(clubId);
+                if (fresh == null)
+                    fresh = store.clubSeed().get(clubId);
+                Club updated = new Club(fresh.id(), newShortName,
+                    fresh.longName(), fresh.state(), fresh.excluded(), fresh.email(),
+                    fresh.aliases(), fresh.topyachtUrls(), fresh.series(), null);
+                store.putClub(updated);
+                store.save();
+            }
+
             if (cache != null)
                 cache.refreshIndexes();
 

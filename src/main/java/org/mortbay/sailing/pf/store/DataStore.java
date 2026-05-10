@@ -894,22 +894,75 @@ public class DataStore
     }
 
     /**
-     * Toggles the excluded flag on a club. If the club doesn't yet have a persisted record,
-     * one is created from the seed.
+     * Toggles the excluded flag on a club. The flag is YAML-owned: this writes
+     * {@code clubs.yaml} (auto-creating the entry if needed) and refreshes the
+     * in-memory seed and the corresponding entry in the persisted clubs map.
      */
     public void setClubExcluded(String clubId, boolean excluded)
     {
         requireStarted();
-        Club club = clubs.get(clubId);
-        if (club == null)
+        Club existing = clubs.get(clubId);
+        Club seed = clubSeed.get(clubId);
+        if (existing == null && seed == null)
+            throw new IllegalArgumentException("Unknown club: " + clubId);
+
+        String shortNameIfNew = existing != null ? existing.shortName()
+            : seed.shortName();
+        boolean changed = ClubLoader.setClubExcluded(configDir, clubId, shortNameIfNew, excluded);
+        if (!changed)
+            return;
+
+        clubSeed = ClubLoader.load(configDir);
+        if (existing != null)
+            clubs.put(clubId, enrichWithSeed(existing));
+    }
+
+    /**
+     * Updates the YAML-owned metadata fields ({@code longName}, {@code state}, {@code email})
+     * for a club. Each value is written verbatim — passing {@code null} clears the field.
+     * Auto-creates the YAML entry if missing. Refreshes the in-memory seed and the
+     * corresponding entry in the persisted clubs map.
+     */
+    public void updateClubMeta(String clubId, String longName, String state, String email)
+    {
+        requireStarted();
+        Club existing = clubs.get(clubId);
+        Club seed = clubSeed.get(clubId);
+        if (existing == null && seed == null)
+            throw new IllegalArgumentException("Unknown club: " + clubId);
+
+        String shortNameIfNew = existing != null ? existing.shortName()
+            : seed.shortName();
+        boolean changed = ClubLoader.updateClubMeta(configDir, clubId, shortNameIfNew,
+            longName, state, email);
+        if (!changed)
+            return;
+
+        clubSeed = ClubLoader.load(configDir);
+        if (existing != null)
+            clubs.put(clubId, enrichWithSeed(existing));
+    }
+
+    /**
+     * Returns a copy of {@code json} with the YAML-owned fields populated from the matching
+     * entry in {@link #clubSeed}. If no seed entry exists, leaves the YAML fields empty and
+     * logs a warning — the club exists in JSON but has no clubs.yaml entry.
+     */
+    private Club enrichWithSeed(Club json)
+    {
+        Club seed = clubSeed.get(json.id());
+        if (seed == null)
         {
-            Club seed = clubSeed.get(clubId);
-            if (seed == null)
-                throw new IllegalArgumentException("Unknown club: " + clubId);
-            club = seed;
+            LOG.warn("Club {} loaded from JSON has no entry in clubs.yaml — YAML-owned fields will be empty",
+                json.id());
+            return new Club(json.id(), json.shortName(),
+                null, null, false, null, List.of(), List.of(),
+                json.series(), json.loadedAt());
         }
-        putClub(club.withExcluded(excluded));
-        save();
+        return new Club(json.id(), json.shortName(),
+            seed.longName(), seed.state(), seed.excluded(), seed.email(),
+            seed.aliases(), seed.topyachtUrls(),
+            json.series(), json.loadedAt());
     }
 
     /** Returns true if the boat has been manually excluded from analysis via the admin UI. */
@@ -1492,6 +1545,9 @@ public class DataStore
         loadExclusions();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
+        // YAML is the source of truth for longName/state/excluded/email/aliases/topyachtUrls;
+        // populate those fields on the in-memory Club records from clubSeed.
+        clubs.replaceAll((id, c) -> enrichWithSeed(c));
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
 

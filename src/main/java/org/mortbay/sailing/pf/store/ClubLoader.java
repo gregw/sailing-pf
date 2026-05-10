@@ -299,6 +299,79 @@ class ClubLoader
     }
 
     /**
+     * Sets the {@code excluded} flag for a club in clubs.yaml. If the club has no entry yet,
+     * one is auto-created using {@code shortNameIfNew}. Returns true if the file was changed.
+     */
+    static boolean setClubExcluded(Path configDir, String clubId,
+                                   String shortNameIfNew, boolean excluded)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return false;
+        if (seedFile.clubs == null)
+            seedFile.clubs = new LinkedHashMap<>();
+
+        SeedEntry entry = seedFile.clubs.get(clubId);
+        boolean created = false;
+        if (entry == null)
+        {
+            entry = new SeedEntry();
+            entry.shortName = shortNameIfNew;
+            seedFile.clubs.put(clubId, entry);
+            created = true;
+        }
+
+        Boolean newValue = excluded ? Boolean.TRUE : null;
+        if (!created && Objects.equals(entry.excluded, newValue))
+            return false;
+
+        entry.excluded = newValue;
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: club {} excluded={}", clubId, excluded);
+        return true;
+    }
+
+    /**
+     * Updates {@code fullName}, {@code state}, and {@code email} for a club in clubs.yaml.
+     * Each value is written verbatim (including null, which clears the field). If the club
+     * has no entry yet, one is auto-created using {@code shortNameIfNew}. Returns true if
+     * the file was changed.
+     */
+    static boolean updateClubMeta(Path configDir, String clubId, String shortNameIfNew,
+                                  String longName, String state, String email)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return false;
+        if (seedFile.clubs == null)
+            seedFile.clubs = new LinkedHashMap<>();
+
+        SeedEntry entry = seedFile.clubs.get(clubId);
+        boolean created = false;
+        if (entry == null)
+        {
+            entry = new SeedEntry();
+            entry.shortName = shortNameIfNew;
+            seedFile.clubs.put(clubId, entry);
+            created = true;
+        }
+
+        if (!created
+            && Objects.equals(entry.fullName, longName)
+            && Objects.equals(entry.state, state)
+            && Objects.equals(entry.email, email))
+            return false;
+
+        entry.fullName = longName;
+        entry.state = state;
+        entry.email = email;
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: club {} meta updated (longName={}, state={}, email={})",
+            clubId, longName, state, email);
+        return true;
+    }
+
+    /**
      * Removes a boatId from clubs.yaml — from {@code noclub} and all per-club {@code boats} lists.
      */
     static void removeBoatId(Path configDir, String boatId)
