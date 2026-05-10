@@ -36,7 +36,7 @@ public record Club(
         return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtUrls, series, t);
     }
 
-    // loadedAt is loading metadata, not domain data — exclude from equality
+    //mode/ loadedAt is loading metadata, not domain data — exclude from equality
     @Override
     public boolean equals(Object o)
     {

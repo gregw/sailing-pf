@@ -424,7 +424,7 @@ function debounceSearch(entity) {
 
 function doSearch(entity) {
     state.pages[entity] = 0;
-    document.getElementById('detail-' + entity).classList.remove('visible');
+    document.getElementById('detail-' + entity)?.classList.remove('visible');
     loadList(entity, 0);
 }
 
@@ -534,7 +534,7 @@ function renderTable(entity, items, append) {
         tr.onclick = () => {
             if (entity === 'races') state.currentRaceIdx = globalIdx;
             if (entity === 'boats') { state.currentBoatIdx = globalIdx; }
-            loadDetail(entity, item.id);
+            if (entity !== 'clubs' && entity !== 'designs') loadDetail(entity, item.id);
         };
         cols.forEach(col => {
             const td = document.createElement('td');
@@ -638,8 +638,6 @@ async function loadDetail(entity, id, {scroll = true} = {}) {
     if (!data) return;
 
     const panel = document.getElementById('detail-' + entity);
-    const pre   = document.getElementById('pre-' + entity);
-    pre.innerHTML = renderJsonTree(data, 0);
 
     if (entity === 'races') {
         setupRaceDivisionChart(id, data);
@@ -662,14 +660,14 @@ async function loadDetail(entity, id, {scroll = true} = {}) {
         updateBoatNav();
     }
 
-    panel.classList.add('visible');
+    if (panel) panel.classList.add('visible');
     if (scroll) {
         if (entity === 'races') {
             document.getElementById('division-section-races').scrollIntoView({behavior: 'smooth', block: 'start'});
         } else if (entity === 'boats') {
             const heading = document.getElementById('pf-boat-heading');
             if (heading) window.scrollTo(0, heading.getBoundingClientRect().top + window.scrollY);
-        } else {
+        } else if (panel) {
             panel.scrollIntoView({behavior: 'smooth', block: 'start'});
         }
     }

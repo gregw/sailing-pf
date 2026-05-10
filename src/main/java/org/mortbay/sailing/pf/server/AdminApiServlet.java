@@ -781,6 +781,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("shortName", c.shortName());
                     row.put("longName", c.longName());
                     row.put("state", c.state());
+                    row.put("email", c.email());
                     long seriesCount = c.series() == null ? 0
                         : c.series().stream().filter(s -> !s.isCatchAll()).count();
                     row.put("boats", boatCount > 0 ? boatCount : null);
@@ -811,7 +812,20 @@ public class AdminApiServlet extends HttpServlet
                 resp.sendError(404);
                 return;
             }
-            writeJson(resp, club);
+            // Manually build the response: longName/state/excluded/email/aliases/topyachtUrls
+            // are @JsonIgnore on Club (YAML-owned, not persisted to JSON), so direct Jackson
+            // serialization would strip them from the API response.
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("id", club.id());
+            body.put("shortName", club.shortName());
+            body.put("longName", club.longName());
+            body.put("state", club.state());
+            body.put("excluded", club.excluded());
+            body.put("email", club.email());
+            body.put("aliases", club.aliases());
+            body.put("topyachtUrls", club.topyachtUrls());
+            body.put("series", club.series());
+            writeJson(resp, body);
         }
     }
 

@@ -3,8 +3,8 @@ clubs:
     shortName: "BBSC"
     state: "NSW"
     fullName: "Batemans Bay Sailing Club"
-    email: "sailing@bbsc.org.au, committee@bbsc.org.au"
     excluded: null
+    email: "sailing@bbsc.org.au, committee@bbsc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -12,8 +12,8 @@ clubs:
     shortName: "BYC"
     state: "TAS"
     fullName: "Bellerive Yacht Club"
-    email: "sailing@byc.org.au, office@byc.org.au"
     excluded: null
+    email: "sailing@byc.org.au, office@byc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -21,8 +21,8 @@ clubs:
     shortName: "BYC"
     state: "VIC"
     fullName: "Ballarat Yacht Club"
-    email: "sailing@ballaratyachtclub.com.au, commodore@ballaratyachtclub.com.au"
     excluded: null
+    email: "sailing@ballaratyachtclub.com.au, commodore@ballaratyachtclub.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -30,8 +30,8 @@ clubs:
     shortName: "CYCA"
     state: "NSW"
     fullName: "Cruising Yacht Club of Australia"
-    email: "sailing@cyca.com.au, cyca@cyca.com.au"
     excluded: null
+    email: "sailingoffice@cyca.com.au"
     aliases:
       - "CYCA/SDYC"
     topyacht:
@@ -42,8 +42,8 @@ clubs:
     shortName: "CYCSA"
     state: "SA"
     fullName: "Cruising Yacht Club of SA"
-    email: "sailing@cycsa.com.au, reception@cycsa.com.au"
     excluded: null
+    email: "sailing@cycsa.com.au, reception@cycsa.com.au"
     aliases: []
     topyacht:
       - "http://cycsa.com.au/results/2017/index.htm"
@@ -56,8 +56,8 @@ clubs:
     shortName: "HBYC"
     state: "VIC"
     fullName: "Hobsons Bay Yacht Club"
-    email: "racing@hbyc.org.au"
     excluded: null
+    email: "racing@hbyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -65,8 +65,8 @@ clubs:
     shortName: "HYC"
     state: "VIC"
     fullName: "Hastings Yacht Club"
-    email: "sailing@hastingsyachtclub.org.au, commodore@hastingsyachtclub.org.au"
     excluded: null
+    email: "sailing@hastingsyachtclub.org.au, commodore@hastingsyachtclub.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -75,6 +75,7 @@ clubs:
     state: "VIC"
     fullName: "Martha Cove Yacht Squadron"
     excluded: null
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -82,8 +83,8 @@ clubs:
     shortName: "MYC"
     state: "VIC"
     fullName: "Mornington Yacht Club"
-    email: "sailing@morningtonyc.net.au"
     excluded: null
+    email: "sailing@morningtonyc.net.au"
     aliases: []
     topyacht: null
     boats: null
@@ -91,8 +92,8 @@ clubs:
     shortName: "PASC"
     state: "SA"
     fullName: "Port Adelaide Sailing Club"
-    email: "sailing@portadelaidesailingclub.com, commodore@pasc.com.au"
     excluded: null
+    email: "sailing@portadelaidesailingclub.com, commodore@pasc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -100,8 +101,8 @@ clubs:
     shortName: "PCSC"
     state: "QLD"
     fullName: "Port Curtis Sailing Club"
-    email: "sailing@gyc.com.au, admin@gyc.com.au"
     excluded: null
+    email: "sailing@gyc.com.au, admin@gyc.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/pcsc/2020/club/index.htm"
@@ -112,8 +113,8 @@ clubs:
     shortName: "PDYC"
     state: "TAS"
     fullName: "Port Dalrymple Yacht Club"
-    email: "commodore@pdyc.org.au"
     excluded: null
+    email: "commodore@pdyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -121,8 +122,8 @@ clubs:
     shortName: "PLYC"
     state: "SA"
     fullName: "Port Lincoln Yacht Club"
-    email: "sailing@plyc.com.au, info@plyc.com.au"
     excluded: null
+    email: "sailing@plyc.com.au, info@plyc.com.au"
     aliases: []
     topyacht:
       - "https://topyacht.net.au/results/plyc/lincolnweek/2024/"
@@ -134,6 +135,7 @@ clubs:
     state: "TAS"
     fullName: ""
     excluded: null
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -141,8 +143,8 @@ clubs:
     shortName: "RBYC"
     state: "VIC"
     fullName: "Royal Brighton Yacht Club"
-    email: "sailing@rbyc.org.au, boatingmanager@rbyc.org.au"
     excluded: null
+    email: "sailing@rbyc.org.au, boatingmanager@rbyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -150,8 +152,8 @@ clubs:
     shortName: "RFBYC"
     state: "WA"
     fullName: "Royal Freshwater Bay Yacht Club"
-    email: "sailing@rfbyc.asn.au"
     excluded: null
+    email: "sailing@rfbyc.asn.au"
     aliases: []
     topyacht: null
     boats: null
@@ -159,8 +161,8 @@ clubs:
     shortName: "RGYC"
     state: "VIC"
     fullName: "Royal Geelong Yacht Club"
-    email: "info@rgyc.com.au"
     excluded: null
+    email: "info@rgyc.com.au"
     aliases: []
     topyacht:
       - "https://topyacht.net.au/results/rgyc/2020-2021_keel_boat_club_series/"
@@ -179,8 +181,8 @@ clubs:
     shortName: "RMYS"
     state: "VIC"
     fullName: "Royal Melbourne Yacht Squadron"
-    email: "sailing@rmys.com.au"
     excluded: null
+    email: "sailing@rmys.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/rmys/2022/awkr22/index.htm"
@@ -189,8 +191,8 @@ clubs:
     shortName: "RQYS"
     state: "QLD"
     fullName: "Royal Queensland Yacht Squadron"
-    email: "sailingmanager@rqys.com.au"
     excluded: null
+    email: "sailingmanager@rqys.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -198,8 +200,8 @@ clubs:
     shortName: "RSAYS"
     state: "SA"
     fullName: "Royal South Australian Yacht Squadron"
-    email: "rsays@rsays.com.au"
     excluded: null
+    email: "rsays@rsays.com.au"
     aliases: []
     topyacht:
       - "https://topyacht.net.au/results/rsays/2022/vxonestate/index.htm"
@@ -208,8 +210,8 @@ clubs:
     shortName: "RYCT"
     state: "TAS"
     fullName: "Royal Yacht Club of Tasmania"
-    email: "sailing@ryct.org.au"
     excluded: null
+    email: "sailing@ryct.org.au"
     aliases: []
     topyacht:
       - "http://results.ryct.org.au/bruny20/"
@@ -233,6 +235,7 @@ clubs:
     state: "SA"
     fullName: ""
     excluded: null
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -240,8 +243,8 @@ clubs:
     shortName: "RYCV"
     state: "VIC"
     fullName: "Royal Yacht Club of Victoria"
-    email: "rycv@rycv.com.au"
     excluded: null
+    email: "rycv@rycv.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/rycv/2020/summer/index-summer.htm"
@@ -259,8 +262,8 @@ clubs:
     shortName: "SBSC"
     state: "VIC"
     fullName: "Safety Beach Sailing Club"
-    email: "keelboat@sbsc.net.au"
     excluded: null
+    email: "keelboat@sbsc.net.au"
     aliases: []
     topyacht: null
     boats: null
@@ -269,6 +272,7 @@ clubs:
     state: "VIC"
     fullName: ""
     excluded: null
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -276,8 +280,8 @@ clubs:
     shortName: "SYC"
     state: "VIC"
     fullName: "Sandringham Yacht Club"
-    email: "office@syc.com.au"
     excluded: null
+    email: "office@syc.com.au"
     aliases: []
     topyacht:
       - "https://topyacht.net.au/results/syc/2024/kblt/"
@@ -295,8 +299,8 @@ clubs:
     shortName: "MYC"
     state: "NSW"
     fullName: "Manly Yacht Club"
-    email: "sailing@myc.org.au"
     excluded: null
+    email: "sailing@myc.org.au"
     aliases: []
     topyacht: null
     boats:
@@ -307,8 +311,8 @@ clubs:
     shortName: "MHYC"
     state: "NSW"
     fullName: "Middle Harbour Yacht Club"
-    email: "sailing@mhyc.com.au"
     excluded: null
+    email: "sailing@mhyc.com.au"
     aliases: []
     topyacht:
       - "https://www.mhyc.com.au/files/results/2020/champsregattas/index.htm"
@@ -320,8 +324,8 @@ clubs:
     shortName: "SASC"
     state: "NSW"
     fullName: "Sydney Amateur Sailing Club"
-    email: "sailing@sasc.com.au, racing@sasc.com.au"
     excluded: null
+    email: "sailing@sasc.com.au, racing@sasc.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/sasc/2023/club/index.htm"
@@ -330,8 +334,8 @@ clubs:
     shortName: "RPEYC"
     state: "NSW"
     fullName: "Royal Prince Edward Yacht Club"
-    email: "sailing@rpeyc.com.au, secretary@rpeyc.com.au"
     excluded: null
+    email: "sailing@rpeyc.com.au, secretary@rpeyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -339,8 +343,8 @@ clubs:
     shortName: "RSYS"
     state: "NSW"
     fullName: "Royal Sydney Yacht Squadron"
-    email: "sailing@rsys.com.au"
     excluded: null
+    email: "sailing@rsys.com.au"
     aliases:
       - "RSYSAcademy"
       - "RSYS - Academy"
@@ -350,8 +354,8 @@ clubs:
     shortName: "RANSA"
     state: "NSW"
     fullName: "Royal Australian Naval Sailing Association"
-    email: "sailing@ransa.com.au"
     excluded: null
+    email: "sailing@ransa.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -359,8 +363,8 @@ clubs:
     shortName: "RPAYC"
     state: "NSW"
     fullName: "Royal Prince Alfred Yacht Club"
-    email: "sailing@rpayc.com.au"
     excluded: null
+    email: "sailing@rpayc.com.au"
     aliases:
       - "RPAYC-OTB"
     topyacht:
@@ -370,8 +374,8 @@ clubs:
     shortName: "BYRA"
     state: "NSW"
     fullName: "Bayview Yacht Racing Association"
-    email: "sailing@byra.org.au"
     excluded: null
+    email: "sailing@byra.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -379,8 +383,8 @@ clubs:
     shortName: "RMYC"
     state: "NSW"
     fullName: "Royal Motor Yacht Club Broken Bay"
-    email: "sailing@royalmotor.com.au, info@royalmotor.com.au"
     excluded: null
+    email: "sailing@royalmotor.com.au, info@royalmotor.com.au"
     aliases:
       - "RMYCBB"
     topyacht: null
@@ -389,8 +393,8 @@ clubs:
     shortName: "ASC"
     state: "NSW"
     fullName: "Avalon Sailing Club"
-    email: "sailing@avalonsailingclub.com.au, info@avalonsailingclub.com.au"
     excluded: null
+    email: "sailing@avalonsailingclub.com.au, info@avalonsailingclub.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -398,8 +402,8 @@ clubs:
     shortName: "BBYC"
     state: "NSW"
     fullName: "Botany Bay Yacht Club"
-    email: "sailing@bbyc.com.au"
     excluded: null
+    email: "sailing@bbyc.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/botanybay/2022/club_series/"
@@ -411,8 +415,8 @@ clubs:
     shortName: "CSC"
     state: "NSW"
     fullName: "Cronulla Sailing Club"
-    email: "sailing@cronullasailingclub.com.au, info@cronullasailingclub.com.au"
     excluded: null
+    email: "sailing@cronullasailingclub.com.au, info@cronullasailingclub.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -420,8 +424,8 @@ clubs:
     shortName: "RMYC (PH)"
     state: "NSW"
     fullName: "Royal Motor Yacht Club - Port Hacking"
-    email: "sailing@rmycph.com.au, admin@rmycph.com.au"
     excluded: null
+    email: "sailing@rmycph.com.au, admin@rmycph.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -429,8 +433,8 @@ clubs:
     shortName: "BSC"
     state: "NSW"
     fullName: "Balmain Sailing Club"
-    email: "sailing@balmainsailingclub.com.au"
     excluded: null
+    email: "sailing@balmainsailingclub.com.au"
     aliases:
       - "BSC Yacht"
       - "Balmain Sailing Club - Yacht"
@@ -446,8 +450,8 @@ clubs:
     shortName: "PRSC"
     state: "NSW"
     fullName: "Parramatta River Sailing Club"
-    email: "sailing@prsc.org.au"
     excluded: null
+    email: "sailing@prsc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -455,8 +459,8 @@ clubs:
     shortName: "DSC"
     state: "NSW"
     fullName: "Drummoyne Sailing Club"
-    email: "sailing@dsc.org.au, info@dsc.org.au"
     excluded: null
+    email: "sailing@dsc.org.au, info@dsc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -464,8 +468,8 @@ clubs:
     shortName: "NCYC"
     state: "NSW"
     fullName: "Newcastle Cruising Yacht Club"
-    email: "sailing@ncyc.net.au"
     excluded: null
+    email: "sailing@ncyc.net.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/ncyc/2021/sf2021/index.htm"
@@ -475,8 +479,8 @@ clubs:
     shortName: "LMYC"
     state: "NSW"
     fullName: "Lake Macquarie Yacht Club"
-    email: "sailing@lmyc.com.au"
     excluded: null
+    email: "sailing@lmyc.com.au"
     aliases: []
     topyacht:
       - "https://www.lmycraceresults.com.au/results/2021/tyregattas/"
@@ -489,8 +493,8 @@ clubs:
     shortName: "GSC"
     state: "NSW"
     fullName: "Gosford Sailing Club"
-    email: "sailing@gossail.com.au"
     excluded: null
+    email: "sailing@gossail.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -498,8 +502,8 @@ clubs:
     shortName: "ORCV"
     state: "VIC"
     fullName: "Ocean Racing Club of Victoria"
-    email: "sailing@orcv.org.au"
     excluded: null
+    email: "sailing@orcv.org.au"
     aliases: []
     topyacht:
       - "https://www.orcv.org.au/results/2022-23/"
@@ -511,8 +515,8 @@ clubs:
     shortName: "DBYC"
     state: "VIC"
     fullName: "Davey's Bay Yacht Club"
-    email: "sailing@dbyc.com.au"
     excluded: null
+    email: "sailing@dbyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -520,8 +524,8 @@ clubs:
     shortName: "BYS"
     state: "VIC"
     fullName: "Blairgowrie Yacht Squadron"
-    email: "sailing@bys.asn.au, info@bys.asn.au"
     excluded: null
+    email: "sailing@bys.asn.au, info@bys.asn.au"
     aliases: []
     topyacht: null
     boats: null
@@ -529,8 +533,8 @@ clubs:
     shortName: "QCYC"
     state: "VIC"
     fullName: "Queenscliff Cruising Yacht Club"
-    email: "sailing@queenscliffcruisingyachtclub.org"
     excluded: null
+    email: "sailing@queenscliffcruisingyachtclub.org"
     aliases: []
     topyacht: null
     boats: null
@@ -538,8 +542,8 @@ clubs:
     shortName: "McCYC"
     state: "VIC"
     fullName: "McCrae Yacht Club"
-    email: "sailing@mccraeyc.com.au, admin@mccraeyc.com.au"
     excluded: null
+    email: "sailing@mccraeyc.com.au, admin@mccraeyc.com.au"
     aliases:
       - "MYC"
     topyacht: null
@@ -548,8 +552,8 @@ clubs:
     shortName: "RYC"
     state: "VIC"
     fullName: "Rosebud Yacht Club"
-    email: "sailing@rosebudyachtclub.au"
     excluded: null
+    email: "sailing@rosebudyachtclub.au"
     aliases: []
     topyacht: null
     boats: null
@@ -557,8 +561,8 @@ clubs:
     shortName: "FYC"
     state: "VIC"
     fullName: "Flinders Yacht Club"
-    email: "sailing@flindersyc.com.au, commodore@flindersyc.com.au"
     excluded: null
+    email: "sailing@flindersyc.com.au, commodore@flindersyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -566,8 +570,8 @@ clubs:
     shortName: "MMYC"
     state: "VIC"
     fullName: "Mount Martha Yacht Club"
-    email: "sailing@mmyc.org.au"
     excluded: null
+    email: "sailing@mmyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -575,8 +579,8 @@ clubs:
     shortName: "MSC"
     state: "VIC"
     fullName: "Mordialloc Sailing Club"
-    email: "sailing@mordiallocsc.com.au"
     excluded: null
+    email: "sailing@mordiallocsc.com.au"
     aliases: []
     topyacht: null
     boats:
@@ -585,8 +589,8 @@ clubs:
     shortName: "WSC"
     state: "VIC"
     fullName: "Williamstown Sailing Club"
-    email: "sailing@williamstownsailingclub.org.au, commodore@williamstownsailingclub.org.au"
     excluded: null
+    email: "sailing@williamstownsailingclub.org.au, commodore@williamstownsailingclub.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -594,8 +598,8 @@ clubs:
     shortName: "DSS"
     state: "TAS"
     fullName: "Derwent Sailing Squadron"
-    email: "sailing@dssinc.org.au"
     excluded: null
+    email: "sailing@dssinc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -603,8 +607,8 @@ clubs:
     shortName: "WMSC"
     state: "QLD"
     fullName: "Wynnum Manly Sailing Club"
-    email: "sailing@wmyc.com.au, office@wmyc.com.au"
     excluded: null
+    email: "sailing@wmyc.com.au, office@wmyc.com.au"
     aliases:
       - "MYC"
       - "WMYC"
@@ -614,8 +618,8 @@ clubs:
     shortName: "QCYC"
     state: "QLD"
     fullName: "Queensland Cruising Yacht Club"
-    email: "sailing@qcyc.com.au"
     excluded: null
+    email: "sailing@qcyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -623,8 +627,8 @@ clubs:
     shortName: "SYC"
     state: "QLD"
     fullName: "Southport Yacht Club"
-    email: "sailing@southportyachtclub.com.au"
     excluded: null
+    email: "sailing@southportyachtclub.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/2020/sailparadise/"
@@ -637,8 +641,8 @@ clubs:
     shortName: "MYC"
     state: "QLD"
     fullName: "Mooloolaba Yacht Club"
-    email: "sailing@mooloolabayachtclub.com.au"
     excluded: null
+    email: "sailing@mooloolabayachtclub.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -646,8 +650,8 @@ clubs:
     shortName: "NYRC"
     state: "QLD"
     fullName: "Noosa Yacht & Rowing Club"
-    email: "sailing@nyrc.com.au"
     excluded: null
+    email: "sailing@nyrc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -655,8 +659,8 @@ clubs:
     shortName: "WSC"
     state: "QLD"
     fullName: "Whitsunday Sailing Club"
-    email: "sailing@whitsundaysailingclub.com.au"
     excluded: null
+    email: "sailing@whitsundaysailingclub.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/2025/abrw/index.htm"
@@ -666,8 +670,8 @@ clubs:
     shortName: "ASC"
     state: "SA"
     fullName: "Adelaide Sailing Club"
-    email: "sailing@adelaidesailingclub.com.au"
     excluded: null
+    email: "sailing@adelaidesailingclub.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -675,8 +679,8 @@ clubs:
     shortName: "BSYC"
     state: "SA"
     fullName: "Brighton & Seacliff Yacht Club"
-    email: "sailing@bsyc.com.au"
     excluded: null
+    email: "sailing@bsyc.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/bsyc/2023/club/index.htm"
@@ -686,8 +690,8 @@ clubs:
     shortName: "RPYC"
     state: "WA"
     fullName: "Royal Perth Yacht Club"
-    email: "sailing@rpyc.com.au"
     excluded: null
+    email: "sailing@rpyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -695,8 +699,8 @@ clubs:
     shortName: "FSC"
     state: "WA"
     fullName: "Fremantle Sailing Club"
-    email: "sailing@fsc.com.au"
     excluded: null
+    email: "sailing@fsc.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/fsc/2023/kb23/"
@@ -708,8 +712,8 @@ clubs:
     shortName: "EFYC"
     state: "WA"
     fullName: "East Fremantle Yacht Club"
-    email: "sailing@efyc.com.au"
     excluded: null
+    email: "sailing@efyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -717,8 +721,8 @@ clubs:
     shortName: "NYC"
     state: "WA"
     fullName: "Nedlands Yacht Club"
-    email: "sailing@nyc.org.au, hello@nyc.org.au"
     excluded: null
+    email: "sailing@nyc.org.au, hello@nyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -726,8 +730,8 @@ clubs:
     shortName: "HYC"
     state: "WA"
     fullName: "Hillarys Yacht Club"
-    email: "sailing@hillarysyachtclub.com.au"
     excluded: null
+    email: "sailing@hillarysyachtclub.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -735,8 +739,8 @@ clubs:
     shortName: "SoPYC"
     state: "WA"
     fullName: "South of Perth Yacht Club"
-    email: "sailing@sopyc.com.au"
     excluded: null
+    email: "sailing@sopyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -744,8 +748,8 @@ clubs:
     shortName: "PFSYC"
     state: "WA"
     fullName: "Perth Flying Squadron Yacht Club"
-    email: "sailing@pfsyc.com.au, general.manager@pfsyc.com.au"
     excluded: null
+    email: "sailing@pfsyc.com.au, general.manager@pfsyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -753,8 +757,8 @@ clubs:
     shortName: "DSC"
     state: "NT"
     fullName: "Darwin Sailing Club"
-    email: "sailing@darwinsailingclub.com.au, admin@dwnsail.com.au"
     excluded: null
+    email: "sailing@darwinsailingclub.com.au, admin@dwnsail.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -762,8 +766,8 @@ clubs:
     shortName: "DBCYA"
     state: "NT"
     fullName: "Dinah Beach Cruising Yacht Association"
-    email: "sailing@dbcya.com.au"
     excluded: null
+    email: "sailing@dbcya.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -772,6 +776,7 @@ clubs:
     state: "VIC"
     fullName: "Port Phillip North Yacht Clubs"
     excluded: null
+    email: null
     aliases: null
     topyacht: null
     boats: null
@@ -780,6 +785,7 @@ clubs:
     state: "SA"
     fullName: "Goolwa Yacht Club"
     excluded: null
+    email: null
     aliases: null
     topyacht: null
     boats: null
@@ -787,8 +793,8 @@ clubs:
     shortName: "RMYCT"
     state: "NSW"
     fullName: "Royal Motor Yacht Club Toronto"
-    email: "sailing@rmyctoronto.com.au, information@rmyctoronto.com.au"
     excluded: null
+    email: "sailing@rmyctoronto.com.au, information@rmyctoronto.com.au"
     aliases: []
     topyacht:
       - "https://www.raceresults.rmyctoronto.com.au/results/2020_2021/hcwindex.htm"
@@ -804,8 +810,8 @@ clubs:
     shortName: "GFS"
     state: "NSW"
     fullName: "Greenwich Flying Squadron"
-    email: "sailing@gfs.org.au"
     excluded: null
+    email: "sailing@gfs.org.au"
     aliases: []
     topyacht:
       - "https://gfs.org.au/handicapper/results/2020/2020_club_series/index.htm"
@@ -817,8 +823,8 @@ clubs:
     shortName: "PMYC"
     state: "VIC"
     fullName: "Port Melbourne Yacht Club"
-    email: "sailing@pmyc.asn.au, office@pmyc.asn.au, commodore@pmyc.asn.au"
     excluded: null
+    email: "sailing@pmyc.asn.au, office@pmyc.asn.au, commodore@pmyc.asn.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/pmyc/2020/club/index.htm"
@@ -832,8 +838,8 @@ clubs:
     shortName: "GRYC"
     state: "SA"
     fullName: "Goolwa Regatta Yacht Club"
-    email: "sailing@gryc.com.au"
     excluded: null
+    email: "sailing@gryc.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/gryc/2020/club/Winter2020/series.htm"
@@ -845,8 +851,8 @@ clubs:
     shortName: "ORWA"
     state: "WA"
     fullName: "Ocean Racing Western Australia"
-    email: "sailing@oceanracingwa.com.au"
     excluded: null
+    email: "sailing@oceanracingwa.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/orwa/2021/index.htm"
@@ -857,8 +863,8 @@ clubs:
     shortName: "CYAA"
     state: "VIC"
     fullName: "Classic Yacht Association Australia"
-    email: "sailing@classicyacht.com.au, secretary@classicyacht.com.au"
     excluded: null
+    email: "sailing@classicyacht.com.au, secretary@classicyacht.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm"
@@ -868,8 +874,8 @@ clubs:
     shortName: "HIYC"
     state: "QLD"
     fullName: "Hamilton Island Yacht Club"
-    email: "sailing@hamiltonisland.com.au"
     excluded: null
+    email: "sailing@hamiltonisland.com.au"
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/2025/hirw/index.htm"
@@ -881,8 +887,8 @@ clubs:
     shortName: "TYC"
     state: "QLD"
     fullName: "Townsville Yacht Club"
-    email: "sailing@townsvilleyachtclub.com.au"
     excluded: null
+    email: "sailing@townsvilleyachtclub.com.au"
     aliases:
       - "Townsville Cruising Yacht Club"
       - "TCYC"
@@ -897,6 +903,7 @@ clubs:
     state: "NSW"
     fullName: "Sydney Harbour Combined Clubs"
     excluded: null
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -904,8 +911,8 @@ clubs:
     shortName: "WYC"
     state: "NSW"
     fullName: "Wollongong Yacht Club"
-    email: "sailing@wyc.org.au"
     excluded: null
+    email: "sailing@wyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -913,8 +920,8 @@ clubs:
     shortName: "PESC"
     state: "TAS"
     fullName: "Port Esperance Sailing Club"
-    email: "commodore@pesc.com.au"
     excluded: null
+    email: "commodore@pesc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -923,6 +930,7 @@ clubs:
     state: "NSW"
     fullName: "Multihull Cruising Yacht Club"
     excluded: true
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -931,6 +939,7 @@ clubs:
     state: "HongKong"
     fullName: "Royal Hong Kong Yacht Club"
     excluded: true
+    email: null
     aliases: []
     topyacht: null
     boats: null
@@ -938,8 +947,8 @@ clubs:
     shortName: "JBCYC"
     state: "NSW"
     fullName: "Jervis Bay Cruising Yacht Club"
-    email: "sailing@jbcyc.com.au"
     excluded: null
+    email: "sailing@jbcyc.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -947,8 +956,8 @@ clubs:
     shortName: "KYC"
     state: "TAS"
     fullName: "Kettering Yacht Club"
-    email: "sailing@ketteringyachtclub.org.au"
     excluded: null
+    email: "sailing@ketteringyachtclub.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -957,6 +966,7 @@ clubs:
     state: "NSW"
     fullName: "Sailsys"
     excluded: null
+    email: null
     aliases: []
     topyacht: null
     boats:
@@ -965,8 +975,8 @@ clubs:
     shortName: "SPS"
     state: "NSW"
     fullName: "Sail Port Stephens"
-    email: "sailing@sailportstephens.com.au"
     excluded: null
+    email: "sailing@sailportstephens.com.au"
     aliases: []
     topyacht: null
     boats: null
@@ -974,8 +984,8 @@ clubs:
     shortName: "OCC"
     state: "NZ"
     fullName: "Opua Cruising Club"
-    email: "sailing@opuacruisingclub.co.nz"
     excluded: null
+    email: "sailing@opuacruisingclub.co.nz"
     aliases: []
     topyacht: null
     boats: null
@@ -983,8 +993,8 @@ clubs:
     shortName: "TCYC"
     state: "QLD"
     fullName: "Tin Can Bay Yacht Club"
-    email: "tincanbayyachtclub@outlook.com"
     excluded: null
+    email: "tincanbayyachtclub@outlook.com"
     aliases: []
     topyacht: null
     boats: null
@@ -992,8 +1002,8 @@ clubs:
     shortName: "IYC"
     state: "NSW"
     fullName: "Illawarra Yacht Club"
-    email: "sailing@iycsailing.asn.au"
     excluded: null
+    email: "sailing@iycsailing.asn.au"
     aliases: []
     topyacht: null
     boats: null
@@ -1001,8 +1011,8 @@ clubs:
     shortName: "RPNYC"
     state: "NZ"
     fullName: "Royal Port Nicholson Yacht Club"
-    email: "sailing@rpnyc.org.nz, office@rpnyc.org.nz"
     excluded: null
+    email: "sailing@rpnyc.org.nz, office@rpnyc.org.nz"
     aliases: []
     topyacht: null
     boats: null
@@ -1010,8 +1020,8 @@ clubs:
     shortName: "TYPBC"
     state: "NZ"
     fullName: "Tauranga Yacht & Power Boat Club Inc"
-    email: "sailing@yacht.org.nz, office@yacht.org.nz"
     excluded: null
+    email: "sailing@yacht.org.nz, office@yacht.org.nz"
     aliases: null
     topyacht: null
     boats: null
