@@ -222,8 +222,13 @@ public class AdminApiServlet extends HttpServlet
         {
             handleEditDesign(req, resp);
         }
+        else if ("/clubs/edit".equals(path))
+        {
+            handleEditClub(req, resp);
+        }
         else if ("/boats/merge-request".equals(path) || "/designs/merge-request".equals(path)
             || "/boats/edit-request".equals(path) || "/designs/edit-request".equals(path)
+            || "/clubs/edit-request".equals(path)
             || "/boats/exclude-request".equals(path) || "/designs/exclude-request".equals(path)
             || "/clubs/exclude-request".equals(path) || "/races/exclude-request".equals(path)
             || "/series/exclude-request".equals(path)
@@ -842,6 +847,79 @@ public class AdminApiServlet extends HttpServlet
             resp.setStatus(500);
             writeJson(resp, Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * POST /api/clubs/edit — edits a club's shortName, longName, state, and/or email.
+     * <p>
+     * Accepts JSON with {@code clubId} (current id), and any of {@code shortName},
+     * {@code longName}, {@code state}, {@code email}. Responds 404 if the club is unknown,
+     * 400 for validation errors.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleEditClub(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String clubId = (String)body.get("clubId");
+            if (clubId == null || clubId.isBlank())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "clubId is required"));
+                return;
+            }
+
+            Club club = store.clubs().get(clubId);
+            if (club == null)
+            {
+                Club seed = store.clubSeed().get(clubId);
+                if (seed == null)
+                {
+                    resp.setStatus(404);
+                    writeJson(resp, Map.of("error", "Club not found: " + clubId));
+                    return;
+                }
+                club = seed;
+            }
+
+            String newShortName = body.containsKey("shortName")
+                ? nullIfBlank((String)body.get("shortName")) : club.shortName();
+            String newLongName = body.containsKey("longName")
+                ? nullIfBlank((String)body.get("longName")) : club.longName();
+            String newState = body.containsKey("state")
+                ? nullIfBlank((String)body.get("state")) : club.state();
+            String newEmail = body.containsKey("email")
+                ? nullIfBlank((String)body.get("email")) : club.email();
+
+            if (java.util.Objects.equals(newShortName, club.shortName())
+                && java.util.Objects.equals(newLongName, club.longName())
+                && java.util.Objects.equals(newState, club.state())
+                && java.util.Objects.equals(newEmail, club.email()))
+            {
+                writeJson(resp, Map.of("ok", true, "noop", true));
+                return;
+            }
+
+            Club updated = new Club(club.id(), newShortName, newLongName, newState,
+                club.excluded(), newEmail, club.aliases(), club.topyachtUrls(), club.series(), null);
+            store.putClub(updated);
+            store.save();
+            if (cache != null)
+                cache.refreshIndexes();
+
+            writeJson(resp, Map.of("ok", true, "noop", false));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    private static String nullIfBlank(String s)
+    {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     /**

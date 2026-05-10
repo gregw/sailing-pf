@@ -933,6 +933,14 @@ function updateMergeBar(entity) {
         if (editClubReq) editClubReq.style.display = (n >= 2 && !w) ? '' : 'none';
     }
 
+    // Edit club (single selection)
+    if (entity === 'clubs') {
+        const editBtn = document.getElementById('edit-btn-clubs');
+        const editReq = document.getElementById('edit-request-btn-clubs');
+        if (editBtn) editBtn.style.display = (n === 1 && w) ? '' : 'none';
+        if (editReq) editReq.style.display = (n === 1 && !w) ? '' : 'none';
+    }
+
     // Ignore / Do Not Ignore (designs only) — mirrors Exclude/Include on the ignored flag.
     if (entity === 'designs')
     {
@@ -976,6 +984,9 @@ function clearSelection(entity) {
         hideEditClubPanel();
     }
     if (entity === 'designs') { hideIgnorePanel(); hideEditDesignPanel(); }
+    if (entity === 'clubs') {
+        hideEditClubPanel();
+    }
     const panel = document.getElementById('detail-' + entity);
     if (panel) panel.classList.remove('visible');
     document.querySelectorAll('#tbody-' + entity + ' input[type=checkbox]').forEach(cb => cb.checked = false);
@@ -1025,7 +1036,7 @@ const ALL_ENTITIES = ['boats', 'designs', 'clubs', 'series', 'races'];
 function syncRequestEmail(value) {
     requestEmail = value;
     // Keep all email inputs in sync
-    const ids = ['edit-email', 'edit-email-designs'];
+    const ids = ['edit-email', 'edit-email-designs', 'edit-request-email-clubs'];
     ALL_ENTITIES.forEach(e => {
         ids.push('merge-email-' + e);
         ids.push('exclude-email-' + e);
@@ -1075,9 +1086,19 @@ function applyMergeAuthState() {
     if (edEmail) edEmail.style.display = w ? 'none' : '';
     if (edMsg)   edMsg.style.display   = w ? 'none' : '';
 
+    // Edit-club panel
+    const ecSave2 = document.getElementById('edit-club-save-btn');
+    const ecReq2 = document.getElementById('edit-club-request-btn');
+    const ecEmail2 = document.getElementById('edit-club-email-row');
+    const ecMsg2 = document.getElementById('edit-club-message-row');
+    if (ecSave2) ecSave2.style.display = w ? '' : 'none';
+    if (ecReq2) ecReq2.style.display = w ? 'none' : '';
+    if (ecEmail2) ecEmail2.style.display = w ? 'none' : '';
+    if (ecMsg2) ecMsg2.style.display = w ? 'none' : '';
+
     // Pre-populate email fields with remembered value
     if (!w) {
-        const ids = ['edit-email', 'edit-email-designs', 'edit-club-email'];
+        const ids = ['edit-email', 'edit-email-designs', 'edit-club-email', 'edit-request-email-clubs'];
         ALL_ENTITIES.forEach(e => {
             ids.push('merge-email-' + e);
             ids.push('exclude-email-' + e);
@@ -1664,6 +1685,90 @@ async function requestDesignEdit() {
     if (result && result.ok) {
         statusEl.textContent = 'Request recorded.';
         clearSelection('designs');
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
+// ---- Edit club ----
+
+let editingClubId = null;
+
+function showEditClubPanel() {
+    const ids = Array.from(state.selected.clubs);
+    if (ids.length !== 1) return;
+    const item = state.selectedData.clubs.get(ids[0]);
+    if (!item) return;
+    editingClubId = item.id;
+    const title = document.getElementById('edit-panel-title-clubs');
+    title.textContent = isWriteAllowed()
+        ? ('Edit Club ' + item.id)
+        : ('Request edit for Club ' + item.id);
+    document.getElementById('edit-club-short-name').value = item.shortName || '';
+    document.getElementById('edit-club-long-name').value = item.longName || '';
+    document.getElementById('edit-club-state').value = item.state || '';
+    document.getElementById('edit-club-email').value = item.email || '';
+    document.getElementById('edit-status-clubs').textContent = '';
+    document.getElementById('edit-panel-clubs').style.display = '';
+    const w = isWriteAllowed();
+    document.getElementById('edit-club-save-btn').style.display = w ? '' : 'none';
+    document.getElementById('edit-club-request-btn').style.display = w ? 'none' : '';
+    document.getElementById('edit-club-email-row').style.display = w ? 'none' : '';
+    document.getElementById('edit-club-message-row').style.display = w ? 'none' : '';
+    if (!w) document.getElementById('edit-request-email-clubs').value = requestEmail;
+}
+
+function hideEditClubPanel() {
+    const panel = document.getElementById('edit-panel-clubs');
+    if (panel) panel.style.display = 'none';
+    editingClubId = null;
+}
+
+function buildClubEditBody() {
+    return {
+        clubId: editingClubId,
+        shortName: document.getElementById('edit-club-short-name').value.trim(),
+        longName: document.getElementById('edit-club-long-name').value.trim(),
+        state: document.getElementById('edit-club-state').value.trim(),
+        email: document.getElementById('edit-club-email').value.trim()
+    };
+}
+
+async function saveClubEdit() {
+    if (!isWriteAllowed() || !editingClubId) return;
+    const statusEl = document.getElementById('edit-status-clubs');
+    statusEl.textContent = 'Saving…';
+    const result = await fetchJson('/api/clubs/edit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(buildClubEditBody())
+    });
+    if (!result || !result.ok) {
+        statusEl.textContent = 'Save failed: ' + ((result && result.error) || 'see console');
+        return;
+    }
+    statusEl.textContent = result.noop ? 'No change.' : 'Saved.';
+    clearSelection('clubs');
+    loadList('clubs', 0);
+}
+
+async function requestClubEdit() {
+    if (!editingClubId) return;
+    const statusEl = document.getElementById('edit-status-clubs');
+    const email = document.getElementById('edit-request-email-clubs')?.value.trim() || '';
+    const message = document.getElementById('edit-club-message')?.value.trim() || '';
+    const body = buildClubEditBody();
+    if (email) body.email_from = email;
+    if (message) body.message = message;
+    statusEl.textContent = 'Submitting request…';
+    const result = await fetchJson('/api/clubs/edit-request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    if (result && result.ok) {
+        statusEl.textContent = 'Request recorded.';
+        clearSelection('clubs');
     } else {
         statusEl.textContent = 'Failed to record request — see console.';
     }

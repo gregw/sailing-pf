@@ -1,5 +1,8 @@
 package org.mortbay.sailing.pf.server;
 
+import java.io.IOException;
+import java.util.Set;
+
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.FilterConfig;
@@ -10,9 +13,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
-import java.io.IOException;
-import java.util.Set;
-
 class WriteAuthFilter implements Filter
 {
     private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
@@ -20,7 +20,7 @@ class WriteAuthFilter implements Filter
      *  plus the comparison handicap-fetch endpoint which is rate-limited inside the handler). */
     private static final Set<String> OPEN_POST_PATHS = Set.of(
         "/api/boats/merge-request", "/api/designs/merge-request",
-        "/api/boats/edit-request", "/api/designs/edit-request",
+        "/api/boats/edit-request", "/api/designs/edit-request", "/api/clubs/edit-request",
         "/api/boats/exclude-request", "/api/designs/exclude-request",
         "/api/clubs/exclude-request", "/api/races/exclude-request",
         "/api/series/exclude-request",

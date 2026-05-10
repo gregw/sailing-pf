@@ -35,6 +35,10 @@
 
     <div id="merge-bar-clubs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
         <span id="merge-bar-count-clubs"></span>
+        <button id="edit-btn-clubs" onclick="showEditClubPanel()" style="margin-left:0.5rem;display:none;">Edit…</button>
+        <button id="edit-request-btn-clubs" onclick="showEditClubPanel()" style="margin-left:0.5rem;display:none;">Request
+            edit…
+        </button>
         <button id="exclude-btn-clubs" onclick="showExcludePanel('clubs', true)" style="margin-left:0.5rem;display:none;">
             Exclude…
         </button>
@@ -42,6 +46,32 @@
             Include…
         </button>
         <button onclick="clearSelection('clubs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="edit-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="edit-panel-title-clubs">Edit Club</strong>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
+            <label for="edit-club-short-name">Short name:</label>
+            <input type="text" id="edit-club-short-name" style="padding:3px 6px;">
+            <label for="edit-club-long-name">Full name:</label>
+            <input type="text" id="edit-club-long-name" style="padding:3px 6px;">
+            <label for="edit-club-state">State:</label>
+            <input type="text" id="edit-club-state" style="padding:3px 6px; max-width:80px;">
+            <label for="edit-club-email">Email:</label>
+            <input type="email" id="edit-club-email" style="padding:3px 6px;">
+        </div>
+        <div id="edit-club-email-row" style="display:none; margin-bottom:0.5rem;">
+            <label for="edit-request-email-clubs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="edit-request-email-clubs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="edit-club-message-row" style="display:none; margin-bottom:0.5rem;">
+            <label for="edit-club-message" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="edit-club-message" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
+        </div>
+        <button id="edit-club-save-btn" onclick="saveClubEdit()">Save</button>
+        <button id="edit-club-request-btn" onclick="requestClubEdit()" style="display:none;">Request</button>
+        <button onclick="hideEditClubPanel()" style="margin-left:0.5rem;">Cancel</button>
+        <div id="edit-status-clubs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="exclude-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
