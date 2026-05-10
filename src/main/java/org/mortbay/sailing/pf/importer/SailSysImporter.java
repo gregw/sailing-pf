@@ -771,9 +771,9 @@ public class SailSysImporter
             return null;
         }
 
-        // Assign club if missing
+        // Assign club if missing and not explicitly marked no-club in config
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);
-        if (boatClub != null && boat.clubId() == null)
+        if (boatClub != null && boat.clubId() == null && !store.isExplicitlyNoClub(boat.id()))
         {
             store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
                 boat.designId(), boatClub.id(),

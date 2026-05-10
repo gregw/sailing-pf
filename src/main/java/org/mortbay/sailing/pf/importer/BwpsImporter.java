@@ -366,7 +366,8 @@ public class BwpsImporter
                 ? detail.type() : null;
             Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, designName, raceDate, SOURCE);
 
-            if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null)
+            if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null
+                && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(detail.club(), null,
                     "BWPS boat sailNumber=" + detail.sailNumber() + " name=" + boatName);

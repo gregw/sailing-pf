@@ -206,6 +206,12 @@ public class DataStore
         return Collections.unmodifiableMap(designs);
     }
 
+    public boolean isExplicitlyNoClub(String boatId)
+    {
+        String override = clubCatalogue.resolveBoatIdOverride(boatId);
+        return override != null && override.isEmpty();
+    }
+
     /** Convenience overload for tests — no date, no source. */
     public Boat findOrCreateBoat(String sailNo, String name, String rawDesign)
     {
@@ -1488,6 +1494,68 @@ public class DataStore
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
+
+        // noclub correction: boats that have a persisted clubId but are listed in the noclub
+        // config get their club cleared. This fixes boats that were assigned a club before the
+        // noclub entry was added, or before the importer guard was in place.
+        {
+            List<Boat> noclubViolations = boats.values().stream()
+                .filter(b -> b.clubId() != null && isExplicitlyNoClub(b.id()))
+                .toList();
+            if (!noclubViolations.isEmpty())
+            {
+                LOG.warn("Correcting {} boat(s) with a club that are listed in noclub", noclubViolations.size());
+                for (Boat b : noclubViolations)
+                {
+                    LOG.warn("noclub correction: clearing clubId '{}' from boat {}", b.clubId(), b.id());
+                    putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
+                        null, b.certificates(), b.sources(), Instant.now(), null));
+                }
+            }
+        }
+
+        // Design alias correction: boats whose stored designId is an alias name (not the
+        // canonical ID) are updated. This fixes boats created before a design alias was added.
+        {
+            List<Map.Entry<String, String>> designAliasUpdates = new ArrayList<>();
+            for (Boat b : boats.values())
+            {
+                if (b.designId() == null)
+                    continue;
+                String canonical = aliases.resolveDesignAlias(b.designId());
+                if (!canonical.equals(b.designId()) && designs.containsKey(canonical))
+                    designAliasUpdates.add(Map.entry(b.id(), canonical));
+            }
+            if (!designAliasUpdates.isEmpty())
+            {
+                LOG.info("Correcting {} boat(s) with aliased designId at startup", designAliasUpdates.size());
+                for (Map.Entry<String, String> e : designAliasUpdates)
+                {
+                    Boat b = boats.get(e.getKey());
+                    if (b == null)
+                        continue;
+                    String canonDesignId = e.getValue();
+                    String canonBoatId = IdGenerator.generateBoatId(b.sailNumber(), b.name(), designs.get(canonDesignId));
+                    if (boats.containsKey(canonBoatId))
+                    {
+                        LOG.info("Design alias correction: merging {} into {} (designId {} → {})",
+                            b.id(), canonBoatId, b.designId(), canonDesignId);
+                        mergeBoats(canonBoatId, List.of(b.id()));
+                    }
+                    else
+                    {
+                        LOG.info("Design alias correction: updating designId {} → {} for boat {}",
+                            b.designId(), canonDesignId, b.id());
+                        Boat updated = new Boat(canonBoatId, b.sailNumber(), b.name(), canonDesignId,
+                            b.clubId(), b.certificates(), b.sources(), Instant.now(), null);
+                        removeBoat(b.id());
+                        putBoat(updated);
+                        rewriteFinisherBoatId(b.id(), canonBoatId);
+                        ClubLoader.remapBoatId(configDir, b.id(), canonBoatId);
+                    }
+                }
+            }
+        }
 
         // Auto-fix stale boats: if the alias seed maps a boat's name to a different canonical
         // name and the canonical boat already exists, merge the stale boat into it.

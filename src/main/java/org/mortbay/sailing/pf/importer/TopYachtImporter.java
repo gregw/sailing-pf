@@ -353,7 +353,8 @@ public class TopYachtImporter
 
             Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, date, SOURCE);
 
-            if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null)
+            if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null
+                && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(me.clubCode, null,
                     "TopYacht boat sailNo=" + sailNo + " name=" + me.boatName);
@@ -718,7 +719,8 @@ public class TopYachtImporter
         {
             Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), null, SOURCE);
 
-            if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null)
+            if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null
+                && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(row.clubCode(), null,
                     "TopYacht boat sailNo=" + row.sailNo() + " name=" + row.boatName());
