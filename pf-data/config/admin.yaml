@@ -6,15 +6,15 @@
 importers:
 - name: "orc"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "ams"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
@@ -47,15 +47,17 @@ importers:
 schedule:
   days:
   - "MONDAY"
-  - "FRIDAY"
+  - "WEDNESDAY"
+  - "SATURDAY"
+  - "SUNDAY"
   time: "02:00:00"
 targetIrcYear: 2025
 outlierSigma: null
 recentRaceReimportDays: 30
 
 # --- SailSys importer ---
-sailsysNextRaceId: 32678
-sailsysEndRaceId: 34327
+sailsysNextRaceId: 33047
+sailsysEndRaceId: 41399
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
@@ -104,13 +106,14 @@ adminPort: 8888
 userPort: 8080
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
-  bwps/api: "2026-05-08T22:35:42.534129126Z"
-  analysis/run: "2026-05-10T02:51:28.305809240Z"
-  pf-optimise/run: "2026-05-10T02:51:29.589195309Z"
-  save-database/run: "2026-05-10T02:51:34.737664657Z"
-  build-indexes/run: "2026-05-10T02:51:27.885264515Z"
-  reference-factors/run: "2026-05-10T02:51:29.013717714Z"
-  sailsys-races/run: "2026-05-08T22:35:54.411017349Z"
-  ams/api: "2026-05-08T22:35:41.563519548Z"
-  orc/api: "2026-05-08T22:35:31.767174831Z"
+  bwps/api: "2026-05-08T22:39:31.469690392Z"
+  analysis/run: "2026-05-10T05:02:54.535613854Z"
+  orc/api: "2026-05-08T22:39:24.392950184Z"
+  pf-optimise/run: "2026-05-10T05:02:57.751745999Z"
+  save-database/run: "2026-05-10T05:53:14.792764078Z"
+  topyacht/api: "2026-05-09T16:18:36.612605661Z"
+  build-indexes/run: "2026-05-10T05:02:53.750991542Z"
+  reference-factors/run: "2026-05-10T05:02:56.283627799Z"
+  sailsys-races/run: "2026-05-09T16:00:00.001396578Z"
+  ams/api: "2026-05-08T22:39:29.540390586Z"
 

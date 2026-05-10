@@ -558,6 +558,20 @@ designs:
     aliases:
       - "Clubman 8 Clubman 8"
       - "clubman8clubman8"
+  "11monedesign":
+    canonicalName: "11m One Design"
+    aliases:
+      - "11mtr One Design"
+      - "11mtronedesign"
+      - "11M OD"
+      - "11mod"
+      - "11 metre One Design"
+      - "11metreonedesign"
+  archambaultsurprise:
+    canonicalName: "Archambault Surprise"
+    aliases:
+      - "Archambault Surprise 25"
+      - "archambaultsurprise25"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
