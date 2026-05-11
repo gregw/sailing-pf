@@ -261,11 +261,16 @@ public class ReferenceNetworkBuilder
         LOG.info("ReferenceNetworkBuilder step 14d monotonicity clamp: {} boats", clamped);
 
         // Recompute design factors after these mutations so design-level RFs reflect the
-        // consolidated boat-level state, then apply the same blend + clamp at design level.
+        // consolidated boat-level state, then apply the same blend + collapse + clamp at design
+        // level. The design-level collapse mirrors step 14c: without it, the design-level blend
+        // would re-introduce a spin/nonSpin split for noSpinnaker designs by aggregating each
+        // variant with the conversion-graph prediction from the other variant.
         Map<String, ReferenceFactors> finalDesignFactors = computeDesignFactors(result, boats, store.designs());
         int designBlended = blendVariantsViaCrossVariantGraph(finalDesignFactors, graph, currentYear);
+        int designCollapsed = collapseNoSpinnakerDesignVariants(finalDesignFactors, store);
         int designClamped = clampMonotonicityDesignLevel(finalDesignFactors, store);
-        LOG.info("ReferenceNetworkBuilder design-level: blended={} clamped={}", designBlended, designClamped);
+        LOG.info("ReferenceNetworkBuilder design-level: blended={} collapsed={} clamped={}",
+            designBlended, designCollapsed, designClamped);
 
         long withSpinFinal = result.values().stream().filter(r -> r.spin() != null).count();
         LOG.info("ReferenceNetworkBuilder complete: {} boats, {} with spin factor",
@@ -476,6 +481,42 @@ public class ReferenceNetworkBuilder
                 nonSpin == null ? cur.nonSpinGeneration() : cur.nonSpinGeneration());
 
             brf.put(e.getKey(), new ReferenceFactors(
+                combined, combined, cur.twoHanded(),
+                gen, gen, cur.twoHandedGeneration()));
+            updated++;
+        }
+        return updated;
+    }
+
+    /**
+     * Design-level analogue of {@link #collapseNoSpinnakerVariants}. Walks the design RF map and
+     * for any design flagged noSpinnaker in {@code design.yaml}, aggregates its spin and nonSpin
+     * factors into a single combined {@link Factor} and writes it into both slots. Required at
+     * the design level because the design-level cross-variant blend runs after the design-RF
+     * recompute and would otherwise re-introduce a spin/nonSpin split for noSpinnaker designs.
+     *
+     * @return number of design entries updated
+     */
+    private static int collapseNoSpinnakerDesignVariants(
+        Map<String, ReferenceFactors> drf, DataStore store)
+    {
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : drf.entrySet())
+        {
+            if (!store.isDesignNoSpinnaker(e.getKey()))
+                continue;
+            ReferenceFactors cur = e.getValue();
+            Factor spin = cur.spin();
+            Factor nonSpin = cur.nonSpin();
+            if (spin == null && nonSpin == null)
+                continue;
+
+            Factor combined = spin == null ? nonSpin
+                : nonSpin == null ? spin
+                : Factor.aggregate(spin, nonSpin);
+            int gen = Math.min(cur.spinGeneration(), cur.nonSpinGeneration());
+
+            drf.put(e.getKey(), new ReferenceFactors(
                 combined, combined, cur.twoHanded(),
                 gen, gen, cur.twoHandedGeneration()));
             updated++;

@@ -574,6 +574,10 @@ designs:
     aliases:
       - "Archambault Surprise 25"
       - "archambaultsurprise25"
+  radford12catrig:
+    canonicalName: "Radford 12 cat rig"
+    aliases:
+      - "Radford 12 cat rig"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"

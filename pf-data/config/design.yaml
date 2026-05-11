@@ -316,6 +316,8 @@ ignored:
 - "mcconaghy"
 - "bakewellwhite"
 - "aquarius"
+noSpinnaker:
+  - "radford12catrig"
 boatDesignOverrides:
 - designId: "sydney36mkii"
   canonicalName: "Sydney 36 MkII"
@@ -379,3 +381,10 @@ boatDesignOverrides:
     name: "Corum"
     from: null
     until: null
+- designId: "radford12catrig"
+  canonicalName: "Radford 12 Cat Rig"
+  boats:
+    - sailNumber: "MYC12"
+      name: "San Toy"
+      from: null
+      until: null

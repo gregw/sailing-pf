@@ -90,6 +90,19 @@ class ReferenceNetworkBuilderTest
             "noSpinnaker collapse: spin.value should equal nonSpin.value");
         assertEquals(cat.spin().weight(), cat.nonSpin().weight(), 1e-9,
             "noSpinnaker collapse: spin.weight should equal nonSpin.weight");
+
+        // The design-level RF must also be collapsed. Regression check: previously the
+        // design-level cross-variant blend ran AFTER recomputing design factors but the
+        // matching collapse step was missing, so a noSpinnaker design would end up with
+        // spin != nonSpin even when every constituent boat had spin == nonSpin.
+        ReferenceFactors catDesign = built.designFactors().get("catrig");
+        assertNotNull(catDesign, "noSpinnaker design should appear in designFactors");
+        assertNotNull(catDesign.spin());
+        assertNotNull(catDesign.nonSpin());
+        assertEquals(catDesign.spin().value(), catDesign.nonSpin().value(), 1e-9,
+            "design-level noSpinnaker collapse: spin.value should equal nonSpin.value");
+        assertEquals(catDesign.spin().weight(), catDesign.nonSpin().weight(), 1e-9,
+            "design-level noSpinnaker collapse: spin.weight should equal nonSpin.weight");
     }
 
     /**
