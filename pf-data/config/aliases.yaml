@@ -285,6 +285,8 @@ designs:
     aliases:
       - "SUN ODYSSEY 469"
       - "sunodyssey469"
+      - "Jeanneau SO 469"
+      - "jeanneauso469"
   jeanneaugrandsoleil43:
     canonicalName: "Jeanneau Grand Soleil 43"
     aliases:
@@ -1058,3 +1060,101 @@ boats:
         name: "navyone"
       - sailNumber: "0404"
         name: "navybone"
+  PR7-zeus:
+    canonicalName: "Zeus"
+    aliases:
+      - sailNumber: "7"
+        name: "zeus"
+  "522-zestoffury":
+    canonicalName: "Zest of Fury"
+    aliases:
+      - sailNumber: "522"
+        name: "zestoffuryf"
+  HKG55-zephyr:
+    canonicalName: "Zephyr"
+    aliases:
+      - sailNumber: "DHKG55"
+        name: "zephyr"
+  "4876-slingshot":
+    canonicalName: "Sling Shot"
+    aliases:
+      - sailNumber: "TBA"
+        name: "slingshot"
+  IANMCCLURG-humpy:
+    canonicalName: "Humpy"
+    aliases:
+      - sailNumber: "MCLURG"
+        name: "humpy"
+  RQ334-fruitsalid3:
+    canonicalName: "Fruit Salid 3"
+    aliases:
+      - sailNumber: "3346L"
+        name: "fruitsalad3"
+  USA4444-lenny:
+    canonicalName: "Lenny"
+    aliases:
+      - sailNumber: "USA44444"
+        name: "lenny"
+      - sailNumber: "US44444"
+        name: "lenny"
+  "5013-letroisimemitemp":
+    canonicalName: "Le Troisième mi Temp"
+    aliases:
+      - sailNumber: "5013"
+        name: "latroisiememitemps"
+      - sailNumber: "5013"
+        name: "latroisennemitemps"
+  "15GBR5-shakira":
+    canonicalName: "Shakira"
+    aliases:
+      - sailNumber: "15"
+        name: "shakira"
+  "82-argylleexpress":
+    canonicalName: "Argylle Express"
+    aliases:
+      - sailNumber: "859"
+        name: "argylleexpress"
+  SM13-scarletrunner:
+    canonicalName: "Scarlet Runner"
+    aliases:
+      - sailNumber: "SM13"
+        name: "scarletrunner13"
+  "1703-insatiableii":
+    canonicalName: "Insatiable II"
+    aliases:
+      - sailNumber: "C30"
+        name: "insatiableii"
+  "7350-themuse":
+    canonicalName: "The Muse"
+    aliases:
+      - sailNumber: "MUSE"
+        name: "themuse"
+  "30022-letsgo":
+    canonicalName: "Let's Go!"
+    aliases:
+      - sailNumber: "3022"
+        name: "letsgo"
+  "708-greeneggsandham":
+    canonicalName: "Green Eggs and Ham"
+    aliases:
+      - sailNumber: "18AUS708"
+        name: "greeneggsandham"
+  SYC888-letsgetiton:
+    canonicalName: "Let's Get It On"
+    aliases:
+      - sailNumber: "SYC888"
+        name: "letsgetitonvival1fe"
+      - sailNumber: "SYC888"
+        name: "letsgetitonfilabe"
+  WM882-gecko:
+    canonicalName: "Gecko"
+    aliases:
+      - sailNumber: ""
+        name: "gecko"
+      - sailNumber: "1224069"
+        name: "gecko"
+  YC868-velocity:
+    canonicalName: "Velocity"
+    aliases:
+      - sailNumber: "YC868"
+        name: "peachteatsvelocity"

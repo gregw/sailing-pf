@@ -127,6 +127,7 @@ public class TaskService
                                Integer bwpsMinYear,                 // null → default 2020
                                Integer orcListMaxAgeDays,           // null → default 1
                                Double minAnalysisR2,             // null → default 0.50
+                               Integer minAnalysisPairs,         // null → default 8
                                Double clubCertificateWeight,     // null → default 0.9
                                Double pfLambda,                 // null → default 1.0
                                Double pfOutlierK,               // null → default 2.0
@@ -137,6 +138,7 @@ public class TaskService
                                Integer pfMaxInnerIterations,    // null → default 100
                                Integer pfMaxOuterIterations,    // null → default 5
                                Double pfCrossVariantLambda,     // null → default 0.0
+                               Double pfGraphCrossVariantLambda, // null → default 0.25
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -182,6 +184,7 @@ public class TaskService
     private volatile int bwpsMinYear = BwpsImporter.DEFAULT_MIN_YEAR;
     private volatile int orcListMaxAgeDays = 1;
     private volatile double minAnalysisR2 = ConversionGraph.DEFAULT_MIN_R2;
+    private volatile int minAnalysisPairs = ConversionGraph.DEFAULT_MIN_PAIRS;
     private volatile double clubCertificateWeight = 0.9;
     private volatile double pfLambda = 1.0;
     private volatile double pfOutlierK = 2.0;
@@ -192,6 +195,7 @@ public class TaskService
     private volatile int pfMaxInnerIterations = 100;
     private volatile int pfMaxOuterIterations = 5;
     private volatile double pfCrossVariantLambda = 0.0;
+    private volatile double pfGraphCrossVariantLambda = 0.25;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -252,6 +256,8 @@ public class TaskService
             if (config.bwpsMinYear() != null) bwpsMinYear = config.bwpsMinYear();
             if (config.orcListMaxAgeDays() != null) orcListMaxAgeDays = config.orcListMaxAgeDays();
             if (config.minAnalysisR2() != null) minAnalysisR2 = config.minAnalysisR2();
+            if (config.minAnalysisPairs() != null)
+                minAnalysisPairs = config.minAnalysisPairs();
             if (config.clubCertificateWeight() != null) clubCertificateWeight = config.clubCertificateWeight();
             if (config.pfLambda() != null) pfLambda = config.pfLambda();
             if (config.pfOutlierK() != null) pfOutlierK = config.pfOutlierK();
@@ -262,6 +268,8 @@ public class TaskService
             if (config.pfMaxInnerIterations() != null) pfMaxInnerIterations = config.pfMaxInnerIterations();
             if (config.pfMaxOuterIterations() != null) pfMaxOuterIterations = config.pfMaxOuterIterations();
             if (config.pfCrossVariantLambda() != null) pfCrossVariantLambda = config.pfCrossVariantLambda();
+            if (config.pfGraphCrossVariantLambda() != null)
+                pfGraphCrossVariantLambda = config.pfGraphCrossVariantLambda();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -344,7 +352,8 @@ public void stop()
                                        Integer pfMaxInnerIterations, Integer pfMaxOuterIterations,
                                        Double pfOutlierK, Double pfAsymmetryFactor,
                                        Double pfOuterDampingFactor, Double pfOuterConvergenceThreshold,
-                                       Double pfCrossVariantLambda)
+                                       Double pfCrossVariantLambda,
+                                       Double pfGraphCrossVariantLambda)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
@@ -361,6 +370,8 @@ public void stop()
         if (pfOuterDampingFactor != null) this.pfOuterDampingFactor = pfOuterDampingFactor;
         if (pfOuterConvergenceThreshold != null) this.pfOuterConvergenceThreshold = pfOuterConvergenceThreshold;
         if (pfCrossVariantLambda != null) this.pfCrossVariantLambda = pfCrossVariantLambda;
+        if (pfGraphCrossVariantLambda != null)
+            this.pfGraphCrossVariantLambda = pfGraphCrossVariantLambda;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -438,6 +449,11 @@ public void stop()
         return minAnalysisR2;
     }
 
+    public int minAnalysisPairs()
+    {
+        return minAnalysisPairs;
+    }
+
     public double clubCertificateWeight()
     {
         return clubCertificateWeight;
@@ -453,6 +469,16 @@ public void stop()
     public double pfConvergenceThreshold() { return pfConvergenceThreshold; }
     public int pfMaxInnerIterations() { return pfMaxInnerIterations; }
     public int pfMaxOuterIterations() { return pfMaxOuterIterations; }
+
+    public double pfCrossVariantLambda()
+    {
+        return pfCrossVariantLambda;
+    }
+
+    public double pfGraphCrossVariantLambda()
+    {
+        return pfGraphCrossVariantLambda;
+    }
 
     public AuthConfig authConfig()
     {
@@ -650,14 +676,14 @@ public void stop()
             case "analysis" ->
             {
                 if (cache != null)
-                    cache.refresh(targetIrcYear, outlierSigma, clubCertificateWeight, minAnalysisR2);
+                    cache.refresh(targetIrcYear, outlierSigma, clubCertificateWeight, minAnalysisR2, minAnalysisPairs);
                 else
                     LOG.warn("Analysis requested but cache is not configured");
             }
             case "reference-factors" ->
             {
                 if (cache != null)
-                    cache.refreshReferenceFactors(targetIrcYear, clubCertificateWeight, minAnalysisR2);
+                    cache.refreshReferenceFactors(targetIrcYear, clubCertificateWeight, minAnalysisR2, minAnalysisPairs);
                 else
                     LOG.warn("Reference factors requested but cache is not configured");
             }
@@ -698,7 +724,7 @@ public void stop()
         return new PfConfig(pfLambda, pfConvergenceThreshold,
             pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
-            pfCrossVariantLambda);
+            pfCrossVariantLambda, pfGraphCrossVariantLambda);
     }
 
     private void persistConfig()
@@ -714,9 +740,9 @@ public void stop()
                     sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
                     sailsysHttpDelayMs, sailsysRecentRaceDays, bwpsMinYear,
                     orcListMaxAgeDays,
-                    minAnalysisR2, clubCertificateWeight, pfLambda, pfOutlierK, pfAsymmetryFactor,
+                    minAnalysisR2, minAnalysisPairs, clubCertificateWeight, pfLambda, pfOutlierK, pfAsymmetryFactor,
                     pfOuterDampingFactor, pfOuterConvergenceThreshold, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
-                    pfCrossVariantLambda,
+                    pfCrossVariantLambda, pfGraphCrossVariantLambda,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,

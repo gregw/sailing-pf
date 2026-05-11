@@ -236,10 +236,251 @@ public class ReferenceNetworkBuilder
         int fromCrossVariant = fillMissingVariantsFromExisting(result, graph, currentYear, lastGen + 2);
         LOG.info("ReferenceNetworkBuilder step 14 cross-variant fill: {} boats", fromCrossVariant);
 
+        // Step 14b: cross-variant blend — for each variant, aggregate the boat's own value
+        // with the cross-variant prediction(s) derived from the other variants via the
+        // conversion graph. Tiny inconsistencies (e.g. a 0.0001 NS-over-spin) cause a tiny
+        // nudge dominated by the boat's own evidence; catastrophic inversions (low-weight
+        // race-propagated spin contradicting a high-weight nonSpin) get pulled sharply toward
+        // consistency. The aggregation's variance term also attenuates the combined weight
+        // when the inputs disagree.
+        int blended = blendVariantsViaCrossVariantGraph(result, graph, currentYear);
+        LOG.info("ReferenceNetworkBuilder step 14b cross-variant blend: {} boats", blended);
+
+        // Step 14c: for designs flagged noSpinnaker in design.yaml, collapse each boat's
+        // spin and nonSpin RFs into a single aggregated factor and store it in both slots.
+        // Runs AFTER the cross-variant blend so it overrides any blend-induced split for
+        // designs that physically cannot fly a kite.
+        int collapsedNoSpin = collapseNoSpinnakerVariants(result, boats, store);
+        LOG.info("ReferenceNetworkBuilder step 14c noSpinnaker collapse: {} boats", collapsedNoSpin);
+
+        // Step 14d: hard monotonicity clamp — guarantees spin >= nonSpin and spin >= twoH.
+        // After the blend this is almost always a no-op; left in as a safety net for residual
+        // inversions and as a strict invariant that downstream callers can rely on.
+        // Skipped for noSpinnaker designs (where spin == nonSpin by construction).
+        int clamped = clampMonotonicity(result, boats, store);
+        LOG.info("ReferenceNetworkBuilder step 14d monotonicity clamp: {} boats", clamped);
+
+        // Recompute design factors after these mutations so design-level RFs reflect the
+        // consolidated boat-level state, then apply the same blend + clamp at design level.
+        Map<String, ReferenceFactors> finalDesignFactors = computeDesignFactors(result, boats, store.designs());
+        int designBlended = blendVariantsViaCrossVariantGraph(finalDesignFactors, graph, currentYear);
+        int designClamped = clampMonotonicityDesignLevel(finalDesignFactors, store);
+        LOG.info("ReferenceNetworkBuilder design-level: blended={} clamped={}", designBlended, designClamped);
+
         long withSpinFinal = result.values().stream().filter(r -> r.spin() != null).count();
         LOG.info("ReferenceNetworkBuilder complete: {} boats, {} with spin factor",
             result.size(), withSpinFinal);
-        return new BuildResult(result, designFactors);
+        return new BuildResult(result, finalDesignFactors);
+    }
+
+    // ==========================================================================
+    // Step 14b: always-blend with cross-variant predictions
+    // ==========================================================================
+
+    /**
+     * For every entity (boat or design) that has at least two variants populated, aggregates
+     * each variant with the cross-variant prediction(s) computed from the other variants via
+     * the conversion graph. The aggregation is weighted: the entity's own factor dominates
+     * unless its weight is low and the cross-variant prediction's weight is high.
+     *
+     * <p>This blend is the "soft monotonicity" layer described in the design notes: it
+     * smooths small inversions toward consistency proportional to evidence, and pulls
+     * catastrophic inversions sharply toward the dominant variant's implication.
+     *
+     * @return number of entities whose factors changed
+     */
+    private static int blendVariantsViaCrossVariantGraph(
+        Map<String, ReferenceFactors> brf, ConversionGraph graph, int currentYear)
+    {
+        ConversionNode ircSpin = new ConversionNode("IRC", currentYear, false, false);
+        ConversionNode ircNS = new ConversionNode("IRC", currentYear, true, false);
+        ConversionNode ircTwoH = new ConversionNode("IRC", currentYear, false, true);
+
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
+        {
+            ReferenceFactors cur = e.getValue();
+            Factor spin = cur.spin();
+            Factor nonSpin = cur.nonSpin();
+            Factor twoH = cur.twoHanded();
+
+            // Compute cross-variant predictions; null when no path or no source variant.
+            Factor predSpinFromNS = nonSpin == null ? null : convertViaGraph(nonSpin, ircNS, ircSpin, graph);
+            Factor predSpinFromTH = twoH == null ? null : convertViaGraph(twoH, ircTwoH, ircSpin, graph);
+            Factor predNSFromSpin = spin == null ? null : convertViaGraph(spin, ircSpin, ircNS, graph);
+            Factor predTHFromSpin = spin == null ? null : convertViaGraph(spin, ircSpin, ircTwoH, graph);
+
+            Factor newSpin = aggregateNonNull(spin, predSpinFromNS, predSpinFromTH);
+            Factor newNonSpin = aggregateNonNull(nonSpin, predNSFromSpin);
+            Factor newTwoH = aggregateNonNull(twoH, predTHFromSpin);
+
+            boolean changed = newSpin != spin
+                || newNonSpin != nonSpin
+                || newTwoH != twoH;
+            if (!changed)
+                continue;
+
+            brf.put(e.getKey(), new ReferenceFactors(
+                newSpin, newNonSpin, newTwoH,
+                cur.spinGeneration(), cur.nonSpinGeneration(), cur.twoHandedGeneration()));
+            updated++;
+        }
+        return updated;
+    }
+
+    /**
+     * Aggregates the non-null factors, returning {@code own} unchanged if no cross-variant
+     * predictions exist and {@code own} alone otherwise (so callers can detect no-op cleanly).
+     */
+    private static Factor aggregateNonNull(Factor own, Factor... others)
+    {
+        List<Factor> nonNull = new ArrayList<>();
+        if (own != null)
+            nonNull.add(own);
+        for (Factor f : others)
+        {
+            if (f != null)
+                nonNull.add(f);
+        }
+        if (nonNull.isEmpty())
+            return own;
+        if (nonNull.size() == 1)
+            return own;
+        return Factor.aggregate(nonNull.toArray(new Factor[0]));
+    }
+
+    // ==========================================================================
+    // Step 14d: hard monotonicity clamp
+    // ==========================================================================
+
+    /**
+     * Boat-level monotonicity clamp. For each boat (excluding those whose design is flagged
+     * noSpinnaker, where spin and nonSpin are deliberately equal), ensures
+     * {@code spin.value >= nonSpin.value} and {@code spin.value >= twoH.value} by raising
+     * the spin factor to whichever bound is violated. Should be a near-no-op after the
+     * cross-variant blend; retained as a strict invariant.
+     */
+    private static int clampMonotonicity(
+        Map<String, ReferenceFactors> brf, Map<String, Boat> boats, DataStore store)
+    {
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
+        {
+            Boat boat = boats.get(e.getKey());
+            if (boat != null && boat.designId() != null && store.isDesignNoSpinnaker(boat.designId()))
+                continue;
+            ReferenceFactors cur = e.getValue();
+            ReferenceFactors clamped = clampReferenceFactors(cur);
+            if (clamped != cur)
+            {
+                brf.put(e.getKey(), clamped);
+                updated++;
+            }
+        }
+        return updated;
+    }
+
+    /**
+     * Design-level monotonicity clamp. Same rule as the boat-level version, but driven by
+     * the design id rather than the boat's design lookup.
+     */
+    private static int clampMonotonicityDesignLevel(
+        Map<String, ReferenceFactors> drf, DataStore store)
+    {
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : drf.entrySet())
+        {
+            if (store.isDesignNoSpinnaker(e.getKey()))
+                continue;
+            ReferenceFactors cur = e.getValue();
+            ReferenceFactors clamped = clampReferenceFactors(cur);
+            if (clamped != cur)
+            {
+                drf.put(e.getKey(), clamped);
+                updated++;
+            }
+        }
+        return updated;
+    }
+
+    /**
+     * Returns a {@link ReferenceFactors} with the spin factor raised to at least max(nonSpin, twoH).
+     * When the spin factor is already monotonic, returns the original instance unchanged.
+     * The spin factor's value is increased; its weight is preserved (the inversion implies
+     * the violating sibling carried high-confidence evidence, but we don't want to lose the
+     * spin factor's own measurement context).
+     */
+    private static ReferenceFactors clampReferenceFactors(ReferenceFactors cur)
+    {
+        Factor spin = cur.spin();
+        Factor nonSpin = cur.nonSpin();
+        Factor twoH = cur.twoHanded();
+        if (spin == null)
+            return cur;
+
+        double floor = spin.value();
+        if (nonSpin != null && nonSpin.value() > floor)
+            floor = nonSpin.value();
+        if (twoH != null && twoH.value() > floor)
+            floor = twoH.value();
+        if (floor == spin.value())
+            return cur;
+
+        return new ReferenceFactors(
+            new Factor(floor, spin.weight()),
+            nonSpin, twoH,
+            cur.spinGeneration(), cur.nonSpinGeneration(), cur.twoHandedGeneration());
+    }
+
+    // ==========================================================================
+    // Step 14c: noSpinnaker variant collapse
+    // ==========================================================================
+
+    /**
+     * For boats whose design is flagged {@link Design#noSpinnaker()}, aggregates the spin
+     * and nonSpin reference factors into a single combined value and writes it into both
+     * slots. A design that physically cannot fly a spinnaker has no real spin/nonSpin split:
+     * any "spin" race entries are mis-categorisations or convenience, so the two factors
+     * should agree. Aggregating respects weights — low-weight inferred spin observations
+     * are pulled toward the dominant nonSpin estimate, and vice versa.
+     *
+     * @return number of boats updated
+     */
+    private static int collapseNoSpinnakerVariants(
+        Map<String, ReferenceFactors> brf,
+        Map<String, Boat> boats,
+        DataStore store)
+    {
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
+        {
+            Boat boat = boats.get(e.getKey());
+            if (boat == null || boat.designId() == null)
+                continue;
+            if (!store.isDesignNoSpinnaker(boat.designId()))
+                continue;
+
+            ReferenceFactors cur = e.getValue();
+            Factor spin = cur.spin();
+            Factor nonSpin = cur.nonSpin();
+            if (spin == null && nonSpin == null)
+                continue;
+
+            Factor combined = spin == null ? nonSpin
+                : nonSpin == null ? spin
+                : Factor.aggregate(spin, nonSpin);
+
+            // Use the minimum generation as the assigned generation for both slots —
+            // the combined factor inherits the earliest available evidence.
+            int gen = Math.min(spin == null ? cur.spinGeneration() : cur.spinGeneration(),
+                nonSpin == null ? cur.nonSpinGeneration() : cur.nonSpinGeneration());
+
+            brf.put(e.getKey(), new ReferenceFactors(
+                combined, combined, cur.twoHanded(),
+                gen, gen, cur.twoHandedGeneration()));
+            updated++;
+        }
+        return updated;
     }
 
     // ==========================================================================
@@ -607,7 +848,11 @@ public class ReferenceNetworkBuilder
      *
      * @return the best aggregated factor, or null if no path was found
      */
-    private static Factor convertViaGraph(
+    /**
+     * Package-private so {@link PfOptimiser} can reuse the same cross-variant conversion
+     * semantics when building its per-iteration converter cache for the PF graph term.
+     */
+    static Factor convertViaGraph(
         Factor source, ConversionNode from, ConversionNode target, ConversionGraph graph)
     {
         List<Factor> out = new ArrayList<>();
@@ -713,7 +958,7 @@ public class ReferenceNetworkBuilder
      * @param depth             current recursion depth
      * @param results           accumulator for completed path factors
      */
-    private static void dfsAllPaths(ConversionNode node,
+    static void dfsAllPaths(ConversionNode node,
                                     double value,
                                     double weight,
                                     ConversionNode target,

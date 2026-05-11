@@ -30,6 +30,15 @@ public class ConversionGraph
     /** Default minimum R² for a LinearFit to be included as a conversion edge. */
     public static final double DEFAULT_MIN_R2 = 0.50;
 
+    /**
+     * Default minimum number of post-trim paired observations for a fit to be included
+     * as a conversion edge. With n &lt; 8 the OLS fit can be coincidentally high-R² yet
+     * slope-wrong (e.g. a single n=3 ALL/twoHanded→ALL/spin edge produced systematic
+     * twoHanded ≈ spin × 1.018 inversions across the fleet); requiring at least 8 paired
+     * observations excludes these low-evidence fits.
+     */
+    public static final int DEFAULT_MIN_PAIRS = 8;
+
     private final Map<ConversionNode, List<ConversionEdge>> adjacency;
 
     private ConversionGraph(Map<ConversionNode, List<ConversionEdge>> adjacency)
@@ -38,16 +47,27 @@ public class ConversionGraph
     }
 
     /**
-     * Builds a ConversionGraph from a list of comparison results using {@link #DEFAULT_MIN_R2}.
+     * Builds a ConversionGraph from a list of comparison results using {@link #DEFAULT_MIN_R2}
+     * and {@link #DEFAULT_MIN_PAIRS}.
      */
     public static ConversionGraph from(List<ComparisonResult> results)
     {
-        return from(results, DEFAULT_MIN_R2);
+        return from(results, DEFAULT_MIN_R2, DEFAULT_MIN_PAIRS);
+    }
+
+    /**
+     * Builds a ConversionGraph from a list of comparison results, using
+     * {@link #DEFAULT_MIN_PAIRS} as the minimum paired-observation threshold.
+     */
+    public static ConversionGraph from(List<ComparisonResult> results, double minR2)
+    {
+        return from(results, minR2, DEFAULT_MIN_PAIRS);
     }
 
     /**
      * Builds a ConversionGraph from a list of comparison results.
-     * Results with no fit or R² below {@code minR2} are ignored.
+     * Results with no fit, R² below {@code minR2}, or fewer than {@code minPairs}
+     * post-trim paired observations are ignored.
      * <p>
      * Year-transition edges (same system, same variant, consecutive years) have their
      * inverse also added, enabling backward-year traversal in the DFS.  This lets Step 12
@@ -55,13 +75,13 @@ public class ConversionGraph
      * for a prior year: IRC-NS-currentYear ←(inv)← IRC-NS-priorYear →(cross)→ IRC-spin-priorYear
      * →(forward)→ IRC-spin-currentYear.
      */
-    public static ConversionGraph from(List<ComparisonResult> results, double minR2)
+    public static ConversionGraph from(List<ComparisonResult> results, double minR2, int minPairs)
     {
         Map<ConversionNode, List<ConversionEdge>> adj = new LinkedHashMap<>();
         for (ComparisonResult r : results)
         {
             LinearFit fit = r.fit();
-            if (fit == null || fit.r2() < minR2)
+            if (fit == null || fit.r2() < minR2 || r.n() < minPairs)
                 continue;
 
             ComparisonKey k = r.key();

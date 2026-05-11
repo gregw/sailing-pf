@@ -18,6 +18,10 @@ public record Design(
     List<String> aliases,  // alternate design names, e.g. "Mumm 30" for "Farr 30"
     List<String> sources,  // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
     Instant lastUpdated,   // when this record was last written by an importer; nullable
+    @JsonIgnore boolean noSpinnaker, // true when this design physically cannot fly a spinnaker
+    // (e.g. cat-rigged): spin and nonSpin RF/PF are treated
+    // as a single combined factor. Persisted in design.yaml,
+    // not in the per-design JSON file.
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Design>
 {
@@ -31,10 +35,20 @@ public record Design(
     @Override
     public Design withLoadedAt(Instant t)
     {
-        return new Design(id, canonicalName, aliases, sources, lastUpdated, t);
+        return new Design(id, canonicalName, aliases, sources, lastUpdated, noSpinnaker, t);
     }
 
-    // loadedAt is loading metadata, not domain data — exclude from equality
+    /**
+     * Returns a copy of this Design with the given {@code noSpinnaker} flag value.
+     */
+    public Design withNoSpinnaker(boolean flag)
+    {
+        return new Design(id, canonicalName, aliases, sources, lastUpdated, flag, loadedAt);
+    }
+
+    // loadedAt is loading metadata, not domain data — exclude from equality.
+    // noSpinnaker is catalogue-derived runtime state — exclude from equality so toggling
+    // the flag never marks a Design dirty for disk persistence.
     @Override
     public boolean equals(Object o)
     {
@@ -62,6 +76,7 @@ public record Design(
             ", aliases=" + aliases +
             ", sources=" + sources +
             ", lastUpdated=" + lastUpdated +
+            ", noSpinnaker=" + noSpinnaker +
             '}';
     }
 }

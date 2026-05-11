@@ -307,6 +307,7 @@ clubs:
       - "5656-mondo-sydney38"
       - "2407-manlysailingaqualuna-force24"
       - "MH137-plumcrazy-adamsmiller3012tonner"
+      - "YC868-velocity-beneteaufirst317"
   mhyc.com.au:
     shortName: "MHYC"
     state: "NSW"
@@ -534,7 +535,7 @@ clubs:
     state: "VIC"
     fullName: "Queenscliff Cruising Yacht Club"
     excluded: null
-    email: "sailing@queenscliffcruisingyachtclub.org"
+    email: "admin@qcyc.org.au"
     aliases: []
     topyacht: null
     boats: null
@@ -1075,3 +1076,4 @@ noclub:
   - "7060-spiritbird-farr30"
   - "1487-jindavik-etchells"
   - "1992-itcouldbebunnies-sabre"
+  - "M045-biggerdayout-beneteauoceanis45"

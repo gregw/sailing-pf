@@ -1424,6 +1424,9 @@ public class AdminApiServlet extends HttpServlet
             String oldId = (String) body.get("designId");
             String newIdRaw = (String) body.get("newId");
             String newCanonicalNameRaw = (String) body.get("canonicalName");
+            // Optional: explicit override of the noSpinnaker flag. Absent → unchanged.
+            Boolean newNoSpinnaker = body.containsKey("noSpinnaker")
+                ? Boolean.TRUE.equals(body.get("noSpinnaker")) : null;
 
             if (oldId == null || oldId.isBlank())
             {
@@ -1453,7 +1456,8 @@ public class AdminApiServlet extends HttpServlet
 
             boolean idChanged   = !newId.equalsIgnoreCase(oldId);
             boolean nameChanged = !newName.equalsIgnoreCase(old.canonicalName());
-            if (!idChanged && !nameChanged)
+            boolean noSpinChanged = newNoSpinnaker != null && newNoSpinnaker != old.noSpinnaker();
+            if (!idChanged && !nameChanged && !noSpinChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true, "newDesignId", oldId));
                 return;
@@ -1483,7 +1487,7 @@ public class AdminApiServlet extends HttpServlet
                 // Pre-create the renamed design at the new id, then let mergeDesigns move
                 // all boats and delete the old design record.
                 Design renamed = new Design(newId, newName, aliases, old.sources(),
-                    java.time.Instant.now(), null);
+                    java.time.Instant.now(), old.noSpinnaker(), null);
                 store.putDesign(renamed);
 
                 DataStore.DesignMergeResult r = store.mergeDesigns(newId, List.of(oldId));
@@ -1503,12 +1507,17 @@ public class AdminApiServlet extends HttpServlet
             {
                 // Id unchanged — just swap the canonical name and add the old name as an alias.
                 Design renamed = new Design(oldId, newName, aliases, old.sources(),
-                    java.time.Instant.now(), null);
+                    java.time.Instant.now(), old.noSpinnaker(), null);
                 store.putDesign(renamed);
                 Aliases.appendDesignMergeAliases(store.configDir(), oldId, newName,
                     List.of(old.canonicalName()));
                 store.reloadAliases();
             }
+
+            // noSpinnaker is YAML-managed; persist via the catalogue, then re-stamp the
+            // in-memory design records.
+            if (noSpinChanged)
+                store.setDesignNoSpinnaker(newId, newNoSpinnaker);
 
             store.save();
             if (cache != null)
@@ -1516,6 +1525,7 @@ public class AdminApiServlet extends HttpServlet
 
             writeJson(resp, Map.of("ok", true, "newDesignId", newId,
                 "idChanged", idChanged, "nameChanged", nameChanged,
+                "noSpinChanged", noSpinChanged,
                 "updatedBoats", updatedBoats,
                 "updatedRaces", updatedRaces,
                 "updatedFinishers", updatedFinishers));
@@ -2194,6 +2204,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("boats",         dd != null ? dd.boatIds().size() : 0);
                 row.put("excluded",      store.isDesignExcluded(d.id()));
                 row.put("ignored",       store.isDesignIgnored(d.id()));
+                row.put("noSpinnaker", store.isDesignNoSpinnaker(d.id()));
                 return row;
             }).collect(Collectors.toList());
 
@@ -2211,7 +2222,16 @@ public class AdminApiServlet extends HttpServlet
                 resp.sendError(404);
                 return;
             }
-            writeJson(resp, design);
+            // Include the catalogue-derived noSpinnaker flag in the detail response
+            // (the @JsonIgnore on the record itself prevents auto-serialisation).
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("id", design.id());
+            detail.put("canonicalName", design.canonicalName());
+            detail.put("aliases", design.aliases());
+            detail.put("sources", design.sources());
+            detail.put("lastUpdated", design.lastUpdated());
+            detail.put("noSpinnaker", design.noSpinnaker());
+            writeJson(resp, detail);
         }
     }
 
@@ -2723,6 +2743,7 @@ public class AdminApiServlet extends HttpServlet
         result.put("targetIrcYear", _taskService.targetIrcYear());
         result.put("outlierSigma", _taskService.outlierSigma());
         result.put("minAnalysisR2", _taskService.minAnalysisR2());
+        result.put("minAnalysisPairs", _taskService.minAnalysisPairs());
         Map<String, Object> pfConfig = new LinkedHashMap<>();
         pfConfig.put("lambda", _taskService.pfLambda());
         pfConfig.put("convergenceThreshold", _taskService.pfConvergenceThreshold());
@@ -2732,6 +2753,8 @@ public class AdminApiServlet extends HttpServlet
         pfConfig.put("asymmetryFactor", _taskService.pfAsymmetryFactor());
         pfConfig.put("outerDampingFactor", _taskService.pfOuterDampingFactor());
         pfConfig.put("outerConvergenceThreshold", _taskService.pfOuterConvergenceThreshold());
+        pfConfig.put("crossVariantLambda", _taskService.pfCrossVariantLambda());
+        pfConfig.put("graphCrossVariantLambda", _taskService.pfGraphCrossVariantLambda());
         result.put("pfConfig", pfConfig);
         result.put("slidingAverageCount", _taskService.slidingAverageCount());
         result.put("slidingAverageDrops", _taskService.slidingAverageDrops());
@@ -2868,13 +2891,16 @@ public class AdminApiServlet extends HttpServlet
             Object rawCrossVariant = body.get("pfCrossVariantLambda");
             Double pfCrossVariantLambda = (rawCrossVariant instanceof Number n10 && n10.doubleValue() >= 0)
                 ? n10.doubleValue() : null;
+            Object rawGraphCrossVariant = body.get("pfGraphCrossVariantLambda");
+            Double pfGraphCrossVariantLambda = (rawGraphCrossVariant instanceof Number n11 && n11.doubleValue() >= 0)
+                ? n11.doubleValue() : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
                 sailsysStartRaceId, sailsysEndRaceId,
                 targetIrcYear, outlierSigma,
                 pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
                 pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
-                pfCrossVariantLambda);
+                pfCrossVariantLambda, pfGraphCrossVariantLambda);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }

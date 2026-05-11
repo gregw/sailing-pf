@@ -1,24 +1,24 @@
 package org.mortbay.sailing.pf.server;
 
+import java.nio.file.Path;
+import java.util.EnumSet;
+
 import jakarta.servlet.DispatcherType;
 import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.security.openid.OpenIdAuthenticator;
-import org.eclipse.jetty.security.openid.OpenIdConfiguration;
-import org.eclipse.jetty.security.openid.OpenIdLoginService;
 import org.eclipse.jetty.ee10.servlet.FilterHolder;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.ee10.servlet.SessionHandler;
 import org.eclipse.jetty.security.Constraint;
 import org.eclipse.jetty.security.SecurityHandler;
+import org.eclipse.jetty.security.openid.OpenIdAuthenticator;
+import org.eclipse.jetty.security.openid.OpenIdConfiguration;
+import org.eclipse.jetty.security.openid.OpenIdLoginService;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.file.Path;
-import java.util.EnumSet;
 
 public class PfServer
 {
@@ -38,7 +38,8 @@ public class PfServer
         taskService.start();
 
         AnalysisCache cache = new AnalysisCache(store);
-        cache.refresh(taskService.targetIrcYear(), taskService.outlierSigma(), taskService.clubCertificateWeight(), taskService.minAnalysisR2());
+        cache.refresh(taskService.targetIrcYear(), taskService.outlierSigma(), taskService.clubCertificateWeight(),
+            taskService.minAnalysisR2(), taskService.minAnalysisPairs());
         taskService.setCache(cache);
         taskService.runStartupTasks();
 

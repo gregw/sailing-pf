@@ -1,13 +1,5 @@
 package org.mortbay.sailing.pf.analysis;
 
-import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.Factor;
-import org.mortbay.sailing.pf.data.Finisher;
-import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.store.DataStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,6 +8,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+
+import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Factor;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.store.DataStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * PF optimiser: weighted alternating least squares in log space.
@@ -53,11 +54,76 @@ public class PfOptimiser
     private static final int NON_SPIN = 1;
     private static final int TWO_HANDED = 2;
 
+    /**
+     * Log-linear approximation of the conversion graph's cross-variant edge for one
+     * ordered variant pair. Stored as a fitted line in log-PF space so each ALS inner
+     * iteration is one multiply-add rather than a fresh DFS traversal.
+     */
+    private record VariantConverter(double slope, double intercept, double weight) {}
+
+    /**
+     * Probes the conversion graph at two seed factors per ordered variant pair and fits
+     * a log-linear converter: {@code log(predicted_v) = slope × log(source_v2) + intercept}.
+     * Returns null entries for pairs the graph cannot reach (e.g. missing twoHanded path).
+     */
+    private static VariantConverter[][] buildVariantConverters(ConversionGraph graph, int targetYear)
+    {
+        ConversionNode[] node = new ConversionNode[]{
+            new ConversionNode("IRC", targetYear, false, false), // SPIN
+            new ConversionNode("IRC", targetYear, true, false), // NON_SPIN
+            new ConversionNode("IRC", targetYear, false, true)   // TWO_HANDED
+        };
+        VariantConverter[][] vc = new VariantConverter[3][3];
+        for (int from = 0; from < 3; from++)
+        {
+            for (int to = 0; to < 3; to++)
+            {
+                if (from == to)
+                    continue;
+                Factor probe1 = ReferenceNetworkBuilder.convertViaGraph(
+                    new Factor(1.0, 1.0), node[from], node[to], graph);
+                Factor probe2 = ReferenceNetworkBuilder.convertViaGraph(
+                    new Factor(2.0, 1.0), node[from], node[to], graph);
+                if (probe1 == null || probe2 == null)
+                    continue;
+                // Two points in log-space: x1 = log(1.0) = 0, x2 = log(2.0)
+                double x1 = 0.0, x2 = Math.log(2.0);
+                double y1 = Math.log(probe1.value());
+                double y2 = Math.log(probe2.value());
+                double slope = (y2 - y1) / (x2 - x1);
+                double intercept = y1; // since x1 = 0
+                // Both probes carry the same seed weight (1.0); aggregated weight is the
+                // graph's path-confidence for this edge. Use probe1's weight as the canonical.
+                double weight = probe1.weight();
+                if (weight <= 0)
+                    continue;
+                vc[from][to] = new VariantConverter(slope, intercept, weight);
+            }
+        }
+        return vc;
+    }
+
+    /**
+     * Backward-compatible overload: runs without the graph-driven cross-variant term.
+     * Equivalent to passing {@code null} for the graph (term disabled regardless of
+     * {@link PfConfig#graphCrossVariantLambda()}).
+     */
     public PfResult optimise(
         DataStore store,
         Map<String, BoatDerived> boatDerivedMap,
         PfConfig config,
         Supplier<Boolean> stopCheck)
+    {
+        return optimise(store, boatDerivedMap, config, stopCheck, null, 0);
+    }
+
+    public PfResult optimise(
+        DataStore store,
+        Map<String, BoatDerived> boatDerivedMap,
+        PfConfig config,
+        Supplier<Boolean> stopCheck,
+        ConversionGraph graph,
+        int targetYear)
     {
         // --- Setup: build working data structures ---
         Map<String, Integer> boatOrdinals = new HashMap<>();
@@ -204,6 +270,16 @@ public class PfOptimiser
             boatVariantEntries[e.variant()][e.boatOrdinal()].add(i);
         }
 
+        // --- Build per-variant-pair graph-converter cache for the cross-variant graph term ---
+        // For each ordered (v2 → v) pair we probe convertViaGraph at two seed values and fit
+        // a log-linear function: predLogPf_v = slope * logPf_v2 + intercept, weighted by the
+        // aggregated path confidence. Built once here; consulted O(boats×variants) per inner
+        // iteration. Null entries (no graph path) cleanly disable the term for that pair.
+        VariantConverter[][] varConv =
+            (graph != null && config.graphCrossVariantLambda() > 0 && targetYear > 0)
+                ? buildVariantConverters(graph, targetYear)
+                : null;
+
         // --- Step 13: Initial T₀ per division (weighted median of corrected times) ---
         double[] divIqrLog = new double[nDivs];
         computeT0(entries, divEntryIndexes, logPf, entryWeights, logT, divIqrLog);
@@ -285,7 +361,7 @@ public class PfOptimiser
                         double denom = sumW + config.lambda() * rfW;
                         double numer = sumWX + config.lambda() * rfW * rfLogForReg;
 
-                        // Cross-variant coupling: pull ratio toward RF-implied ratio
+                        // Cross-variant coupling: pull ratio toward this BOAT's RF-implied ratio
                         double mu = config.crossVariantLambda();
                         if (mu > 0 && !Double.isNaN(rfLog))
                         {
@@ -297,6 +373,39 @@ public class PfOptimiser
                                 if (Double.isNaN(rfLog2)) continue;
                                 numer += mu * (logPf[v2][b] + (rfLog - rfLog2));
                                 denom += mu;
+                            }
+                        }
+
+                        // Graph-driven cross-variant coupling: pull each variant's PF toward
+                        // the FLEET-WIDE conversion-graph prediction of the other variants'
+                        // current PFs (Gauss-Seidel — reads current logPf[v2][b] each pass).
+                        double muG = config.graphCrossVariantLambda();
+                        if (muG > 0 && varConv != null)
+                        {
+                            BoatDerived bd = boatDerivedMap.get(boatId);
+                            Boat boatRec = bd != null ? bd.boat() : null;
+                            boolean noSpinDesign = boatRec != null && boatRec.designId() != null
+                                && store.isDesignNoSpinnaker(boatRec.designId());
+                            double[] rfLogs2 = boatLogRf.get(boatId);
+                            for (int v2 = 0; v2 < 3; v2++)
+                            {
+                                if (v2 == v)
+                                    continue;
+                                // Cat-rigged designs: spin and nonSpin slots are collapsed
+                                // post-hoc in mergePfResults; don't pull them apart here.
+                                if (noSpinDesign && ((v == SPIN && v2 == NON_SPIN)
+                                    || (v == NON_SPIN && v2 == SPIN)))
+                                    continue;
+                                VariantConverter c = varConv[v2][v];
+                                if (c == null)
+                                    continue;
+                                // Need some signal on v2 (races or a real RF) to predict from.
+                                if (entryCount[v2][b] == 0 && Double.isNaN(rfLogs2[v2]))
+                                    continue;
+                                double predLogPf = c.slope * logPf[v2][b] + c.intercept;
+                                double w = muG * c.weight;
+                                numer += w * predLogPf;
+                                denom += w;
                             }
                         }
 

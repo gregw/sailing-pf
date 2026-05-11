@@ -1630,6 +1630,8 @@ function showEditDesignPanel() {
         : ('Request edit for Design ' + item.id);
     document.getElementById('edit-design-id').value   = item.id || '';
     document.getElementById('edit-design-name').value = item.canonicalName || '';
+    const nsBox = document.getElementById('edit-design-no-spinnaker');
+    if (nsBox) nsBox.checked = !!item.noSpinnaker;
     const boats = item.boats != null ? item.boats : 0;
     const warn = document.getElementById('edit-design-warning');
     warn.textContent = boats > 0
@@ -1650,7 +1652,10 @@ function hideEditDesignPanel() {
 function buildDesignEditBody() {
     const newId = document.getElementById('edit-design-id').value.trim();
     const newName = document.getElementById('edit-design-name').value.trim();
-    return { designId: editingDesignId, newId, canonicalName: newName };
+    const nsBox = document.getElementById('edit-design-no-spinnaker');
+    const body = {designId: editingDesignId, newId, canonicalName: newName};
+    if (nsBox) body.noSpinnaker = !!nsBox.checked;
+    return body;
 }
 
 async function saveDesignEdit() {

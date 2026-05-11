@@ -467,14 +467,15 @@ public class DataStore
                 return existing;
             // Canonical design not yet in store — create it using the seed's canonical name
             String seedName = aliases.designCanonicalName(canonicalId);
-            design = new Design(canonicalId, seedName != null ? seedName : className.trim(), List.of(), List.of(), null, null);
+            design = new Design(canonicalId, seedName != null ? seedName : className.trim(),
+                List.of(), List.of(), null, false, null);
             putDesign(design);
             if (designCatalogue.isExcluded(canonicalId))
                 LOG.info("Design {} is excluded (dinghy/OTB class)", canonicalId);
             return design;
         }
 
-        design = new Design(designId, className.trim(), List.of(), List.of(), null, null);
+        design = new Design(designId, className.trim(), List.of(), List.of(), null, false, null);
         putDesign(design);
         if (designCatalogue.isExcluded(designId))
             LOG.info("Design {} is excluded (dinghy/OTB class)", designId);
@@ -636,9 +637,13 @@ public class DataStore
     public void putDesign(Design design)
     {
         requireStarted();
-        designs.put(design.id(), design);
+        // Always reflect the catalogue's current noSpinnaker state on the in-memory record.
+        boolean catNoSpin = designCatalogue.isNoSpinnaker(design.id());
+        Design stamped = design.noSpinnaker() == catNoSpin ? design : design.withNoSpinnaker(catNoSpin);
+        designs.put(stamped.id(), stamped);
         InvalidationListener l = invalidationListener;
-        if (l != null) l.onDesignChanged(design.id());
+        if (l != null)
+            l.onDesignChanged(stamped.id());
     }
 
     public void putRace(Race race)
@@ -739,7 +744,8 @@ public class DataStore
         for (Design md : toMerge)
             allSources.addAll(md.sources());
         putDesign(new Design(keepDesign.id(), keepDesign.canonicalName(),
-            List.copyOf(allAliases), List.copyOf(allSources), Instant.now(), null));
+            List.copyOf(allAliases), List.copyOf(allSources), Instant.now(),
+            keepDesign.noSpinnaker(), null));
 
         // Repoint all boats whose designId references a merged-away design; fix boat IDs too
         Set<String> mergeIdSet = new HashSet<>(mergeIds);
@@ -992,6 +998,30 @@ public class DataStore
         requireStarted();
         Designs.setFlag(configDir, id, Designs.Flag.EXCLUDED, excluded);
         reloadDesignCatalogue();
+    }
+
+    /**
+     * Returns true if the given design is flagged as physically unable to fly a spinnaker
+     * (cat-rigged, gaff cutter, etc.). When true, the reference-factor and PF analyses
+     * collapse a boat's spin and non-spin factors into a single aggregated value, since
+     * any "spin entry" in the source data does not actually imply a spinnaker was flown.
+     * Toggled via {@link #setDesignNoSpinnaker(String, boolean)}.
+     */
+    public boolean isDesignNoSpinnaker(String designId)
+    {
+        if (designId == null || designId.isBlank())
+            return false;
+        return designCatalogue.isNoSpinnaker(designId);
+    }
+
+    public void setDesignNoSpinnaker(String id, boolean flag)
+    {
+        requireStarted();
+        Designs.setFlag(configDir, id, Designs.Flag.NO_SPINNAKER, flag);
+        reloadDesignCatalogue();
+        InvalidationListener l = invalidationListener;
+        if (l != null)
+            l.onDesignChanged(id);
     }
 
     /**
@@ -1258,6 +1288,9 @@ public class DataStore
     {
         requireStarted();
         designCatalogue = Designs.load(configDir);
+        // Re-stamp catalogue-derived flags on every in-memory Design (e.g. noSpinnaker).
+        designs.replaceAll((id, d) -> d.noSpinnaker() == designCatalogue.isNoSpinnaker(id)
+            ? d : d.withNoSpinnaker(designCatalogue.isNoSpinnaker(id)));
     }
 
     /**
@@ -1531,7 +1564,7 @@ public class DataStore
             if (existing == null)
             {
                 Design d = new Design(normId, canonicalName, List.of(),
-                    List.of("DesignOverride"), Instant.now(), null);
+                    List.of("DesignOverride"), Instant.now(), false, null);
                 putDesign(d);
                 LOG.info("Created design {} ('{}') from boatDesignOverrides in design.yaml", normId, canonicalName);
             }
@@ -1539,9 +1572,15 @@ public class DataStore
             {
                 putDesign(new Design(existing.id(), existing.canonicalName(),
                     existing.aliases(), addSource(existing.sources(), "DesignOverride"),
-                    existing.lastUpdated(), null));
+                    existing.lastUpdated(), existing.noSpinnaker(), null));
             }
         });
+
+        // Stamp the catalogue-derived noSpinnaker flag onto every Design now that both the
+        // designs map and the catalogue are loaded. Subsequent toggles re-stamp via reloadDesignCatalogue().
+        designs.replaceAll((id, d) -> d.noSpinnaker() == designCatalogue.isNoSpinnaker(id)
+            ? d : d.withNoSpinnaker(designCatalogue.isNoSpinnaker(id)));
+
         loadExclusions();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));

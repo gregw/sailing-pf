@@ -72,6 +72,7 @@ orcListMaxAgeDays: 1
 
 # --- Analysis ---
 minAnalysisR2: 0.5
+minAnalysisPairs: 8
 clubCertificateWeight: 0.9
 
 # --- PF optimiser ---
@@ -84,6 +85,7 @@ pfConvergenceThreshold: 1.0E-4
 pfMaxInnerIterations: 100
 pfMaxOuterIterations: 50
 pfCrossVariantLambda: 0.0
+pfGraphCrossVariantLambda: 0.25
 
 # --- Sliding average / consistency ---
 slidingAverageCount: 8
@@ -107,13 +109,13 @@ userPort: 8080
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
   bwps/api: "2026-05-08T22:39:31.469690392Z"
-  analysis/run: "2026-05-10T05:02:54.535613854Z"
+  analysis/run: "2026-05-11T06:46:10.811140203Z"
   orc/api: "2026-05-08T22:39:24.392950184Z"
-  pf-optimise/run: "2026-05-10T05:02:57.751745999Z"
-  save-database/run: "2026-05-10T05:53:14.792764078Z"
-  topyacht/api: "2026-05-09T16:18:36.612605661Z"
-  build-indexes/run: "2026-05-10T05:02:53.750991542Z"
-  reference-factors/run: "2026-05-10T05:02:56.283627799Z"
-  sailsys-races/run: "2026-05-09T16:00:00.001396578Z"
+  pf-optimise/run: "2026-05-11T06:46:13.939300768Z"
+  save-database/run: "2026-05-11T06:46:22.358705066Z"
+  topyacht/api: "2026-05-10T16:18:19.599551797Z"
+  build-indexes/run: "2026-05-11T06:46:09.914809471Z"
+  reference-factors/run: "2026-05-11T06:46:12.394340430Z"
+  sailsys-races/run: "2026-05-10T16:00:00.001386431Z"
   ams/api: "2026-05-08T22:39:29.540390586Z"
 

@@ -1,14 +1,5 @@
 package org.mortbay.sailing.pf.analysis;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.mortbay.sailing.pf.data.Boat;
-import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.Factor;
-import org.mortbay.sailing.pf.data.Finisher;
-import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.store.DataStore;
-
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -20,7 +11,19 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Factor;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.store.DataStore;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PfOptimiserTest
 {
@@ -55,7 +58,7 @@ class PfOptimiserTest
     {
         // Boat with strong RF (weight=1.0) but only 1 race entry
         Scenario s = buildScenarioWithFewRaces();
-        PfConfig strongReg = new PfConfig(5.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0);
+        PfConfig strongReg = new PfConfig(5.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.0);
         PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, strongReg, () -> false);
 
         // "b5-echo-design" has only 1 race but RF = 1.15
@@ -73,10 +76,10 @@ class PfOptimiserTest
         // Build a scenario with one fast outlier, run with and without asymmetry
         Scenario s = buildScenarioWithOutlier(true);  // fast outlier
 
-        PfConfig withAsym = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 3.0, 0.5, 0.01, 0.0);
+        PfConfig withAsym = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 3.0, 0.5, 0.01, 0.0, 0.0);
         PfResult resultAsym = new PfOptimiser().optimise(s.store, s.boatDerived, withAsym, () -> false);
 
-        PfConfig noAsym = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 1.0, 0.5, 0.01, 0.0);
+        PfConfig noAsym = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 1.0, 0.5, 0.01, 0.0, 0.0);
         PfResult resultNoAsym = new PfOptimiser().optimise(s.store, s.boatDerived, noAsym, () -> false);
 
         // The outlier boat's PF should differ more from RF with asymmetry=1 (less down-weighting of the fast result)

@@ -372,7 +372,7 @@ class DataStoreTest {
     void findOrCreateBoatCreatesNewBoat(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design design = new Design("j24", "J/24", List.of(), List.of(), null, null);
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null, false, null);
         store.putDesign(design);
 
         Boat boat = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
@@ -388,7 +388,7 @@ class DataStoreTest {
     void findOrCreateBoatReturnsSameBoatOnExactId(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design design = new Design("j24", "J/24", List.of(), List.of(), null, null);
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null, false, null);
         store.putDesign(design);
 
         Boat boat1 = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
@@ -406,7 +406,7 @@ class DataStoreTest {
                 List.of(), List.of(), null, null);
         store.putBoat(noDesign);
 
-        Design design = new Design("j24", "J/24", List.of(), List.of(), null, null);
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null, false, null);
         store.putDesign(design);
 
         Boat upgraded = store.findOrCreateBoat("AUS1234", "Raging Bull", "J/24");
@@ -434,7 +434,7 @@ class DataStoreTest {
     void findOrCreateBoatMatchesDesignAlias(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
-        Design existing = new Design("j24", "J/24", List.of("J 24"), List.of(), null, null);
+        Design existing = new Design("j24", "J/24", List.of("J 24"), List.of(), null, false, null);
         store.putDesign(existing);
 
         Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "J 24");
@@ -451,7 +451,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         // Pre-populate the canonical design
-        Design canonical = new Design("sydney36cr", "Sydney 36 CR", List.of(), List.of(), null, null);
+        Design canonical = new Design("sydney36cr", "Sydney 36 CR", List.of(), List.of(), null, false, null);
         store.putDesign(canonical);
 
         Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydney 36 OD");
@@ -516,8 +516,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         // Two boats with same normalised sail+name but different designs.
-        Design tp52 = new Design("tp52", "TP52", List.of(), List.of(), null, null);
-        Design farr40 = new Design("farr40", "Farr 40", List.of(), List.of(), null, null);
+        Design tp52 = new Design("tp52", "TP52", List.of(), List.of(), null, false, null);
+        Design farr40 = new Design("farr40", "Farr 40", List.of(), List.of(), null, false, null);
         store.putDesign(tp52);
         store.putDesign(farr40);
         // Sail numbers are stored post-AUS-prefix-strip (see findOrCreateBoatCreatesNewBoat).
@@ -655,8 +655,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design oldDesign  = new Design("old",  "Old Class", List.of(), List.of(), null, null);
-        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), null, null);
+        Design oldDesign = new Design("old", "Old Class", List.of(), List.of(), null, false, null);
+        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), null, false, null);
         store.putDesign(oldDesign);
         store.putDesign(keepDesign);
 
@@ -691,8 +691,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design oldDesign  = new Design("old",  "Old Class", List.of(), List.of(), null, null);
-        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), null, null);
+        Design oldDesign = new Design("old", "Old Class", List.of(), List.of(), null, false, null);
+        Design keepDesign = new Design("keep", "Keep Class", List.of(), List.of(), null, false, null);
         store.putDesign(oldDesign);
         store.putDesign(keepDesign);
 
@@ -743,8 +743,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design elliot6  = new Design("elliot6",  "Elliot 6",  List.of(), List.of(), null, null);
-        Design elliott6 = new Design("elliott6", "Elliott 6", List.of(), List.of(), null, null);
+        Design elliot6 = new Design("elliot6", "Elliot 6", List.of(), List.of(), null, false, null);
+        Design elliott6 = new Design("elliott6", "Elliott 6", List.of(), List.of(), null, false, null);
         store.putDesign(elliot6);
         store.putDesign(elliott6);
 
@@ -804,8 +804,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Design d1 = new Design("d1", "D1", List.of(), List.of(), null, null);
-        Design d2 = new Design("d2", "D2", List.of(), List.of(), null, null);
+        Design d1 = new Design("d1", "D1", List.of(), List.of(), null, false, null);
+        Design d2 = new Design("d2", "D2", List.of(), List.of(), null, false, null);
         store.putDesign(d1);
         store.putDesign(d2);
 
@@ -842,7 +842,7 @@ class DataStoreTest {
         store.start();
 
         // Create an existing "sydney36" design (the wrong one, from raw data)
-        store.putDesign(new Design("sydney36", "Sydney 36", List.of(), List.of(), null, null));
+        store.putDesign(new Design("sydney36", "Sydney 36", List.of(), List.of(), null, false, null));
 
         // The override should have auto-created "sydney36mkii" at startup
         assertNotNull(store.designs().get("sydney36mkii"), "override design should be auto-created");
@@ -879,7 +879,7 @@ class DataStoreTest {
         store.start();
 
         // Simulate ORC having already created the properly-designed boat
-        store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, null));
+        store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, false, null));
         store.putBoat(new Boat("6333-georgiaexpress-farr36", "6333", "Georgia Express", "farr36",
                                null, List.of(), List.of("ORC:Farr 36"), null, null));
 
@@ -907,8 +907,8 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        store.putDesign(new Design("d1", "D1", List.of(), List.of(), null, null));
-        store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, null));
+        store.putDesign(new Design("d1", "D1", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, false, null));
 
         // Boat A is under design d1 — will be de-designed (no collision at "1-foo").
         // Sail number "1" rather than "AUS1" to keep the implicit AUS-strip out of this test.
@@ -966,6 +966,45 @@ class DataStoreTest {
                 LocalDate.of(2024, 2, 1), "TopYacht");
         assertEquals("1-foo", resolved.id(),
                 "ignored incoming design should route to the existing designless boat");
+    }
+
+    /**
+     * setDesignNoSpinnaker persists the flag in design.yaml, re-stamps the in-memory
+     * Design record, and survives a store stop/start cycle.
+     */
+    @Test
+    void setDesignNoSpinnakerPersistsAndRestamps(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        store.putDesign(new Design("radford12", "Radford 12", List.of(), List.of(), null, false, null));
+        assertFalse(store.designs().get("radford12").noSpinnaker(),
+            "default state should be noSpinnaker=false");
+        assertFalse(store.isDesignNoSpinnaker("radford12"));
+
+        store.setDesignNoSpinnaker("radford12", true);
+
+        // 1. Catalogue accessor reports the new state.
+        assertTrue(store.isDesignNoSpinnaker("radford12"));
+        // 2. In-memory Design record is re-stamped without a fresh putDesign.
+        assertTrue(store.designs().get("radford12").noSpinnaker(),
+            "in-memory Design should reflect the catalogue flag after toggle");
+
+        // 3. Persists across a stop/start cycle (i.e. survives in design.yaml).
+        store.stop();
+        DataStore reopened = new DataStore(tempDir);
+        reopened.start();
+        reopened.putDesign(new Design("radford12", "Radford 12", List.of(), List.of(), null, false, null));
+        assertTrue(reopened.isDesignNoSpinnaker("radford12"),
+            "noSpinnaker flag should reload from design.yaml");
+        assertTrue(reopened.designs().get("radford12").noSpinnaker(),
+            "putDesign should re-stamp the catalogue flag on insertion");
+
+        // 4. Clearing the flag updates state in both runtime and on disk.
+        reopened.setDesignNoSpinnaker("radford12", false);
+        assertFalse(reopened.isDesignNoSpinnaker("radford12"));
+        assertFalse(reopened.designs().get("radford12").noSpinnaker());
     }
 
     // --- Helpers ---

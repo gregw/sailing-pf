@@ -1,5 +1,14 @@
 package org.mortbay.sailing.pf.server;
 
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.mortbay.sailing.pf.analysis.BoatDerived;
 import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.ComparisonResult;
@@ -7,34 +16,26 @@ import org.mortbay.sailing.pf.analysis.ConversionGraph;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
 import org.mortbay.sailing.pf.analysis.DivisionPf;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
+import org.mortbay.sailing.pf.analysis.HandicapAnalyser;
+import org.mortbay.sailing.pf.analysis.PerformanceProfile;
+import org.mortbay.sailing.pf.analysis.PerformanceProfileBuilder;
 import org.mortbay.sailing.pf.analysis.PfConfig;
 import org.mortbay.sailing.pf.analysis.PfOptimiser;
 import org.mortbay.sailing.pf.analysis.PfQuality;
 import org.mortbay.sailing.pf.analysis.PfResult;
-import org.mortbay.sailing.pf.analysis.PerformanceProfile;
-import org.mortbay.sailing.pf.analysis.PerformanceProfileBuilder;
 import org.mortbay.sailing.pf.analysis.RaceDerived;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
-import org.mortbay.sailing.pf.analysis.HandicapAnalyser;
 import org.mortbay.sailing.pf.analysis.ReferenceNetworkBuilder;
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.time.LocalDate;
-import java.util.LinkedHashMap;
-import java.util.stream.Collectors;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.OptionalInt;
-import java.util.Set;
 
 /**
  * Shared cache for analysis results. Holds the output of {@link HandicapAnalyser#analyseAll()}
@@ -56,6 +57,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile List<ComparisonResult> comparisons = List.of();
     private volatile int targetYear = LocalDate.now().getYear();
     private volatile double minAnalysisR2 = ConversionGraph.DEFAULT_MIN_R2;
+    private volatile int minAnalysisPairs = ConversionGraph.DEFAULT_MIN_PAIRS;
 
     // Consolidated per-entity derived data
     private volatile Map<String, BoatDerived> boatDerived = Map.of();
@@ -93,42 +95,48 @@ public class AnalysisCache implements DataStore.InvalidationListener
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
      * @param outlierSigma  outlier trimming threshold in units of SE, or null to use default (2.5)
      * @param minR2         minimum R² for a conversion edge to be included in the graph
+     * @param minPairs      minimum post-trim paired observations for a conversion edge
      */
-    public void refresh(Integer targetIrcYear, Double outlierSigma, double clubCertificateWeight, double minR2)
+    public void refresh(Integer targetIrcYear, Double outlierSigma, double clubCertificateWeight,
+                        double minR2, int minPairs)
     {
         LOG.info("AnalysisCache: refreshing...");
         double sigma = outlierSigma != null ? outlierSigma : 2.5;
         List<ComparisonResult> newComparisons = new HandicapAnalyser(store, sigma).analyseAll();
-        ConversionGraph graph = ConversionGraph.from(newComparisons, minR2);
+        ConversionGraph graph = ConversionGraph.from(newComparisons, minR2, minPairs);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
 
         comparisons = newComparisons;
         targetYear  = year;
         minAnalysisR2 = minR2;
+        minAnalysisPairs = minPairs;
         mergeReferenceFactors(built);
-        LOG.info("AnalysisCache: {} comparisons, {} boat derived, {} design derived (targetYear={}, minR2={})",
-            newComparisons.size(), boatDerived.size(), designDerived.size(), year, minR2);
+        LOG.info("AnalysisCache: {} comparisons, {} boat derived, {} design derived (targetYear={}, minR2={}, minPairs={})",
+            newComparisons.size(), boatDerived.size(), designDerived.size(), year, minR2, minPairs);
     }
 
     /**
      * Recomputes reference factors only, using the existing comparisons and conversion graph.
-     * Faster than {@link #refresh(Integer, Double, double, double)} when only the boat certificate data has changed.
+     * Faster than {@link #refresh} when only the boat certificate data has changed.
      *
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
      * @param minR2         minimum R² for a conversion edge to be included in the graph
+     * @param minPairs      minimum post-trim paired observations for a conversion edge
      */
-    public void refreshReferenceFactors(Integer targetIrcYear, double clubCertificateWeight, double minR2)
+    public void refreshReferenceFactors(Integer targetIrcYear, double clubCertificateWeight,
+                                        double minR2, int minPairs)
     {
         LOG.info("AnalysisCache: refreshing reference factors...");
-        ConversionGraph graph = ConversionGraph.from(comparisons, minR2);
+        ConversionGraph graph = ConversionGraph.from(comparisons, minR2, minPairs);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
         targetYear = year;
         minAnalysisR2 = minR2;
+        minAnalysisPairs = minPairs;
         mergeReferenceFactors(built);
-        LOG.info("AnalysisCache: {} boat derived, {} design derived (targetYear={}, minR2={})",
-            boatDerived.size(), designDerived.size(), year, minR2);
+        LOG.info("AnalysisCache: {} boat derived, {} design derived (targetYear={}, minR2={}, minPairs={})",
+            boatDerived.size(), designDerived.size(), year, minR2, minPairs);
     }
 
     /**
@@ -394,6 +402,11 @@ public class AnalysisCache implements DataStore.InvalidationListener
         return minAnalysisR2;
     }
 
+    public int minAnalysisPairs()
+    {
+        return minAnalysisPairs;
+    }
+
     public List<ComparisonResult> comparisons()
     {
         return comparisons;
@@ -435,7 +448,10 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public void refreshPf(PfConfig config, java.util.function.Supplier<Boolean> stopCheck)
     {
         LOG.info("AnalysisCache: running PF optimiser...");
-        PfResult result = new PfOptimiser().optimise(store, boatDerived, config, stopCheck);
+        // Build the conversion graph from the cached comparisons so the optimiser can
+        // apply the fleet-wide cross-variant pull on top of per-boat RF anchoring.
+        ConversionGraph graph = ConversionGraph.from(comparisons, minAnalysisR2, minAnalysisPairs);
+        PfResult result = new PfOptimiser().optimise(store, boatDerived, config, stopCheck, graph, targetYear);
         if (result.boatPfs().isEmpty())
         {
             LOG.info("AnalysisCache: PF optimiser returned no results (stopped or no data)");
@@ -466,9 +482,29 @@ public class AnalysisCache implements DataStore.InvalidationListener
         for (Map.Entry<String, BoatPf> e : result.boatPfs().entrySet())
         {
             BoatDerived existing = newBoats.get(e.getKey());
-            if (existing != null)
-                newBoats.put(e.getKey(), new BoatDerived(existing.boat(), existing.referenceFactors(),
-                    existing.raceIds(), existing.seriesIds(), e.getValue()));
+            if (existing == null)
+                continue;
+            BoatPf pf = e.getValue();
+            // For boats whose design is flagged noSpinnaker, collapse spin and nonSpin into
+            // one aggregated factor — the design physically cannot fly a kite, so any
+            // spin/nonSpin split in the source data is a categorisation artifact.
+            Boat boat = existing.boat();
+            if (boat.designId() != null && store.isDesignNoSpinnaker(boat.designId())
+                && (pf.spin() != null || pf.nonSpin() != null))
+            {
+                Factor combined = pf.spin() == null ? pf.nonSpin()
+                    : pf.nonSpin() == null ? pf.spin()
+                    : Factor.aggregate(pf.spin(), pf.nonSpin());
+                // Pick the larger-magnitude (more recent / data-driven) delta and combine race counts.
+                double delta = Math.abs(pf.referenceDeltaSpin()) > Math.abs(pf.referenceDeltaNonSpin())
+                    ? pf.referenceDeltaSpin() : pf.referenceDeltaNonSpin();
+                int totalRaces = pf.spinRaceCount() + pf.nonSpinRaceCount();
+                pf = new BoatPf(combined, combined, pf.twoHanded(),
+                    delta, delta, pf.referenceDeltaTwoHanded(),
+                    totalRaces, totalRaces, pf.twoHandedRaceCount());
+            }
+            newBoats.put(e.getKey(), new BoatDerived(existing.boat(), existing.referenceFactors(),
+                existing.raceIds(), existing.seriesIds(), pf));
         }
         this.boatDerived = Map.copyOf(newBoats);
 

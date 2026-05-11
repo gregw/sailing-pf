@@ -1,13 +1,5 @@
 package org.mortbay.sailing.pf.store;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.mortbay.sailing.pf.importer.IdGenerator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,8 +10,16 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Objects;
+import java.util.Set;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.mortbay.sailing.pf.importer.IdGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads {@code design.yaml} from the config directory (or classpath fallback) and returns
@@ -102,7 +102,8 @@ class Designs
     }
 
     /** Enumerates the toggleable design-catalogue flag fields in {@code design.yaml}. */
-    enum Flag { EXCLUDED, IGNORED }
+    enum Flag
+    {EXCLUDED, IGNORED, NO_SPINNAKER}
 
     /**
      * Reads {@code design.yaml}, toggles {@code designId} on or off the specified flag list,
@@ -125,12 +126,21 @@ class Designs
             }
         }
         if (catalogue == null) catalogue = new CatalogueFile();
-        List<String> list = flag == Flag.EXCLUDED ? catalogue.excluded : catalogue.ignored;
+        List<String> list = switch (flag)
+        {
+            case EXCLUDED -> catalogue.excluded;
+            case IGNORED -> catalogue.ignored;
+            case NO_SPINNAKER -> catalogue.noSpinnaker;
+        };
         if (list == null)
         {
             list = new ArrayList<>();
-            if (flag == Flag.EXCLUDED) catalogue.excluded = list;
-            else                       catalogue.ignored  = list;
+            switch (flag)
+            {
+                case EXCLUDED -> catalogue.excluded = list;
+                case IGNORED -> catalogue.ignored = list;
+                case NO_SPINNAKER -> catalogue.noSpinnaker = list;
+            }
         }
         // Compare by normalised id so "Foo 36", "foo36", "Foo-36" match a single entry.
         String normTarget = IdGenerator.normaliseDesignName(designId);
@@ -216,6 +226,7 @@ class Designs
     {
         public List<String> excluded;
         public List<String> ignored;
+        public List<String> noSpinnaker;
         public List<DesignOverride> boatDesignOverrides;
     }
 
@@ -242,6 +253,7 @@ class Designs
 
         private final Set<String> excludedIds;
         private final Set<String> ignoredIds;
+        private final Set<String> noSpinnakerIds;
         /** "normSail|normName" → list of override entries (possibly date-ranged) */
         private final Map<String, List<OverrideEntry>> overridesByKey;
         /** normDesignId → canonical name to use when creating the design (explicit canonicalName or raw designId) */
@@ -253,6 +265,7 @@ class Designs
             {
                 excludedIds = Set.of();
                 ignoredIds = Set.of();
+                noSpinnakerIds = Set.of();
                 overridesByKey = Map.of();
                 overrideDesigns = Map.of();
                 return;
@@ -283,6 +296,19 @@ class Designs
             ignoredIds = Collections.unmodifiableSet(ign);
             if (!ign.isEmpty())
                 LOG.info("Loaded design catalogue: {} ignored design name(s)", ign.size());
+
+            Set<String> nspin = new HashSet<>();
+            if (file.noSpinnaker != null)
+            {
+                for (String name : file.noSpinnaker)
+                {
+                    if (name != null && !name.isBlank())
+                        nspin.add(IdGenerator.normaliseDesignName(name));
+                }
+            }
+            noSpinnakerIds = Collections.unmodifiableSet(nspin);
+            if (!nspin.isEmpty())
+                LOG.info("Loaded design catalogue: {} no-spinnaker design(s)", nspin.size());
 
             Map<String, List<OverrideEntry>> overrides = new HashMap<>();
             Map<String, String> designs = new HashMap<>();
@@ -326,6 +352,13 @@ class Designs
             if (normalisedDesignId == null)
                 return false;
             return ignoredIds.contains(normalisedDesignId);
+        }
+
+        boolean isNoSpinnaker(String normalisedDesignId)
+        {
+            if (normalisedDesignId == null)
+                return false;
+            return noSpinnakerIds.contains(normalisedDesignId);
         }
 
         /**
