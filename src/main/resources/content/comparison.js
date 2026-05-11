@@ -445,6 +445,7 @@ function pfCalc() {
         fileInput: document.getElementById('handicap-file'),
         fileStatus: document.getElementById('file-status'),
         variantModeSelect: document.getElementById('handicap-variant-mode'),
+        sourceVariantSelect: document.getElementById('handicap-source-variant'),
         downloadBtn: document.getElementById('download-handicaps-btn'),
         downloadStatus: document.getElementById('download-status'),
         onChange: () => {

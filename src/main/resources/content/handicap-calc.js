@@ -1343,6 +1343,15 @@ window.HandicapCalc = (function () {
             }
         }
 
+        // Stamp a source-variant override onto all rows before filter/session logic runs.
+        function applySourceVariantOverride(rows) {
+            const v = cfg.sourceVariantSelect?.value;
+            if (!v || v === 'auto') return;
+            rows.forEach(r => {
+                r.variant = v;
+            });
+        }
+
         // ---- Wire fetch / load / download buttons ----
 
         async function doFetch() {
@@ -1370,6 +1379,7 @@ window.HandicapCalc = (function () {
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
                 const data = await resp.json();
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps');
+                applySourceVariantOverride(data);
                 rememberFetchedRows(data);
                 const matched = setHandicapsByMatch(data);
                 if (status) {
@@ -1405,6 +1415,7 @@ window.HandicapCalc = (function () {
                 const text = await file.text();
                 const data = JSON.parse(text);
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps in file');
+                applySourceVariantOverride(data);
                 rememberFetchedRows(data);
                 const matched = setHandicapsByMatch(data);
                 if (status) {

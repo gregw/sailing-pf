@@ -3485,7 +3485,9 @@ public class AdminApiServlet extends HttpServlet
                 if (handicap != null && chosenId != null)
                     hcap = pickSailSysHandicap((List<Map<String, Object>>)handicap.get("currentHandicaps"), chosenId);
                 if (hcap == null) continue;
-                result.add(handicapEntry(sailNo, name, divName, hcap));
+                Object nsObj = entry.get("nonSpinnaker");
+                Boolean nonSpin = (nsObj instanceof Boolean) ? (Boolean)nsObj : null;
+                result.add(handicapEntry(sailNo, name, divName, hcap, nonSpin));
             }
         }
         return result;
@@ -3688,16 +3690,31 @@ public class AdminApiServlet extends HttpServlet
 
     private static Map<String, Object> handicapEntry(String sailNo, String name, String division, Double handicap)
     {
+        return handicapEntry(sailNo, name, division, handicap, null);
+    }
+
+    private static Map<String, Object> handicapEntry(String sailNo, String name, String division, Double handicap, Boolean nonSpinnaker)
+    {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("sailno", sailNo);
         m.put("name", name);
         if (division != null)
             m.put("division", division);
         m.put("handicap", handicap);
-        String v = variantFromDivisionName(division);
+        String v = inferVariant(division, nonSpinnaker);
         if (v != null)
             m.put("variant", v);
         return m;
+    }
+
+    private static String inferVariant(String divName, Boolean nonSpinnaker)
+    {
+        String fromDiv = variantFromDivisionName(divName);
+        if (fromDiv != null)
+            return fromDiv;
+        if (nonSpinnaker != null)
+            return nonSpinnaker ? "nonSpin" : "spin";
+        return null;
     }
 
     private static String variantFromDivisionName(String divName)
