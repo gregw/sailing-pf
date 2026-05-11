@@ -407,7 +407,11 @@ window.HandicapCalc = (function () {
         function sortCalcBoats() {
             const {col, dir} = calcSort;
             const mul = dir === 'asc' ? 1 : -1;
-            if (col === 'name') {
+            if (col === 'sailno') {
+                calcBoats.sort((a, b) => mul * (a.sailNumber || '').localeCompare(b.sailNumber || ''));
+            } else if (col === 'boatName') {
+                calcBoats.sort((a, b) => mul * (a.boatName || a.name || '').localeCompare(b.boatName || b.name || ''));
+            } else if (col === 'name') {
                 calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
             } else if (col.startsWith('input:')) {
                 // Sort by the values entered in this specific set's input column.
@@ -466,9 +470,13 @@ window.HandicapCalc = (function () {
 
             section.style.display = '';
 
-            // Static (non-input) columns — sortable.
+            // Leading columns (before set inputs) — sortable.
+            const leadCols = [
+                {key: 'sailno', label: 'Sail No', align: 'left'},
+                {key: 'boatName', label: 'Boat', align: 'left'},
+            ];
+            // Static (non-input) columns after set inputs — sortable.
             const staticCols = [
-                {key: 'name', label: 'Boat', align: 'left'},
                 {key: 'pf', label: 'PF', align: 'right'},
                 {key: 'pfDelta', label: 'PFΔ', align: 'right'},
                 {key: 'rf', label: 'RF', align: 'right'},
@@ -476,7 +484,7 @@ window.HandicapCalc = (function () {
             ];
             if (cfg.showBestFit) staticCols.push({key: 'bestFit', label: 'Best Fit', align: 'right'});
 
-            const validSortKeys = new Set(staticCols.map(c => c.key));
+            const validSortKeys = new Set([...leadCols.map(c => c.key), ...staticCols.map(c => c.key)]);
             const inputMatch = /^input:(\d+)$/.exec(calcSort.col);
             const inputValid = inputMatch && parseInt(inputMatch[1], 10) < sets.length;
             if (!validSortKeys.has(calcSort.col) && !inputValid) calcSort = {col: 'pf', dir: 'desc'};
@@ -489,8 +497,8 @@ window.HandicapCalc = (function () {
             const thead = document.createElement('thead');
             const hdrTr = document.createElement('tr');
 
-            // Boat name column (static, sortable).
-            hdrTr.appendChild(makeSortableTh(staticCols[0]));
+            // Sail No + Boat name columns (leading, sortable).
+            leadCols.forEach(c => hdrTr.appendChild(makeSortableTh(c)));
 
             // One header per set: name + focus radio + remove button.
             sets.forEach((s, i) => hdrTr.appendChild(makeSetHeaderTh(s, i)));
@@ -517,10 +525,10 @@ window.HandicapCalc = (function () {
             }
             hdrTr.appendChild(addTh);
 
-            // Remaining static columns (PF / PFΔ / RF / RFΔ / Best Fit). PF / RF columns
+            // Static columns (PF / PFΔ / RF / RFΔ / Best Fit). PF / RF columns
             // get a "show in chart" tickbox above the sort label so charts can hide each
             // dataset on demand.
-            staticCols.slice(1).forEach(c => {
+            staticCols.forEach(c => {
                 if (c.key === 'pf' || c.key === 'rf')
                     hdrTr.appendChild(makeFactorHeaderTh(c));
                 else
@@ -533,12 +541,12 @@ window.HandicapCalc = (function () {
             const tbody = document.createElement('tbody');
             calcBoats.forEach(b => {
                 const tr = document.createElement('tr');
-                tr.appendChild(makeBoatNameCell(b));
+                makeLeadingCells(b).forEach(td => tr.appendChild(td));
                 sets.forEach((_, i) => tr.appendChild(makeInputCell(b, i, entered)));
                 // Empty filler aligning with the "+ Add" header.
                 const filler = document.createElement('td');
                 tr.appendChild(filler);
-                staticCols.slice(1).forEach(c => tr.appendChild(makeStaticCell(b, c)));
+                staticCols.forEach(c => tr.appendChild(makeStaticCell(b, c)));
                 tbody.appendChild(tr);
             });
             table.appendChild(tbody);
@@ -673,23 +681,33 @@ window.HandicapCalc = (function () {
             return th;
         }
 
-        function makeBoatNameCell(b) {
-            const tdName = document.createElement('td');
+        function makeLeadingCells(b) {
             const color = b.color || '#888';
+
+            const tdSailno = document.createElement('td');
+            tdSailno.style.cssText = `color:${color};font-weight:bold;font-family:monospace;padding-right:4px;white-space:nowrap;`;
+            tdSailno.textContent = b.sailNumber || '—';
+
+            const tdName = document.createElement('td');
             tdName.style.cssText = `color:${color};font-weight:bold;`;
             const link = document.createElement('a');
             link.href = `boats.html?id=${encodeURIComponent(b.id)}`;
-            link.textContent = b.name;
+            link.textContent = b.boatName || b.name;
             link.style.cssText = 'color:inherit;text-decoration:none;';
             link.title = 'Click to view boat details — hover for performance profile';
             const cached = profileCache.get(b.id);
             if (cached) cached.then(p => {
                 if (p === null) link.title = 'Click to view boat details — no performance profile available';
             });
+            tdName.appendChild(link);
+
+            // Hover on either cell shows the performance profile popup.
+            tdSailno.addEventListener('mouseenter', () => showPentagonPopup(tdSailno, b.id, color));
+            tdSailno.addEventListener('mouseleave', hidePentagonPopup);
             link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
             link.addEventListener('mouseleave', hidePentagonPopup);
-            tdName.appendChild(link);
-            return tdName;
+
+            return [tdSailno, tdName];
         }
 
         function makeInputCell(b, setIdx, enteredMap) {
