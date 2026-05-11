@@ -2567,6 +2567,7 @@ function applyRaceCalcDivision(divName) {
         name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
         sailNumber: b.sailNumber || null,
         boatName: b.name || null,
+        designName: b.designName || null,
         division: b.division || null,
         variant: b.variant || 'spin',
         pf: b.pf,
@@ -3493,9 +3494,9 @@ function initFromUrlOrSession() {
 
     const id = params.get('id');
     if (id) {
-        // Specific target: clear persisted search, init list, then load detail.
-        state.searches[entity] = '';
-        sessionStorage.removeItem(SEARCH_KEY_PREFIX + entity);
+        // Seed search with the id so the table filters to this entity.
+        state.searches[entity] = id;
+        sessionStorage.setItem(SEARCH_KEY_PREFIX + entity, id);
         initEntityPage(entity);
         loadDetail(entity, id);
         return;

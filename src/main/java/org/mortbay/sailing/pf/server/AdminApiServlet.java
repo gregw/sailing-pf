@@ -1722,10 +1722,14 @@ public class AdminApiServlet extends HttpServlet
             BoatDerived bd = cache.boatDerived().get(boatId);
             if (bd == null) continue;
 
+            String designId = bd.boat().designId();
+            Design design = designId != null ? store.designs().get(designId) : null;
             Map<String, Object> bm = new LinkedHashMap<>();
             bm.put("id",         boatId);
             bm.put("name",       bd.boat().name());
             bm.put("sailNumber", bd.boat().sailNumber());
+            bm.put("designId", designId);
+            bm.put("designName", design != null ? design.canonicalName() : null);
 
             ReferenceFactors rf = bd.referenceFactors();
             bm.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);

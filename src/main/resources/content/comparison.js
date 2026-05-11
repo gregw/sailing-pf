@@ -483,6 +483,7 @@ function renderHandicapCalc(data) {
             id: b.id, name, color,
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
+            designName: b.designName || null,
             variant: selectedVariant,
             pfAll: {
                 spin: b.pfSpin ? b.pfSpin.value : null,

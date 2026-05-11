@@ -258,8 +258,9 @@ window.HandicapCalc = (function () {
         }, 250);
     }
 
-    function showPentagonPopup(linkEl, boatId, color) {
+    function showPentagonPopup(linkEl, boatId, color, text) {
         schedulePopup(linkEl.getBoundingClientRect(), boatId, color, {
+            text,
             onResolve: profile => {
                 linkEl.title = profile
                     ? 'Click to view boat details — hover for performance profile'
@@ -788,9 +789,12 @@ window.HandicapCalc = (function () {
             tdName.appendChild(link);
 
             // Hover on either cell shows the performance profile popup.
-            tdSailno.addEventListener('mouseenter', () => showPentagonPopup(tdSailno, b.id, color));
+            const designText = b.designName
+                ? `<span style="color:#555;font-style:italic">${b.designName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`
+                : null;
+            tdSailno.addEventListener('mouseenter', () => showPentagonPopup(tdSailno, b.id, color, designText));
             tdSailno.addEventListener('mouseleave', hidePentagonPopup);
-            link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
+            link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color, designText));
             link.addEventListener('mouseleave', hidePentagonPopup);
 
             return [tdSailno, tdName, makeVariantCell(b)];
