@@ -1072,10 +1072,20 @@ window.HandicapCalc = (function () {
                 const merged = prev.filter(r => !isReplaced(r)).concat(current);
                 out.sets.push({name: s.name, show: s.show !== false, entries: merged});
             });
+            const variants = {};
+            let hasVariantOverrides = false;
+            calcBoats.forEach(b => {
+                const v = boatVariants.get(b.id);
+                if (v && v !== (b.variant || 'spin')) {
+                    variants[b.id] = v;
+                    hasVariantOverrides = true;
+                }
+            });
+            if (hasVariantOverrides) out.variants = variants;
             try {
                 const anyEntries = out.sets.some(s => s.entries.length > 0);
                 const anyHidden = !showPf || !showRf || out.sets.some(s => !s.show);
-                if (anyEntries || out.sets.length > 1 || anyHidden)
+                if (anyEntries || out.sets.length > 1 || anyHidden || hasVariantOverrides)
                     sessionStorage.setItem(cfg.sessionKey, JSON.stringify(out));
                 else
                     sessionStorage.removeItem(cfg.sessionKey);
@@ -1099,6 +1109,14 @@ window.HandicapCalc = (function () {
                 const m = /^Set\s+(\d+)$/.exec(s.name);
                 return m ? parseInt(m[1], 10) + 1 : 0;
             }));
+            // Restore per-boat variant overrides before render so dropdowns reflect them.
+            if (data.variants && typeof data.variants === 'object') {
+                Object.entries(data.variants).forEach(([id, v]) => {
+                    boatVariants.set(id, v);
+                    const boat = calcBoats.find(b => b.id === id);
+                    if (boat) applyVariantToPf(boat, v);
+                });
+            }
             render();
 
             // Apply each set's entries to its column inputs.
