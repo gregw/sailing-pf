@@ -2160,6 +2160,20 @@ public class AdminApiServlet extends HttpServlet
                     case "spinRef"       -> Comparator.comparing(
                                                (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return (dd2 != null && dd2.referenceFactors() != null && dd2.referenceFactors().spin() != null) ? dd2.referenceFactors().spin().value() : 0.0; },
                                                Comparator.<Double>naturalOrder());
+                    case "nonSpinRef" -> Comparator.comparing(
+                        (Design d2) ->
+                        {
+                            DesignDerived dd2 = cache.designDerived().get(d2.id());
+                            return (dd2 != null && dd2.referenceFactors() != null && dd2.referenceFactors().nonSpin() != null) ? dd2.referenceFactors().nonSpin().value() : 0.0;
+                        },
+                        Comparator.<Double>naturalOrder());
+                    case "twoHandedRef" -> Comparator.comparing(
+                        (Design d2) ->
+                        {
+                            DesignDerived dd2 = cache.designDerived().get(d2.id());
+                            return (dd2 != null && dd2.referenceFactors() != null && dd2.referenceFactors().twoHanded() != null) ? dd2.referenceFactors().twoHanded().value() : 0.0;
+                        },
+                        Comparator.<Double>naturalOrder());
                     case "boats"         -> Comparator.comparingInt(
                                                (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return dd2 != null ? dd2.boatIds().size() : 0; });
                     default              -> Comparator.comparing(Design::id, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
@@ -2173,8 +2187,10 @@ public class AdminApiServlet extends HttpServlet
                 row.put("id",            d.id());
                 row.put("canonicalName", d.canonicalName());
                 DesignDerived dd = cache.designDerived().get(d.id());
-                Factor dspin = (dd != null && dd.referenceFactors() != null) ? dd.referenceFactors().spin() : null;
-                row.put("spinRef",       dspin != null ? factorMap(dspin) : null);
+                ReferenceFactors rf = (dd != null) ? dd.referenceFactors() : null;
+                row.put("spinRef", rf != null && rf.spin() != null ? factorMap(rf.spin()) : null);
+                row.put("nonSpinRef", rf != null && rf.nonSpin() != null ? factorMap(rf.nonSpin()) : null);
+                row.put("twoHandedRef", rf != null && rf.twoHanded() != null ? factorMap(rf.twoHanded()) : null);
                 row.put("boats",         dd != null ? dd.boatIds().size() : 0);
                 row.put("excluded",      store.isDesignExcluded(d.id()));
                 row.put("ignored",       store.isDesignIgnored(d.id()));

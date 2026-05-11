@@ -149,15 +149,24 @@ const COLUMNS = {
               const text = esc(item.canonicalName != null ? String(item.canonicalName) : '');
               return /modified|custom/i.test(item.id || '') ? `<span style="text-decoration:line-through">${text}</span>` : text;
           } },
-        { label: 'RF',     key: 'spinRef',       anchor: 'col-design-rf',
-          tip: 'Design-level Reference Factor aggregated across all boats of this class. Colors: green = high confidence, red = low',
+        {
+            label: 'RF Spin', key: 'spinRef', anchor: 'col-design-rf-spin',
+            tip: 'Reference Factor for spinnaker sailing. Color indicates confidence: green = high, red = low.',
           render: v => v && v.value != null
             ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
-        { label: 'RF Weight', key: 'spinRef', anchor: 'col-design-rf-weight',
-          tip: 'Statistical weight of the design-level RF: higher means more race data and tighter confidence.',
-          render: v => v && v.weight != null
-            ? weightSpan(v.weight, v.weight.toFixed(1), v.weight)
+        {
+            label: 'RF No-Spin', key: 'nonSpinRef', anchor: 'col-design-rf-nospin',
+            tip: 'Reference Factor for non-spinnaker sailing. Color indicates confidence: green = high, red = low.',
+            render: v => v && v.value != null
+                ? weightSpan(v.value, v.value.toFixed(4), v.weight)
+                : '<span style="color:#bbb">—</span>'
+        },
+        {
+            label: 'RF 2-Handed', key: 'twoHandedRef', anchor: 'col-design-rf-2handed',
+            tip: 'Reference Factor for two-handed sailing. Color indicates confidence: green = high, red = low.',
+            render: v => v && v.value != null
+                ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
