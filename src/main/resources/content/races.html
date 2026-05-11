@@ -116,6 +116,15 @@
                     <div id="file-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
                 </div>
                 <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
+                <div style="margin-bottom:0.8rem;">
+                    <label for="handicap-variant-mode">On import:</label>
+                    <select id="handicap-variant-mode" style="margin-left:0.5rem;" title="How to handle Spin/NS/2H variant info in fetched handicaps">
+                        <option value="ignore">Ignore variant</option>
+                        <option value="set">Set selectors</option>
+                        <option value="filter" selected>Filter by selector</option>
+                    </select>
+                </div>
+                <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
                 <div>
                     <button id="download-handicaps-btn" style="padding:4px 12px;">Download handicaps as JSON</button>
                     <button id="clear-handicaps-btn" style="margin-left:0.5rem;padding:4px 12px;">Clear all</button>

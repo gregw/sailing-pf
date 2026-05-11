@@ -3694,7 +3694,28 @@ public class AdminApiServlet extends HttpServlet
         if (division != null)
             m.put("division", division);
         m.put("handicap", handicap);
+        String v = variantFromDivisionName(division);
+        if (v != null)
+            m.put("variant", v);
         return m;
+    }
+
+    private static String variantFromDivisionName(String divName)
+    {
+        if (divName == null)
+            return null;
+        String d = divName.toLowerCase();
+        if (d.contains("two-handed") || d.contains("two handed") || d.contains("twohanded")
+            || d.contains("2-handed") || d.contains("double-handed")
+            || d.contains("double handed") || d.contains("shorthanded")
+            || d.contains("short-handed") || d.contains("2 handed"))
+            return "twoHanded";
+        if (d.contains("non-spinnaker") || d.contains("non spinnaker")
+            || d.contains("nonspinnaker") || d.contains("non-spin") || d.contains("non spin"))
+            return "nonSpin";
+        if (d.contains("spinnaker") || d.contains("spin"))
+            return "spin";
+        return null;
     }
 
     private static String stringOf(Object o)

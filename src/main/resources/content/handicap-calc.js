@@ -1163,12 +1163,22 @@ window.HandicapCalc = (function () {
         // a same-sailno-only item can claim it. Each boat is matched at most once per call.
         function applyEntriesToSet(setIdx, rows) {
             let matched = 0;
+            let variantsChanged = false;
             const used = new Set();
             const items = rows.filter(r => r.handicap != null);
             const remaining = [...items];
 
             function applyTo(boat, item) {
+                const mode = cfg.variantModeSelect?.value || 'ignore';
+                if (mode === 'filter' && item.variant) {
+                    if (boatVariant(boat) !== item.variant) return;
+                }
                 used.add(boat.id);
+                if (mode === 'set' && item.variant && item.variant !== boatVariant(boat)) {
+                    boatVariants.set(boat.id, item.variant);
+                    applyVariantToPf(boat, item.variant);
+                    variantsChanged = true;
+                }
                 const inp = section.querySelector(
                     `.pf-calc-input[data-boat-id="${boat.id}"][data-set-idx="${setIdx}"]`);
                 if (inp) {
@@ -1215,12 +1225,13 @@ window.HandicapCalc = (function () {
                 return tn !== '' && normaliseDesignName(b.boatName) === tn;
             });
 
-            return matched;
+            return {matched, variantsChanged};
         }
 
         // Public: load rows into the focused set.
         function setHandicapsByMatch(rows) {
-            const matched = applyEntriesToSet(focusedIdx, rows);
+            const {matched, variantsChanged} = applyEntriesToSet(focusedIdx, rows);
+            if (variantsChanged) render();
             recalc();
             return matched;
         }

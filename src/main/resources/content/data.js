@@ -2534,6 +2534,7 @@ function raceCalc() {
         fetchStatus: document.getElementById('fetch-status'),
         fileInput: document.getElementById('handicap-file'),
         fileStatus: document.getElementById('file-status'),
+        variantModeSelect: document.getElementById('handicap-variant-mode'),
         downloadBtn: document.getElementById('download-handicaps-btn'),
         downloadStatus: document.getElementById('download-status'),
         onChange: () => {
