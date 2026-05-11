@@ -255,8 +255,12 @@ async function loadChart() {
 }
 
 function onVariantChange() {
+    const prevVariant = selectedVariant;
     selectedVariant = document.getElementById('variant-selector').value;
     if (lastChartData) renderChart(lastChartData);
+    // Sync calc: only update boats that still have the old variant.
+    if (pfCalcController && prevVariant !== selectedVariant)
+        pfCalcController.updateVariant(prevVariant, selectedVariant);
     loadElapsedCharts();
 }
 
@@ -477,6 +481,25 @@ function renderHandicapCalc(data) {
             id: b.id, name, color,
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
+            variant: selectedVariant,
+            pfAll: {
+                spin: b.pfSpin ? b.pfSpin.value : null,
+                nonSpin: b.pfNonSpin ? b.pfNonSpin.value : null,
+                twoHanded: b.pfTwoHanded ? b.pfTwoHanded.value : null,
+            },
+            pfWeightAll: {
+                spin: b.pfSpin ? b.pfSpin.weight : null,
+                nonSpin: b.pfNonSpin ? b.pfNonSpin.weight : null,
+                twoHanded: b.pfTwoHanded ? b.pfTwoHanded.weight : null,
+            },
+            rfAll: {
+                spin: b.rfSpin ? b.rfSpin.value : null,
+                nonSpin: b.rfNonSpin ? b.rfNonSpin.value : null,
+            },
+            rfWeightAll: {
+                spin: b.rfSpin ? b.rfSpin.weight : null,
+                nonSpin: b.rfNonSpin ? b.rfNonSpin.weight : null,
+            },
             pf: pfFactor ? pfFactor.value : null,
             pfWeight: pfFactor ? pfFactor.weight : null,
             rf: rfFactor ? rfFactor.value : null,

@@ -1918,20 +1918,11 @@ public class AdminApiServlet extends HttpServlet
                 ReferenceFactors rf = bd.referenceFactors();
                 BoatPf pf = bd.pf();
 
-                // Use each finisher's own nonSpinnaker flag to pick the correct variant
-                String fVariant = f.nonSpinnaker() ? "nonSpin" : "spin";
+                String fVariant = finisherVariant(div, f);
                 variantsUsed.add(fVariant);
 
-                Factor pfFactor = pf == null ? null : switch (fVariant)
-                {
-                    case "nonSpin" -> pf.nonSpin();
-                    default -> pf.spin();
-                };
-                Factor rfFactor = rf == null ? null : switch (fVariant)
-                {
-                    case "nonSpin" -> rf.nonSpin();
-                    default -> rf.spin();
-                };
+                Factor pfFactor = selectVariantFactor(pf, rf, fVariant, true);
+                Factor rfFactor = selectVariantFactor(pf, rf, fVariant, false);
 
                 double elapsedSec = f.elapsedTime().toSeconds();
                 Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
@@ -2020,19 +2011,11 @@ public class AdminApiServlet extends HttpServlet
                     if (bd == null)
                         continue;
 
-                    String fVariant = f.nonSpinnaker() ? "nonSpin" : "spin";
+                    String fVariant = finisherVariant(div, f);
                     ReferenceFactors rf = bd.referenceFactors();
                     BoatPf pf = bd.pf();
-                    Factor pfFactor = pf == null ? null : switch (fVariant)
-                    {
-                        case "nonSpin" -> pf.nonSpin();
-                        default -> pf.spin();
-                    };
-                    Factor rfFactor = rf == null ? null : switch (fVariant)
-                    {
-                        case "nonSpin" -> rf.nonSpin();
-                        default -> rf.spin();
-                    };
+                    Factor pfFactor = selectVariantFactor(pf, rf, fVariant, true);
+                    Factor rfFactor = selectVariantFactor(pf, rf, fVariant, false);
                     Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
                     Double rfVal = rfFactor != null && !Double.isNaN(rfFactor.value()) ? rfFactor.value() : null;
                     Double pfWeight = pfFactor != null && !Double.isNaN(pfFactor.weight()) ? pfFactor.weight() : null;
@@ -2064,6 +2047,52 @@ public class AdminApiServlet extends HttpServlet
         result.put("raceName", raceName(race));
         result.put("boats", new ArrayList<>(byBoat.values()));
         writeJson(resp, result);
+    }
+
+    /**
+     * Determines the handicap variant for a finisher: "twoHanded", "nonSpin", or "spin".
+     * Checks the division name for two-handed and non-spin keywords (mirroring PfOptimiser),
+     * then falls back to the finisher's {@code nonSpinnaker} flag.
+     */
+    private static String finisherVariant(Division div, Finisher f)
+    {
+        String divName = div.name() == null ? "" : div.name().toLowerCase();
+        if (divName.contains("two-handed") || divName.contains("two handed")
+            || divName.contains("twohanded") || divName.contains("2-handed")
+            || divName.contains("double-handed") || divName.contains("double handed")
+            || divName.contains("shorthanded") || divName.contains("short-handed")
+            || divName.contains("2 handed"))
+            return "twoHanded";
+        if (divName.contains("non-spinnaker") || divName.contains("non spinnaker")
+            || divName.contains("nonspinnaker") || divName.contains("non-spin")
+            || divName.contains("non spin"))
+            return "nonSpin";
+        return f.nonSpinnaker() ? "nonSpin" : "spin";
+    }
+
+    private static Factor selectVariantFactor(BoatPf pf, ReferenceFactors rf, String variant, boolean usePf)
+    {
+        if (usePf)
+        {
+            if (pf == null)
+                return null;
+            return switch (variant)
+            {
+                case "twoHanded" -> pf.twoHanded();
+                case "nonSpin" -> pf.nonSpin();
+                default -> pf.spin();
+            };
+        }
+        else
+        {
+            if (rf == null)
+                return null;
+            return switch (variant)
+            {
+                case "nonSpin" -> rf.nonSpin();
+                default -> rf.spin();  // no two-handed RF
+            };
+        }
     }
 
     private Map<String, Object> factorMap(Factor f)
@@ -2314,17 +2343,9 @@ public class AdminApiServlet extends HttpServlet
 
                     BoatPf pf = bd.pf();
                     ReferenceFactors rf = bd.referenceFactors();
-                    String variant = f.nonSpinnaker() ? "nonSpin" : "spin";
-                    Factor pfFactor = pf == null ? null : switch (variant)
-                    {
-                        case "nonSpin" -> pf.nonSpin();
-                        default -> pf.spin();
-                    };
-                    Factor rfFactor = rf == null ? null : switch (variant)
-                    {
-                        case "nonSpin" -> rf.nonSpin();
-                        default -> rf.spin();
-                    };
+                    String variant = finisherVariant(div, f);
+                    Factor pfFactor = selectVariantFactor(pf, rf, variant, true);
+                    Factor rfFactor = selectVariantFactor(pf, rf, variant, false);
 
                     double elapsedSec = f.elapsedTime().toSeconds();
                     Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
@@ -2340,6 +2361,7 @@ public class AdminApiServlet extends HttpServlet
                     fm.put("sailNumber", bd.boat().sailNumber());
                     fm.put("designId", designId);
                     fm.put("designName", design != null ? design.canonicalName() : null);
+                    fm.put("variant", variant);
                     fm.put("elapsed", elapsedSec);
                     fm.put("pf", pfVal);
                     fm.put("pfWeight", pfWeight);

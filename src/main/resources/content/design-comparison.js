@@ -21,6 +21,8 @@ const STORAGE_KEY = 'pf-designComparison-items';
 let selectedItems   = [];   // {type:'design', id, label, color}
 let allAvailable    = false;
 let selectedVariant = 'spin';
+// Per-design variant override for the handicap calculator.
+const designVariants = new Map();
 let showRfLine       = true;
 let showTrendLinear  = true;
 let showTrendSliding = true;
@@ -221,9 +223,24 @@ async function loadChart() {
 }
 
 function onVariantChange() {
+    const prevVariant = selectedVariant;
     selectedVariant = document.getElementById('variant-selector').value;
     if (lastChartData) renderChart(lastChartData);
+    // Sync calc: only update designs that still have the old variant.
+    if (lastChartData && prevVariant !== selectedVariant)
+        updateCalcVariant(prevVariant, selectedVariant);
     loadElapsedCharts();
+}
+
+function updateCalcVariant(oldVariant, newVariant) {
+    let changed = false;
+    designVariants.forEach((v, id) => {
+        if (v === oldVariant) {
+            designVariants.set(id, newVariant);
+            changed = true;
+        }
+    });
+    if (changed && lastChartData) renderHandicapCalc(lastChartData);
 }
 
 function filterByVariant(entries) {
@@ -411,7 +428,9 @@ function renderHandicapCalc(data) {
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (d.canonicalName || d.id);
 
-        const rfFactor = selectedVariant === 'nonSpin' ? d.rfNonSpin : d.rfSpin;
+        if (!designVariants.has(d.id)) designVariants.set(d.id, selectedVariant);
+        const dVariant = designVariants.get(d.id);
+        const rfFactor = dVariant === 'nonSpin' ? d.rfNonSpin : d.rfSpin;
 
         let bestFit = null;
         if (showBestFit) {
@@ -422,7 +441,12 @@ function renderHandicapCalc(data) {
 
         return {
             id: d.id, name, color,
-            rf:       rfFactor ? rfFactor.value : null,
+            variant: dVariant,
+            rfAll: {
+                spin: d.rfSpin ? d.rfSpin.value : null,
+                nonSpin: d.rfNonSpin ? d.rfNonSpin.value : null,
+            },
+            rf: rfFactor ? rfFactor.value : null,
             bestFit
         };
     }).filter(d => d.rf != null || d.bestFit != null);
@@ -437,6 +461,7 @@ function renderHandicapCalc(data) {
 
     const cols = [
         { key: 'name',    label: 'Design',         align: 'left'   },
+        {key: 'variant', label: 'Var', align: 'center'},
         { key: 'input',   label: 'Enter handicap', align: 'center' },
         { key: 'rf',      label: 'RF',             align: 'right'  },
     ];
@@ -449,6 +474,13 @@ function renderHandicapCalc(data) {
     const thead = document.createElement('thead');
     const hdrTr = document.createElement('tr');
     cols.forEach(c => {
+        if (c.key === 'variant') {
+            const th = document.createElement('th');
+            th.textContent = 'Var';
+            th.style.cssText = 'padding:2px 4px;font-size:0.8rem;color:#555;text-align:center;';
+            hdrTr.appendChild(th);
+            return;
+        }
         const th = document.createElement('th');
         const isActive = c.key === calcSort.col;
         const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
@@ -473,6 +505,27 @@ function renderHandicapCalc(data) {
                 const td = document.createElement('td');
                 td.style.cssText = `color:${b.color};font-weight:bold;`;
                 td.textContent = b.name;
+                tr.appendChild(td);
+            } else if (c.key === 'variant') {
+                const td = document.createElement('td');
+                td.style.cssText = 'text-align:center;padding:1px 4px;white-space:nowrap;';
+                const sel = document.createElement('select');
+                sel.style.cssText = 'font-size:0.75rem;padding:1px 2px;max-width:58px;';
+                [['spin', 'Spin'], ['nonSpin', 'NS']].forEach(([v, lbl]) => {
+                    if (b.rfAll[v] == null) return;
+                    const o = document.createElement('option');
+                    o.value = v;
+                    o.textContent = lbl;
+                    if (v === b.variant) o.selected = true;
+                    sel.appendChild(o);
+                });
+                sel.addEventListener('change', () => {
+                    const newV = sel.value;
+                    designVariants.set(b.id, newV);
+                    // Update this row's rf value and re-render.
+                    renderHandicapCalc(data);
+                });
+                td.appendChild(sel);
                 tr.appendChild(td);
             } else if (c.key === 'input') {
                 const td = document.createElement('td');
@@ -514,6 +567,8 @@ function sortCalcBoats(calcBoats) {
     const mul = dir === 'asc' ? 1 : -1;
     if (col === 'name') {
         calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
+    } else if (col === 'variant') {
+        calcBoats.sort((a, b) => mul * (a.variant || '').localeCompare(b.variant || ''));
     } else if (col === 'input') {
         calcBoats.sort((a, b) => mul * ((a.rf ?? 0) - (b.rf ?? 0)));
     } else {

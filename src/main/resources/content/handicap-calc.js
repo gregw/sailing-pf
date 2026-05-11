@@ -280,11 +280,16 @@ window.HandicapCalc = (function () {
         }, 80);
     }
 
+    const VARIANT_LABELS = {spin: 'Spin', nonSpin: 'NS', twoHanded: '2H'};
+    const VARIANT_ORDER = ['spin', 'nonSpin', 'twoHanded'];
+
     function create(cfg) {
         const section = cfg.section;
         const table = cfg.table;
         let calcBoats = [];
         let calcSort = {col: 'pf', dir: 'desc'};
+        // Per-boat variant override: boatId → 'spin'|'nonSpin'|'twoHanded'
+        const boatVariants = new Map();
 
         // Sets — one column per set, focused set drives load/clear/typing/scaled-preview.
         // `show` per set (default true) drives whether consumers (charts) plot that set's
@@ -409,6 +414,8 @@ window.HandicapCalc = (function () {
             const mul = dir === 'asc' ? 1 : -1;
             if (col === 'sailno') {
                 calcBoats.sort((a, b) => mul * (a.sailNumber || '').localeCompare(b.sailNumber || ''));
+            } else if (col === 'variant') {
+                calcBoats.sort((a, b) => mul * (boatVariant(a)).localeCompare(boatVariant(b)));
             } else if (col === 'boatName') {
                 calcBoats.sort((a, b) => mul * (a.boatName || a.name || '').localeCompare(b.boatName || b.name || ''));
             } else if (col === 'name') {
@@ -474,6 +481,7 @@ window.HandicapCalc = (function () {
             const leadCols = [
                 {key: 'sailno', label: 'Sail No', align: 'left'},
                 {key: 'boatName', label: 'Boat', align: 'left'},
+                {key: 'variant', label: 'Var', align: 'center'},
             ];
             // Static (non-input) columns after set inputs — sortable.
             const staticCols = [
@@ -681,6 +689,84 @@ window.HandicapCalc = (function () {
             return th;
         }
 
+        function boatVariant(b) {
+            return boatVariants.get(b.id) || b.variant || 'spin';
+        }
+
+        function applyVariantToPf(b, v) {
+            const all = b.pfAll, wAll = b.pfWeightAll;
+            if (all) {
+                b.pf = all[v] ?? null;
+                b.pfWeight = wAll ? (wAll[v] ?? null) : null;
+            }
+            const rAll = b.rfAll, rwAll = b.rfWeightAll;
+            if (rAll) {
+                b.rf = rAll[v] ?? null;
+                b.rfWeight = rwAll ? (rwAll[v] ?? null) : null;
+            }
+        }
+
+        function makeVariantCell(b) {
+            const td = document.createElement('td');
+            td.style.cssText = 'text-align:center;padding:1px 4px;white-space:nowrap;';
+            const v = boatVariant(b);
+            const hasAll = b.pfAll != null;
+
+            if (hasAll) {
+                // Dropdown so the user can switch per-boat variant.
+                const sel = document.createElement('select');
+                sel.style.cssText = 'font-size:0.75rem;padding:1px 2px;max-width:58px;';
+                VARIANT_ORDER.forEach(opt => {
+                    if (b.pfAll[opt] == null) return;
+                    const o = document.createElement('option');
+                    o.value = opt;
+                    o.textContent = VARIANT_LABELS[opt];
+                    if (opt === v) o.selected = true;
+                    sel.appendChild(o);
+                });
+                sel.addEventListener('change', () => {
+                    const newV = sel.value;
+                    boatVariants.set(b.id, newV);
+                    applyVariantToPf(b, newV);
+                    // Refresh the static value cells for this boat.
+                    section.querySelectorAll(`.pf-calc-value[data-boat-id="${b.id}"]`).forEach(cell => {
+                        const ft = cell.dataset.factorType;
+                        if (ft === 'pfDelta' || ft === 'rfDelta') {
+                            cell.textContent = '';
+                            cell.style.color = '';
+                            cell.title = '';
+                            return;
+                        }
+                        const val = b[ft];
+                        cell.textContent = val != null ? val.toFixed(4) : '—';
+                        cell.dataset.origValue = val != null ? String(val) : '';
+                        const wField = weightFieldFor(ft);
+                        const w = wField ? b[wField] : null;
+                        if (val != null && w != null) {
+                            cell.style.color = weightColor(w);
+                            cell.title = weightLabel(w);
+                        } else {
+                            cell.style.color = '';
+                            cell.title = '';
+                        }
+                    });
+                    recalc();
+                });
+                td.appendChild(sel);
+            } else {
+                // Fixed badge — variant determined by race data, not changeable.
+                const badge = document.createElement('span');
+                const label = VARIANT_LABELS[v] || v;
+                badge.textContent = label;
+                badge.style.cssText = 'font-size:0.72rem;padding:1px 4px;border-radius:3px;'
+                    + (v === 'twoHanded' ? 'background:#e8f0fe;color:#1a56db;'
+                        : v === 'nonSpin' ? 'background:#fef3c7;color:#b45309;'
+                            : 'background:#d1fae5;color:#065f46;');
+                td.appendChild(badge);
+            }
+            return td;
+        }
+
         function makeLeadingCells(b) {
             const color = b.color || '#888';
 
@@ -707,7 +793,7 @@ window.HandicapCalc = (function () {
             link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
             link.addEventListener('mouseleave', hidePentagonPopup);
 
-            return [tdSailno, tdName];
+            return [tdSailno, tdName, makeVariantCell(b)];
         }
 
         function makeInputCell(b, setIdx, enteredMap) {
@@ -1025,9 +1111,33 @@ window.HandicapCalc = (function () {
 
         function setBoats(newBoats, opts) {
             if (opts && opts.showBestFit !== undefined) cfg.showBestFit = opts.showBestFit;
-            calcBoats = (newBoats || []).filter(b => b.pf != null);
+            const incoming = (newBoats || []);
+            // Seed per-boat variant from boat.variant, applying pfAll if provided.
+            incoming.forEach(b => {
+                const v = b.variant || 'spin';
+                if (!boatVariants.has(b.id)) boatVariants.set(b.id, v);
+                applyVariantToPf(b, boatVariants.get(b.id));
+            });
+            calcBoats = incoming.filter(b => b.pf != null);
             render();
             loadFromSession();
+        }
+
+        // Update variant for all boats whose current variant === oldVariant → newVariant.
+        // Applies correct pf/rf from pfAll where available, then recalcs.
+        function updateVariant(oldVariant, newVariant) {
+            let changed = false;
+            calcBoats.forEach(b => {
+                if (boatVariant(b) === oldVariant) {
+                    boatVariants.set(b.id, newVariant);
+                    applyVariantToPf(b, newVariant);
+                    changed = true;
+                }
+            });
+            if (changed) {
+                render();
+                recalc();
+            }
         }
 
         // Match imported rows into a specific set's input column. Same multi-pass logic as
@@ -1330,7 +1440,7 @@ window.HandicapCalc = (function () {
 
         return {
             setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues,
-            getAllSets, getShowPf, getShowRf, recalc
+            getAllSets, getShowPf, getShowRf, recalc, updateVariant
         };
     }
 

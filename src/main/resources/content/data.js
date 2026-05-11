@@ -2552,6 +2552,7 @@ function applyRaceCalcDivision(divName) {
         sailNumber: b.sailNumber || null,
         boatName: b.name || null,
         division: b.division || null,
+        variant: b.variant || 'spin',
         pf: b.pf,
         pfWeight: b.pfWeight,
         rf: b.rf,
@@ -2691,34 +2692,53 @@ function onSeriesDivisionChange() {
     renderSeriesChartForDivision(divName);
 }
 
-// Build a unique-by-boatId list of {id, name, sailNumber, boatName, pf, rf} for the calc.
+// Build a unique-by-boatId list of {id, name, sailNumber, boatName, pf, rf, variant} for the calc.
 // When divName is "__all__", aggregates boats from every division in the series.
+// variant is the most-frequent variant across all the boat's appearances in the selected division.
 function buildSeriesCalcBoats(data, divName) {
     const allDivisions = divName === '__all__';
-    const seen = new Map();
+    // First pass: collect all appearances per boat (for most-frequent variant and pf-per-variant).
+    const appearances = new Map(); // boatId → [{variant, pf, pfWeight, rf, rfWeight, ...}]
     data.races.forEach(race => {
         const divs = allDivisions ? race.divisions
             : race.divisions.filter(d => (d.name || '') === divName);
         divs.forEach(div => {
-            div.finishers.forEach(f => {
-                if (!f.boatId || f.pf == null || seen.has(f.boatId)) return;
-                seen.set(f.boatId, {
-                    id: f.boatId,
-                    name: f.sailNumber ? `${f.sailNumber} ${f.name || ''}`.trim() : (f.name || f.boatId),
-                    sailNumber: f.sailNumber || null,
-                    boatName: f.name || null,
-                    designId: f.designId || null,
-                    designName: f.designName || null,
-                    pf: f.pf,
-                    pfWeight: f.pfWeight,
-                    rf: f.rf != null ? f.rf : null,
-                    rfWeight: f.rfWeight,
-                    bestFit: null
-                });
+            (div.finishers || []).forEach(f => {
+                if (!f.boatId || f.pf == null) return;
+                if (!appearances.has(f.boatId)) appearances.set(f.boatId, []);
+                appearances.get(f.boatId).push(f);
             });
         });
     });
-    return [...seen.values()];
+
+    const result = [];
+    appearances.forEach((finishers, boatId) => {
+        // Most-frequent variant.
+        const counts = {};
+        finishers.forEach(f => {
+            const v = f.variant || 'spin';
+            counts[v] = (counts[v] || 0) + 1;
+        });
+        const dominantVariant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+        // Pick pf/rf from first appearance with the dominant variant.
+        const best = finishers.find(f => (f.variant || 'spin') === dominantVariant) || finishers[0];
+        const first = finishers[0];
+        result.push({
+            id: boatId,
+            name: first.sailNumber ? `${first.sailNumber} ${first.name || ''}`.trim() : (first.name || boatId),
+            sailNumber: first.sailNumber || null,
+            boatName: first.name || null,
+            designId: first.designId || null,
+            designName: first.designName || null,
+            variant: dominantVariant,
+            pf: best.pf,
+            pfWeight: best.pfWeight,
+            rf: best.rf != null ? best.rf : null,
+            rfWeight: best.rfWeight,
+            bestFit: null
+        });
+    });
+    return result;
 }
 
 // Finishers for a given race under the current division selection. When divName is
