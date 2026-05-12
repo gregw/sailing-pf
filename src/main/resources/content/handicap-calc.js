@@ -1282,7 +1282,8 @@ window.HandicapCalc = (function () {
                     if (boat) out.push({
                         sailno: boat.sailNumber || '',
                         name: boat.boatName || '',
-                        handicap: v
+                        handicap: v,
+                        variant: boatVariant(boat)
                     });
                 }
             });

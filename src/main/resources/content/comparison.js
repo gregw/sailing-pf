@@ -240,6 +240,7 @@ async function loadChart() {
     if (boatIds.length === 0) {
         Plotly.purge('comparison-chart');
         lastChartData = null;
+        document.getElementById('comparison-chart-section').style.display = 'none';
         document.getElementById('pf-calc').style.display = '';
         document.getElementById('pf-calc-table-section').style.display = 'none';
         document.getElementById('bcfc-race-division-section').style.display = 'none';
@@ -247,6 +248,7 @@ async function loadChart() {
         pfCalc();
         return;
     }
+    document.getElementById('comparison-chart-section').style.display = '';
 
     const params = new URLSearchParams();
     params.set('boatIds', boatIds.join(','));
@@ -464,14 +466,10 @@ function pfCalc() {
 
 async function addBoatsFromRows(rows) {
     if (selectedItems.length > 0) return null;
-    const data = await fetchJson('/api/comparison/candidates?allAvailable=true');
-    if (!data) return {handled: true, matched: 0};
-    const allBoats = data.boats || [];
 
     function norm(s) {
         return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     }
-
     function sailEq(a, b) {
         if (!a || !b) return false;
         return a.toUpperCase().replace(/[^A-Z0-9]/g, '') === b.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -480,25 +478,33 @@ async function addBoatsFromRows(rows) {
     const added = new Set();
     const matched = [];
 
-    function tryAdd(boat) {
-        if (!added.has(boat.id)) {
-            added.add(boat.id);
-            matched.push(boat);
+    for (const row of rows) {
+        if (row.handicap == null) continue;
+        const query = row.sailno || row.name;
+        if (!query) continue;
+        const params = new URLSearchParams({allAvailable: 'true', boatQ: query});
+        const data = await fetchJson('/api/comparison/candidates?' + params);
+        if (!data) continue;
+        const candidates = (data.boats || []).filter(b => !added.has(b.id));
+
+        let hit = null;
+        if (row.sailno && row.name) {
+            const hits = candidates.filter(b => sailEq(b.sailNumber, row.sailno) && norm(b.name) === norm(row.name));
+            if (hits.length === 1) hit = hits[0];
+        }
+        if (!hit && row.sailno) {
+            const hits = candidates.filter(b => sailEq(b.sailNumber, row.sailno));
+            if (hits.length === 1) hit = hits[0];
+        }
+        if (!hit && row.name) {
+            const hits = candidates.filter(b => norm(b.name) === norm(row.name));
+            if (hits.length === 1) hit = hits[0];
+        }
+        if (hit) {
+            added.add(hit.id);
+            matched.push(hit);
         }
     }
-
-    function pass(predicate) {
-        const available = allBoats.filter(b => !added.has(b.id));
-        rows.forEach(row => {
-            if (row.handicap == null) return;
-            const hits = available.filter(b => predicate(row, b));
-            if (hits.length === 1) tryAdd(hits[0]);
-        });
-    }
-
-    pass((r, b) => r.sailno && r.name && sailEq(b.sailNumber, r.sailno) && norm(b.name) === norm(r.name));
-    pass((r, b) => r.sailno && sailEq(b.sailNumber, r.sailno));
-    pass((r, b) => r.name && norm(r.name) !== '' && norm(b.name) === norm(r.name));
 
     matched.forEach(b => {
         selectedItems.push({
@@ -510,6 +516,9 @@ async function addBoatsFromRows(rows) {
     });
 
     if (matched.length > 0) {
+        // Set variant mode to "set" so variants from the JSON are applied to the newly added boats
+        const modeSelect = document.getElementById('handicap-variant-mode');
+        if (modeSelect) modeSelect.value = 'set';
         renderChips();
         saveSelection();
         loadCandidates();
@@ -1095,5 +1104,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('add-boat-btn').addEventListener('click', addBoat);
     loadCandidates();
-    if (selectedItems.length > 0) loadChart();
+    loadChart();
 });
