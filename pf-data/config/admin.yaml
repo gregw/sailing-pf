@@ -86,6 +86,7 @@ pfMaxInnerIterations: 100
 pfMaxOuterIterations: 50
 pfCrossVariantLambda: 0.0
 pfGraphCrossVariantLambda: 0.25
+pfNoRaceFallbackWeight: 0.2
 
 # --- Sliding average / consistency ---
 slidingAverageCount: 8
@@ -109,12 +110,12 @@ userPort: 8080
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
   bwps/api: "2026-05-08T22:39:31.469690392Z"
-  analysis/run: "2026-05-11T09:22:48.921579941Z"
-  pf-optimise/run: "2026-05-11T09:22:50.311887814Z"
-  save-database/run: "2026-05-11T09:23:06.035707644Z"
+  analysis/run: "2026-05-12T22:15:13.908575634Z"
+  pf-optimise/run: "2026-05-12T22:15:15.398254512Z"
+  save-database/run: "2026-05-12T22:15:29.445388922Z"
   topyacht/api: "2026-05-10T16:18:19.599551797Z"
-  build-indexes/run: "2026-05-11T09:22:48.534835537Z"
-  reference-factors/run: "2026-05-11T09:22:49.709165967Z"
+  build-indexes/run: "2026-05-12T22:15:13.540522926Z"
+  reference-factors/run: "2026-05-12T22:15:14.690589592Z"
   sailsys-races/run: "2026-05-10T16:00:00.001386431Z"
   ams/api: "2026-05-08T22:39:29.540390586Z"
   orc/api: "2026-05-08T22:39:24.392950184Z"

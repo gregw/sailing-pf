@@ -2759,6 +2759,7 @@ public class AdminApiServlet extends HttpServlet
         pfConfig.put("outerConvergenceThreshold", _taskService.pfOuterConvergenceThreshold());
         pfConfig.put("crossVariantLambda", _taskService.pfCrossVariantLambda());
         pfConfig.put("graphCrossVariantLambda", _taskService.pfGraphCrossVariantLambda());
+        pfConfig.put("noRaceFallbackWeight", _taskService.pfNoRaceFallbackWeight());
         result.put("pfConfig", pfConfig);
         result.put("slidingAverageCount", _taskService.slidingAverageCount());
         result.put("slidingAverageDrops", _taskService.slidingAverageDrops());
@@ -2898,13 +2899,18 @@ public class AdminApiServlet extends HttpServlet
             Object rawGraphCrossVariant = body.get("pfGraphCrossVariantLambda");
             Double pfGraphCrossVariantLambda = (rawGraphCrossVariant instanceof Number n11 && n11.doubleValue() >= 0)
                 ? n11.doubleValue() : null;
+            Object rawNoRaceFallback = body.get("pfNoRaceFallbackWeight");
+            Double pfNoRaceFallbackWeight = (rawNoRaceFallback instanceof Number n12
+                && n12.doubleValue() >= 0 && n12.doubleValue() <= 1.0)
+                ? n12.doubleValue() : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
                 sailsysStartRaceId, sailsysEndRaceId,
                 targetIrcYear, outlierSigma,
                 pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
                 pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
-                pfCrossVariantLambda, pfGraphCrossVariantLambda);
+                pfCrossVariantLambda, pfGraphCrossVariantLambda,
+                pfNoRaceFallbackWeight);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }

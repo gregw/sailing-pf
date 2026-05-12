@@ -1,16 +1,5 @@
 package org.mortbay.sailing.pf.server;
 
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.commonmark.Extension;
-import org.commonmark.ext.gfm.tables.TablesExtension;
-import org.commonmark.parser.Parser;
-import org.commonmark.renderer.html.HtmlRenderer;
-
-import java.util.List;
-import java.util.Map;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -18,9 +7,21 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.commonmark.Extension;
+import org.commonmark.ext.gfm.tables.TablesExtension;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 
 public class StaticResourceServlet extends HttpServlet
 {
@@ -44,6 +45,39 @@ public class StaticResourceServlet extends HttpServlet
     private static final Parser MD_PARSER = Parser.builder().extensions(MD_EXTENSIONS).build();
     private static final HtmlRenderer MD_RENDERER = HtmlRenderer.builder().extensions(MD_EXTENSIONS).build();
 
+    private final Path filesystemContentRoot;
+
+    public StaticResourceServlet()
+    {
+        this(null);
+    }
+
+    public StaticResourceServlet(Path filesystemContentRoot)
+    {
+        this.filesystemContentRoot = filesystemContentRoot;
+    }
+
+    /**
+     * Opens a content resource by filename, falling back to the filesystem root if not on classpath.
+     */
+    private InputStream openContentResource(String filename) throws IOException
+    {
+        InputStream in = getClass().getResourceAsStream("/content/" + filename);
+        if (in != null || filesystemContentRoot == null)
+            return in;
+        Path target = filesystemContentRoot.resolve(filename).normalize();
+        if (!target.startsWith(filesystemContentRoot.normalize()))
+            return null;
+        try
+        {
+            return Files.newInputStream(target);
+        }
+        catch (IOException e)
+        {
+            return null;
+        }
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
@@ -58,7 +92,7 @@ public class StaticResourceServlet extends HttpServlet
             return;
         }
 
-        InputStream in = getClass().getResourceAsStream("/content" + path);
+        InputStream in = openContentResource(path.substring(1));
         if (in == null)
         {
             resp.sendError(404);
@@ -182,7 +216,7 @@ public class StaticResourceServlet extends HttpServlet
         while (m.find())
         {
             String file = m.group(1);
-            InputStream inc = getClass().getResourceAsStream("/content/" + file);
+            InputStream inc = openContentResource(file);
             String replacement = "";
             if (inc != null)
             {

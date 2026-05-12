@@ -14,6 +14,12 @@ package org.mortbay.sailing.pf.analysis;
  *       between IRC variant nodes. Defaults to 0.25 (mild always-on prior).</li>
  * </ul>
  * Both terms can be enabled simultaneously; their effects sum.
+ *
+ * <p>{@code noRaceFallbackWeight} caps the confidence assigned to a boat's PF for a variant
+ * in which the boat has zero race entries AND from which no cross-variant graph inference
+ * is available (e.g. graph not loaded, or no other variant has races). The PF value falls
+ * back to the boat's RF, but its weight is capped at this value to reflect that we have no
+ * direct observation of the boat in this variant. Defaults to 0.2.
  */
 public record PfConfig(
     double lambda,                  // regularisation strength (pulls PF toward RF)
@@ -25,8 +31,9 @@ public record PfConfig(
     double outerDampingFactor,      // blend fraction for outer weight updates (1.0=no damping, 0.5=half step)
     double outerConvergenceThreshold, // max weight change to declare outer convergence (default 0.01)
     double crossVariantLambda,      // couples variant PFs via THIS BOAT's RF ratio; 0 = disabled
-    double graphCrossVariantLambda  // couples variant PFs via FLEET-WIDE conversion graph; 0 = disabled
+    double graphCrossVariantLambda, // couples variant PFs via FLEET-WIDE conversion graph; 0 = disabled
+    double noRaceFallbackWeight     // cap on PF weight for a variant with no races and no usable graph inference
 )
 {
-    public static final PfConfig DEFAULT = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.25);
+    public static final PfConfig DEFAULT = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.25, 0.2);
 }

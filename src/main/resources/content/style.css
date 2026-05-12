@@ -133,6 +133,51 @@ a { color: #2255aa; }
 .landing-card strong { font-size: 1.05rem; }
 .landing-card span { font-size: 0.85rem; color: #555; line-height: 1.4; }
 
+/* What's New section */
+.release-notes-section {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #ccc;
+}
+
+.release-notes-section h2 {
+    margin-top: 0;
+}
+
+.release-notes-box {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f9f9f9;
+    padding: 1rem;
+}
+
+.release-notes-box h3 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.95rem;
+}
+
+.release-notes-box h3:first-child {
+    margin-top: 0;
+}
+
+.release-notes-box p {
+    margin: 0.3rem 0;
+    line-height: 1.4;
+}
+
+.release-notes-box ul {
+    margin: 0.3rem 0;
+    padding-left: 1.5rem;
+}
+
+.release-notes-box li {
+    margin: 0.15rem 0;
+    line-height: 1.4;
+}
+
 /* Stats */
 .stats { display: flex; gap: 3rem; background: #f5f5f5; padding: 1rem; margin-bottom: 0.5rem; }
 .stat strong { display: block; font-size: 2rem; }
@@ -410,6 +455,10 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
     .comparison-options-row { gap: 0.5rem 1rem; }
 
     .conv-table table { min-width: auto; }
+
+    .release-notes-box {
+        max-height: 250px;
+    }
 
     button { padding: 5px 10px; font-size: 0.85rem; }
 }

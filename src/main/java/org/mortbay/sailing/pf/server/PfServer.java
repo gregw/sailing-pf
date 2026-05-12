@@ -92,7 +92,7 @@ public class PfServer
 
         context.addServlet(new ServletHolder(new AdminApiServlet(store, taskService, cache, httpClient, authConfig)), "/api/*");
         context.addServlet(new ServletHolder(new AnalysisServlet(store, cache)), "/api/analyse/*");
-        context.addServlet(new ServletHolder(new StaticResourceServlet()), "/*");
+        context.addServlet(new ServletHolder(new StaticResourceServlet(Path.of("").toAbsolutePath())), "/*");
         server.setHandler(context);
         server.start();
 

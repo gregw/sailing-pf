@@ -34,6 +34,15 @@ public class PfOptimiser
 {
     private static final Logger LOG = LoggerFactory.getLogger(PfOptimiser.class);
 
+    // TODO: ARCHITECTURAL REFACTOR (independent of the no-race weight dampening fix)
+    //       1. VariantConverter stores weight as a primitive instead of encapsulating Factor.
+    //          Violates "conversion graphs produce Factors" — loses Factor semantics downstream.
+    //       2. Factor lacks an inverse() method. Inverse conversions are currently handled
+    //          ad-hoc with manual slope/intercept math; an inverse() method would clean this up.
+    //       3. Confidence propagation through the conversion graph deserves a clearer model:
+    //          how does path confidence compound through multi-hop conversions, and should
+    //          Factor weight represent path confidence or data reliability?
+
     // --- Working data structures ---
 
     private record DivisionKey(String raceId, int divisionIndex) {}
@@ -58,6 +67,13 @@ public class PfOptimiser
      * Log-linear approximation of the conversion graph's cross-variant edge for one
      * ordered variant pair. Stored as a fitted line in log-PF space so each ALS inner
      * iteration is one multiply-add rather than a fresh DFS traversal.
+     *
+     * TODO: DESIGN ISSUE — This record duplicates weight as a primitive field instead of
+     *       using a Factor object.
+     *       This would:
+     *        - Eliminate field duplication (Factor already has weight)
+     *        - Be consistent with "conversion graphs produce Factors" principle
+     *        - Allow Factor.inverse() method instead of needing inverse logic here
      */
     private record VariantConverter(double slope, double intercept, double weight) {}
 
@@ -97,6 +113,12 @@ public class PfOptimiser
                 double weight = probe1.weight();
                 if (weight <= 0)
                     continue;
+                // TODO: CONVERSION GRAPH — probe1 returns a Factor with both value and weight.
+                //       Currently we extract weight as a primitive and lose the Factor structure.
+                //       Should store the entire Factor (or derive it from slope/intercept) so that:
+                //       1. VariantConverter encapsulates the Factor (not duplicate weight field)
+                //       2. The Factor's weight semantics are preserved through the conversion pipeline
+                //       3. downstreamCode can call factor.inverse() when needed
                 vc[from][to] = new VariantConverter(slope, intercept, weight);
             }
         }
@@ -270,13 +292,15 @@ public class PfOptimiser
             boatVariantEntries[e.variant()][e.boatOrdinal()].add(i);
         }
 
-        // --- Build per-variant-pair graph-converter cache for the cross-variant graph term ---
+        // --- Build per-variant-pair graph-converter cache ---
         // For each ordered (v2 → v) pair we probe convertViaGraph at two seed values and fit
         // a log-linear function: predLogPf_v = slope * logPf_v2 + intercept, weighted by the
-        // aggregated path confidence. Built once here; consulted O(boats×variants) per inner
-        // iteration. Null entries (no graph path) cleanly disable the term for that pair.
+        // aggregated path confidence. Built whenever a graph + targetYear are available
+        // (independent of graphCrossVariantLambda — the inner loop guards its own use of varConv
+        // by that lambda, but assembleResult uses varConv unconditionally to dampen the weight
+        // of variants for which the boat has no race entries).
         VariantConverter[][] varConv =
-            (graph != null && config.graphCrossVariantLambda() > 0 && targetYear > 0)
+            (graph != null && targetYear > 0)
                 ? buildVariantConverters(graph, targetYear)
                 : null;
 
@@ -408,6 +432,11 @@ public class PfOptimiser
                                 denom += w;
                             }
                         }
+                        // TODO: INVERSE CONVERSION — If we need to invert a VariantConverter
+                        //       (e.g., converting from B back to A when we have A's data but need B's),
+                        //       the inverse logic should live on Factor, not here. This would provide
+                        //       a clean semantic: factor.inverse() returns a new Factor with inverted
+                        //       value and appropriate weight handling for the reverse direction.
 
                         if (denom <= 0) continue; // all weights zero — keep current value
                         double newLogPf = numer / denom;
@@ -474,11 +503,11 @@ public class PfOptimiser
         }
 
         // --- Step 19: Output assembly ---
-        return assembleResult(config, ordinalToBoatId, ordinalToDivKey, boatLogRf, boatRfWeight,
+        return assembleResult(config, ordinalToBoatId, ordinalToDivKey, boatLogRf,
             logPf, logT, divIqrLog, entries, entryWeights, entryCount,
             divEntryIndexes, boatVariantEntries, nBoats, nDivs, totalInner, outerIter,
             innerConverged, outerConverged, finalMaxDelta, finalMaxWeightChange,
-            List.copyOf(outerDeltaTrace), store, boatDerivedMap);
+            List.copyOf(outerDeltaTrace), store, boatDerivedMap, varConv);
     }
 
     private int determineVariant(Finisher f, Division div, boolean raceForceNonSpin)
@@ -593,7 +622,7 @@ public class PfOptimiser
 
     private PfResult assembleResult(PfConfig config,
                                      String[] ordinalToBoatId, DivisionKey[] ordinalToDivKey,
-                                     Map<String, double[]> boatLogRf, Map<String, double[]> boatRfWeight,
+                                    Map<String, double[]> boatLogRf,
                                      double[][] logPf, double[] logT, double[] divIqrLog,
                                      List<Entry> entries, double[] entryWeights,
                                      int[][] entryCount,
@@ -604,7 +633,8 @@ public class PfOptimiser
                                      boolean innerConverged, boolean outerConverged,
                                      double finalMaxDelta, double finalMaxWeightChange,
                                      List<Double> outerDeltaTrace,
-                                     DataStore store, Map<String, BoatDerived> boatDerivedMap)
+                                    DataStore store, Map<String, BoatDerived> boatDerivedMap,
+                                    VariantConverter[][] varConv)
     {
         // Boat PFs
         Map<String, BoatPf> boatPfs = new LinkedHashMap<>();
@@ -614,7 +644,6 @@ public class PfOptimiser
         {
             String boatId = ordinalToBoatId[b];
             double[] rfLog = boatLogRf.get(boatId);
-            double[] rfW = boatRfWeight.get(boatId);
 
             BoatDerived bd = boatDerivedMap.get(boatId);
             ReferenceFactors rf = bd != null ? bd.referenceFactors() : null;
@@ -654,8 +683,56 @@ public class PfOptimiser
                 }
                 else if (rfFactor != null)
                 {
-                    // PF == RF for variants with no races
-                    pfFactors[v] = rfFactor;
+                    // No races for this variant — PF takes RF's value, but the weight must
+                    // reflect the absence of direct observations of this boat in variant v.
+                    // The boat's RF may be high-confidence (inherited from a well-evidenced
+                    // design or aggregated via cross-variant blend in ReferenceNetworkBuilder),
+                    // but for THIS boat we have no race data for variant v. Cap the PF weight
+                    // by the cross-variant graph's inference confidence: for each other variant
+                    // v2 in which the boat has races, build a Factor whose weight is the boat's
+                    // race-derived confidence in v2 (totalWeight/5) times the v2→v conversion
+                    // confidence, then Factor.aggregate across source variants and cap by
+                    // rfFactor.weight(). When no graph inference is available, fall back to
+                    // config.noRaceFallbackWeight() (default 0.2).
+                    double newWeight;
+                    List<Factor> inferences = null;
+                    if (varConv != null)
+                    {
+                        for (int v2 = 0; v2 < 3; v2++)
+                        {
+                            if (v2 == v)
+                                continue;
+                            VariantConverter conv = varConv[v2][v];
+                            if (conv == null)
+                                continue;
+                            double totalV2EntryWeight = 0;
+                            for (int idx : boatVariantEntries[v2][b])
+                            {
+                                totalV2EntryWeight += entryWeights[idx];
+                            }
+                            if (totalV2EntryWeight <= 0)
+                                continue;
+                            double raceConfidence = Math.min(1.0, totalV2EntryWeight / 5.0);
+                            double w = raceConfidence * conv.weight();
+                            if (w <= 0)
+                                continue;
+                            if (inferences == null)
+                                inferences = new ArrayList<>(2);
+                            inferences.add(new Factor(rfFactor.value(), w));
+                        }
+                    }
+                    if (inferences != null && !inferences.isEmpty())
+                    {
+                        Factor agg = inferences.size() == 1
+                            ? inferences.get(0)
+                            : Factor.aggregate(inferences.toArray(new Factor[0]));
+                        newWeight = Math.min(rfFactor.weight(), agg.weight());
+                    }
+                    else
+                    {
+                        newWeight = Math.min(rfFactor.weight(), config.noRaceFallbackWeight());
+                    }
+                    pfFactors[v] = new Factor(rfFactor.value(), newWeight);
                     refDeltas[v] = 0.0;
                 }
                 // else null — no RF and no races

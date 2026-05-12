@@ -139,6 +139,7 @@ public class TaskService
                                Integer pfMaxOuterIterations,    // null → default 5
                                Double pfCrossVariantLambda,     // null → default 0.0
                                Double pfGraphCrossVariantLambda, // null → default 0.25
+                               Double pfNoRaceFallbackWeight,   // null → default 0.2
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -196,6 +197,7 @@ public class TaskService
     private volatile int pfMaxOuterIterations = 5;
     private volatile double pfCrossVariantLambda = 0.0;
     private volatile double pfGraphCrossVariantLambda = 0.25;
+    private volatile double pfNoRaceFallbackWeight = 0.2;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -270,6 +272,8 @@ public class TaskService
             if (config.pfCrossVariantLambda() != null) pfCrossVariantLambda = config.pfCrossVariantLambda();
             if (config.pfGraphCrossVariantLambda() != null)
                 pfGraphCrossVariantLambda = config.pfGraphCrossVariantLambda();
+            if (config.pfNoRaceFallbackWeight() != null)
+                pfNoRaceFallbackWeight = config.pfNoRaceFallbackWeight();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -353,7 +357,8 @@ public void stop()
                                        Double pfOutlierK, Double pfAsymmetryFactor,
                                        Double pfOuterDampingFactor, Double pfOuterConvergenceThreshold,
                                        Double pfCrossVariantLambda,
-                                       Double pfGraphCrossVariantLambda)
+                                       Double pfGraphCrossVariantLambda,
+                                       Double pfNoRaceFallbackWeight)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
@@ -372,6 +377,8 @@ public void stop()
         if (pfCrossVariantLambda != null) this.pfCrossVariantLambda = pfCrossVariantLambda;
         if (pfGraphCrossVariantLambda != null)
             this.pfGraphCrossVariantLambda = pfGraphCrossVariantLambda;
+        if (pfNoRaceFallbackWeight != null)
+            this.pfNoRaceFallbackWeight = pfNoRaceFallbackWeight;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -478,6 +485,11 @@ public void stop()
     public double pfGraphCrossVariantLambda()
     {
         return pfGraphCrossVariantLambda;
+    }
+
+    public double pfNoRaceFallbackWeight()
+    {
+        return pfNoRaceFallbackWeight;
     }
 
     public AuthConfig authConfig()
@@ -724,7 +736,8 @@ public void stop()
         return new PfConfig(pfLambda, pfConvergenceThreshold,
             pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
-            pfCrossVariantLambda, pfGraphCrossVariantLambda);
+            pfCrossVariantLambda, pfGraphCrossVariantLambda,
+            pfNoRaceFallbackWeight);
     }
 
     private void persistConfig()
@@ -743,6 +756,7 @@ public void stop()
                     minAnalysisR2, minAnalysisPairs, clubCertificateWeight, pfLambda, pfOutlierK, pfAsymmetryFactor,
                     pfOuterDampingFactor, pfOuterConvergenceThreshold, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
                     pfCrossVariantLambda, pfGraphCrossVariantLambda,
+                    pfNoRaceFallbackWeight,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,
