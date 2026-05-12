@@ -131,6 +131,7 @@ function removeItem(idx) {
     saveSelection();
     loadCandidates();
     loadChart();
+    loadElapsedCharts();
 }
 
 function clearAll() {
@@ -139,6 +140,7 @@ function clearAll() {
     saveSelection();
     loadCandidates();
     loadChart();
+    loadElapsedCharts();
 }
 
 function renderChips() {
@@ -238,9 +240,11 @@ async function loadChart() {
     if (boatIds.length === 0) {
         Plotly.purge('comparison-chart');
         lastChartData = null;
-        document.getElementById('pf-calc').style.display = 'none';
+        document.getElementById('pf-calc').style.display = '';
+        document.getElementById('pf-calc-table-section').style.display = 'none';
         document.getElementById('bcfc-race-division-section').style.display = 'none';
         inlineDivisionData = null;
+        pfCalc();
         return;
     }
 
@@ -450,14 +454,74 @@ function pfCalc() {
         downloadStatus: document.getElementById('download-status'),
         onChange: () => {
             if (inlineDivisionData) renderInlineDivisionChart();
-        }
+        },
+        onFetchedRows: (rows) => addBoatsFromRows(rows)
     });
     const clearBtn = document.getElementById('clear-handicaps-btn');
     if (clearBtn) clearBtn.addEventListener('click', () => pfCalcController.clearAll());
     return pfCalcController;
 }
 
+async function addBoatsFromRows(rows) {
+    if (selectedItems.length > 0) return null;
+    const data = await fetchJson('/api/comparison/candidates?allAvailable=true');
+    if (!data) return {handled: true, matched: 0};
+    const allBoats = data.boats || [];
+
+    function norm(s) {
+        return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function sailEq(a, b) {
+        if (!a || !b) return false;
+        return a.toUpperCase().replace(/[^A-Z0-9]/g, '') === b.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    }
+
+    const added = new Set();
+    const matched = [];
+
+    function tryAdd(boat) {
+        if (!added.has(boat.id)) {
+            added.add(boat.id);
+            matched.push(boat);
+        }
+    }
+
+    function pass(predicate) {
+        const available = allBoats.filter(b => !added.has(b.id));
+        rows.forEach(row => {
+            if (row.handicap == null) return;
+            const hits = available.filter(b => predicate(row, b));
+            if (hits.length === 1) tryAdd(hits[0]);
+        });
+    }
+
+    pass((r, b) => r.sailno && r.name && sailEq(b.sailNumber, r.sailno) && norm(b.name) === norm(r.name));
+    pass((r, b) => r.sailno && sailEq(b.sailNumber, r.sailno));
+    pass((r, b) => r.name && norm(r.name) !== '' && norm(b.name) === norm(r.name));
+
+    matched.forEach(b => {
+        selectedItems.push({
+            type: 'boat',
+            id: b.id,
+            label: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
+            color: nextColor()
+        });
+    });
+
+    if (matched.length > 0) {
+        renderChips();
+        saveSelection();
+        loadCandidates();
+        loadChart();
+        loadElapsedCharts();
+    }
+
+    return {handled: true, matched: matched.length};
+}
+
 function renderHandicapCalc(data) {
+    document.getElementById('pf-calc-table-section').style.display = '';
     const showBestFit = data.boats.length <= 3;
 
     const calcBoats = data.boats.map(b => {

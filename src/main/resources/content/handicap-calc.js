@@ -32,6 +32,9 @@
 //                                   //   pages/views with different boat lists can share the same
 //                                   //   key without overwriting each other's entries.
 //   onChange,                       // optional () => void, fired after every recalc
+//   onFetchedRows,                  // optional async (rows) => {handled, matched} | null
+//                                   //   called after fetch/load before setHandicapsByMatch;
+//                                   //   return {handled:true, matched:N} to skip normal matching
 //   // Optional fetch/load/save controls; pass to wire automatic event handlers:
 //   urlInput, fetchBtn, fetchStatus,
 //   fileInput, fileStatus,
@@ -1385,9 +1388,11 @@ window.HandicapCalc = (function () {
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps');
                 applySourceVariantOverride(data);
                 rememberFetchedRows(data);
-                const matched = setHandicapsByMatch(data);
+                const cbResult = cfg.onFetchedRows ? await cfg.onFetchedRows(data) : null;
+                const matched = cbResult?.handled ? cbResult.matched : setHandicapsByMatch(data);
                 if (status) {
-                    status.textContent = `Fetched ${data.length} handicaps, matched ${matched} boats`;
+                    const verb = cbResult?.handled ? 'added' : 'matched';
+                    status.textContent = `Fetched ${data.length} handicaps, ${verb} ${matched} boats`;
                     status.style.color = matched > 0 ? '#2e7d32' : '#c62828';
                 }
             } catch (err) {
@@ -1421,9 +1426,11 @@ window.HandicapCalc = (function () {
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps in file');
                 applySourceVariantOverride(data);
                 rememberFetchedRows(data);
-                const matched = setHandicapsByMatch(data);
+                const cbResult = cfg.onFetchedRows ? await cfg.onFetchedRows(data) : null;
+                const matched = cbResult?.handled ? cbResult.matched : setHandicapsByMatch(data);
                 if (status) {
-                    status.textContent = `Loaded ${data.length} handicaps, matched ${matched} boats`;
+                    const verb = cbResult?.handled ? 'added' : 'matched';
+                    status.textContent = `Loaded ${data.length} handicaps, ${verb} ${matched} boats`;
                     status.style.color = matched > 0 ? '#2e7d32' : '#c62828';
                 }
                 fileInput.value = '';
