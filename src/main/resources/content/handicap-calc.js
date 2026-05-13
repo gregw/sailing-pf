@@ -306,6 +306,15 @@ const HandicapCalc = (function () {
         // Per-boat variant override: boatId → 'spin'|'nonSpin'|'twoHanded'
         const boatVariants = new Map();
 
+        // Optional "compare" checkbox column — when cfg.compareSelect is true the
+        // calculator prepends a tick-column so the consumer can pick exactly N boats
+        // (default 2) for pairwise charts. The selection is bounded; ticking past the
+        // cap is rejected. The cap and callback are read from cfg so the calculator
+        // stays generic across pages.
+        const compareEnabled = !!cfg.compareSelect;
+        const compareMax = cfg.compareMax || 2;
+        const compareSelectedIds = new Set();
+
         // Sets — one column per set, focused set drives load/clear/typing/scaled-preview.
         // `show` per set (default true) drives whether consumers (charts) plot that set's
         // allocated-corrected dataset; same idea for showPf / showRf at the controller level.
@@ -519,6 +528,16 @@ const HandicapCalc = (function () {
 
             const thead = document.createElement('thead');
             const hdrTr = document.createElement('tr');
+
+            // Compare-checkbox column header (non-sortable). Only present when the page
+            // wires up cfg.compareSelect.
+            if (compareEnabled) {
+                const cmpTh = document.createElement('th');
+                cmpTh.style.cssText = 'padding:2px 4px;text-align:center;font-size:0.8rem;color:#555;';
+                cmpTh.textContent = 'Cmp';
+                cmpTh.title = `Tick up to ${compareMax} boats to compare`;
+                hdrTr.appendChild(cmpTh);
+            }
 
             // Sail No + Boat name columns (leading, sortable).
             leadCols.forEach(c => hdrTr.appendChild(makeSortableTh(c)));
@@ -782,6 +801,40 @@ const HandicapCalc = (function () {
             return td;
         }
 
+        // Build the optional compare-checkbox cell. The checkbox is disabled when
+        // the selection is full and this boat isn't already in it, so the user can't
+        // tick past the cap. Toggling fires onCompareSelectionChange with the new id set.
+        function makeCompareCell(b) {
+            const td = document.createElement('td');
+            td.style.cssText = 'text-align:center;padding:1px 4px;';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'pf-calc-compare';
+            cb.dataset.boatId = b.id;
+            cb.checked = compareSelectedIds.has(b.id);
+            cb.disabled = !cb.checked && compareSelectedIds.size >= compareMax;
+            cb.title = cb.disabled
+                ? `Tick at most ${compareMax} boats to compare`
+                : `Tick to compare this boat with up to ${compareMax - 1} other(s)`;
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    if (compareSelectedIds.size >= compareMax) {
+                        cb.checked = false;
+                        return;
+                    }
+                    compareSelectedIds.add(b.id);
+                } else {
+                    compareSelectedIds.delete(b.id);
+                }
+                // Re-render so other checkboxes' disabled state updates immediately.
+                render();
+                if (cfg.onCompareSelectionChange)
+                    cfg.onCompareSelectionChange(new Set(compareSelectedIds));
+            });
+            td.appendChild(cb);
+            return td;
+        }
+
         function makeLeadingCells(b) {
             const color = b.color || '#888';
 
@@ -811,7 +864,9 @@ const HandicapCalc = (function () {
             link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color, designText));
             link.addEventListener('mouseleave', hidePentagonPopup);
 
-            return [tdSailno, tdName, makeVariantCell(b)];
+            const cells = [tdSailno, tdName, makeVariantCell(b)];
+            if (compareEnabled) cells.unshift(makeCompareCell(b));
+            return cells;
         }
 
         function makeInputCell(b, setIdx, enteredMap) {
@@ -1169,6 +1224,18 @@ const HandicapCalc = (function () {
                 applyVariantToPf(b, boatVariants.get(b.id));
             });
             calcBoats = incoming.filter(b => b.pf != null);
+            // Drop compare ticks for boats that are no longer in the calculator.
+            if (compareEnabled) {
+                const presentIds = new Set(calcBoats.map(b => b.id));
+                let dropped = false;
+                for (const id of [...compareSelectedIds])
+                    if (!presentIds.has(id)) {
+                        compareSelectedIds.delete(id);
+                        dropped = true;
+                    }
+                if (dropped && cfg.onCompareSelectionChange)
+                    cfg.onCompareSelectionChange(new Set(compareSelectedIds));
+            }
             render();
             loadFromSession();
         }
@@ -1516,7 +1583,10 @@ const HandicapCalc = (function () {
 
         return {
             setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues,
-            getAllSets, getShowPf, getShowRf, recalc, updateVariant
+            getAllSets, getShowPf, getShowRf, recalc, updateVariant,
+            // Compare-checkbox accessors (no-op when cfg.compareSelect is false).
+            getCompareSelection: () => new Set(compareSelectedIds),
+            getBoatVariant: (id) => boatVariants.get(id) || 'spin'
         };
     }
 

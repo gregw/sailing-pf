@@ -36,6 +36,9 @@ let inlineDivisionName = null;
 let inlineDivisionSeriesId = null;
 let inlineSeriesId = null;  // seriesId for which inlineSeriesRaces was fetched
 let inlineSeriesRaces = null;  // [{raceId, raceName, date}] sorted by date, or null
+// Cached /api/comparison/elapsed-chart response for the current pair so per-boat
+// variant changes re-filter without hitting the server. Keyed by `${idA}|${idB}`.
+let elapsedChartCache = {key: null, data: null};
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -454,8 +457,16 @@ function pfCalc() {
         sourceVariantSelect: document.getElementById('handicap-source-variant'),
         downloadBtn: document.getElementById('download-handicaps-btn'),
         downloadStatus: document.getElementById('download-status'),
+        compareSelect: true,
+        compareMax: 2,
+        onCompareSelectionChange: () => loadElapsedCharts(),
         onChange: () => {
             if (inlineDivisionData) renderInlineDivisionChart();
+            // A per-boat variant change in the calc table fires onChange too; the cached
+            // elapsed payload lets this re-render without hitting the API.
+            const elapsedSection = document.getElementById('elapsed-charts-section');
+            if (elapsedSection && elapsedSection.style.display !== 'none')
+                loadElapsedCharts();
         },
         onFetchedRows: (rows) => addBoatsFromRows(rows)
     });
@@ -886,54 +897,84 @@ function renderInlineDivisionChart() {
 
 // ---- Elapsed time comparison charts ----
 
+// Render the elapsed-time chart for the pair currently ticked in the handicap
+// calculator's compare column. Shows the section when exactly two boats are ticked;
+// hides it otherwise. Points are filtered to races where each boat sailed under the
+// variant currently selected for it in the calculator — so a pair displayed under
+// (Spin, Non-Spin) only sees races where boat A sailed spin AND boat B sailed non-spin.
 async function loadElapsedCharts() {
     const section = document.getElementById('elapsed-charts-section');
     const container = document.getElementById('elapsed-charts-container');
 
-    const boats = selectedItems.filter(i => i.type === 'boat');
-    if (boats.length < 2 || boats.length > 3) {
-        if (boats.length >= 4) {
-            section.style.display = '';
-            container.innerHTML = '<p style="color:#666;">Too many boats selected — select 2 or 3 boats to see elapsed time comparisons.</p>';
-        } else {
-            section.style.display = 'none';
-        }
+    if (!pfCalcController) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    const selected = [...pfCalcController.getCompareSelection()];
+    if (selected.length !== 2) {
+        section.style.display = 'none';
+        container.innerHTML = '';
         return;
     }
 
-    // Build pairs: [A,B] for 2 boats; [A,B],[A,C],[B,C] for 3 boats
-    const pairs = [];
-    for (let i = 0; i < boats.length; i++)
-        for (let j = i + 1; j < boats.length; j++)
-            pairs.push([boats[i], boats[j]]);
+    const [idA, idB] = selected;
+    const itemA = selectedItems.find(i => i.type === 'boat' && i.id === idA);
+    const itemB = selectedItems.find(i => i.type === 'boat' && i.id === idB);
+    if (!itemA || !itemB) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
 
     section.style.display = '';
-    container.innerHTML = '';
 
-    // Fetch all pairs in parallel
-    const results = await Promise.all(pairs.map(([a, b]) => {
-        const params = new URLSearchParams({ boatAId: a.id, boatBId: b.id });
-        return fetchJson('/api/comparison/elapsed-chart?' + params);
-    }));
-
-    // Render one chart per pair
-    pairs.forEach(([boatItemA, boatItemB], idx) => {
-        const data = results[idx];
+    const key = `${idA}|${idB}`;
+    let data;
+    if (elapsedChartCache.key === key && elapsedChartCache.data) {
+        data = elapsedChartCache.data;
+    } else {
+        const params = new URLSearchParams({boatAId: idA, boatBId: idB});
+        data = await fetchJson('/api/comparison/elapsed-chart?' + params);
         if (!data) return;
-        const divId = `elapsed-chart-${idx}`;
+        elapsedChartCache = {key, data};
+    }
+
+    // Filter points to races where each boat sailed under the variant currently
+    // selected for it in the calculator. The renderer doesn't mutate `data.points`
+    // (we hand it a shallow copy), so cached `data` stays usable for the next call.
+    const variantA = pfCalcController.getBoatVariant(idA);
+    const variantB = pfCalcController.getBoatVariant(idB);
+    const matches = (variant, nonSpin, twoH) =>
+        variant === 'twoHanded' ? twoH
+            : variant === 'nonSpin' ? nonSpin
+                : !nonSpin && !twoH;
+    const filteredPoints = (data.points || []).filter(p =>
+        matches(variantA, p.aNonSpinnaker, p.aTwoHanded) &&
+        matches(variantB, p.bNonSpinnaker, p.bTwoHanded));
+    const renderData = {...data, points: filteredPoints};
+
+    // Re-use the existing chart container when it's already for this pair — avoids a
+    // Plotly tear-down/recreate on every onChange tick (handicap edit / variant flip).
+    let titleEl = container.querySelector('.elapsed-chart-title');
+    let chartDiv = container.querySelector('#elapsed-chart-0');
+    if (!chartDiv || container.dataset.pairKey !== key) {
+        container.innerHTML = '';
+        container.dataset.pairKey = key;
         const wrapper = document.createElement('div');
         wrapper.style.marginBottom = '1.5rem';
-        const title = document.createElement('div');
-        title.style.cssText = 'font-weight:bold;margin-bottom:0.25rem;';
-        title.textContent = `${boatItemA.label} vs ${boatItemB.label}`;
-        const chartDiv = document.createElement('div');
-        chartDiv.id = divId;
+        titleEl = document.createElement('div');
+        titleEl.className = 'elapsed-chart-title';
+        titleEl.style.cssText = 'font-weight:bold;margin-bottom:0.25rem;';
+        wrapper.appendChild(titleEl);
+        chartDiv = document.createElement('div');
+        chartDiv.id = 'elapsed-chart-0';
         chartDiv.style.cssText = 'width:100%;height:500px;';
-        wrapper.appendChild(title);
         wrapper.appendChild(chartDiv);
         container.appendChild(wrapper);
-        renderElapsedChart(divId, data, boatItemA.color, boatItemB.color);
-    });
+    }
+    titleEl.textContent = `${itemA.label} vs ${itemB.label}`;
+    renderElapsedChart('elapsed-chart-0', renderData, itemA.color, itemB.color);
 }
 
 /** Re-renders the elapsed-time charts without refetching; used by the From-0 toggle. */

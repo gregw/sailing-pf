@@ -8,6 +8,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -3233,6 +3234,22 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
+     * Index a per-boat residual list by "raceId|divisionName" so points can pull the
+     * boat's variant flags for a specific race/division. Tolerates null/empty input.
+     */
+    private static Map<String, EntryResidual> indexResidualsByRaceDiv(List<EntryResidual> residuals)
+    {
+        if (residuals == null || residuals.isEmpty())
+            return Map.of();
+        Map<String, EntryResidual> m = new HashMap<>();
+        for (EntryResidual r : residuals)
+        {
+            m.put(r.raceId() + "|" + r.divisionName(), r);
+        }
+        return m;
+    }
+
+    /**
      * GET /api/comparison/elapsed-chart — returns pairwise elapsed-time comparison data for two boats.
      * <p>
      * Required params: {@code boatAId} and {@code boatBId}. For each race division in which both
@@ -3251,7 +3268,16 @@ public class AdminApiServlet extends HttpServlet
 
         BoatDerived bda = cache.boatDerived().get(boatAId);
         BoatDerived bdb = cache.boatDerived().get(boatBId);
-        if (bda == null || bdb == null) { resp.sendError(404); return; }
+        if (bda == null || bdb == null) { resp.sendError(404);
+            return;
+        }
+
+        // Index per-boat EntryResiduals by "raceId|divisionName" so each point can carry
+        // the variant each boat sailed in that race-division. The frontend filters by
+        // each boat's current calculator variant, so missing residual data leaves the
+        // flags defaulting to spin and the point may or may not match the filter.
+        Map<String, EntryResidual> residualsA = indexResidualsByRaceDiv(cache.residualsByBoatId().get(boatAId));
+        Map<String, EntryResidual> residualsB = indexResidualsByRaceDiv(cache.residualsByBoatId().get(boatBId));
 
         // Collect races where boat A competed, then look for boat B in the same division
         Set<String> racesA = bda.raceIds() != null ? bda.raceIds() : Set.of();
@@ -3284,6 +3310,10 @@ public class AdminApiServlet extends HttpServlet
                     if (seriesName == null) seriesName = seriesId;
                 }
 
+                String key = raceId + "|" + div.name();
+                EntryResidual rA = residualsA.get(key);
+                EntryResidual rB = residualsB.get(key);
+
                 Map<String, Object> pt = new LinkedHashMap<>();
                 pt.put("x",          bElapsed);
                 pt.put("y",          aElapsed);
@@ -3292,6 +3322,10 @@ public class AdminApiServlet extends HttpServlet
                 pt.put("raceName",   raceName(race));
                 pt.put("seriesName", seriesName);
                 pt.put("division",   div.name());
+                pt.put("aNonSpinnaker", rA != null && rA.nonSpinnaker());
+                pt.put("aTwoHanded", rA != null && rA.twoHanded());
+                pt.put("bNonSpinnaker", rB != null && rB.nonSpinnaker());
+                pt.put("bTwoHanded", rB != null && rB.twoHanded());
                 points.add(pt);
             }
         }
