@@ -7,7 +7,7 @@ function renderJsonTree(val, depth) {
     if (Array.isArray(val)) {
         if (val.length === 0) return '<span class="jt-punct">[]</span>';
         const rows = val.map(v => `<div class="jt-row">${renderJsonTree(v, depth + 1)}</div>`).join('');
-        return `<details open><summary class="jt-sum">[ ${val.length} ]</summary><div class="jt-body">${rows}</div></details>`;
+        return `<details><summary class="jt-sum">[ ${val.length} ]</summary><div class="jt-body">${rows}</div></details>`;
     }
     if (t === 'object') {
         const keys = Object.keys(val);
@@ -16,9 +16,14 @@ function renderJsonTree(val, depth) {
         const rows = keys.map(k =>
             `<div class="jt-row"><span class="jt-key">${esc(k)}</span>: ${renderJsonTree(val[k], depth + 1)}</div>`
         ).join('');
-        return `<details open><summary class="jt-sum">{ ${preview} }</summary><div class="jt-body">${rows}</div></details>`;
+        return `<details><summary class="jt-sum">{ ${preview} }</summary><div class="jt-body">${rows}</div></details>`;
     }
     return esc(String(val));
+}
+
+function renderRawJson(data) {
+    if (!data) return '';
+    return `<details class="raw-json-outer"><summary>Raw record</summary><div class="json-tree">${renderJsonTree(data, 0)}</div></details>`;
 }
 
 function weightColor(w) {
@@ -543,7 +548,7 @@ function renderTable(entity, items, append) {
         tr.onclick = () => {
             if (entity === 'races') state.currentRaceIdx = globalIdx;
             if (entity === 'boats') { state.currentBoatIdx = globalIdx; }
-            if (entity !== 'clubs' && entity !== 'designs') loadDetail(entity, item.id);
+            loadDetail(entity, item.id, item);
         };
         cols.forEach(col => {
             const td = document.createElement('td');
@@ -637,9 +642,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-async function loadDetail(entity, id, {scroll = true} = {}) {
+async function loadDetail(entity, id, item, {scroll = true} = {}) {
     if (entity === 'series') {
         loadSeriesChart(id);
+        const jd = document.getElementById('json-raw-series');
+        if (jd) jd.innerHTML = renderRawJson(item);
         return;
     }
 
@@ -668,6 +675,9 @@ async function loadDetail(entity, id, {scroll = true} = {}) {
 
         updateBoatNav();
     }
+
+    const jd = document.getElementById('json-raw-' + entity);
+    if (jd) jd.innerHTML = renderRawJson(data);
 
     if (panel) panel.classList.add('visible');
     if (scroll) {
@@ -1887,7 +1897,8 @@ function prevRace() {
     if (state.currentRaceIdx > 0) {
         preferredDivision = document.getElementById('race-division-select').value || null;
         state.currentRaceIdx--;
-        loadDetail('races', state.raceItems[state.currentRaceIdx].id);
+        const r = state.raceItems[state.currentRaceIdx];
+        loadDetail('races', r.id, r);
     }
 }
 
@@ -1895,7 +1906,8 @@ function nextRace() {
     if (state.currentRaceIdx < state.raceItems.length - 1) {
         preferredDivision = document.getElementById('race-division-select').value || null;
         state.currentRaceIdx++;
-        loadDetail('races', state.raceItems[state.currentRaceIdx].id);
+        const r = state.raceItems[state.currentRaceIdx];
+        loadDetail('races', r.id, r);
     }
 }
 
@@ -1917,14 +1929,16 @@ function updateBoatNav() {
 function prevBoat() {
     if (state.currentBoatIdx > 0) {
         state.currentBoatIdx--;
-        loadDetail('boats', state.boatItems[state.currentBoatIdx].id);
+        const b = state.boatItems[state.currentBoatIdx];
+        loadDetail('boats', b.id, b);
     }
 }
 
 function nextBoat() {
     if (state.currentBoatIdx < state.boatItems.length - 1) {
         state.currentBoatIdx++;
-        loadDetail('boats', state.boatItems[state.currentBoatIdx].id);
+        const b = state.boatItems[state.currentBoatIdx];
+        loadDetail('boats', b.id, b);
     }
 }
 

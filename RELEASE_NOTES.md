@@ -1,5 +1,6 @@
 ### May 2026
 
+- **JSON View**: Re-added json view of items.
 - **PF Optimizer Invariants**: Ensure weighted ratios between spin, nonSpin and 2handed PF are preserved across optimisation
   iterations.
 - **Handicap Calculator Enhancements**: Better handling of mixed fleets. More sort and navigation options.

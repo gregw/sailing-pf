@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -57,6 +58,11 @@ public class AdminApiServlet extends HttpServlet
     private static final JsonMapper MAPPER = JsonMapper.builder()
         .addModule(new JavaTimeModule())
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .build();
+    private static final JsonMapper MAPPER_FULL = JsonMapper.builder()
+        .addModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .disable(MapperFeature.USE_ANNOTATIONS)
         .build();
     private static final int DEFAULT_PAGE_SIZE = 50;
 
@@ -524,7 +530,7 @@ public class AdminApiServlet extends HttpServlet
                 resp.sendError(404);
                 return;
             }
-            writeJson(resp, boat);
+            writeJsonFull(resp, boat);
         }
     }
 
@@ -2318,7 +2324,7 @@ public class AdminApiServlet extends HttpServlet
                 resp.sendError(404);
                 return;
             }
-            writeJson(resp, race);
+            writeJsonFull(resp, race);
         }
     }
 
@@ -3015,6 +3021,12 @@ public class AdminApiServlet extends HttpServlet
     private void writeJson(HttpServletResponse resp, Object obj) throws IOException
     {
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(resp.getWriter(), obj);
+    }
+
+    private void writeJsonFull(HttpServletResponse resp, Object obj) throws IOException
+    {
+        resp.setContentType("application/json;charset=utf-8");
+        MAPPER_FULL.writerWithDefaultPrettyPrinter().writeValue(resp.getWriter(), obj);
     }
 
     /**
