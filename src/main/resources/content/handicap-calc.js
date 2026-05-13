@@ -1303,6 +1303,17 @@ const HandicapCalc = (function () {
                 remaining.push(...leftover);
             }
 
+            // 0. Server-resolved boatId — the primary path. Rows fetched from the server
+            //    already carry the canonical boatId (alias-resolved). The four sail/name
+            //    passes below remain only as a fallback for legacy downloaded JSON files
+            //    that predate the boatId schema.
+            pass((it, b) => it.boatId && it.boatId === b.id);
+
+            if (remaining.some(item => !item.boatId)) {
+                console.info(
+                    `handicap-calc: ${remaining.filter(it => !it.boatId).length} row(s) without boatId — falling back to sail/name match`);
+            }
+
             // 1. sailno + name (strongest — distinguishes same-sailno boats by name)
             pass((it, b) =>
                 it.sailno && it.name &&
@@ -1412,6 +1423,7 @@ const HandicapCalc = (function () {
                 if (!isNaN(v)) {
                     const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
                     if (boat) out.push({
+                        boatId: boat.id,
                         sailno: boat.sailNumber || '',
                         name: boat.boatName || '',
                         handicap: v,
@@ -1472,9 +1484,14 @@ const HandicapCalc = (function () {
                 stored.sets.push({name: sets[i].name, show: sets[i].show !== false, entries: []});
             }
             const target = stored.sets[focusedIdx];
-            const replaced = item => incoming.some(r =>
-                (r.sailno && r.sailno === item.sailno) ||
-                (!r.sailno && r.name && r.name === item.name));
+            // Dedupe by boatId when both sides have it (the new schema); fall back to
+            // sail/name for legacy entries that predate boatId, otherwise a freshly
+            // canonical-sail fetch would not collide with an older alias-keyed entry.
+            const replaced = item => incoming.some(r => {
+                if (r.boatId && item.boatId) return r.boatId === item.boatId;
+                if (r.sailno && r.sailno === item.sailno) return true;
+                return !r.sailno && r.name && r.name === item.name;
+            });
             target.entries = (target.entries || []).filter(e => !replaced(e)).concat(incoming);
             stored.focused = focusedIdx;
             try {

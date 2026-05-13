@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -210,6 +211,57 @@ public class DataStore
     {
         String override = clubCatalogue.resolveBoatIdOverride(boatId);
         return override != null && override.isEmpty();
+    }
+
+    /**
+     * Reads — never creates — an existing Boat by sail number and/or name, honouring
+     * the alias system ({@code aliases.yaml}) and AUS-prefix collapsing. Used by
+     * read-only server paths (e.g. fetch-handicaps) where creating a phantom boat
+     * would be wrong.
+     * <p>
+     * Either {@code rawSailNo} or {@code rawName} may be null/blank; the lookup uses
+     * whichever key(s) are present and still requires a unique match.
+     * <p>
+     * Returns {@code Optional.empty()} when there is no match <em>or</em> when more
+     * than one candidate would match (ambiguous — treated the same as no match by
+     * callers, who must not silently create a phantom).
+     */
+    public Optional<Boat> findBoat(String rawSailNo, String rawName)
+    {
+        String sailNo = IdGenerator.normaliseSailNumber(rawSailNo);
+        String name = IdGenerator.normaliseName(rawName);
+
+        Aliases.BoatMatch aliased = aliases.lookupBoat(sailNo, name).orElse(null);
+        if (aliased != null)
+        {
+            if (aliased.normSailNumber() != null)
+                sailNo = aliased.normSailNumber();
+            if (aliased.normName() != null)
+                name = aliased.normName();
+        }
+
+        boolean haveSail = !sailNo.isEmpty();
+        boolean haveName = !name.isEmpty();
+        if (!haveSail && !haveName)
+            return Optional.empty();
+
+        List<Boat> matches = new ArrayList<>();
+        for (Boat candidate : boats.values())
+        {
+            if (haveSail && !sailNo.equalsIgnoreCase(candidate.sailNumber()))
+                continue;
+            if (haveName && !name.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
+                continue;
+            matches.add(candidate);
+        }
+
+        if (matches.size() == 1)
+            return Optional.of(matches.getFirst());
+        if (matches.size() > 1)
+            LOG.debug("findBoat ambiguous: sailNo='{}' name='{}' → {} candidates: {}",
+                sailNo, name, matches.size(),
+                matches.stream().map(Boat::id).toList());
+        return Optional.empty();
     }
 
     /** Convenience overload for tests — no date, no source. */

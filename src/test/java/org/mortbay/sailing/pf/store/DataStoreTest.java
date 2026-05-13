@@ -548,6 +548,115 @@ class DataStoreTest {
             "second candidate id:design present: " + contents);
     }
 
+    // --- findBoat (read-only, alias-aware) ---
+
+    @Test
+    void findBoatResolvesSailAliasToCanonicalBoat(@TempDir Path tempDir)
+    {
+        // aliases.yaml maps A350-absolut with sail alias "R350"
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat canonical = new Boat("A350-absolut", "A350", "Absolut", null, null,
+            List.of(), List.of(), null, null);
+        store.putBoat(canonical);
+
+        Boat found = store.findBoat("R350", "Absolut").orElse(null);
+
+        assertNotNull(found);
+        assertEquals("A350-absolut", found.id());
+        assertEquals("A350", found.sailNumber());
+        assertEquals("Absolut", found.name());
+    }
+
+    @Test
+    void findBoatResolvesNameAliasToCanonicalBoat(@TempDir Path tempDir)
+    {
+        // aliases.yaml maps MYC7-daydreaming with name alias "1060"
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat canonical = new Boat("MYC7-daydreaming", "MYC7", "Day Dreaming", null, null,
+            List.of(), List.of(), null, null);
+        store.putBoat(canonical);
+
+        Boat found = store.findBoat("MYC7", "1060").orElse(null);
+
+        assertNotNull(found);
+        assertEquals("MYC7-daydreaming", found.id());
+    }
+
+    @Test
+    void findBoatStripsAusPrefix(@TempDir Path tempDir)
+    {
+        // Implicit AUS-prefix alias: AUS1234 → 1234 with no yaml entry needed.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat canonical = new Boat("1234-ragingbull", "1234", "Raging Bull", null, null,
+            List.of(), List.of(), null, null);
+        store.putBoat(canonical);
+
+        Boat found = store.findBoat("AUS1234", "Raging Bull").orElse(null);
+
+        assertNotNull(found);
+        assertEquals("1234-ragingbull", found.id());
+    }
+
+    @Test
+    void findBoatReturnsEmptyOnAmbiguity(@TempDir Path tempDir)
+    {
+        // Two boats with the same canonical sail+name but different designs — ambiguous.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("1234-ragingbull-tp52", "1234", "Raging Bull",
+            "tp52", null, List.of(), List.of(), null, null));
+        store.putBoat(new Boat("1234-ragingbull-farr40", "1234", "Raging Bull",
+            "farr40", null, List.of(), List.of(), null, null));
+
+        assertTrue(store.findBoat("AUS1234", "Raging Bull").isEmpty());
+    }
+
+    @Test
+    void findBoatReturnsEmptyOnNoMatch(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        assertTrue(store.findBoat("X999", "Nobody").isEmpty());
+    }
+
+    @Test
+    void findBoatMatchesByNameOnly(@TempDir Path tempDir)
+    {
+        // Simulates the BWPS standings path where rows carry no sail number.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("1234-ragingbull", "1234", "Raging Bull", null, null,
+            List.of(), List.of(), null, null));
+
+        Boat found = store.findBoat(null, "Raging Bull").orElse(null);
+
+        assertNotNull(found);
+        assertEquals("1234-ragingbull", found.id());
+    }
+
+    @Test
+    void findBoatBySailAliasYieldsSameIdAsFindOrCreate(@TempDir Path tempDir)
+    {
+        // The boatId returned by an alias-based findBoat must match what an importer
+        // (findOrCreateBoat) would produce — so frontend boatId-to-boatId matching
+        // never goes stale.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        // Importer creates the canonical boat using its canonical sail/name.
+        Boat created = store.findOrCreateBoat("A350", "Absolut", null);
+
+        // A later fetch sees the alias sail "R350" and looks up read-only.
+        Boat found = store.findBoat("R350", "Absolut").orElse(null);
+
+        assertNotNull(found);
+        assertEquals(created.id(), found.id());
+    }
+
     // --- findUniqueClubByShortName ---
 
     @Test

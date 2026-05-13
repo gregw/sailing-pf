@@ -481,65 +481,33 @@ function pfCalc() {
 async function addBoatsFromRows(rows) {
     if (selectedItems.length > 0) return null;
 
-    function norm(s) {
-        return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    }
-    function sailEq(a, b) {
-        if (!a || !b) return false;
-        return a.toUpperCase().replace(/[^A-Z0-9]/g, '') === b.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    }
-
+    // Matching is done server-side (alias-aware via DataStore.findBoat) and surfaced as
+    // row.boatId. The frontend trusts the boatId; rows with no server match are skipped.
     const added = new Set();
     const matched = [];
 
     for (const row of rows) {
-        const query = row.sailno || row.name;
-        if (!query) {
-            console.warn('fetch-handicaps: row has no sailno/name, skipping', row);
+        if (!row.boatId) {
+            console.warn('fetch-handicaps: server returned no boatId for row, skipping', row);
             continue;
         }
-        const params = new URLSearchParams({allAvailable: 'true', boatQ: query});
-        const data = await fetchJson('/api/comparison/candidates?' + params);
-        if (!data) continue;
-        const candidates = (data.boats || []).filter(b => !added.has(b.id));
-
-        let hit = null;
-        if (row.sailno && row.name) {
-            const hits = candidates.filter(b => sailEq(b.sailNumber, row.sailno) && norm(b.name) === norm(row.name));
-            if (hits.length === 1) hit = hits[0];
-        }
-        if (!hit && row.sailno) {
-            const hits = candidates.filter(b => sailEq(b.sailNumber, row.sailno));
-            if (hits.length === 1) hit = hits[0];
-        }
-        if (!hit && row.name) {
-            const hits = candidates.filter(b => norm(b.name) === norm(row.name));
-            if (hits.length === 1) hit = hits[0];
-        }
-        if (hit) {
-            added.add(hit.id);
-            matched.push({boat: hit, rowVariant: row.variant || null});
-        } else {
-            console.warn('fetch-handicaps: no unique match for row', {
-                sailno: row.sailno || null,
-                name: row.name || null,
-                division: row.division || null,
-                candidatesCount: candidates.length
-            });
-        }
+        if (added.has(row.boatId)) continue;
+        added.add(row.boatId);
+        matched.push(row);
     }
 
-    matched.forEach(({boat, rowVariant}) => {
+    matched.forEach(row => {
+        const label = row.sailno ? `${row.sailno} ${row.name}` : row.name;
         selectedItems.push({
             type: 'boat',
-            id: boat.id,
-            label: boat.sailNumber ? `${boat.sailNumber} ${boat.name}` : boat.name,
+            id: row.boatId,
+            label,
             color: nextColor(),
             // Seed the calculator's variant for THIS new boat from the source row, so the
             // fetched handicap loads against the matching variant. We don't flip the global
             // import mode — existing boats keep their own variants and a subsequent fetch
             // honours the user's mode select (default 'filter').
-            initialVariant: rowVariant
+            initialVariant: row.variant || null
         });
     });
 

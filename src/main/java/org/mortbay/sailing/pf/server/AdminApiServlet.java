@@ -3652,7 +3652,7 @@ public class AdminApiServlet extends HttpServlet
 
     private double lookupKnownPf(String sailNo, String name)
     {
-        Boat match = findBoat(sailNo, name);
+        Boat match = store.findBoat(sailNo, name).orElse(null);
         if (match == null) return 1.0;
         BoatDerived bd = cache.boatDerived().get(match.id());
         if (bd == null || bd.pf() == null) return 1.0;
@@ -3709,53 +3709,34 @@ public class AdminApiServlet extends HttpServlet
             if (name.isBlank())
                 continue;
             // hcap may be null — keep the row so an empty calculator gets the boat list.
-            Boat boat = findBoat(null, name);
-            String sailNo = boat != null ? boat.sailNumber() : null;
-            result.add(handicapEntry(sailNo, name, hcap));
+            result.add(handicapEntry(null, name, hcap));
         }
         return result;
     }
 
     // --- Helpers ---
 
-    private Boat findBoat(String sailNo, String name)
+    /**
+     * Builds the per-row JSON sent back to the frontend, resolving the row's canonical
+     * {@link Boat} once on the server (alias-aware via {@link DataStore#findBoat}).
+     * The frontend then matches by {@code boatId} only — no client-side alias logic.
+     * When no unique boat matches, {@code boatId} is null and the raw sail/name from
+     * the source are preserved so the frontend can still surface the row.
+     */
+    private Map<String, Object> handicapEntry(String rawSailNo, String rawName, Double handicap)
     {
-        String normSail = sailNo != null ? sailNo.replaceAll("\\s+", "").toUpperCase(Locale.ENGLISH) : null;
-        String normName = name != null ? name.trim().toLowerCase(Locale.ENGLISH) : null;
-        Boat sailMatch = null;
-        Boat nameMatch = null;
-        int nameMatches = 0;
-        for (Boat b : store.boats().values())
-        {
-            if (normSail != null && b.sailNumber() != null
-                && b.sailNumber().replaceAll("\\s+", "").equalsIgnoreCase(normSail))
-            {
-                sailMatch = b;
-                break;
-            }
-            if (normName != null && b.name() != null && b.name().toLowerCase(Locale.ENGLISH).equals(normName))
-            {
-                nameMatch = b;
-                nameMatches++;
-            }
-        }
-        if (sailMatch != null) return sailMatch;
-        return nameMatches == 1 ? nameMatch : null;
+        return handicapEntry(rawSailNo, rawName, null, handicap, null);
     }
 
-    private static Map<String, Object> handicapEntry(String sailNo, String name, Double handicap)
+    private Map<String, Object> handicapEntry(String rawSailNo, String rawName, String division, Double handicap, Boolean nonSpinnaker)
     {
-        return handicapEntry(sailNo, name, null, handicap);
-    }
+        Boat boat = store.findBoat(rawSailNo, rawName).orElse(null);
+        String boatId = boat != null ? boat.id() : null;
+        String sailNo = boat != null ? boat.sailNumber() : rawSailNo;
+        String name = boat != null ? boat.name() : rawName;
 
-    private static Map<String, Object> handicapEntry(String sailNo, String name, String division, Double handicap)
-    {
-        return handicapEntry(sailNo, name, division, handicap, null);
-    }
-
-    private static Map<String, Object> handicapEntry(String sailNo, String name, String division, Double handicap, Boolean nonSpinnaker)
-    {
         Map<String, Object> m = new LinkedHashMap<>();
+        m.put("boatId", boatId);
         m.put("sailno", sailNo);
         m.put("name", name);
         if (division != null)

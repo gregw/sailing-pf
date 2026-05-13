@@ -15,3 +15,7 @@ boats:
     aliases:
       - name: "1060"
       - name: TenSixty
+  A350-absolut:
+    canonicalName: Absolut
+    aliases:
+      - sailNumber: R350
