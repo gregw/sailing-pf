@@ -39,6 +39,9 @@ let inlineSeriesRaces = null;  // [{raceId, raceName, date}] sorted by date, or 
 // Cached /api/comparison/elapsed-chart response for the current pair so per-boat
 // variant changes re-filter without hitting the server. Keyed by `${idA}|${idB}`.
 let elapsedChartCache = {key: null, data: null};
+// Last best-fit slope for the elapsed chart (Y/X = elapsedA/elapsedB). Updated every
+// time renderElapsedChart runs so "Use Best Fit" can re-apply the displayed value.
+let lastElapsedFit = null;
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -958,6 +961,7 @@ async function loadElapsedCharts() {
     // Plotly tear-down/recreate on every onChange tick (handicap edit / variant flip).
     let titleEl = container.querySelector('.elapsed-chart-title');
     let chartDiv = container.querySelector('#elapsed-chart-0');
+    let bestFitBtn = container.querySelector('#elapsed-use-best-fit');
     if (!chartDiv || container.dataset.pairKey !== key) {
         container.innerHTML = '';
         container.dataset.pairKey = key;
@@ -971,10 +975,48 @@ async function loadElapsedCharts() {
         chartDiv.id = 'elapsed-chart-0';
         chartDiv.style.cssText = 'width:100%;height:500px;';
         wrapper.appendChild(chartDiv);
+        // "Use Best Fit" — pushes the best-fit slope into the focused-set handicaps
+        // for boats A and B (geometric-mean-balanced against the other anchors).
+        bestFitBtn = document.createElement('button');
+        bestFitBtn.id = 'elapsed-use-best-fit';
+        bestFitBtn.type = 'button';
+        bestFitBtn.style.cssText = 'margin-top:0.5rem;padding:6px 14px;cursor:pointer;';
+        bestFitBtn.addEventListener('click', applyBestFitToHandicaps);
+        wrapper.appendChild(bestFitBtn);
         container.appendChild(wrapper);
     }
     titleEl.textContent = `${itemA.label} vs ${itemB.label}`;
     renderElapsedChart('elapsed-chart-0', renderData, itemA.color, itemB.color);
+
+    // Refresh the button's label / enabled state to reflect the current fit.
+    const slope = lastElapsedFit?.slope;
+    if (bestFitBtn) {
+        if (slope && isFinite(slope) && slope > 0) {
+            const ratio = 1 / slope;
+            bestFitBtn.disabled = false;
+            bestFitBtn.textContent = `Use Best Fit (handicap ratio ${ratio.toFixed(4)})`;
+            bestFitBtn.title = `Set ${itemA.label} and ${itemB.label} handicaps so their ratio equals `
+                + `${ratio.toFixed(4)} (best-fit elapsed-time slope ${slope.toFixed(4)}), `
+                + `balanced against other handicaps in the focused column.`;
+            bestFitBtn.dataset.idA = idA;
+            bestFitBtn.dataset.idB = idB;
+            bestFitBtn.dataset.ratio = String(ratio);
+        } else {
+            bestFitBtn.disabled = true;
+            bestFitBtn.textContent = 'Use Best Fit — not enough data';
+            bestFitBtn.title = 'Need at least two co-raced points to compute a best-fit slope';
+        }
+    }
+}
+
+function applyBestFitToHandicaps() {
+    const btn = document.getElementById('elapsed-use-best-fit');
+    if (!btn || btn.disabled || !pfCalcController) return;
+    const idA = btn.dataset.idA;
+    const idB = btn.dataset.idB;
+    const ratio = parseFloat(btn.dataset.ratio);
+    if (!idA || !idB || !isFinite(ratio) || ratio <= 0) return;
+    pfCalcController.applyPairwiseFit(idA, idB, ratio);
 }
 
 /** Re-renders the elapsed-time charts without refetching; used by the From-0 toggle. */
@@ -995,6 +1037,7 @@ function renderElapsedChart(divId, data, colorA, colorB) {
 
     if (points.length === 0) {
         Plotly.purge(divId);
+        lastElapsedFit = null;
         return;
     }
 
@@ -1031,6 +1074,7 @@ function renderElapsedChart(divId, data, colorA, colorB) {
 
     // Best-fit line through origin
     const fit = linearFitElapsed(xs, ys);
+    lastElapsedFit = fit;
     if (fit) {
         const x0 = 0, x1 = xMax + xPad;
         traces.push({

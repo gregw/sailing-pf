@@ -1334,6 +1334,47 @@ const HandicapCalc = (function () {
             return matched;
         }
 
+        // Public: set boatA and boatB's focused-set handicaps so their ratio matches
+        // `ratio = hcapA/hcapB` while staying as close as possible (in log space) to the
+        // consensus scale of the other anchors. With no other anchors the boats anchor
+        // to their own PF values (R = 1). Returns true if both inputs were written.
+        function applyPairwiseFit(idA, idB, ratio) {
+            const boatA = calcBoats.find(b => b.id === idA);
+            const boatB = calcBoats.find(b => b.id === idB);
+            if (!boatA || !boatB) return false;
+            if (boatA.pf == null || boatA.pf === 0) return false;
+            if (boatB.pf == null || boatB.pf === 0) return false;
+            if (!isFinite(ratio) || ratio <= 0) return false;
+
+            // R = weighted mean of (entered / pf) over focused-set anchors that aren't A or B.
+            let R = 1, wSum = 0, num = 0;
+            focusedInputCells().forEach(inp => {
+                const id = inp.dataset.boatId;
+                if (id === idA || id === idB) return;
+                const v = parseFloat(inp.value);
+                if (isNaN(v)) return;
+                const b = calcBoats.find(cb => cb.id === id);
+                if (!b || b.pf == null || b.pf === 0) return;
+                const w = (b.pfWeight != null && b.pfWeight > 0) ? b.pfWeight : 1;
+                wSum += w;
+                num += w * (v / b.pf);
+            });
+            if (wSum > 0) R = num / wSum;
+
+            // Constraint: hcapA = pfA * R * s, hcapB = pfB * R * t, with s/t = ratio·pfB/pfA.
+            // Minimising (log s)^2 + (log t)^2 gives s = √q, t = 1/√q (geometric mean).
+            const q = ratio * boatB.pf / boatA.pf;
+            const sqrtQ = Math.sqrt(q);
+            const hcapA = boatA.pf * R * sqrtQ;
+            const hcapB = boatB.pf * R / sqrtQ;
+            const inpA = focusedInputFor(idA);
+            const inpB = focusedInputFor(idB);
+            if (inpA) inpA.value = hcapA.toFixed(4);
+            if (inpB) inpB.value = hcapB.toFixed(4);
+            recalc();
+            return !!(inpA && inpB);
+        }
+
         // Clear the focused set entirely — visible inputs *and* any persisted entries for
         // boats not currently shown (e.g. boats from other divisions/races sharing this
         // sessionKey). Other sets are untouched.
@@ -1584,6 +1625,7 @@ const HandicapCalc = (function () {
         return {
             setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues,
             getAllSets, getShowPf, getShowRf, recalc, updateVariant,
+            applyPairwiseFit,
             // Compare-checkbox accessors (no-op when cfg.compareSelect is false).
             getCompareSelection: () => new Set(compareSelectedIds),
             getBoatVariant: (id) => boatVariants.get(id) || 'spin'
