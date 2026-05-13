@@ -479,9 +479,11 @@ async function addBoatsFromRows(rows) {
     const matched = [];
 
     for (const row of rows) {
-        if (row.handicap == null) continue;
         const query = row.sailno || row.name;
-        if (!query) continue;
+        if (!query) {
+            console.warn('fetch-handicaps: row has no sailno/name, skipping', row);
+            continue;
+        }
         const params = new URLSearchParams({allAvailable: 'true', boatQ: query});
         const data = await fetchJson('/api/comparison/candidates?' + params);
         if (!data) continue;
@@ -502,23 +504,32 @@ async function addBoatsFromRows(rows) {
         }
         if (hit) {
             added.add(hit.id);
-            matched.push(hit);
+            matched.push({boat: hit, rowVariant: row.variant || null});
+        } else {
+            console.warn('fetch-handicaps: no unique match for row', {
+                sailno: row.sailno || null,
+                name: row.name || null,
+                division: row.division || null,
+                candidatesCount: candidates.length
+            });
         }
     }
 
-    matched.forEach(b => {
+    matched.forEach(({boat, rowVariant}) => {
         selectedItems.push({
             type: 'boat',
-            id: b.id,
-            label: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
-            color: nextColor()
+            id: boat.id,
+            label: boat.sailNumber ? `${boat.sailNumber} ${boat.name}` : boat.name,
+            color: nextColor(),
+            // Seed the calculator's variant for THIS new boat from the source row, so the
+            // fetched handicap loads against the matching variant. We don't flip the global
+            // import mode — existing boats keep their own variants and a subsequent fetch
+            // honours the user's mode select (default 'filter').
+            initialVariant: rowVariant
         });
     });
 
     if (matched.length > 0) {
-        // Set variant mode to "set" so variants from the JSON are applied to the newly added boats
-        const modeSelect = document.getElementById('handicap-variant-mode');
-        if (modeSelect) modeSelect.value = 'set';
         renderChips();
         saveSelection();
         loadCandidates();
@@ -557,7 +568,10 @@ function renderHandicapCalc(data) {
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
             designName: b.designName || null,
-            variant: selectedVariant,
+            // Newly imported boats carry their source-row variant; everything else uses
+            // the page-level selector. setBoats only seeds boatVariants for boats it
+            // hasn't seen before, so existing variants are preserved across re-renders.
+            variant: item?.initialVariant || selectedVariant,
             pfAll: {
                 spin: b.pfSpin ? b.pfSpin.value : null,
                 nonSpin: b.pfNonSpin ? b.pfNonSpin.value : null,

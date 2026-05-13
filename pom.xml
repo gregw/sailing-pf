@@ -103,10 +103,34 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.5.0</version>
-        <configuration>
-          <mainClass>org.mortbay.sailing.pf.server.PfServer</mainClass>
-          <commandlineArgs>${pf-data}</commandlineArgs>
-        </configuration>
+        <executions>
+          <!-- `default-cli` is the special execution id picked up by `mvn exec:java`
+               (or `mvn exec:exec`) when invoked without an @executionId. Keeping the
+               server-launch config scoped to that execution stops `commandlineArgs`
+               from leaking into the js-tests execution below. -->
+          <execution>
+            <id>default-cli</id>
+            <configuration>
+              <mainClass>org.mortbay.sailing.pf.server.PfServer</mainClass>
+              <commandlineArgs>${pf-data}</commandlineArgs>
+            </configuration>
+          </execution>
+          <execution>
+            <id>js-tests</id>
+            <phase>test</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>node</executable>
+              <arguments>
+                <argument>--test</argument>
+                <argument>${project.basedir}/src/test/js/handicap-calc.test.js</argument>
+              </arguments>
+              <skip>${maven.test.skip}</skip>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

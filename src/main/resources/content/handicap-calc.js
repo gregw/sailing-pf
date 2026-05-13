@@ -41,7 +41,7 @@
 //   downloadBtn, downloadStatus,
 // }
 
-window.HandicapCalc = (function () {
+const HandicapCalc = (function () {
 
     // --- Sail-number / boat-name normalisation (mirrors importer logic) ---
     function normaliseSailNumber(raw) {
@@ -286,6 +286,17 @@ window.HandicapCalc = (function () {
 
     const VARIANT_LABELS = {spin: 'Spin', nonSpin: 'NS', twoHanded: '2H'};
     const VARIANT_ORDER = ['spin', 'nonSpin', 'twoHanded'];
+
+    // Decide what to do with one fetched row given the current variant-mode select and the
+    // boat's existing variant. Pure helper — also the unit under test.
+    //   'skip'     — do not load this handicap (variants disagree under 'filter').
+    //   'override' — load handicap AND replace the boat's variant ('set' mode).
+    //   'apply'    — load handicap, keep the existing variant.
+    function decideVariantAction(mode, itemVariant, currentBoatVariant) {
+        if (mode === 'filter' && itemVariant && currentBoatVariant !== itemVariant) return 'skip';
+        if (mode === 'set' && itemVariant && itemVariant !== currentBoatVariant) return 'override';
+        return 'apply';
+    }
 
     function create(cfg) {
         const section = cfg.section;
@@ -1133,11 +1144,18 @@ window.HandicapCalc = (function () {
             }
             render();
 
-            // Apply each set's entries to its column inputs.
+            // Apply each set's entries to its column inputs. applyEntriesToSet may flip
+            // per-boat variants when mode is 'set', so re-render if any did — otherwise
+            // the variant dropdowns built above would keep showing the pre-import values.
+            let variantsChanged = false;
             sets.forEach((_, i) => {
                 const entries = data.sets[i] ? data.sets[i].entries : [];
-                if (entries && entries.length > 0) applyEntriesToSet(i, entries);
+                if (entries && entries.length > 0) {
+                    const r = applyEntriesToSet(i, entries);
+                    if (r.variantsChanged) variantsChanged = true;
+                }
             });
+            if (variantsChanged) render();
             recalc();
         }
 
@@ -1184,11 +1202,10 @@ window.HandicapCalc = (function () {
 
             function applyTo(boat, item) {
                 const mode = cfg.variantModeSelect?.value || 'ignore';
-                if (mode === 'filter' && item.variant) {
-                    if (boatVariant(boat) !== item.variant) return;
-                }
+                const action = decideVariantAction(mode, item.variant, boatVariant(boat));
+                if (action === 'skip') return;
                 used.add(boat.id);
-                if (mode === 'set' && item.variant && item.variant !== boatVariant(boat)) {
+                if (action === 'override') {
                     boatVariants.set(boat.id, item.variant);
                     applyVariantToPf(boat, item.variant);
                     variantsChanged = true;
@@ -1507,5 +1524,9 @@ window.HandicapCalc = (function () {
         create,
         normaliseSailNumber, stripPrefix, normaliseDesignName, sailnoMatch,
         showPentagonPopupAt, hidePentagonPopup,
+        decideVariantAction,
     };
 })();
+
+if (typeof window !== 'undefined') window.HandicapCalc = HandicapCalc;
+if (typeof module !== 'undefined' && module.exports) module.exports = HandicapCalc;

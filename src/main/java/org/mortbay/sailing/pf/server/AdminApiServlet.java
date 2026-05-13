@@ -3506,7 +3506,8 @@ public class AdminApiServlet extends HttpServlet
                 Map<String, Object> handicap = (Map<String, Object>)entry.get("handicap");
                 if (handicap != null && chosenId != null)
                     hcap = pickSailSysHandicap((List<Map<String, Object>>)handicap.get("currentHandicaps"), chosenId);
-                if (hcap == null) continue;
+                // hcap may be null — manage / pre-race pages have no allocated handicap yet,
+                // but the frontend still wants the entrant so the user can seed one.
                 Object nsObj = entry.get("nonSpinnaker");
                 Boolean nonSpin = (nsObj instanceof Boolean) ? (Boolean)nsObj : null;
                 result.add(handicapEntry(sailNo, name, divName, hcap, nonSpin));
@@ -3594,7 +3595,8 @@ public class AdminApiServlet extends HttpServlet
                     if (purhcMinutes != null)
                         hcap = tcfFromPurhc(sailNo, name, purhcMinutes);
                 }
-                if (hcap == null) continue;
+                // hcap may be null — surface the entrant anyway so an empty calculator
+                // can still pick up the boat list from a pre-race page.
 
                 bySail.putIfAbsent(sailNo, handicapEntry(sailNo, name, hcap));
             }
@@ -3670,7 +3672,9 @@ public class AdminApiServlet extends HttpServlet
             Element link = nameCell.selectFirst("a[href]");
             String name = (link != null ? link.text() : nameCell.text()).trim();
             Double hcap = parseDoubleOrNull(cells.get(hcapIdx).text());
-            if (name.isBlank() || hcap == null) continue;
+            if (name.isBlank())
+                continue;
+            // hcap may be null — keep the row so an empty calculator gets the boat list.
             Boat boat = findBoat(null, name);
             String sailNo = boat != null ? boat.sailNumber() : null;
             result.add(handicapEntry(sailNo, name, hcap));
