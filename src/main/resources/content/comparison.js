@@ -475,6 +475,10 @@ function pfCalc() {
     });
     const clearBtn = document.getElementById('clear-handicaps-btn');
     if (clearBtn) clearBtn.addEventListener('click', () => pfCalcController.clearAll());
+    const usePfBtn = document.getElementById('use-pf-btn');
+    if (usePfBtn) usePfBtn.addEventListener('click', () => pfCalcController.useDisplayedFactor('pf'));
+    const useRfBtn = document.getElementById('use-rf-btn');
+    if (useRfBtn) useRfBtn.addEventListener('click', () => pfCalcController.useDisplayedFactor('rf'));
     return pfCalcController;
 }
 

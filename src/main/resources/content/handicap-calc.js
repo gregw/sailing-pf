@@ -1345,6 +1345,28 @@ const HandicapCalc = (function () {
             return matched;
         }
 
+        // Public: fill every empty input in the focused set with the value currently
+        // shown in the PF or RF cell on the same row. Already-filled inputs are left
+        // alone; recalc() reconverges the consensus with the new anchors. Reads from
+        // the DOM so the value matches exactly what the user sees (adjusted by R when
+        // anchors exist, raw factor otherwise).
+        function useDisplayedFactor(factorType) {
+            if (factorType !== 'pf' && factorType !== 'rf') return 0;
+            let filled = 0;
+            focusedInputCells().forEach(inp => {
+                if (inp.value !== '') return;
+                const cell = section.querySelector(
+                    `.pf-calc-value[data-boat-id="${inp.dataset.boatId}"][data-factor-type="${factorType}"]`);
+                if (!cell) return;
+                const v = parseFloat(cell.textContent);
+                if (!isFinite(v)) return;
+                inp.value = v.toFixed(4);
+                filled++;
+            });
+            if (filled > 0) recalc();
+            return filled;
+        }
+
         // Public: set boatA and boatB's focused-set handicaps so their ratio matches
         // `ratio = hcapA/hcapB` while staying as close as possible (in log space) to the
         // consensus scale of the other anchors. With no other anchors the boats anchor
@@ -1640,7 +1662,8 @@ const HandicapCalc = (function () {
         if (cfg.downloadBtn) cfg.downloadBtn.addEventListener('click', doDownload);
 
         return {
-            setBoats, setHandicapsByMatch, clearAll, getEnteredHandicaps, getEnteredValues,
+            setBoats, setHandicapsByMatch, useDisplayedFactor, clearAll,
+            getEnteredHandicaps, getEnteredValues,
             getAllSets, getShowPf, getShowRf, recalc, updateVariant,
             applyPairwiseFit,
             // Compare-checkbox accessors (no-op when cfg.compareSelect is false).

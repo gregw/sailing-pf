@@ -2558,6 +2558,10 @@ function raceCalc() {
     });
     const clearBtn = document.getElementById('clear-handicaps-btn');
     if (clearBtn) clearBtn.addEventListener('click', () => raceCalcController.clearAll());
+    const usePfBtn = document.getElementById('use-pf-btn');
+    if (usePfBtn) usePfBtn.addEventListener('click', () => raceCalcController.useDisplayedFactor('pf'));
+    const useRfBtn = document.getElementById('use-rf-btn');
+    if (useRfBtn) useRfBtn.addEventListener('click', () => raceCalcController.useDisplayedFactor('rf'));
     return raceCalcController;
 }
 
@@ -2682,6 +2686,10 @@ function seriesPfCalc() {
     });
     const clearBtn = document.getElementById('series-clear-handicaps-btn');
     if (clearBtn) clearBtn.addEventListener('click', () => seriesPfCalcController.clearAll());
+    const usePfBtn = document.getElementById('series-use-pf-btn');
+    if (usePfBtn) usePfBtn.addEventListener('click', () => seriesPfCalcController.useDisplayedFactor('pf'));
+    const useRfBtn = document.getElementById('series-use-rf-btn');
+    if (useRfBtn) useRfBtn.addEventListener('click', () => seriesPfCalcController.useDisplayedFactor('rf'));
     return seriesPfCalcController;
 }
 
