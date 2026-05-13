@@ -819,8 +819,15 @@ window.HandicapCalc = (function () {
             input.style.cssText = 'width:90px;font-family:monospace;text-align:right;'
                 + (isFocused ? '' : 'background:#f7f7f7;color:#666;');
             const prev = enteredMap.get(`${setIdx}|${b.id}`);
-            if (prev != null) input.value = prev;
+            if (prev != null) {
+                const n = parseFloat(prev);
+                input.value = isNaN(n) ? prev : n.toFixed(4);
+            }
             input.addEventListener('input', recalc);
+            input.addEventListener('blur', () => {
+                const n = parseFloat(input.value);
+                if (!isNaN(n)) input.value = n.toFixed(4);
+            });
             input.addEventListener('focus', () => {
                 if (setIdx !== focusedIdx) setFocus(setIdx);
             });
@@ -1189,7 +1196,7 @@ window.HandicapCalc = (function () {
                 const inp = section.querySelector(
                     `.pf-calc-input[data-boat-id="${boat.id}"][data-set-idx="${setIdx}"]`);
                 if (inp) {
-                    inp.value = String(item.handicap);
+                    inp.value = parseFloat(item.handicap).toFixed(4);
                     matched++;
                 }
             }
