@@ -1162,3 +1162,10 @@ boats:
     aliases:
       - sailNumber: "YC868"
         name: "peachteatsvelocity"
+  M7-smokenmirrors:
+    canonicalName: "Smoke N Mirrors"
+    aliases:
+      - sailNumber: "M7"
+        name: "smokemirrors"
+      - sailNumber: "M7"
+        name: "smokenmirros"

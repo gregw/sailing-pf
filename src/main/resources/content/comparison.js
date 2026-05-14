@@ -340,6 +340,13 @@ function computeBcfDivisor(data) {
 }
 
 function renderChart(data) {
+    renderBcfChart(data);
+    renderHandicapCalc(data);
+}
+
+// BCF chart only — no calc reset. Safe to call from inside pfCalc onChange,
+// because it never invokes setBoats / recalc and so cannot re-fire onChange.
+function renderBcfChart(data) {
     const traces = [];
 
     // Pre-compute filtered entries per boat (variant + last-12-months)
@@ -501,8 +508,6 @@ function renderChart(data) {
         const {raceId, divisionName, seriesId} = pt.customdata;
         if (raceId) showRaceDivisionInline(raceId, divisionName || '', seriesId || null);
     });
-
-    renderHandicapCalc(data);
 }
 
 // ---- Handicap calculator (thin adapter over shared HandicapCalc module) ----
@@ -533,7 +538,9 @@ function pfCalc() {
         onCompareSelectionChange: () => loadElapsedCharts(),
         onChange: () => {
             // Re-render the BCF chart so a divisor toggle (or its clearing) is reflected.
-            if (lastChartData) renderChart(lastChartData);
+            // Calls the BCF-only renderer — calling renderChart here would re-enter
+            // renderHandicapCalc → setBoats → recalc → onChange (infinite recursion).
+            if (lastChartData) renderBcfChart(lastChartData);
             if (inlineDivisionData) renderInlineDivisionChart();
             // A per-boat variant change in the calc table fires onChange too; the cached
             // elapsed payload lets this re-render without hitting the API.
