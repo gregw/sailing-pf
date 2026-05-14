@@ -295,28 +295,40 @@ function filterEntries(entries) {
     return result;
 }
 
-function pickPfVariant(boat) {
-    return selectedVariant === 'nonSpin' ? boat.pfNonSpin
-        : selectedVariant === 'twoHanded' ? boat.pfTwoHanded
+function pfVariantFor(boat, variant) {
+    return variant === 'nonSpin' ? boat.pfNonSpin
+        : variant === 'twoHanded' ? boat.pfTwoHanded
             : boat.pfSpin;
 }
 
+function rfVariantFor(boat, variant) {
+    return variant === 'nonSpin' ? boat.rfNonSpin
+        : variant === 'twoHanded' ? null : boat.rfSpin;
+}
+
+function pickPfVariant(boat) {
+    return pfVariantFor(boat, selectedVariant);
+}
+
 function pickRfVariant(boat) {
-    return selectedVariant === 'nonSpin' ? boat.rfNonSpin
-        : selectedVariant === 'twoHanded' ? null : boat.rfSpin;
+    return rfVariantFor(boat, selectedVariant);
 }
 
 // Active divisor for the BCF chart, when one of the calc's PF / RF / set "show"
 // tickboxes is on (singleSelectShow ensures at most one). Returns null when no
 // divisor is active. perBoat values mirror Factor.applyInverse — the chart plots
 // y' = e.backCalcFactor / value and intensity weight w' = e.weight × weight.
+//
+// PF / RF are looked up using the calc's per-boat variant (not the global selector)
+// so the PF divisor matches an allocated set built via "Use PF" — which copies each
+// boat's per-boat-variant PF.
 function computeBcfDivisor(data) {
     const calc = pfCalcController;
     if (!calc) return null;
     if (calc.getShowPf()) {
         const perBoat = new Map();
         data.boats.forEach(b => {
-            const f = pickPfVariant(b);
+            const f = pfVariantFor(b, calc.getBoatVariant(b.id));
             if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
         });
         return {label: 'PF', perBoat};
@@ -324,7 +336,7 @@ function computeBcfDivisor(data) {
     if (calc.getShowRf()) {
         const perBoat = new Map();
         data.boats.forEach(b => {
-            const f = pickRfVariant(b);
+            const f = rfVariantFor(b, calc.getBoatVariant(b.id));
             if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
         });
         return {label: 'RF', perBoat};
