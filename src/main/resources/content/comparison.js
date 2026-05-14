@@ -11,7 +11,6 @@ const HANDICAP_STORAGE_KEY = 'pf.allocated.handicaps';
 
 let selectedItems   = [];   // {type:'boat', id, label, color}
 let allAvailable    = false;
-let selectedVariant = 'spin';
 let showErrorBars    = false;
 let showRfLine       = true;
 let showPfLine      = true;
@@ -118,7 +117,9 @@ function addBoat() {
         type:  'boat',
         id:    boat.id,
         label: boat.sailNumber ? `${boat.sailNumber} ${boat.name}` : boat.name,
-        color: nextColor()
+        color: nextColor(),
+        // Seed the calc's per-boat variant for this new boat from the table majority.
+        initialVariant: majorityVariant()
     });
     focusedBoatId = null;
     document.getElementById('add-boat-btn').disabled = true;
@@ -266,26 +267,38 @@ async function loadChart() {
     loadElapsedCharts();
 }
 
-function onVariantChange() {
-    const prevVariant = selectedVariant;
-    selectedVariant = document.getElementById('variant-selector').value;
-    if (lastChartData) renderChart(lastChartData);
-    // Sync calc: only update boats that still have the old variant.
-    if (pfCalcController && prevVariant !== selectedVariant)
-        pfCalcController.updateVariant(prevVariant, selectedVariant);
-    loadElapsedCharts();
+// The page has no global variant selector — each boat's variant lives in the
+// handicap calculator's per-boat dropdown. This reads it (defaulting to 'spin'
+// before the calc exists).
+function boatVariantFor(boatId) {
+    return pfCalcController ? pfCalcController.getBoatVariant(boatId) : 'spin';
 }
 
-function filterByVariant(entries) {
+// Variant to seed a newly added boat with: the majority variant among the boats
+// already in the comparison, or 'spin' when there's no clear single majority.
+function majorityVariant() {
+    if (!pfCalcController || selectedItems.length === 0) return 'spin';
+    const counts = {spin: 0, nonSpin: 0, twoHanded: 0};
+    selectedItems.forEach(i => {
+        const v = pfCalcController.getBoatVariant(i.id);
+        if (counts[v] != null) counts[v]++;
+    });
+    const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    if (ranked[0][1] === 0) return 'spin';                       // no boats counted
+    if (ranked[0][1] === ranked[1][1]) return 'spin';            // tie → no clear majority
+    return ranked[0][0];
+}
+
+function filterByVariant(entries, variant) {
     return entries.filter(e =>
-        selectedVariant === 'twoHanded' ? e.twoHanded
-        : selectedVariant === 'nonSpin' ? e.nonSpinnaker
+        variant === 'twoHanded' ? e.twoHanded
+            : variant === 'nonSpin' ? e.nonSpinnaker
         : !e.nonSpinnaker && !e.twoHanded
     );
 }
 
-function filterEntries(entries) {
-    let result = filterByVariant(entries);
+function filterEntries(entries, variant) {
+    let result = filterByVariant(entries, variant);
     if (showLast12Months) {
         const cutoff = new Date();
         cutoff.setFullYear(cutoff.getFullYear() - 1);
@@ -304,14 +317,6 @@ function pfVariantFor(boat, variant) {
 function rfVariantFor(boat, variant) {
     return variant === 'nonSpin' ? boat.rfNonSpin
         : variant === 'twoHanded' ? null : boat.rfSpin;
-}
-
-function pickPfVariant(boat) {
-    return pfVariantFor(boat, selectedVariant);
-}
-
-function pickRfVariant(boat) {
-    return rfVariantFor(boat, selectedVariant);
 }
 
 // Active divisor for the BCF chart, when one of the calc's PF / RF / set "show"
@@ -352,8 +357,10 @@ function computeBcfDivisor(data) {
 }
 
 function renderChart(data) {
-    renderBcfChart(data);
+    // Calc first: it seeds each boat's per-boat variant (boatVariants), which
+    // renderBcfChart then reads for entry filtering and PF/RF lookup.
     renderHandicapCalc(data);
+    renderBcfChart(data);
 }
 
 // BCF chart only — no calc reset. Safe to call from inside pfCalc onChange,
@@ -361,8 +368,9 @@ function renderChart(data) {
 function renderBcfChart(data) {
     const traces = [];
 
-    // Pre-compute filtered entries per boat (variant + last-12-months)
-    const filteredPerBoat = new Map(data.boats.map(b => [b.id, filterEntries(b.entries)]));
+    // Pre-compute filtered entries per boat (per-boat variant + last-12-months)
+    const filteredPerBoat = new Map(
+        data.boats.map(b => [b.id, filterEntries(b.entries, boatVariantFor(b.id))]));
 
     // If "common races only", further restrict each boat to the intersection of raceIds
     if (showCommonRacesOnly && data.boats.length >= 2) {
@@ -396,8 +404,9 @@ function renderBcfChart(data) {
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (boat.sailNumber ? `${boat.sailNumber} ${boat.name}` : boat.name);
 
-        const rfFactor = pickRfVariant(boat);
-        const pfFactor = pickPfVariant(boat);
+        const variant = boatVariantFor(boat.id);
+        const rfFactor = rfVariantFor(boat, variant);
+        const pfFactor = pfVariantFor(boat, variant);
 
         // PF / RF horizontal lines are about the unscaled domain — hide them while a
         // divisor is active (they would just collapse near 1.0 or be misleading).
@@ -504,7 +513,7 @@ function renderBcfChart(data) {
         xaxis: { title: 'Date', type: 'date' },
         yaxis: {title: yTitle, rangemode: yFromZero ? 'tozero' : 'normal'},
         showlegend: !hideLegend,
-        legend: { orientation: 'v', xanchor: 'right', x: 1 },
+        legend: {orientation: 'v', xanchor: 'left', x: 0},
         margin: { t: 20, b: 60, l: 60, r: 20 },
         hovermode: 'closest'
     };
@@ -597,10 +606,9 @@ async function addBoatsFromRows(rows) {
             label,
             color: nextColor(),
             // Seed the calculator's variant for THIS new boat from the source row, so the
-            // fetched handicap loads against the matching variant. We don't flip the global
-            // import mode — existing boats keep their own variants and a subsequent fetch
-            // honours the user's mode select (default 'filter').
-            initialVariant: row.variant || null
+            // fetched handicap loads against the matching variant; fall back to the table
+            // majority when the source row carries no variant info.
+            initialVariant: row.variant || majorityVariant()
         });
     });
 
@@ -624,16 +632,20 @@ function renderHandicapCalc(data) {
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name);
 
-        const pfFactor = selectedVariant === 'nonSpin' ? b.pfNonSpin
-            : selectedVariant === 'twoHanded' ? b.pfTwoHanded
-                : b.pfSpin;
-        const rfFactor = selectedVariant === 'nonSpin' ? b.rfNonSpin
-            : selectedVariant === 'twoHanded' ? null
-                : b.rfSpin;
+        // Per-boat variant: a known boat keeps the variant the calc already tracks;
+        // a new boat takes its source-row variant if any, else the table majority.
+        // setBoats only seeds boatVariants for boats it hasn't seen, so this `variant`
+        // field only takes effect for genuinely new boats.
+        const variant = item?.initialVariant
+            || (pfCalcController ? pfCalcController.getBoatVariant(b.id) : null)
+            || majorityVariant();
+
+        const pfFactor = pfVariantFor(b, variant);
+        const rfFactor = rfVariantFor(b, variant);
 
         let bestFit = null;
         if (showBestFit) {
-            const entries = filterEntries(b.entries || []);
+            const entries = filterEntries(b.entries || [], variant);
             const trend = weightedOlsTrend(entries);
             if (trend) bestFit = trend.y[1];
         }
@@ -643,10 +655,7 @@ function renderHandicapCalc(data) {
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
             designName: b.designName || null,
-            // Newly imported boats carry their source-row variant; everything else uses
-            // the page-level selector. setBoats only seeds boatVariants for boats it
-            // hasn't seen before, so existing variants are preserved across re-renders.
-            variant: item?.initialVariant || selectedVariant,
+            variant,
             pfAll: {
                 spin: b.pfSpin ? b.pfSpin.value : null,
                 nonSpin: b.pfNonSpin ? b.pfNonSpin.value : null,
@@ -1047,7 +1056,7 @@ async function loadElapsedCharts() {
         container.appendChild(wrapper);
     }
     titleEl.textContent = `${itemA.label} vs ${itemB.label}`;
-    renderElapsedChart('elapsed-chart-0', renderData, itemA.color, itemB.color);
+    renderElapsedChart('elapsed-chart-0', renderData, itemA.color, itemB.color, variantA, variantB);
 
     // Refresh the button's label / enabled state to reflect the current fit.
     const slope = lastElapsedFit?.slope;
@@ -1085,7 +1094,7 @@ function onElapsedFromZeroChange() {
     loadElapsedCharts();
 }
 
-function renderElapsedChart(divId, data, colorA, colorB) {
+function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
     let points = data.points || [];
 
     // Apply last-12-months filter if active
@@ -1149,9 +1158,9 @@ function renderElapsedChart(divId, data, colorA, colorB) {
 
     const x0 = 0, x1 = xMax + xPad;
 
-    // Expected RF ratio line (through origin)
-    const rfA = selectedVariant === 'nonSpin' ? data.boatA.rfNonSpin : data.boatA.rfSpin;
-    const rfB = selectedVariant === 'nonSpin' ? data.boatB.rfNonSpin : data.boatB.rfSpin;
+    // Expected RF ratio line (through origin) — each boat under its own variant.
+    const rfA = rfVariantFor(data.boatA, variantA);
+    const rfB = rfVariantFor(data.boatB, variantB);
     if (rfA && rfB && rfA.value && rfB.value) {
         const slope = rfB.value / rfA.value;
         traces.push({
@@ -1163,11 +1172,9 @@ function renderElapsedChart(divId, data, colorA, colorB) {
         });
     }
 
-    // Expected PF ratio line (through origin)
-    const pfA = selectedVariant === 'nonSpin' ? data.boatA.pfNonSpin
-               : selectedVariant === 'twoHanded' ? data.boatA.pfTwoHanded : data.boatA.pfSpin;
-    const pfB = selectedVariant === 'nonSpin' ? data.boatB.pfNonSpin
-               : selectedVariant === 'twoHanded' ? data.boatB.pfTwoHanded : data.boatB.pfSpin;
+    // Expected PF ratio line (through origin) — each boat under its own variant.
+    const pfA = pfVariantFor(data.boatA, variantA);
+    const pfB = pfVariantFor(data.boatB, variantB);
     if (pfA && pfB && pfA.value && pfB.value) {
         const slope = pfB.value / pfA.value;
         traces.push({
@@ -1246,7 +1253,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         allAvailable = e.target.checked;
         loadCandidates();
     });
-    document.getElementById('variant-selector').addEventListener('change', onVariantChange);
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-pf-line')      .addEventListener('change', e => { showPfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
