@@ -73,6 +73,38 @@ public record Factor(
     }
 
     /**
+     * Inverse of {@link #apply(Factor, WeightedInterval)} — divides by the factor's value
+     * to recover (or back-calculate) the underlying elapsed time from a corrected time.
+     * <pre>
+     *   result.duration = t.duration ÷ f.value
+     *   result.weight   = t.weight × f.weight
+     * </pre>
+     * Weights still multiply: the back-calculation inherits both the corrected time's
+     * uncertainty and the factor's own confidence.
+     * <p>The duration is rounded (rather than truncated) so the round-trip
+     * {@code applyInverse(f, apply(f, t))} returns the original duration exactly.
+     */
+    public static WeightedInterval applyInverse(Factor f, WeightedInterval t)
+    {
+        Duration recovered = Duration.ofNanos(Math.round(t.duration().toNanos() / f.value()));
+        return new WeightedInterval(recovered, t.weight() * f.weight());
+    }
+
+    /**
+     * Inverse of {@link #apply(Factor, Duration)} — divides an unweighted elapsed time by
+     * the factor's value. The result carries the factor's own weight.
+     * <pre>
+     *   result.duration = t ÷ f.value
+     *   result.weight   = f.weight
+     * </pre>
+     */
+    public static WeightedInterval applyInverse(Factor f, Duration t)
+    {
+        Duration recovered = Duration.ofNanos(Math.round(t.toNanos() / f.value()));
+        return new WeightedInterval(recovered, f.weight());
+    }
+
+    /**
      * Chains one or more independent multiplicative adjustments into a single factor.
      * <pre>
      *   result.value  = f₁.value × f₂.value × …

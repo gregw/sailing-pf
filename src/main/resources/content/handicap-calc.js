@@ -324,6 +324,28 @@ const HandicapCalc = (function () {
         let showPf = true;
         let showRf = true;
 
+        // When cfg.singleSelectShow is true, the PF, RF, and per-set "show" tickboxes act as
+        // a radio group — at most one may be true. enforceSingleShow keeps that invariant.
+        // `kept` identifies the just-ticked one ('pf', 'rf', or a setIdx); when null
+        // (e.g. on session restore), the first true flag in priority order [pf, rf, sets…]
+        // wins and the rest are cleared.
+        function enforceSingleShow(kept) {
+            if (!cfg.singleSelectShow) return;
+            if (kept == null) {
+                if (showPf) kept = 'pf';
+                else if (showRf) kept = 'rf';
+                else {
+                    const i = sets.findIndex(s => s.show !== false);
+                    if (i >= 0) kept = i;
+                }
+            }
+            if (kept !== 'pf') showPf = false;
+            if (kept !== 'rf') showRf = false;
+            sets.forEach((s, i) => {
+                if (kept !== i) s.show = false;
+            });
+        }
+
         function valueCells() {
             return section.querySelectorAll('.pf-calc-value');
         }
@@ -631,7 +653,9 @@ const HandicapCalc = (function () {
             cb.addEventListener('change', () => {
                 if (c.key === 'pf') showPf = cb.checked;
                 else showRf = cb.checked;
+                if (cb.checked) enforceSingleShow(c.key);
                 saveToSession();
+                if (cfg.singleSelectShow) render();
                 if (cfg.onChange) cfg.onChange();
             });
             wrap.appendChild(cb);
@@ -670,7 +694,9 @@ const HandicapCalc = (function () {
             showCb.style.cssText = 'margin:0;cursor:pointer;';
             showCb.addEventListener('change', () => {
                 set.show = showCb.checked;
+                if (showCb.checked) enforceSingleShow(idx);
                 saveToSession();
+                if (cfg.singleSelectShow) render();
                 if (cfg.onChange) cfg.onChange();
             });
             topRow.appendChild(showCb);
@@ -1184,6 +1210,9 @@ const HandicapCalc = (function () {
             focusedIdx = Math.max(0, Math.min(sets.length - 1, data.focused | 0));
             if (typeof data.showPf === 'boolean') showPf = data.showPf;
             if (typeof data.showRf === 'boolean') showRf = data.showRf;
+            // Restored state may have multiple flags true (e.g. saved by another page
+            // without the constraint). Prune to a single flag if singleSelectShow is set.
+            enforceSingleShow(null);
             // Ensure auto-naming continues from the highest existing "Set N".
             nextSetN = Math.max(2, ...sets.map(s => {
                 const m = /^Set\s+(\d+)$/.exec(s.name);

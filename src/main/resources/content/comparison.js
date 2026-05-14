@@ -295,6 +295,50 @@ function filterEntries(entries) {
     return result;
 }
 
+function pickPfVariant(boat) {
+    return selectedVariant === 'nonSpin' ? boat.pfNonSpin
+        : selectedVariant === 'twoHanded' ? boat.pfTwoHanded
+            : boat.pfSpin;
+}
+
+function pickRfVariant(boat) {
+    return selectedVariant === 'nonSpin' ? boat.rfNonSpin
+        : selectedVariant === 'twoHanded' ? null : boat.rfSpin;
+}
+
+// Active divisor for the BCF chart, when one of the calc's PF / RF / set "show"
+// tickboxes is on (singleSelectShow ensures at most one). Returns null when no
+// divisor is active. perBoat values mirror Factor.applyInverse — the chart plots
+// y' = e.backCalcFactor / value and intensity weight w' = e.weight × weight.
+function computeBcfDivisor(data) {
+    const calc = pfCalcController;
+    if (!calc) return null;
+    if (calc.getShowPf()) {
+        const perBoat = new Map();
+        data.boats.forEach(b => {
+            const f = pickPfVariant(b);
+            if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
+        });
+        return {label: 'PF', perBoat};
+    }
+    if (calc.getShowRf()) {
+        const perBoat = new Map();
+        data.boats.forEach(b => {
+            const f = pickRfVariant(b);
+            if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
+        });
+        return {label: 'RF', perBoat};
+    }
+    const activeSet = calc.getAllSets().find(s => s.show);
+    if (activeSet && activeSet.values.size > 0) {
+        const perBoat = new Map();
+        // Allocated entries are user-typed — treat as full confidence.
+        activeSet.values.forEach((v, boatId) => perBoat.set(boatId, {value: v, weight: 1}));
+        return {label: activeSet.name, perBoat};
+    }
+    return null;
+}
+
 function renderChart(data) {
     const traces = [];
 
@@ -309,8 +353,13 @@ function renderChart(data) {
             filteredPerBoat.set(b.id, filteredPerBoat.get(b.id).filter(e => common.has(e.raceId))));
     }
 
+    // When a divisor is active, dots are plotted as BCF / divisor (mirrors
+    // Factor.applyInverse). Boats with no divisor entry are skipped entirely.
+    const divisor = computeBcfDivisor(data);
+
     let minDate = null, maxDate = null;
     data.boats.forEach(b => {
+        if (divisor && !divisor.perBoat.has(b.id)) return;
         filteredPerBoat.get(b.id).forEach(e => {
             if (!minDate || e.date < minDate) minDate = e.date;
             if (!maxDate || e.date > maxDate) maxDate = e.date;
@@ -321,16 +370,19 @@ function renderChart(data) {
         : ['2018-01-01', new Date().toISOString().slice(0, 10)];
 
     data.boats.forEach(boat => {
+        const div = divisor ? divisor.perBoat.get(boat.id) : null;
+        if (divisor && !div) return;   // boat has no divisor entry → skip
+
         const item  = selectedItems.find(i => i.type === 'boat' && i.id === boat.id);
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (boat.sailNumber ? `${boat.sailNumber} ${boat.name}` : boat.name);
 
-        const rfFactor  = selectedVariant === 'nonSpin' ? boat.rfNonSpin
-            : selectedVariant === 'twoHanded' ? null : boat.rfSpin;
-        const pfFactor = selectedVariant === 'nonSpin' ? boat.pfNonSpin
-            : selectedVariant === 'twoHanded' ? boat.pfTwoHanded : boat.pfSpin;
+        const rfFactor = pickRfVariant(boat);
+        const pfFactor = pickPfVariant(boat);
 
-        if (showRfLine && rfFactor) {
+        // PF / RF horizontal lines are about the unscaled domain — hide them while a
+        // divisor is active (they would just collapse near 1.0 or be misleading).
+        if (showRfLine && rfFactor && !divisor) {
             traces.push({
                 x: lineX, y: [rfFactor.value, rfFactor.value],
                 type: 'scatter', mode: 'lines',
@@ -340,7 +392,7 @@ function renderChart(data) {
                 hovertemplate: `${esc(name)} RF: %{y:.4f}<extra></extra>`
             });
         }
-        if (showPfLine && pfFactor) {
+        if (showPfLine && pfFactor && !divisor) {
             traces.push({
                 x: lineX, y: [pfFactor.value, pfFactor.value],
                 type: 'scatter', mode: 'lines',
@@ -351,7 +403,17 @@ function renderChart(data) {
             });
         }
 
-        const entries = filteredPerBoat.get(boat.id);
+        // Apply divisor to entries (Factor.applyInverse semantics: divide value,
+        // multiply weights). The dot layer reads backCalcFactor and weight from the
+        // returned entries, so the trend line implicitly uses the scaled values too.
+        const rawEntries = filteredPerBoat.get(boat.id);
+        const entries = div
+            ? rawEntries.map(e => ({
+                ...e,
+                backCalcFactor: e.backCalcFactor / div.value,
+                weight: e.weight * div.weight
+            }))
+            : rawEntries;
         if (entries.length > 0) {
             const xs = [], ys = [], sizes = [], opacities = [], symbols = [], texts = [], custom = [];
             entries.forEach(e => {
@@ -397,7 +459,9 @@ function renderChart(data) {
                     hovertemplate: `${esc(name)} linear trend: %{y:.4f}<extra></extra>`
                 });
             }
-            if (showTrendSliding) {
+            // Sliding average is hidden in divisor mode — its seed value (PF) lives in
+            // the unscaled domain and would skew the early window.
+            if (showTrendSliding && !divisor) {
                 const pfSeed = pfFactor ? pfFactor.value : null;
                 const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, pfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
@@ -416,9 +480,10 @@ function renderChart(data) {
     });
 
     const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;
+    const yTitle = divisor ? `Factor ratio: BCF / ${divisor.label}` : 'Factor';
     const layout = {
         xaxis: { title: 'Date', type: 'date' },
-        yaxis: {title: 'Factor', rangemode: yFromZero ? 'tozero' : 'normal'},
+        yaxis: {title: yTitle, rangemode: yFromZero ? 'tozero' : 'normal'},
         showlegend: !hideLegend,
         legend: { orientation: 'v', xanchor: 'right', x: 1 },
         margin: { t: 20, b: 60, l: 60, r: 20 },
@@ -462,8 +527,13 @@ function pfCalc() {
         downloadStatus: document.getElementById('download-status'),
         compareSelect: true,
         compareMax: 2,
+        // Compare boats page repurposes the PF / RF / per-set "show" tickboxes as a
+        // single divisor selector for the BCF chart, so at most one may be ticked.
+        singleSelectShow: true,
         onCompareSelectionChange: () => loadElapsedCharts(),
         onChange: () => {
+            // Re-render the BCF chart so a divisor toggle (or its clearing) is reflected.
+            if (lastChartData) renderChart(lastChartData);
             if (inlineDivisionData) renderInlineDivisionChart();
             // A per-boat variant change in the calc table fires onChange too; the cached
             // elapsed payload lets this re-render without hitting the API.

@@ -1,8 +1,8 @@
 package org.mortbay.sailing.pf.data;
 
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
+
+import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
@@ -76,6 +76,62 @@ class FactorTest
         Factor f = new Factor(1.1, 0.75);
 
         WeightedInterval result = Factor.apply(f, Duration.ofMinutes(60));
+
+        assertThat(result.weight(), closeTo(0.75, 1e-10));
+    }
+
+    // --- applyInverse ---
+
+    @Test
+    void applyInverseDividesDuration()
+    {
+        Factor f = new Factor(1.1, 0.9);
+        WeightedInterval t = new WeightedInterval(Duration.ofMinutes(66), 0.8);
+
+        WeightedInterval result = Factor.applyInverse(f, t);
+
+        assertThat(result.duration(), equalTo(Duration.ofMinutes(60)));
+    }
+
+    @Test
+    void applyInverseMultipliesWeights()
+    {
+        Factor f = new Factor(1.0, 0.8);
+        WeightedInterval t = new WeightedInterval(Duration.ofMinutes(60), 0.5);
+
+        WeightedInterval result = Factor.applyInverse(f, t);
+
+        assertThat(result.weight(), closeTo(0.4, 1e-10));
+    }
+
+    @Test
+    void applyInverseUndoesApply()
+    {
+        Factor f = new Factor(1.1, 1.0);
+        WeightedInterval original = new WeightedInterval(Duration.ofSeconds(3600), 0.7);
+
+        WeightedInterval roundTrip = Factor.applyInverse(f, Factor.apply(f, original));
+
+        assertThat(roundTrip.duration(), equalTo(original.duration()));
+        assertThat(roundTrip.weight(), closeTo(original.weight(), 1e-10));
+    }
+
+    @Test
+    void applyInverseUnweightedDurationDividesDuration()
+    {
+        Factor f = new Factor(1.1, 0.9);
+
+        WeightedInterval result = Factor.applyInverse(f, Duration.ofMinutes(66));
+
+        assertThat(result.duration(), equalTo(Duration.ofMinutes(60)));
+    }
+
+    @Test
+    void applyInverseUnweightedDurationCarriesFactorWeight()
+    {
+        Factor f = new Factor(1.1, 0.75);
+
+        WeightedInterval result = Factor.applyInverse(f, Duration.ofMinutes(66));
 
         assertThat(result.weight(), closeTo(0.75, 1e-10));
     }
