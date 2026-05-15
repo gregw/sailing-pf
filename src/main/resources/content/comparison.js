@@ -9,16 +9,28 @@ const PALETTE = [
 const STORAGE_KEY = 'pf-comparison-items';
 const HANDICAP_STORAGE_KEY = 'pf.allocated.handicaps';
 
+// Initial values come from sessionStorage if present (session persistence across page
+// navigation), otherwise the HTML defaults (matching the `checked` attributes).
+function _persistedBool(key, dflt) {
+    const v = sessionStorage.getItem('pf.ctrl.' + key);
+    return v === null ? dflt : v === 'true';
+}
+
+function _persistedStr(key, dflt) {
+    const v = sessionStorage.getItem('pf.ctrl.' + key);
+    return v === null ? dflt : v;
+}
+
 let selectedItems   = [];   // {type:'boat', id, label, color}
-let allAvailable    = false;
+let allAvailable = _persistedBool('all-available', false);
 let showErrorBars    = false;
-let showRfLine       = true;
-let showPfLine      = true;
-let showTrendLinear  = true;
-let showTrendSliding = true;
-let hideLegend       = false;
-let recentMonths = 0;     // 0 = all time, otherwise filter to last N months
-let showCommonRacesOnly = false;
+let showRfLine = _persistedBool('show-rf-line', true);
+let showPfLine = _persistedBool('show-pf-line', true);
+let showTrendLinear = _persistedBool('show-trend-linear', true);
+let showTrendSliding = _persistedBool('show-trend-sliding', true);
+let hideLegend = _persistedBool('hide-legend', false);
+let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
+let showCommonRacesOnly = _persistedBool('common-races-only', false);
 let slidingAverageCount = 8;
 let slidingAverageDrops = 0;
 let candidateBoats  = [];
@@ -1057,6 +1069,7 @@ async function loadElapsedCharts() {
     }
     titleEl.textContent = `${itemA.label} vs ${itemB.label}`;
     renderElapsedChart('elapsed-chart-0', renderData, itemA.color, itemB.color, variantA, variantB);
+    initChartResize('elapsed-chart-0', 500);
 
     // Refresh the button's label / enabled state to reflect the current fit.
     const slope = lastElapsedFit?.slope;
@@ -1249,10 +1262,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     restoreSelection();
     renderChips();
 
+    // Reflect the persisted values onto the control elements so the UI matches the
+    // state that the JS variables above were initialised with. persistControl saves
+    // future user changes; we still wire the original listeners for the side effects
+    // (re-render, reload candidates, etc.).
+    persistControl('all-available');
     document.getElementById('all-available').addEventListener('change', e => {
         allAvailable = e.target.checked;
         loadCandidates();
     });
+    persistControl('show-rf-line');
+    persistControl('show-pf-line');
+    persistControl('show-trend-linear');
+    persistControl('show-trend-sliding');
+    persistControl('hide-legend');
+    persistControl('recent-months');
+    persistControl('common-races-only');
+    persistControl('bcfc-y-from-zero');
+    persistControl('elapsed-from-zero');
+    persistControl('boat-search');
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-pf-line')      .addEventListener('change', e => { showPfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
@@ -1275,6 +1303,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         boatDebounce = setTimeout(loadCandidates, 250);
     });
     document.getElementById('add-boat-btn').addEventListener('click', addBoat);
+
+    // Persistent resize handles. The elapsed-chart resizer is wired again when the
+    // dynamic div is recreated in loadElapsedCharts.
+    initChartResize('comparison-chart', 670);
+    initChartResize('bcfc-race-division-chart', 500);
+
     loadCandidates();
     loadChart();
 });

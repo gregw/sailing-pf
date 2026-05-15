@@ -255,7 +255,17 @@ const COLUMNS = {
     ],
 };
 
-let boatVariant = 'spin';
+const BOAT_VARIANT_KEY = 'pf.ctrl.boat-variant';
+let boatVariant = sessionStorage.getItem(BOAT_VARIANT_KEY) || 'spin';
+
+function applyBoatVariantColumns() {
+    const rfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-rf');
+    const pfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-pf');
+    if (rfCol) rfCol.sortKey = boatVariant === 'nonSpin' ? 'nonSpinRef' : boatVariant === 'twoHanded' ? 'twoHandedRef' : 'spinRef';
+    if (pfCol) pfCol.sortKey = boatVariant === 'nonSpin' ? 'pfNonSpin' : boatVariant === 'twoHanded' ? 'pfTwoHanded' : 'pf';
+}
+
+applyBoatVariantColumns();
 
 // ---- Division-chart "From 0" state (shared across races + series tabs) ----
 // Persisted in sessionStorage so switching divisions/tabs keeps the same preference.
@@ -302,10 +312,8 @@ function onDivChartYFromZeroChange(cb) {
 
 function setBoatVariant(v) {
     boatVariant = v;
-    const rfCol  = COLUMNS.boats.find(c => c.anchor === 'col-boat-rf');
-    const pfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-pf');
-    if (rfCol)  rfCol.sortKey  = v === 'nonSpin' ? 'nonSpinRef'   : v === 'twoHanded' ? 'twoHandedRef' : 'spinRef';
-    if (pfCol) pfCol.sortKey = v === 'nonSpin' ? 'pfNonSpin'   : v === 'twoHanded' ? 'pfTwoHanded' : 'pf';
+    sessionStorage.setItem(BOAT_VARIANT_KEY, v);
+    applyBoatVariantColumns();
     loadList('boats', 0);
 }
 
@@ -379,6 +387,18 @@ function isWriteAllowed() { return window.pfAuth?.authenticated; }
 // Foreign-entity navigation goes through gotoEntity() — a real page load — not this.
 function initEntityPage(entity) {
     state.activeTab = entity;
+
+    // Restore session-persisted filter checkboxes + select before the first loadList
+    // reads them. Same-concept checkboxes across the five browse pages share keys
+    // ('show-excluded', 'hide-empty') so e.g. ticking it on /boats keeps it ticked
+    // when you navigate to /designs. Singletons keep their own ids.
+    persistControl('show-excluded-' + entity, {key: 'show-excluded', onChange: () => doSearch(entity)});
+    persistControl('hide-empty-' + entity, {key: 'hide-empty', onChange: () => doSearch(entity)});
+    persistControl('exclude-empty-series', {onChange: () => doSearch('series')});
+    persistControl('filter-dupe-sails', {onChange: () => doSearch('boats')});
+    const variantSel = document.getElementById('boat-variant');
+    if (variantSel) variantSel.value = boatVariant;  // boatVariant already restored from sessionStorage
+
     const q = document.getElementById('q-' + entity);
     if (q && state.searches[entity] !== undefined) q.value = state.searches[entity];
     updateFilterBanner(entity);
@@ -3252,77 +3272,11 @@ function median(arr) {
     return (n % 2) ? s[(n - 1) >> 1] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
-// ---- Chart resizing functionality ----
-
-const CHART_HEIGHTS_KEY = 'pf.chart.heights';
-
-function initChartResize(chartId, defaultHeight) {
-    const chartDiv = document.getElementById(chartId);
-    if (!chartDiv) return;
-
-    // Make chart container position relative for absolute positioning of handle
-    chartDiv.style.position = 'relative';
-
-    // Create resize handle
-    const handle = document.createElement('div');
-    handle.className = 'chart-resize-handle';
-    chartDiv.appendChild(handle);
-
-    // Get stored height or use default
-    const storedHeights = JSON.parse(sessionStorage.getItem(CHART_HEIGHTS_KEY) || '{}');
-    const currentHeight = storedHeights[chartId] || defaultHeight;
-    chartDiv.style.height = currentHeight + 'px';
-
-    // Minimum height is half the default
-    const minHeight = Math.floor(defaultHeight / 2);
-
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
-
-    handle.addEventListener('mousedown', (e) => {
-        isResizing = true;
-        startY = e.clientY;
-        startHeight = chartDiv.offsetHeight;
-        e.preventDefault();
-        document.body.style.cursor = 'ns-resize';
-        document.body.style.userSelect = 'none';
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-
-        const deltaY = e.clientY - startY;
-        const newHeight = Math.max(minHeight, startHeight + deltaY);
-        chartDiv.style.height = newHeight + 'px';
-        if (window.Plotly) Plotly.Plots.resize(chartDiv);
-
-        // Store the new height
-        const heights = JSON.parse(sessionStorage.getItem(CHART_HEIGHTS_KEY) || '{}');
-        heights[chartId] = newHeight;
-        sessionStorage.setItem(CHART_HEIGHTS_KEY, JSON.stringify(heights));
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (isResizing) {
-            isResizing = false;
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        }
-    });
-}
-
-// Initialize resize handles when charts are rendered
-function initChartResizers() {
-    // Race division chart (default 600px, min 300px)
+// Browse-page chart resizers — handler lives in common.js.
+document.addEventListener('DOMContentLoaded', () => {
     initChartResize('race-division-chart', 600);
-
-    // Series chart (default 500px, min 250px)
     initChartResize('series-chart', 500);
-}
-
-// Call this after DOM is ready
-document.addEventListener('DOMContentLoaded', initChartResizers);
+});
 
 // ---- Debugging tools (remove in production) ----
 

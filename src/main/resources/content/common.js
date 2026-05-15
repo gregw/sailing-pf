@@ -21,6 +21,37 @@ function speedFactorAxisTitle(formula) {
     return `Speed Factor <a href="ui-tips.md#speed-factor" class="info-btn" target="_blank">ⓘ</a>: ${formula}`;
 }
 
+// Persist a form control's value (text/select/number/checkbox) in sessionStorage so
+// it stays the same as the user navigates between pages in this tab. Restores any
+// saved value on call and registers a listener to save future user changes.
+//
+// `opts.key` is the storage key suffix — defaults to the element id. Pass an explicit
+// key to share state between controls that live on different pages but represent the
+// same concept (e.g. `hide-empty-boats` and `hide-empty-designs` both pass key
+// `hide-empty`). `opts.onChange(el)` runs after every user-driven change, after the
+// save — use it when restoration alone isn't enough and downstream logic needs to
+// re-run. The element's own inline `onchange=` handler keeps firing too.
+function persistControl(id, opts) {
+    opts = opts || {};
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const key = 'pf.ctrl.' + (opts.key || id);
+    const isCheckbox = el.type === 'checkbox';
+    const stored = sessionStorage.getItem(key);
+    if (stored !== null) {
+        if (isCheckbox) el.checked = (stored === 'true');
+        else el.value = stored;
+    }
+    const evtName = (el.tagName === 'SELECT' || isCheckbox || el.type === 'number')
+        ? 'change' : 'input';
+    el.addEventListener(evtName, () => {
+        const val = isCheckbox ? String(el.checked) : el.value;
+        sessionStorage.setItem(key, val);
+        if (opts.onChange) opts.onChange(el);
+    });
+    return el;
+}
+
 async function fetchJson(url, options) {
     try {
         const resp = await fetch(url, options);
@@ -170,6 +201,66 @@ function trendLineTrace(slope, intercept, xMin, xMax, baseName, color, opts) {
         hoverlabel: {namelength: -1},
         meta: {trendLine: true, baseWidth, hoverWidth}
     };
+}
+
+// ---- Chart resizing ----
+//
+// Adds a drag handle to the bottom-right corner of a Plotly chart div so the user can
+// resize its height. Heights are persisted per-chart-id in sessionStorage so they
+// survive page navigation. Safe to call multiple times for the same chartId (e.g.
+// when a dynamically-rendered chart container is rebuilt) — the handle is only added
+// once, but the height is re-applied so a freshly-created div picks up the saved size.
+const CHART_HEIGHTS_KEY = 'pf.chart.heights';
+
+function initChartResize(chartId, defaultHeight) {
+    const chartDiv = document.getElementById(chartId);
+    if (!chartDiv) return;
+
+    const storedHeights = JSON.parse(sessionStorage.getItem(CHART_HEIGHTS_KEY) || '{}');
+    const currentHeight = storedHeights[chartId] || defaultHeight;
+    chartDiv.style.height = currentHeight + 'px';
+
+    if (chartDiv.dataset.resizeWired === 'true') return;
+    chartDiv.dataset.resizeWired = 'true';
+    chartDiv.style.position = 'relative';
+
+    const handle = document.createElement('div');
+    handle.className = 'chart-resize-handle';
+    chartDiv.appendChild(handle);
+
+    const minHeight = Math.floor(defaultHeight / 2);
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = chartDiv.offsetHeight;
+        e.preventDefault();
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const deltaY = e.clientY - startY;
+        const newHeight = Math.max(minHeight, startHeight + deltaY);
+        chartDiv.style.height = newHeight + 'px';
+        if (window.Plotly) Plotly.Plots.resize(chartDiv);
+        const heights = JSON.parse(sessionStorage.getItem(CHART_HEIGHTS_KEY) || '{}');
+        heights[chartId] = newHeight;
+        sessionStorage.setItem(CHART_HEIGHTS_KEY, JSON.stringify(heights));
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
 }
 
 /** Reference std dev in log space at weight = 1.0.  See .claude/error_bars.md. */

@@ -20,14 +20,28 @@ const PALETTE = [
 const STORAGE_KEY = 'pf-designComparison-items';
 const HANDICAP_STORAGE_KEY = 'pf.design.allocated.handicaps';
 
+// Initial values come from sessionStorage if present (session persistence across
+// page navigation), otherwise the HTML defaults (matching the `checked` attributes).
+// The keys are shared with comparison.html where the same control id exists, so a
+// preference set on /comparison applies when you visit /design-comparison.
+function _persistedBool(key, dflt) {
+    const v = sessionStorage.getItem('pf.ctrl.' + key);
+    return v === null ? dflt : v === 'true';
+}
+
+function _persistedStr(key, dflt) {
+    const v = sessionStorage.getItem('pf.ctrl.' + key);
+    return v === null ? dflt : v;
+}
+
 let selectedItems = [];   // {type:'design', id, label, color, initialVariant?}
-let allAvailable    = false;
-let showRfLine       = true;
-let showTrendLinear  = true;
-let showTrendSliding = true;
-let hideLegend       = false;
-let recentMonths = 0;     // 0 = all time, otherwise filter to last N months
-let showCommonRacesOnly = false;
+let allAvailable = _persistedBool('all-available', false);
+let showRfLine = _persistedBool('show-rf-line', true);
+let showTrendLinear = _persistedBool('show-trend-linear', true);
+let showTrendSliding = _persistedBool('show-trend-sliding', true);
+let hideLegend = _persistedBool('hide-legend', false);
+let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
+let showCommonRacesOnly = _persistedBool('common-races-only', false);
 let slidingAverageCount = 8;
 let slidingAverageDrops = 0;
 let candidateDesigns = [];
@@ -636,6 +650,7 @@ async function loadElapsedCharts() {
     }
     titleEl.textContent = `${itemA.label} vs ${itemB.label}`;
     renderElapsedChart('elapsed-chart-0', data, itemA.color, itemB.color, variantA, variantB);
+    initChartResize('elapsed-chart-0', 500);
 
     // Refresh the button's label / enabled state to reflect the current fit.
     const slope = lastElapsedFit?.slope;
@@ -827,10 +842,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     restoreSelection();
     renderChips();
 
+    // Restore persisted UI controls and save future user changes. Keys are shared
+    // with comparison.html where the same control id exists.
+    persistControl('all-available');
     document.getElementById('all-available').addEventListener('change', e => {
         allAvailable = e.target.checked;
         loadCandidates();
     });
+    persistControl('show-rf-line');
+    persistControl('show-trend-linear');
+    persistControl('show-trend-sliding');
+    persistControl('hide-legend');
+    persistControl('recent-months');
+    persistControl('common-races-only');
+    persistControl('elapsed-from-zero');
+    persistControl('design-search');
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine        = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear')  .addEventListener('change', e => { showTrendLinear   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding') .addEventListener('change', e => { showTrendSliding  = e.target.checked; if (lastChartData) renderChart(lastChartData); });
@@ -848,6 +874,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         designDebounce = setTimeout(loadCandidates, 250);
     });
     document.getElementById('add-design-btn').addEventListener('click', addDesign);
+
+    // Persistent resize handle for the main chart. The elapsed-chart resizer is
+    // wired again when the dynamic div is recreated in loadElapsedCharts.
+    initChartResize('comparison-chart', 960);
+
     loadCandidates();
     if (selectedItems.length > 0) loadChart();
 });

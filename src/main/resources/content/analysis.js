@@ -1,5 +1,5 @@
 let currentAnalysisId = null;
-let showAnalysisErrors = false;
+let showAnalysisErrors = sessionStorage.getItem('pf.ctrl.show-analysis-errors') === 'true';
 
 function onAnalysisErrorsChange() {
     showAnalysisErrors = document.getElementById('show-analysis-errors').checked;
@@ -680,6 +680,26 @@ function fmt(v) {
     return v.toFixed(4);
 }
 
-loadAnalysisList();
+// Initial load. After loadAnalysisList populates the <select>, restore any persisted
+// selection so the user lands on the same comparison they were last viewing.
+(async () => {
+    await loadAnalysisList();
+    persistControl('analysis-select', {onChange: () => onAnalysisSelect()});
+    onAnalysisSelect();   // sync the Load button to whatever value was restored
+    persistControl('show-analysis-errors', {
+        onChange: () => {
+            showAnalysisErrors = document.getElementById('show-analysis-errors').checked;
+            if (currentAnalysisId) loadAnalysis();
+        }
+    });
+    persistControl('tbl-min');
+    persistControl('tbl-max');
+    persistControl('tbl-step');
+})();
 loadNetwork();
 loadPfQuality();
+
+document.addEventListener('DOMContentLoaded', () => {
+    initChartResize('network-plot', 1000);
+    initChartResize('analysis-plot', 420);
+});

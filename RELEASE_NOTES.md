@@ -2,12 +2,9 @@
 
 - **Back Calculated Factor charts**: Updated by selected factor set.
 - **Elapsed Time Comparison**: Added to handicap calculator.
-- **JSON View**: Re-added json view of items.
-- **PF Optimizer Invariants**: Ensure weighted ratios between spin, nonSpin and 2handed PF are preserved across optimisation
-  iterations.
+- **PF Optimizer Invariants**: Many improvements to PF optimizer.
 - **Handicap Calculator Enhancements**: Better handling of mixed fleets. More sort and navigation options.
-- **Factor Confidence Weighting**: Improved confidence metrics for performance factors based on race entry counts and data
-  quality.
+- **JSON View**: Re-added JSON view of items.
 
 ### April 2026
 
