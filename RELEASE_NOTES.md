@@ -1,3 +1,7 @@
+### Notice to Handicappers
+
+- a new [video](https://youtu.be/rXwKmlnDd8Y) of using this tool to set the MYC handicaps for the winter series.
+
 ### May 2026
 
 - **Back Calculated Factor charts**: Updated by selected factor set.
