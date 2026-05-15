@@ -74,6 +74,8 @@ async function loadImporters() {
         document.getElementById('pf-max-outer').value = data.pfConfig.maxOuterIterations;
         document.getElementById('pf-outlier-k').value = data.pfConfig.outlierK;
         document.getElementById('pf-asymmetry').value = data.pfConfig.asymmetryFactor;
+        document.getElementById('pf-dubious-factor').value = data.pfConfig.dubiousFactor;
+        document.getElementById('pf-max-factor').value = data.pfConfig.maxFactor;
         document.getElementById('pf-outer-damping').value = data.pfConfig.outerDampingFactor;
         document.getElementById('pf-outer-convergence').value = data.pfConfig.outerConvergenceThreshold;
         document.getElementById('pf-outer-pf-convergence').value = data.pfConfig.outerPfConvergenceThreshold;
@@ -256,6 +258,8 @@ async function saveSchedule() {
     const pfMaxOuterIterations = parseInt(document.getElementById('pf-max-outer').value, 10) || null;
     const pfOutlierK = parseFloat(document.getElementById('pf-outlier-k').value) || null;
     const pfAsymmetryFactor = parseFloat(document.getElementById('pf-asymmetry').value) || null;
+    const pfDubiousFactor = parseFloat(document.getElementById('pf-dubious-factor').value) || null;
+    const pfMaxFactor = parseFloat(document.getElementById('pf-max-factor').value) || null;
     const pfOuterDampingFactor = parseFloat(document.getElementById('pf-outer-damping').value) || null;
     const pfOuterConvergenceThreshold = parseFloat(document.getElementById('pf-outer-convergence').value) || null;
     const pfOuterPfConvergenceThreshold = parseFloat(document.getElementById('pf-outer-pf-convergence').value) || null;
@@ -266,7 +270,8 @@ async function saveSchedule() {
         body: JSON.stringify({ days, time, importers, sailsysStartId, sailsysEndId, targetIrcYear,
             pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
-            pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics
+            pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
+            pfDubiousFactor, pfMaxFactor
         })
     });
     if (!resp.ok) {

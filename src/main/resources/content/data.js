@@ -533,7 +533,12 @@ function renderTable(entity, items, append) {
     items.forEach((item, itemIdx) => {
         const globalIdx = baseIdx + itemIdx;
         const tr = document.createElement('tr');
-        if (item.excluded) tr.classList.add('excluded');
+        if (item.excluded) {
+            tr.classList.add('excluded');
+            tr.title = item.exclusionReason
+                ? 'Excluded: ' + item.exclusionReason
+                : 'Excluded';
+        }
         if (item.ignored)  tr.classList.add('ignored');
         if (state.selected[entity].has(item.id)) tr.classList.add('selected');
         // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
@@ -767,12 +772,12 @@ function renderBoatPf(data) {
 
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
-        html += `<label style="font-size:0.85rem;font-weight:normal;"><input type="checkbox" id="residual-last12" onchange="window._residualLast12=this.checked; renderResidualChart(window._lastResiduals)"> Last 12 months only</label>`;
+        html += `<label style="font-size:0.85rem;font-weight:normal;"><input type="checkbox" id="residual-last18" onchange="window._residualLast18=this.checked; renderResidualChart(window._lastResiduals)"> Last 18 months only</label>`;
         html += '<div id="pf-residual-chart"></div>';
         setTimeout(() => {
             // Restore checkbox state across prev/next navigation
-            const cb = document.getElementById('residual-last12');
-            if (cb && window._residualLast12) cb.checked = true;
+            const cb = document.getElementById('residual-last18');
+            if (cb && window._residualLast18) cb.checked = true;
             window._lastResiduals = data.residuals;
             renderResidualChart(data.residuals);
         }, 0);
@@ -784,10 +789,10 @@ function renderResidualChart(residuals) {
     const container = document.getElementById('pf-residual-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
-    const cb = document.getElementById('residual-last12');
+    const cb = document.getElementById('residual-last18');
     if (cb && cb.checked) {
         const cutoff = new Date();
-        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        cutoff.setMonth(cutoff.getMonth() - 18);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         residuals = residuals.filter(r => r.date >= cutoffStr);
     }
@@ -1223,8 +1228,17 @@ function showExcludePanel(entity, doExclude) {
         list.appendChild(line);
     });
     panel.style.display = '';
-    // Auth-dependent visibility of confirm buttons / email + message rows
+    // Auth-dependent visibility of confirm buttons / email row
     applyPanelAuthState(entity, 'exclude', isWriteAllowed());
+    // The message textarea serves two purposes:
+    //   - For non-write users (request flow), it's the email message — always shown.
+    //   - For write users, it's the operator-supplied exclusion reason — show when EXCLUDING
+    //     (and hide when including, since including doesn't carry a reason).
+    const msgRow = document.getElementById('exclude-message-row-' + entity);
+    if (msgRow) msgRow.style.display = (!isWriteAllowed() || doExclude) ? '' : 'none';
+    // Clear the textarea so the previous exclusion's reason doesn't auto-carry over.
+    const msgInput = document.getElementById('exclude-message-' + entity);
+    if (msgInput) msgInput.value = '';
 }
 
 function hideExcludePanel(entity) {
@@ -1250,6 +1264,13 @@ function buildExcludeBody(entity, intent) {
     const payload = { excluded: intent };
     if (entity === 'series') payload.names = items.map(it => it.name).filter(Boolean);
     else                     payload.ids   = items.map(it => it.id).filter(Boolean);
+    // When excluding (intent=true), capture the operator's reason from the panel textarea.
+    // The same textarea is reused for the non-write-user 'exclude-request' message; for the
+    // write path we persist its contents on each excluded entry.
+    if (intent) {
+        const reason = document.getElementById('exclude-message-' + entity)?.value.trim() || '';
+        if (reason) payload.reason = reason;
+    }
     return payload;
 }
 

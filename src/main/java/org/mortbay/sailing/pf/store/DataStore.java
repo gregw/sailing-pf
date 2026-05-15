@@ -99,11 +99,19 @@ public class DataStore
     private List<Maker> makers;
     private boolean makersDirty;
 
-    // Mutable exclusion sets — persisted to config/exclusions.json, managed via admin UI
-    private final Set<String> excludedBoatIds          = new LinkedHashSet<>();
-    private final Set<String> excludedRaceIds           = new LinkedHashSet<>();
-    private final List<String> excludedSeriesPatterns    = new ArrayList<>();
+    // Mutable exclusion sets — persisted to config/exclusions.yaml, managed via admin UI.
+    // Map values are the operator-supplied (or auto-supplied) reason for exclusion;
+    // empty string when no reason was given. LinkedHashMap preserves insertion order
+    // so the YAML stays diff-friendly across saves.
+    private final Map<String, String> excludedBoats = new LinkedHashMap<>();
+    private final Map<String, String> excludedRaces = new LinkedHashMap<>();
+    private final Map<String, String> excludedSeries = new LinkedHashMap<>(); // pattern -> reason
     private volatile List<Pattern> compiledSeriesPatterns = List.of();
+
+    // When true, putRace runs RaceSanityChecker on freshly inserted races and auto-excludes
+    // any that look like placeholder / synthetic data. Tests using synthetic fixtures set
+    // this to false; production importers leave it at the default.
+    private volatile boolean autoSanityCheck = true;
 
     // Invalidation listener for derived data caches
     private volatile InvalidationListener invalidationListener;
@@ -701,9 +709,32 @@ public class DataStore
     public void putRace(Race race)
     {
         requireStarted();
+        boolean isNew = !races.containsKey(race.id());
         races.put(race.id(), race);
+        if (autoSanityCheck && isNew && !excludedRaces.containsKey(race.id()))
+        {
+            RaceSanityChecker.check(race).ifPresent(issue ->
+            {
+                String reason = "sanity-check: " + issue.checkName() + " — " + issue.description();
+                excludedRaces.put(race.id(), reason);
+                LOG.info("Race sanity check '{}' auto-excluded race {}: {}",
+                    issue.checkName(), race.id(), issue.description());
+                saveExclusions();
+            });
+        }
         InvalidationListener l = invalidationListener;
         if (l != null) l.onRaceChanged(race.id());
+    }
+
+    /**
+     * Enable or disable the import-time race sanity checker. When enabled (the default),
+     * {@link #putRace} runs {@link RaceSanityChecker} on first insert and auto-adds any
+     * suspicious race to the exclusion list. Tests using synthetic fixtures with identical
+     * or round elapsed times should disable this.
+     */
+    public void setAutoSanityCheck(boolean enabled)
+    {
+        this.autoSanityCheck = enabled;
     }
 
     public Map<String, Race> races()
@@ -1027,21 +1058,50 @@ public class DataStore
     public boolean isBoatExcluded(String boatId)
     {
         requireStarted();
-        return excludedBoatIds.contains(boatId);
+        return excludedBoats.containsKey(boatId);
+    }
+
+    /**
+     * Returns the operator-supplied reason a boat was excluded, or null if it isn't excluded
+     * (or was excluded without a reason).
+     */
+    public String boatExclusionReason(String boatId)
+    {
+        requireStarted();
+        String r = excludedBoats.get(boatId);
+        return (r == null || r.isEmpty()) ? null : r;
     }
 
     /** Returns true if the race has been manually excluded from analysis via the admin UI. */
     public boolean isRaceExcluded(String raceId)
     {
         requireStarted();
-        return excludedRaceIds.contains(raceId);
+        return excludedRaces.containsKey(raceId);
+    }
+
+    /**
+     * Returns the operator-supplied reason a race was excluded, or null if it isn't excluded
+     * (or was excluded without a reason).
+     */
+    public String raceExclusionReason(String raceId)
+    {
+        requireStarted();
+        String r = excludedRaces.get(raceId);
+        return (r == null || r.isEmpty()) ? null : r;
     }
 
     public void setBoatExcluded(String id, boolean excluded)
     {
+        setBoatExcluded(id, excluded, null);
+    }
+
+    public void setBoatExcluded(String id, boolean excluded, String reason)
+    {
         requireStarted();
-        if (excluded) excludedBoatIds.add(id);
-        else excludedBoatIds.remove(id);
+        if (excluded)
+            excludedBoats.put(id, reason == null ? "" : reason);
+        else
+            excludedBoats.remove(id);
         saveExclusions();
     }
 
@@ -1176,9 +1236,16 @@ public class DataStore
 
     public void setRaceExcluded(String id, boolean excluded)
     {
+        setRaceExcluded(id, excluded, null);
+    }
+
+    public void setRaceExcluded(String id, boolean excluded, String reason)
+    {
         requireStarted();
-        if (excluded) excludedRaceIds.add(id);
-        else excludedRaceIds.remove(id);
+        if (excluded)
+            excludedRaces.put(id, reason == null ? "" : reason);
+        else
+            excludedRaces.remove(id);
         saveExclusions();
     }
 
@@ -1207,11 +1274,41 @@ public class DataStore
     }
 
     /**
+     * Returns the reason associated with the first series-exclusion pattern that matches the
+     * given series name, or null if no pattern matches or the matching pattern has no reason.
+     */
+    public String seriesExclusionReason(String seriesName)
+    {
+        if (seriesName == null)
+            return null;
+        for (Map.Entry<String, String> e : excludedSeries.entrySet())
+        {
+            try
+            {
+                if (Pattern.compile(e.getKey(), Pattern.CASE_INSENSITIVE).matcher(seriesName).find())
+                {
+                    String r = e.getValue();
+                    return (r == null || r.isEmpty()) ? null : r;
+                }
+            }
+            catch (Exception ignored)
+            { /* skip malformed */ }
+        }
+        return null;
+    }
+
+    public void setSeriesExcluded(String seriesName, boolean excluded)
+    {
+        setSeriesExcluded(seriesName, excluded, null);
+    }
+
+    /**
      * Adds or removes a series exclusion pattern. When adding, the series name
      * is wrapped as a regex that matches the full string (case-insensitive).
      * When removing, any pattern whose regex matches the exact name is removed.
+     * On add, {@code reason} is stored alongside the pattern.
      */
-    public void setSeriesExcluded(String seriesName, boolean excluded)
+    public void setSeriesExcluded(String seriesName, boolean excluded, String reason)
     {
         requireStarted();
         String escaped = "^" + Pattern.quote(seriesName) + "$";
@@ -1219,7 +1316,7 @@ public class DataStore
         {
             if (!isSeriesExcluded(seriesName))
             {
-                excludedSeriesPatterns.add(escaped);
+                excludedSeries.put(escaped, reason == null ? "" : reason);
                 compileSeriesPatterns();
                 saveExclusions();
             }
@@ -1227,7 +1324,7 @@ public class DataStore
         else
         {
             // Remove any pattern that fully matches this series name
-            boolean changed = excludedSeriesPatterns.removeIf(p ->
+            boolean changed = excludedSeries.keySet().removeIf(p ->
             {
                 try { return Pattern.compile(p, Pattern.CASE_INSENSITIVE).matcher(seriesName).find(); }
                 catch (Exception e) { return false; }
@@ -1240,11 +1337,48 @@ public class DataStore
         }
     }
 
+    /**
+     * On-disk shape for exclusions.yaml. Each list element is an object with
+     * {@code id}/{@code pattern} and {@code reason}. The loader also accepts the
+     * legacy flat-string form for each list (bare ID/pattern, no reason) so
+     * pre-existing files upgrade cleanly on next save.
+     */
     private static class ExclusionsFile
     {
-        public Set<String> boats          = new LinkedHashSet<>();
-        public Set<String> races          = new LinkedHashSet<>();
-        public List<String> series        = new ArrayList<>();
+        public List<Entry> boats = new ArrayList<>();
+        public List<Entry> races = new ArrayList<>();
+        public List<SeriesEntry> series = new ArrayList<>();
+
+        public static class Entry
+        {
+            public String id;
+            public String reason;
+
+            public Entry()
+            {
+            }
+
+            public Entry(String id, String reason)
+            {
+                this.id = id;
+                this.reason = reason;
+            }
+        }
+
+        public static class SeriesEntry
+        {
+            public String pattern;
+            public String reason;
+
+            public SeriesEntry()
+            {
+            }
+
+            public SeriesEntry(String pattern, String reason)
+            {
+                this.pattern = pattern;
+                this.reason = reason; }
+        }
     }
 
     private void loadExclusions()
@@ -1257,17 +1391,36 @@ public class DataStore
         try
         {
             boolean isYaml = file.equals(yamlFile);
-            ExclusionsFile ef = (isYaml ? YAML_MAPPER : MAPPER).readValue(file.toFile(), ExclusionsFile.class);
-            if (ef.boats   != null) excludedBoatIds.addAll(ef.boats);
-            if (ef.races   != null) excludedRaceIds.addAll(ef.races);
-            if (ef.series  != null)
+            // Parse as a tree so we can accept either the legacy bare-string list shape
+            // or the new object-list shape transparently.
+            com.fasterxml.jackson.databind.JsonNode root =
+                (isYaml ? YAML_MAPPER : MAPPER).readTree(file.toFile());
+            loadEntriesInto(root.path("boats"), excludedBoats);
+            loadEntriesInto(root.path("races"), excludedRaces);
+            // Series entries use 'pattern' instead of 'id'.
+            com.fasterxml.jackson.databind.JsonNode seriesNode = root.path("series");
+            if (seriesNode.isArray())
             {
-                excludedSeriesPatterns.addAll(ef.series);
+                for (com.fasterxml.jackson.databind.JsonNode n : seriesNode)
+                {
+                    if (n.isTextual())
+                        excludedSeries.put(n.asText(), "");
+                    else if (n.isObject())
+                    {
+                        String pat = n.path("pattern").asText(null);
+                        if (pat == null || pat.isEmpty())
+                            pat = n.path("id").asText(null);
+                        if (pat == null || pat.isEmpty())
+                            continue;
+                        String reason = n.path("reason").asText("");
+                        excludedSeries.put(pat, reason);
+                    }
+                }
                 compileSeriesPatterns();
             }
             LOG.info("Loaded exclusions from {}: {} boats, {} races, {} series patterns",
-                file.getFileName(), excludedBoatIds.size(), excludedRaceIds.size(),
-                excludedSeriesPatterns.size());
+                file.getFileName(), excludedBoats.size(), excludedRaces.size(),
+                excludedSeries.size());
             // Migrate: if loaded from JSON, save as YAML and delete the JSON file
             if (!isYaml)
             {
@@ -1282,9 +1435,31 @@ public class DataStore
         }
     }
 
+    /**
+     * Helper: populate an exclusion map from a JSON array of either bare strings or {id, reason} objects.
+     */
+    private static void loadEntriesInto(com.fasterxml.jackson.databind.JsonNode arr, Map<String, String> out)
+    {
+        if (!arr.isArray())
+            return;
+        for (com.fasterxml.jackson.databind.JsonNode n : arr)
+        {
+            if (n.isTextual())
+                out.put(n.asText(), "");
+            else if (n.isObject())
+            {
+                String id = n.path("id").asText(null);
+                if (id == null || id.isEmpty())
+                    continue;
+                String reason = n.path("reason").asText("");
+                out.put(id, reason);
+            }
+        }
+    }
+
     private void compileSeriesPatterns()
     {
-        compiledSeriesPatterns = excludedSeriesPatterns.stream()
+        compiledSeriesPatterns = excludedSeries.keySet().stream()
             .map(p ->
             {
                 try { return Pattern.compile(p, Pattern.CASE_INSENSITIVE); }
@@ -1298,9 +1473,18 @@ public class DataStore
     {
         Path file = configDir.resolve("exclusions.yaml");
         ExclusionsFile ef = new ExclusionsFile();
-        ef.boats   = new LinkedHashSet<>(excludedBoatIds);
-        ef.races   = new LinkedHashSet<>(excludedRaceIds);
-        ef.series  = new ArrayList<>(excludedSeriesPatterns);
+        for (Map.Entry<String, String> e : excludedBoats.entrySet())
+        {
+            ef.boats.add(new ExclusionsFile.Entry(e.getKey(), e.getValue()));
+        }
+        for (Map.Entry<String, String> e : excludedRaces.entrySet())
+        {
+            ef.races.add(new ExclusionsFile.Entry(e.getKey(), e.getValue()));
+        }
+        for (Map.Entry<String, String> e : excludedSeries.entrySet())
+        {
+            ef.series.add(new ExclusionsFile.SeriesEntry(e.getKey(), e.getValue()));
+        }
         try
         {
             Files.createDirectories(configDir);
@@ -1838,8 +2022,10 @@ public class DataStore
         designCatalogue = null;
         makers = null;
         makersDirty = false;
-        excludedBoatIds.clear();
-        excludedRaceIds.clear();
+        excludedBoats.clear();
+        excludedRaces.clear();
+        excludedSeries.clear();
+        compiledSeriesPatterns = List.of();
     }
 
     private <T> List<T> loadDir(Path dir, Class<T> type)

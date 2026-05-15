@@ -648,8 +648,31 @@ public class PfOptimiser
 
             double scale = config.outlierK() * iqr;
             double ratio = effectiveDeviation / scale;
-            entryWeights[i] = e.refWeight() / (1.0 + ratio * ratio);
+            double w = e.refWeight() / (1.0 + ratio * ratio);
+            entryWeights[i] = w * fastBoatMultiplier(logPf[e.variant()][e.boatOrdinal()], config);
         }
+    }
+
+    /**
+     * Linear ramp that fades entry weight from 1 at {@code dubiousFactor} to 0 at {@code maxFactor},
+     * based on the boat's current PF. Boats whose PF is at or below {@code dubiousFactor} are
+     * unaffected; boats at or above {@code maxFactor} are fully excluded. Reflects that very fast
+     * boats sit at the tail of the handicap distribution and contaminate the back-calculated analysis.
+     */
+    private static double fastBoatMultiplier(double logPfVal, PfConfig config)
+    {
+        if (Double.isNaN(logPfVal))
+            return 1.0;
+        double dubious = config.dubiousFactor();
+        double max = config.maxFactor();
+        if (max <= dubious)
+            return 1.0; // disabled / misconfigured
+        double pf = Math.exp(logPfVal);
+        if (pf <= dubious)
+            return 1.0;
+        if (pf >= max)
+            return 0.0;
+        return (max - pf) / (max - dubious);
     }
 
     /**
@@ -687,10 +710,11 @@ public class PfOptimiser
                 iqr = 0.01;
             double effDev = residual < 0 ? Math.abs(residual) * config.asymmetryFactor() : Math.abs(residual);
             double ratio = effDev / (config.outlierK() * iqr);
+            double fbMult = fastBoatMultiplier(logPf[e.variant()][e.boatOrdinal()], config);
             sb.append(String.format(
-                "%n  [%d] race=%s div=%s boat=%s v=%d residual=%+.4f oldW=%.4f newW=%.4f dev/scale=%.2f",
+                "%n  [%d] race=%s div=%s boat=%s v=%d residual=%+.4f oldW=%.4f newW=%.4f dev/scale=%.2f fbMult=%.2f",
                 k + 1, e.raceId(), e.divisionName(), e.boatId(), e.variant(),
-                residual, oldWeights[idx], entryWeights[idx], ratio));
+                residual, oldWeights[idx], entryWeights[idx], ratio, fbMult));
         }
         LOG.info(sb.toString());
 

@@ -34,9 +34,11 @@ public record PfConfig(
     double graphCrossVariantLambda, // couples variant PFs via FLEET-WIDE conversion graph; 0 = disabled
     double noRaceFallbackWeight,    // cap on PF weight for a variant with no races and no usable graph inference
     double outerPfConvergenceThreshold, // max |Δlog(PF)| between outer cycles; outer loop also converges when this is met
-    boolean logOuterDiagnostics     // when true, log top weight-flippers and PF-movers each outer cycle
+    boolean logOuterDiagnostics,    // when true, log top weight-flippers and PF-movers each outer cycle
+    double dubiousFactor,           // PF threshold above which entry weights ramp down (default 1.5)
+    double maxFactor                // PF threshold at/above which entry weights are zero (default 2.0)
 )
 {
     public static final PfConfig DEFAULT = new PfConfig(
-        1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.25, 0.2, 1.0e-3, false);
+        1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.25, 0.2, 1.0e-3, false, 1.5, 2.0);
 }

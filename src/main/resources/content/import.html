@@ -122,7 +122,19 @@
       </label>
       <input type="number" id="pf-asymmetry" step="0.1" min="0" style="width:6em">
 
-      <label for="pf-outer-damping">
+        <label for="pf-dubious-factor">
+            Dubious factor
+            <a href="ui-tips.md#config-pf-dubious-factor" class="info-btn" data-tip="PF above this threshold begins a linear weight ramp toward zero, excluding fast boats from the analysis. Default 1.5." target="_blank">ⓘ</a>:
+        </label>
+        <input type="number" id="pf-dubious-factor" step="0.05" min="0" style="width:6em">
+
+        <label for="pf-max-factor">
+            Max factor
+            <a href="ui-tips.md#config-pf-max-factor" class="info-btn" data-tip="PF at or above this threshold gets zero entry weight, fully excluding the boat. Must be greater than dubious factor. Default 2.0." target="_blank">ⓘ</a>:
+        </label>
+        <input type="number" id="pf-max-factor" step="0.05" min="0" style="width:6em">
+
+        <label for="pf-outer-damping">
           Outer damping factor
           <a href="ui-tips.md#config-pf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles. Lower values damp oscillation; 1.0 = no damping. Default 0.5. Typical range 0.05–1.0." target="_blank">ⓘ</a>:
       </label>

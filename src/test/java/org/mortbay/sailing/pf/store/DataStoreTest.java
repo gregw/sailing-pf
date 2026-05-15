@@ -1116,6 +1116,64 @@ class DataStoreTest {
         assertFalse(reopened.designs().get("radford12").noSpinnaker());
     }
 
+    // --- Exclusion reason persistence ---
+
+    @Test
+    void raceExclusionReasonRoundTrips(@TempDir Path tempDir) throws IOException
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.setAutoSanityCheck(false);
+        store.setRaceExcluded("race-123", true, "merged-course bug");
+        store.setBoatExcluded("boat-456", true, "duplicate of boat-789");
+        store.setSeriesExcluded("Junior Pennant", true, "youth dinghy series");
+
+        String yaml = Files.readString(tempDir.resolve("config/exclusions.yaml"));
+        assertTrue(yaml.contains("id: \"race-123\""), "races entry should be object-shape");
+        assertTrue(yaml.contains("merged-course bug"), "reason should be persisted");
+        assertTrue(yaml.contains("id: \"boat-456\""), "boats entry should be object-shape");
+        assertTrue(yaml.contains("duplicate of boat-789"));
+        assertTrue(yaml.contains("pattern:"), "series entry should use 'pattern' key");
+        assertTrue(yaml.contains("youth dinghy series"));
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        store2.setAutoSanityCheck(false);
+        assertTrue(store2.isRaceExcluded("race-123"));
+        assertEquals("merged-course bug", store2.raceExclusionReason("race-123"));
+        assertTrue(store2.isBoatExcluded("boat-456"));
+        assertEquals("duplicate of boat-789", store2.boatExclusionReason("boat-456"));
+        assertTrue(store2.isSeriesExcluded("Junior Pennant"));
+        assertEquals("youth dinghy series", store2.seriesExclusionReason("Junior Pennant"));
+    }
+
+    @Test
+    void loadsLegacyFlatStringExclusionsFile(@TempDir Path tempDir) throws IOException
+    {
+        // Legacy on-disk shape: bare strings, no reasons. Must still load.
+        Files.createDirectories(tempDir.resolve("config"));
+        Files.writeString(tempDir.resolve("config/exclusions.yaml"),
+            "boats:\n" +
+                "  - \"legacy-boat-1\"\n" +
+                "  - \"legacy-boat-2\"\n" +
+                "races:\n" +
+                "  - \"legacy-race-1\"\n" +
+                "series:\n" +
+                "  - \"^Legacy Series$\"\n");
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        assertTrue(store.isBoatExcluded("legacy-boat-1"));
+        assertTrue(store.isBoatExcluded("legacy-boat-2"));
+        assertTrue(store.isRaceExcluded("legacy-race-1"));
+        assertTrue(store.isSeriesExcluded("Legacy Series"));
+        // No reason field in the old format → getters return null.
+        assertNull(store.boatExclusionReason("legacy-boat-1"));
+        assertNull(store.raceExclusionReason("legacy-race-1"));
+        assertNull(store.seriesExclusionReason("Legacy Series"));
+    }
+
     // --- Helpers ---
 
     private DataStore testDataStore() throws URISyntaxException {

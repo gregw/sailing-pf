@@ -26,7 +26,7 @@ let showRfLine       = true;
 let showTrendLinear  = true;
 let showTrendSliding = true;
 let hideLegend       = false;
-let showLast12Months  = false;
+let showLast18Months = false;
 let showCommonRacesOnly = false;
 let slidingAverageCount = 8;
 let slidingAverageDrops = 0;
@@ -245,9 +245,9 @@ function filterByVariant(entries, variant) {
 
 function filterEntries(entries, variant) {
     let result = filterByVariant(entries, variant);
-    if (showLast12Months) {
+    if (showLast18Months) {
         const cutoff = new Date();
-        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        cutoff.setMonth(cutoff.getMonth() - 18);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         result = result.filter(e => e.date >= cutoffStr);
     }
@@ -311,7 +311,7 @@ function renderBcfChart(data) {
     const traces = [];
     const designs = data.designs || [];
 
-    // Pre-compute filtered entries per design (per-design variant + last-12-months).
+    // Pre-compute filtered entries per design (per-design variant + last-18-months).
     const filteredPerDesign = new Map(
         designs.map(d => [d.id, filterEntries(d.entries || [], boatVariantFor(d.id))]));
 
@@ -683,10 +683,10 @@ function median(nums) {
 function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
     let rawPoints = data.points || [];
 
-    // Apply last-12-months filter if active
-    if (showLast12Months) {
+    // Apply last-18-months filter if active
+    if (showLast18Months) {
         const cutoff = new Date();
-        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        cutoff.setMonth(cutoff.getMonth() - 18);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         rawPoints = rawPoints.filter(p => p.date >= cutoffStr);
     }
@@ -835,7 +835,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('show-trend-linear')  .addEventListener('change', e => { showTrendLinear   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding') .addEventListener('change', e => { showTrendSliding  = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('hide-legend')        .addEventListener('change', e => { hideLegend        = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
-    document.getElementById('last-12-months')     .addEventListener('change', e => { showLast12Months  = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
+    document.getElementById('last-18-months').addEventListener('change', e => {
+        showLast18Months = e.target.checked;
+        if (lastChartData) renderChart(lastChartData);
+        loadElapsedCharts();
+    });
     document.getElementById('common-races-only')  .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('design-search').addEventListener('input', () => {
         clearTimeout(designDebounce);

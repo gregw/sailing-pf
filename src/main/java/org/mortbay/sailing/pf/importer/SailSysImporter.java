@@ -525,7 +525,8 @@ public class SailSysImporter
 
         if (autoExclude)
         {
-            store.setRaceExcluded(raceId, true);
+            String reason = "series-pattern: name='" + data.name + "' series='" + seriesName + "'";
+            store.setRaceExcluded(raceId, true, reason);
             LOG.info("SailSys: auto-excluded race '{}' (id={}) — name/series matched exclusion pattern",
                 data.name, data.id);
         }

@@ -578,6 +578,13 @@ designs:
     canonicalName: "Radford 12 cat rig"
     aliases:
       - "Radford 12 cat rig"
+  vplpverdier100:
+    canonicalName: "Vplp Verdier 100"
+    aliases:
+      - "VPLP /Verdier Maxi 100ft"
+      - "vplpverdiermaxi100ft"
+      - "Hogson Yachts / VPLP / Guillaume Verdier VPLP 100"
+      - "hogsonyachtsvplpguillaumeverdiervplp100"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -615,6 +622,8 @@ boats:
       name: "Andoo Comanche"
     - sailNumber: null
       name: "Master Lock Comanche"
+    - sailNumber: "USA12358"
+      name: "comanche"
   SM9535-celestial:
     canonicalName: "Celestial"
     aliases:
@@ -1176,3 +1185,10 @@ boats:
         name: "sirocco"
       - sailNumber: "1769"
         name: "sirocco"
+  HKG2276-scallywag100:
+    canonicalName: "Scallywag 100"
+    aliases:
+      - sailNumber: "HKG2276"
+        name: "shkscallywag"
+      - sailNumber: "HKG2276"
+        name: "shkscallywag100"

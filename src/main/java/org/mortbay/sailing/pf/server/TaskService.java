@@ -142,6 +142,8 @@ public class TaskService
                                Double pfNoRaceFallbackWeight,   // null → default 0.2
                                Double pfOuterPfConvergenceThreshold, // null → default 1.0e-3
                                Boolean pfLogOuterDiagnostics,        // null → false
+                               Double pfDubiousFactor,               // null → default 1.5
+                               Double pfMaxFactor,                   // null → default 2.0
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -202,6 +204,8 @@ public class TaskService
     private volatile double pfNoRaceFallbackWeight = 0.2;
     private volatile double pfOuterPfConvergenceThreshold = 1.0e-3;
     private volatile boolean pfLogOuterDiagnostics = false;
+    private volatile double pfDubiousFactor = 1.5;
+    private volatile double pfMaxFactor = 2.0;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -282,6 +286,10 @@ public class TaskService
                 pfOuterPfConvergenceThreshold = config.pfOuterPfConvergenceThreshold();
             if (config.pfLogOuterDiagnostics() != null)
                 pfLogOuterDiagnostics = config.pfLogOuterDiagnostics();
+            if (config.pfDubiousFactor() != null)
+                pfDubiousFactor = config.pfDubiousFactor();
+            if (config.pfMaxFactor() != null)
+                pfMaxFactor = config.pfMaxFactor();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -368,7 +376,9 @@ public void stop()
                                        Double pfGraphCrossVariantLambda,
                                        Double pfNoRaceFallbackWeight,
                                        Double pfOuterPfConvergenceThreshold,
-                                       Boolean pfLogOuterDiagnostics)
+                                       Boolean pfLogOuterDiagnostics,
+                                       Double pfDubiousFactor,
+                                       Double pfMaxFactor)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
@@ -393,6 +403,10 @@ public void stop()
             this.pfOuterPfConvergenceThreshold = pfOuterPfConvergenceThreshold;
         if (pfLogOuterDiagnostics != null)
             this.pfLogOuterDiagnostics = pfLogOuterDiagnostics;
+        if (pfDubiousFactor != null)
+            this.pfDubiousFactor = pfDubiousFactor;
+        if (pfMaxFactor != null)
+            this.pfMaxFactor = pfMaxFactor;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -514,6 +528,16 @@ public void stop()
     public double pfNoRaceFallbackWeight()
     {
         return pfNoRaceFallbackWeight;
+    }
+
+    public double pfDubiousFactor()
+    {
+        return pfDubiousFactor;
+    }
+
+    public double pfMaxFactor()
+    {
+        return pfMaxFactor;
     }
 
     public AuthConfig authConfig()
@@ -762,7 +786,8 @@ public void stop()
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
             pfCrossVariantLambda, pfGraphCrossVariantLambda,
             pfNoRaceFallbackWeight,
-            pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics);
+            pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
+            pfDubiousFactor, pfMaxFactor);
     }
 
     private void persistConfig()
@@ -783,6 +808,7 @@ public void stop()
                     pfCrossVariantLambda, pfGraphCrossVariantLambda,
                     pfNoRaceFallbackWeight,
                     pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
+                    pfDubiousFactor, pfMaxFactor,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,

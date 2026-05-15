@@ -277,13 +277,14 @@ public class AdminApiServlet extends HttpServlet
                 return;
             }
             boolean excluded = Boolean.TRUE.equals(body.get("excluded"));
+            String reason = body.get("reason") instanceof String s ? s : null;
             for (String id : ids)
             {
                 switch (entity)
                 {
-                    case "boats"   -> store.setBoatExcluded(id, excluded);
+                    case "boats" -> store.setBoatExcluded(id, excluded, reason);
                     case "designs" -> store.setDesignExcluded(id, excluded);
-                    case "races"   -> store.setRaceExcluded(id, excluded);
+                    case "races" -> store.setRaceExcluded(id, excluded, reason);
                     default        -> { resp.sendError(400); return; }
                 }
             }
@@ -315,8 +316,11 @@ public class AdminApiServlet extends HttpServlet
                 return;
             }
             boolean excluded = Boolean.TRUE.equals(body.get("excluded"));
+            String reason = body.get("reason") instanceof String s ? s : null;
             for (String name : names)
-                store.setSeriesExcluded(name, excluded);
+            {
+                store.setSeriesExcluded(name, excluded, reason);
+            }
             writeJson(resp, Map.of("ok", true, "excluded", excluded, "count", names.size()));
         }
         catch (Exception e)
@@ -514,6 +518,7 @@ public class AdminApiServlet extends HttpServlet
                 PerformanceProfile prof = cache.profilesByBoatId().get(b.id());
                 row.put("profile", prof != null ? prof.overallScore() : null);
                 row.put("excluded", store.isBoatExcluded(b.id()));
+                row.put("exclusionReason", store.boatExclusionReason(b.id()));
                 return row;
             }).collect(Collectors.toList());
 
@@ -2528,6 +2533,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("lastDate",   lastDate);
                 row.put("races",      seriesRaces.size());
                 row.put("excluded",   excluded);
+                row.put("exclusionReason", store.seriesExclusionReason(s.name()));
                 row.put("clubExcluded", clubExcluded);
                 rows.add(row);
             }
@@ -2638,6 +2644,7 @@ public class AdminApiServlet extends HttpServlet
         row.put("name", raceName(r));
         row.put("finishers", finishers);
         row.put("excluded", store.isRaceExcluded(r.id()));
+        row.put("exclusionReason", store.raceExclusionReason(r.id()));
 
         var rd = cache.raceDerived().get(r.id());
         if (rd != null && rd.divisionPfs() != null && !rd.divisionPfs().isEmpty())
@@ -2715,6 +2722,8 @@ public class AdminApiServlet extends HttpServlet
         cfg.put("outerConvergenceThreshold", q.config().outerConvergenceThreshold());
         cfg.put("outerPfConvergenceThreshold", q.config().outerPfConvergenceThreshold());
         cfg.put("logOuterDiagnostics", q.config().logOuterDiagnostics());
+        cfg.put("dubiousFactor", q.config().dubiousFactor());
+        cfg.put("maxFactor", q.config().maxFactor());
         result.put("config", cfg);
         writeJson(resp, result);
     }
@@ -2773,6 +2782,8 @@ public class AdminApiServlet extends HttpServlet
         pfConfig.put("noRaceFallbackWeight", _taskService.pfNoRaceFallbackWeight());
         pfConfig.put("outerPfConvergenceThreshold", _taskService.pfOuterPfConvergenceThreshold());
         pfConfig.put("logOuterDiagnostics", _taskService.pfLogOuterDiagnostics());
+        pfConfig.put("dubiousFactor", _taskService.pfDubiousFactor());
+        pfConfig.put("maxFactor", _taskService.pfMaxFactor());
         result.put("pfConfig", pfConfig);
         result.put("slidingAverageCount", _taskService.slidingAverageCount());
         result.put("slidingAverageDrops", _taskService.slidingAverageDrops());
@@ -2921,6 +2932,12 @@ public class AdminApiServlet extends HttpServlet
                 ? n13.doubleValue() : null;
             Object rawLogDiag = body.get("pfLogOuterDiagnostics");
             Boolean pfLogOuterDiagnostics = (rawLogDiag instanceof Boolean b1) ? b1 : null;
+            Object rawDubious = body.get("pfDubiousFactor");
+            Double pfDubiousFactor = (rawDubious instanceof Number n14 && n14.doubleValue() > 0)
+                ? n14.doubleValue() : null;
+            Object rawMaxFactor = body.get("pfMaxFactor");
+            Double pfMaxFactor = (rawMaxFactor instanceof Number n15 && n15.doubleValue() > 0)
+                ? n15.doubleValue() : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
                 sailsysStartRaceId, sailsysEndRaceId,
@@ -2929,7 +2946,8 @@ public class AdminApiServlet extends HttpServlet
                 pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
                 pfCrossVariantLambda, pfGraphCrossVariantLambda,
                 pfNoRaceFallbackWeight,
-                pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics);
+                pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
+                pfDubiousFactor, pfMaxFactor);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }
