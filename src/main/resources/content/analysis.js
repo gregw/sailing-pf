@@ -633,8 +633,8 @@ async function loadPfQuality() {
 function fmtTrace(trace) {
     if (!trace || trace.length === 0) return '';
     const f = v => v.toFixed(3);
-    if (trace.length <= 10) return trace.map(f).join(' → ');
-    return [...trace.slice(0, 3).map(f), '\u2026', ...trace.slice(-3).map(f)].join(' → ');
+    if (trace.length <= 16) return trace.map(f).join(' → ');
+    return [...trace.slice(0, 8).map(f), '\u2026', ...trace.slice(-8).map(f)].join(' → ');
 }
 
 function renderPfQuality(q) {
