@@ -772,12 +772,17 @@ function renderBoatPf(data) {
 
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
-        html += `<label style="font-size:0.85rem;font-weight:normal;"><input type="checkbox" id="residual-last18" onchange="window._residualLast18=this.checked; renderResidualChart(window._lastResiduals)"> Last 18 months only</label>`;
+        const sel = window._residualMonths != null ? window._residualMonths : 0;
+        html += `<label style="font-size:0.85rem;font-weight:normal;">Show: <select id="residual-months" onchange="window._residualMonths=parseInt(this.value,10)||0; renderResidualChart(window._lastResiduals)">
+            <option value="0"${sel === 0 ? ' selected' : ''}>All time</option>
+            <option value="6"${sel === 6 ? ' selected' : ''}>Last 6 months</option>
+            <option value="12"${sel === 12 ? ' selected' : ''}>Last 12 months</option>
+            <option value="18"${sel === 18 ? ' selected' : ''}>Last 18 months</option>
+            <option value="24"${sel === 24 ? ' selected' : ''}>Last 24 months</option>
+            <option value="60"${sel === 60 ? ' selected' : ''}>Last 60 months</option>
+        </select></label>`;
         html += '<div id="pf-residual-chart"></div>';
         setTimeout(() => {
-            // Restore checkbox state across prev/next navigation
-            const cb = document.getElementById('residual-last18');
-            if (cb && window._residualLast18) cb.checked = true;
             window._lastResiduals = data.residuals;
             renderResidualChart(data.residuals);
         }, 0);
@@ -789,10 +794,10 @@ function renderResidualChart(residuals) {
     const container = document.getElementById('pf-residual-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
-    const cb = document.getElementById('residual-last18');
-    if (cb && cb.checked) {
+    const months = window._residualMonths || 0;
+    if (months > 0) {
         const cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - 18);
+        cutoff.setMonth(cutoff.getMonth() - months);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         residuals = residuals.filter(r => r.date >= cutoffStr);
     }

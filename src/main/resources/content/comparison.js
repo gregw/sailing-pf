@@ -17,7 +17,7 @@ let showPfLine      = true;
 let showTrendLinear  = true;
 let showTrendSliding = true;
 let hideLegend       = false;
-let showLast18Months = false;
+let recentMonths = 0;     // 0 = all time, otherwise filter to last N months
 let showCommonRacesOnly = false;
 let slidingAverageCount = 8;
 let slidingAverageDrops = 0;
@@ -299,9 +299,9 @@ function filterByVariant(entries, variant) {
 
 function filterEntries(entries, variant) {
     let result = filterByVariant(entries, variant);
-    if (showLast18Months) {
+    if (recentMonths > 0) {
         const cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - 18);
+        cutoff.setMonth(cutoff.getMonth() - recentMonths);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         result = result.filter(e => e.date >= cutoffStr);
     }
@@ -368,7 +368,7 @@ function renderChart(data) {
 function renderBcfChart(data) {
     const traces = [];
 
-    // Pre-compute filtered entries per boat (per-boat variant + last-18-months)
+    // Pre-compute filtered entries per boat (per-boat variant + recent-months)
     const filteredPerBoat = new Map(
         data.boats.map(b => [b.id, filterEntries(b.entries, boatVariantFor(b.id))]));
 
@@ -1097,10 +1097,10 @@ function onElapsedFromZeroChange() {
 function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
     let points = data.points || [];
 
-    // Apply last-18-months filter if active
-    if (showLast18Months) {
+    // Apply recent-months filter if active
+    if (recentMonths > 0) {
         const cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - 18);
+        cutoff.setMonth(cutoff.getMonth() - recentMonths);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
         points = points.filter(p => p.date >= cutoffStr);
     }
@@ -1258,8 +1258,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
-    document.getElementById('last-18-months').addEventListener('change', e => {
-        showLast18Months = e.target.checked;
+    document.getElementById('recent-months').addEventListener('change', e => {
+        recentMonths = parseInt(e.target.value, 10) || 0;
         if (lastChartData) renderChart(lastChartData);
         loadElapsedCharts();
     });
