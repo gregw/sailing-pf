@@ -1258,7 +1258,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
-    document.getElementById('recent-months').addEventListener('change', e => {
+    const recentSel = document.getElementById('recent-months');
+    recentMonths = parseInt(recentSel.value, 10) || 0;
+    recentSel.addEventListener('change', e => {
         recentMonths = parseInt(e.target.value, 10) || 0;
         if (lastChartData) renderChart(lastChartData);
         loadElapsedCharts();
