@@ -3,11 +3,12 @@
 /*
  * Multi-design comparison — mirrors comparison.js (boats) with design-level semantics:
  *   - single selector adds any number of designs to a chip list
- *   - main chart draws each design's RF line plus back-calc dots/trends across all
- *     member-boat residuals (anchored against the design's RF for the variant)
- *   - 2 or 3 designs → pairwise elapsed-time charts
- *   - handicap calculator accepts allocated handicaps for any subset and colours
- *     entered cells by fit quality, unentered cells by confidence
+ *   - BCF chart draws each design's back-calc dots/trends across all member-boat residuals,
+ *     each design filtered to its own per-design variant; when an RF or allocated-handicap
+ *     set is selected in the calculator the dots are divided by it (no PF for designs)
+ *   - shared HandicapCalc module (design mode): allocated handicap sets + RF + Best Fit,
+ *     per-design variant dropdowns, compare-checkbox pair selection. No fetch/save.
+ *   - the two designs ticked in the compare column feed the elapsed-time chart
  */
 
 const PALETTE = [
@@ -17,12 +18,10 @@ const PALETTE = [
 ];
 
 const STORAGE_KEY = 'pf-designComparison-items';
+const HANDICAP_STORAGE_KEY = 'pf.design.allocated.handicaps';
 
-let selectedItems   = [];   // {type:'design', id, label, color}
+let selectedItems = [];   // {type:'design', id, label, color, initialVariant?}
 let allAvailable    = false;
-let selectedVariant = 'spin';
-// Per-design variant override for the handicap calculator.
-const designVariants = new Map();
 let showRfLine       = true;
 let showTrendLinear  = true;
 let showTrendSliding = true;
@@ -35,7 +34,12 @@ let candidateDesigns = [];
 let focusedDesignId  = null;
 let designDebounce   = null;
 let lastChartData    = null;
-let calcSort         = { col: 'rf', dir: 'desc' };
+// Cached /api/design-comparison/chart response for the current pair so per-design
+// variant changes re-filter without hitting the server. Keyed by `${idA}|${idB}`.
+let elapsedChartCache = {key: null, data: null};
+// Last best-fit slope for the elapsed chart. Updated every renderElapsedChart so
+// "Use Best Fit" can re-apply the displayed value.
+let lastElapsedFit = null;
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -111,7 +115,9 @@ function addDesign() {
         type:  'design',
         id:    d.id,
         label: d.canonicalName || d.id,
-        color: nextColor()
+        color: nextColor(),
+        // Seed the calc's per-design variant for this new design from the table majority.
+        initialVariant: majorityVariant()
     });
     focusedDesignId = null;
     document.getElementById('add-design-btn').disabled = true;
@@ -161,7 +167,7 @@ function renderChips() {
     }
 }
 
-// ---- Trend helpers (copied from comparison.js) ----
+// ---- Trend helpers ----
 
 function weightedOlsTrend(entries) {
     if (entries.length < 3) return null;
@@ -203,6 +209,76 @@ function slidingAverage(entries, n, drops, seed) {
     return xs.length >= 2 ? { x: xs, y: ys } : null;
 }
 
+// ---- Variant helpers ----
+
+// The page has no global variant selector — each design's variant lives in the
+// handicap calculator's per-design dropdown. This reads it (defaulting to 'spin'
+// before the calc exists).
+function boatVariantFor(designId) {
+    return dCalcController ? dCalcController.getBoatVariant(designId) : 'spin';
+}
+
+// Variant to seed a newly added design with: the majority variant among the designs
+// already in the comparison, or 'spin' when there's no clear single majority.
+function majorityVariant() {
+    if (!dCalcController || selectedItems.length === 0) return 'spin';
+    const counts = {spin: 0, nonSpin: 0};
+    selectedItems.forEach(i => {
+        const v = dCalcController.getBoatVariant(i.id);
+        if (counts[v] != null) counts[v]++;
+    });
+    const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    if (ranked[0][1] === 0) return 'spin';                  // no designs counted
+    if (ranked[0][1] === ranked[1][1]) return 'spin';       // tie → no clear majority
+    return ranked[0][0];
+}
+
+function rfVariantFor(design, variant) {
+    return variant === 'nonSpin' ? design.rfNonSpin : design.rfSpin;
+}
+
+function filterByVariant(entries, variant) {
+    return entries.filter(e =>
+        variant === 'nonSpin' ? e.nonSpinnaker : !e.nonSpinnaker && !e.twoHanded
+    );
+}
+
+function filterEntries(entries, variant) {
+    let result = filterByVariant(entries, variant);
+    if (showLast12Months) {
+        const cutoff = new Date();
+        cutoff.setFullYear(cutoff.getFullYear() - 1);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        result = result.filter(e => e.date >= cutoffStr);
+    }
+    return result;
+}
+
+// Active divisor for the BCF chart, when the calc's RF or a set "show" tickbox is on
+// (singleSelectShow ensures at most one). Designs have no PF. Returns null when no
+// divisor is active. perBoat values mirror Factor.applyInverse — the chart plots
+// y' = e.backCalcFactor / value and intensity weight w' = e.weight × weight.
+function computeBcfDivisor(data) {
+    const calc = dCalcController;
+    if (!calc) return null;
+    if (calc.getShowRf()) {
+        const perBoat = new Map();
+        (data.designs || []).forEach(d => {
+            const f = rfVariantFor(d, calc.getBoatVariant(d.id));
+            if (f) perBoat.set(d.id, {value: f.value, weight: f.weight});
+        });
+        return {label: 'RF', perBoat};
+    }
+    const activeSet = calc.getAllSets().find(s => s.show);
+    if (activeSet && activeSet.values.size > 0) {
+        const perBoat = new Map();
+        // Allocated entries are user-typed — treat as full confidence.
+        activeSet.values.forEach((v, id) => perBoat.set(id, {value: v, weight: 1}));
+        return {label: activeSet.name, perBoat};
+    }
+    return null;
+}
+
 // ---- Main back-calc chart ----
 
 async function loadChart() {
@@ -222,49 +298,22 @@ async function loadChart() {
     loadElapsedCharts();
 }
 
-function onVariantChange() {
-    const prevVariant = selectedVariant;
-    selectedVariant = document.getElementById('variant-selector').value;
-    if (lastChartData) renderChart(lastChartData);
-    // Sync calc: only update designs that still have the old variant.
-    if (lastChartData && prevVariant !== selectedVariant)
-        updateCalcVariant(prevVariant, selectedVariant);
-    loadElapsedCharts();
-}
-
-function updateCalcVariant(oldVariant, newVariant) {
-    let changed = false;
-    designVariants.forEach((v, id) => {
-        if (v === oldVariant) {
-            designVariants.set(id, newVariant);
-            changed = true;
-        }
-    });
-    if (changed && lastChartData) renderHandicapCalc(lastChartData);
-}
-
-function filterByVariant(entries) {
-    return entries.filter(e =>
-        selectedVariant === 'nonSpin' ? e.nonSpinnaker : !e.nonSpinnaker && !e.twoHanded
-    );
-}
-
-function filterEntries(entries) {
-    let result = filterByVariant(entries);
-    if (showLast12Months) {
-        const cutoff = new Date();
-        cutoff.setFullYear(cutoff.getFullYear() - 1);
-        const cutoffStr = cutoff.toISOString().slice(0, 10);
-        result = result.filter(e => e.date >= cutoffStr);
-    }
-    return result;
-}
-
 function renderChart(data) {
+    // Calc first: it seeds each design's per-design variant (boatVariants), which
+    // renderBcfChart then reads for entry filtering and RF lookup.
+    renderHandicapCalc(data);
+    renderBcfChart(data);
+}
+
+// BCF chart only — no calc reset. Safe to call from inside the calc's onChange,
+// because it never invokes setBoats / recalc and so cannot re-fire onChange.
+function renderBcfChart(data) {
     const traces = [];
     const designs = data.designs || [];
 
-    const filteredPerDesign = new Map(designs.map(d => [d.id, filterEntries(d.entries || [])]));
+    // Pre-compute filtered entries per design (per-design variant + last-12-months).
+    const filteredPerDesign = new Map(
+        designs.map(d => [d.id, filterEntries(d.entries || [], boatVariantFor(d.id))]));
 
     if (showCommonRacesOnly && designs.length >= 2) {
         const sets = designs.map(d => new Set(filteredPerDesign.get(d.id).map(e => e.raceId)));
@@ -273,20 +322,13 @@ function renderChart(data) {
             filteredPerDesign.set(d.id, filteredPerDesign.get(d.id).filter(e => common.has(e.raceId))));
     }
 
-    let yMin = 0.5, yMax = 1.5;
-    designs.forEach(d => {
-        filteredPerDesign.get(d.id).forEach(e => {
-            if (e.backCalcFactor < yMin) yMin = e.backCalcFactor;
-            if (e.backCalcFactor > yMax) yMax = e.backCalcFactor;
-        });
-    });
-    const pad = (yMax - yMin) * 0.05 + 0.02;
-    yMin = Math.floor((yMin - pad) * 20) / 20;
-    yMax = Math.ceil ((yMax + pad) * 20) / 20;
-    const yRange = [Math.min(0.5, yMin), Math.max(1.5, yMax)];
+    // When a divisor is active, dots are plotted as BCF / divisor (mirrors
+    // Factor.applyInverse). Designs with no divisor entry are skipped entirely.
+    const divisor = computeBcfDivisor(data);
 
     let minDate = null, maxDate = null;
     designs.forEach(d => {
+        if (divisor && !divisor.perBoat.has(d.id)) return;
         filteredPerDesign.get(d.id).forEach(e => {
             if (!minDate || e.date < minDate) minDate = e.date;
             if (!maxDate || e.date > maxDate) maxDate = e.date;
@@ -296,14 +338,21 @@ function renderChart(data) {
         ? [minDate, maxDate]
         : ['2018-01-01', new Date().toISOString().slice(0, 10)];
 
+    const plottedYs = [];
+
     designs.forEach(design => {
+        const div = divisor ? divisor.perBoat.get(design.id) : null;
+        if (divisor && !div) return;   // design has no divisor entry → skip
+
         const item  = selectedItems.find(i => i.id === design.id);
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (design.canonicalName || design.id);
 
-        const rfFactor = selectedVariant === 'nonSpin' ? design.rfNonSpin : design.rfSpin;
+        const variant = boatVariantFor(design.id);
+        const rfFactor = rfVariantFor(design, variant);
 
-        if (showRfLine && rfFactor) {
+        // RF line is about the unscaled domain — hide it while a divisor is active.
+        if (showRfLine && rfFactor && !divisor) {
             traces.push({
                 x: lineX, y: [rfFactor.value, rfFactor.value],
                 type: 'scatter', mode: 'lines',
@@ -314,13 +363,23 @@ function renderChart(data) {
             });
         }
 
-        const entries = filteredPerDesign.get(design.id);
+        // Apply divisor to entries (Factor.applyInverse semantics: divide value,
+        // multiply weights). The trend line implicitly uses the scaled values too.
+        const rawEntries = filteredPerDesign.get(design.id);
+        const entries = div
+            ? rawEntries.map(e => ({
+                ...e,
+                backCalcFactor: e.backCalcFactor / div.value,
+                weight: e.weight * div.weight
+            }))
+            : rawEntries;
         if (entries.length > 0) {
             const xs = [], ys = [], sizes = [], opacities = [], symbols = [], texts = [], custom = [];
             entries.forEach(e => {
                 const w = Math.min(Math.max(e.weight, 0), 1);
                 xs.push(e.date);
                 ys.push(e.backCalcFactor);
+                plottedYs.push(e.backCalcFactor);
                 sizes.push(4 + 6 * w);
                 opacities.push(parseFloat((0.35 + 0.65 * w).toFixed(2)));
                 symbols.push(e.weight < 0.01 ? 'x' : 'circle');
@@ -362,7 +421,9 @@ function renderChart(data) {
                     hovertemplate: `${esc(name)} linear trend: %{y:.4f}<extra></extra>`
                 });
             }
-            if (showTrendSliding) {
+            // Sliding average is hidden in divisor mode — its seed value (RF) lives in
+            // the unscaled domain and would skew the early window.
+            if (showTrendSliding && !divisor) {
                 const rfSeed = rfFactor ? rfFactor.value : null;
                 const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, rfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
@@ -380,11 +441,25 @@ function renderChart(data) {
         }
     });
 
+    // Y-range: padded to the plotted (post-divisor) values; keep the historic
+    // min-[0.5,1.5] clamp only when no divisor is active (ratios cluster near 1.0).
+    let yRange;
+    if (plottedYs.length > 0) {
+        let lo = Math.min(...plottedYs), hi = Math.max(...plottedYs);
+        const pad = (hi - lo) * 0.05 + 0.02;
+        lo = Math.floor((lo - pad) * 20) / 20;
+        hi = Math.ceil((hi + pad) * 20) / 20;
+        yRange = divisor ? [lo, hi] : [Math.min(0.5, lo), Math.max(1.5, hi)];
+    } else if (!divisor) {
+        yRange = [0.5, 1.5];
+    }
+
+    const yTitle = divisor ? `Factor ratio: BCF / ${divisor.label}` : 'Factor';
     const layout = {
         xaxis: { title: 'Date', type: 'date' },
-        yaxis: { title: 'Factor', range: yRange },
+        yaxis: yRange ? {title: yTitle, range: yRange} : {title: yTitle},
         showlegend: !hideLegend,
-        legend: { orientation: 'v', xanchor: 'right', x: 1 },
+        legend: {orientation: 'v', xanchor: 'left', x: 0},
         margin: { t: 20, b: 60, l: 60, r: 20 },
         hovermode: 'closest'
     };
@@ -405,21 +480,41 @@ function renderChart(data) {
             window.location.href = 'races.html?' + new URLSearchParams({id: raceId});
         }
     });
-
-    renderHandicapCalc(data);
 }
 
-// ---- Handicap calculator ----
+// ---- Handicap calculator (thin adapter over shared HandicapCalc module, design mode) ----
+
+let dCalcController = null;
+
+function dCalc() {
+    if (dCalcController) return dCalcController;
+    dCalcController = HandicapCalc.create({
+        entityKind: 'design',
+        section: document.getElementById('pf-calc'),
+        table: document.querySelector('#pf-calc table'),
+        sessionKey: HANDICAP_STORAGE_KEY,
+        compareSelect: true,
+        compareMax: 2,
+        // Design page repurposes the RF / per-set "show" tickboxes as a single divisor
+        // selector for the BCF chart, so at most one may be ticked.
+        singleSelectShow: true,
+        onCompareSelectionChange: () => loadElapsedCharts(),
+        onChange: () => {
+            // Re-render the BCF chart so a divisor toggle (or its clearing) is reflected.
+            // Calls the BCF-only renderer — calling renderChart here would re-enter
+            // renderHandicapCalc → setBoats → recalc → onChange (infinite recursion).
+            if (lastChartData) renderBcfChart(lastChartData);
+            // A per-design variant change in the calc table fires onChange too; the
+            // cached elapsed payload lets this re-render without hitting the API.
+            const elapsedSection = document.getElementById('elapsed-charts-section');
+            if (elapsedSection && elapsedSection.style.display !== 'none')
+                loadElapsedCharts();
+        }
+    });
+    return dCalcController;
+}
 
 function renderHandicapCalc(data) {
-    const section = document.getElementById('pf-calc');
-    const table   = section.querySelector('table');
-
-    const enteredValues = new Map();
-    document.querySelectorAll('.pf-calc-input').forEach(inp => {
-        if (inp.value !== '') enteredValues.set(inp.dataset.boatId, inp.value);
-    });
-
     const designs = data.designs || [];
     const showBestFit = designs.length <= 8;
 
@@ -428,374 +523,192 @@ function renderHandicapCalc(data) {
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (d.canonicalName || d.id);
 
-        if (!designVariants.has(d.id)) designVariants.set(d.id, selectedVariant);
-        const dVariant = designVariants.get(d.id);
-        const rfFactor = dVariant === 'nonSpin' ? d.rfNonSpin : d.rfSpin;
+        // Per-design variant: a known design keeps the variant the calc already tracks;
+        // a new design takes its seeded variant if any, else the table majority.
+        const variant = item?.initialVariant
+            || (dCalcController ? dCalcController.getBoatVariant(d.id) : null)
+            || majorityVariant();
+
+        const rfFactor = rfVariantFor(d, variant);
 
         let bestFit = null;
         if (showBestFit) {
-            const entries = filterEntries(d.entries || []);
+            const entries = filterEntries(d.entries || [], variant);
             const trend = weightedOlsTrend(entries);
             if (trend) bestFit = trend.y[1];
         }
 
         return {
             id: d.id, name, color,
-            variant: dVariant,
+            boatName: name,
+            variant,
             rfAll: {
                 spin: d.rfSpin ? d.rfSpin.value : null,
                 nonSpin: d.rfNonSpin ? d.rfNonSpin.value : null,
             },
+            rfWeightAll: {
+                spin: d.rfSpin ? d.rfSpin.weight : null,
+                nonSpin: d.rfNonSpin ? d.rfNonSpin.weight : null,
+            },
             rf: rfFactor ? rfFactor.value : null,
+            rfWeight: rfFactor ? rfFactor.weight : null,
             bestFit
         };
-    }).filter(d => d.rf != null || d.bestFit != null);
-
-    if (calcBoats.length === 0) {
-        section.style.display = 'none';
-        return;
-    }
-
-    section.style.display = '';
-    table.innerHTML = '';
-
-    const cols = [
-        { key: 'name',    label: 'Design',         align: 'left'   },
-        {key: 'variant', label: 'Var', align: 'center'},
-        { key: 'input',   label: 'Enter handicap', align: 'center' },
-        { key: 'rf',      label: 'RF',             align: 'right'  },
-    ];
-    if (showBestFit) cols.push({ key: 'bestFit', label: 'Best Fit', align: 'right' });
-
-    if (!cols.some(c => c.key === calcSort.col)) calcSort = { col: 'rf', dir: 'desc' };
-
-    sortCalcBoats(calcBoats);
-
-    const thead = document.createElement('thead');
-    const hdrTr = document.createElement('tr');
-    cols.forEach(c => {
-        if (c.key === 'variant') {
-            const th = document.createElement('th');
-            th.textContent = 'Var';
-            th.style.cssText = 'padding:2px 4px;font-size:0.8rem;color:#555;text-align:center;';
-            hdrTr.appendChild(th);
-            return;
-        }
-        const th = document.createElement('th');
-        const isActive = c.key === calcSort.col;
-        const arrow = isActive ? (calcSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
-        th.textContent = c.label + arrow;
-        th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};cursor:pointer;user-select:none;`
-            + (isActive ? 'font-weight:bold;' : '');
-        th.addEventListener('click', () => {
-            if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-            else calcSort = { col: c.key, dir: c.key === 'name' ? 'asc' : 'desc' };
-            renderHandicapCalc(data);
-        });
-        hdrTr.appendChild(th);
     });
-    thead.appendChild(hdrTr);
-    table.appendChild(thead);
 
-    const tbody = document.createElement('tbody');
-    calcBoats.forEach(b => {
-        const tr = document.createElement('tr');
-        cols.forEach(c => {
-            if (c.key === 'name') {
-                const td = document.createElement('td');
-                td.style.cssText = `color:${b.color};font-weight:bold;`;
-                td.textContent = b.name;
-                tr.appendChild(td);
-            } else if (c.key === 'variant') {
-                const td = document.createElement('td');
-                td.style.cssText = 'text-align:center;padding:1px 4px;white-space:nowrap;';
-                const sel = document.createElement('select');
-                sel.style.cssText = 'font-size:0.75rem;padding:1px 2px;max-width:58px;';
-                [['spin', 'Spin'], ['nonSpin', 'NS']].forEach(([v, lbl]) => {
-                    if (b.rfAll[v] == null) return;
-                    const o = document.createElement('option');
-                    o.value = v;
-                    o.textContent = lbl;
-                    if (v === b.variant) o.selected = true;
-                    sel.appendChild(o);
-                });
-                sel.addEventListener('change', () => {
-                    const newV = sel.value;
-                    designVariants.set(b.id, newV);
-                    // Update this row's rf value and re-render.
-                    renderHandicapCalc(data);
-                });
-                td.appendChild(sel);
-                tr.appendChild(td);
-            } else if (c.key === 'input') {
-                const td = document.createElement('td');
-                td.style.cssText = 'padding:2px 4px;text-align:center;';
-                const input = document.createElement('input');
-                input.type = 'number';
-                input.step = '0.0001';
-                input.min  = '0.1';
-                input.max  = '2.0';
-                input.className = 'pf-calc-input';
-                input.dataset.boatId = b.id;
-                input.placeholder = 'enter…';
-                input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
-                if (enteredValues.has(b.id)) input.value = enteredValues.get(b.id);
-                input.addEventListener('input', () => recalcAll(calcBoats));
-                td.appendChild(input);
-                tr.appendChild(td);
-            } else {
-                const td = document.createElement('td');
-                td.className = 'pf-calc-value';
-                td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
-                const v = b[c.key];
-                td.textContent = v != null ? v.toFixed(4) : '—';
-                td.dataset.boatId = b.id;
-                td.dataset.factorType = c.key;
-                td.dataset.origValue = v != null ? String(v) : '';
-                tr.appendChild(td);
-            }
-        });
-        tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-
-    if (enteredValues.size > 0) recalcAll(calcBoats);
+    dCalc().setBoats(calcBoats, {showBestFit});
 }
 
-function sortCalcBoats(calcBoats) {
-    const { col, dir } = calcSort;
-    const mul = dir === 'asc' ? 1 : -1;
-    if (col === 'name') {
-        calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
-    } else if (col === 'variant') {
-        calcBoats.sort((a, b) => mul * (a.variant || '').localeCompare(b.variant || ''));
-    } else if (col === 'input') {
-        calcBoats.sort((a, b) => mul * ((a.rf ?? 0) - (b.rf ?? 0)));
-    } else {
-        calcBoats.sort((a, b) => {
-            const av = a[col], bv = b[col];
-            if (av == null && bv == null) return 0;
-            if (av == null) return 1;
-            if (bv == null) return -1;
-            return mul * (av - bv);
-        });
-    }
-}
+// ---- Elapsed time comparison chart ----
 
-function fitColor(deviation) {
-    const t = Math.min(deviation / 0.05, 1);
-    const h = 120 * (1 - t);
-    return `hsl(${h}, 60%, 38%)`;
-}
-function fitLabel(deviation) {
-    const pct = (deviation * 100).toFixed(1);
-    if (deviation < 0.01) return `Entered value — deviation ${pct}% from consensus (excellent fit)`;
-    if (deviation < 0.025) return `Entered value — deviation ${pct}% from consensus (good fit)`;
-    if (deviation < 0.05) return `Entered value — deviation ${pct}% from consensus (moderate fit)`;
-    return `Entered value — deviation ${pct}% from consensus (poor fit)`;
-}
-function confidenceColor(cv) {
-    const t = Math.min(cv / 0.05, 1);
-    const h = 210 - 180 * t;
-    const l = 45 - 7 * t;
-    return `hsl(${h}, 55%, ${l}%)`;
-}
-function confidenceLabel(cv) {
-    const pct = (cv * 100).toFixed(1);
-    if (cv < 0.01) return `Scaled from consensus — spread ${pct}% (high confidence)`;
-    if (cv < 0.025) return `Scaled from consensus — spread ${pct}% (moderate confidence)`;
-    if (cv < 0.05) return `Scaled from consensus — spread ${pct}% (low confidence)`;
-    return `Scaled from consensus — spread ${pct}% (very low confidence)`;
-}
-
-// Small inline delta indicator: shows how the displayed cell value differs from the
-// column's original (RF / Best Fit) allocation.
-function deltaSpan(displayed, orig) {
-    if (orig == null || isNaN(orig)) return '';
-    const delta = displayed - orig;
-    if (Math.abs(delta) < 0.00005) return '';
-    const arrow = delta > 0 ? '↑' : '↓';
-    const sign = delta > 0 ? '+' : '−';
-    const color = delta > 0 ? '#a04020' : '#206020';
-    return ` <span style="font-size:0.72rem;color:${color};margin-left:4px;font-weight:normal;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
-}
-
-function restoreAll() {
-    document.querySelectorAll('.pf-calc-value').forEach(td => {
-        const origStr = td.dataset.origValue;
-        td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
-        td.style.color = '';
-        td.title = '';
-    });
-}
-
-function scaleSingle(anchor) {
-    document.querySelectorAll('.pf-calc-value').forEach(td => {
-        const ft      = td.dataset.factorType;
-        const origStr = td.dataset.origValue;
-        if (!origStr) return;
-        const origVal = parseFloat(origStr);
-        if (isNaN(origVal)) return;
-
-        const srcFactor = anchor.boat[ft];
-        if (srcFactor == null) {
-            td.textContent = origVal.toFixed(4);
-            td.style.color = '';
-            td.title = '';
-            return;
-        }
-        // Single-anchor: every cell IS the consensus prediction, so delta is always 0.
-        const newVal = origVal * (anchor.value / srcFactor);
-        td.textContent = newVal.toFixed(4);
-        td.style.color = '#c05000';
-        td.title = 'Scaled from single entered value — no consensus spread available';
-    });
-}
-
-function scaleMulti(anchors) {
-    const anchorIds = new Set(anchors.map(a => a.boat.id));
-    const anchorByBoat = new Map(anchors.map(a => [a.boat.id, a]));
-
-    const ftSet = new Set();
-    document.querySelectorAll('.pf-calc-value').forEach(td => ftSet.add(td.dataset.factorType));
-
-    const ftStats = {};
-    for (const ft of ftSet) {
-        const ratios = [];
-        for (const a of anchors) {
-            const orig = a.boat[ft];
-            if (orig != null && orig !== 0) ratios.push({ boatId: a.boat.id, r: a.value / orig });
-        }
-        if (ratios.length === 0) { ftStats[ft] = null; continue; }
-        const R = ratios.reduce((s, x) => s + x.r, 0) / ratios.length;
-        const S = ratios.length > 1
-            ? Math.sqrt(ratios.reduce((s, x) => s + (x.r - R) ** 2, 0) / ratios.length)
-            : 0;
-        const cv = R > 0 ? S / R : 0;
-        ftStats[ft] = { ratios, R, S, cv, ratioMap: new Map(ratios.map(x => [x.boatId, x.r])) };
-    }
-
-    document.querySelectorAll('.pf-calc-value').forEach(td => {
-        const ft      = td.dataset.factorType;
-        const boatId  = td.dataset.boatId;
-        const origStr = td.dataset.origValue;
-        if (!origStr) return;
-        const origVal = parseFloat(origStr);
-        if (isNaN(origVal)) return;
-
-        const stats = ftStats[ft];
-        if (!stats) {
-            td.textContent = origVal.toFixed(4);
-            td.style.color = '';
-            td.title = '';
-            return;
-        }
-        if (stats.ratios.length === 1) {
-            td.textContent = (origVal * stats.R).toFixed(4);
-            td.style.color = '#c05000';
-            td.title = 'Scaled from single entered value — no consensus spread available';
-            return;
-        }
-        const isAnchor = anchorIds.has(boatId);
-        if (isAnchor) {
-            // Show the entered value; delta is entered − consensus prediction (origVal * R).
-            const a = anchorByBoat.get(boatId);
-            const predicted = origVal * stats.R;
-            td.innerHTML = a.value.toFixed(4) + deltaSpan(a.value, predicted);
-            const r = stats.ratioMap.get(boatId);
-            if (r != null) {
-                const deviation = Math.abs(r - stats.R) / stats.R;
-                td.style.color = fitColor(deviation);
-                td.title = fitLabel(deviation);
-            } else {
-                td.style.color = '';
-                td.title = '';
-            }
-        } else {
-            // Unentered boat: cell IS the consensus prediction, so delta = 0.
-            td.textContent = (origVal * stats.R).toFixed(4);
-            td.style.color = confidenceColor(stats.cv);
-            td.title = confidenceLabel(stats.cv);
-        }
-    });
-}
-
-function recalcAll(calcBoats) {
-    const anchors = [];
-    document.querySelectorAll('.pf-calc-input').forEach(inp => {
-        const v = parseFloat(inp.value);
-        if (!isNaN(v)) {
-            const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
-            if (boat) anchors.push({ boat, value: v });
-        }
-    });
-    if (anchors.length === 0) { restoreAll(); return; }
-    if (anchors.length === 1) { scaleSingle(anchors[0]); return; }
-    scaleMulti(anchors);
-}
-
-// ---- Elapsed time comparison charts ----
-
+// Render the elapsed-time chart for the pair currently ticked in the handicap
+// calculator's compare column. Shows the section when exactly two designs are ticked;
+// hides it otherwise. Each point's finishers are filtered to the variant currently
+// selected for each design, then medianed.
 async function loadElapsedCharts() {
     const section = document.getElementById('elapsed-charts-section');
     const container = document.getElementById('elapsed-charts-container');
 
-    const designs = selectedItems;
-    if (designs.length < 2 || designs.length > 3) {
-        if (designs.length >= 4) {
-            section.style.display = '';
-            container.innerHTML = '<p style="color:#666;">Too many designs selected — select 2 or 3 designs to see elapsed time comparisons.</p>';
-        } else {
-            section.style.display = 'none';
-        }
+    if (!dCalcController) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    const selected = [...dCalcController.getCompareSelection()];
+    if (selected.length !== 2) {
+        section.style.display = 'none';
+        container.innerHTML = '';
         return;
     }
 
-    const pairs = [];
-    for (let i = 0; i < designs.length; i++)
-        for (let j = i + 1; j < designs.length; j++)
-            pairs.push([designs[i], designs[j]]);
+    const [idA, idB] = selected;
+    const itemA = selectedItems.find(i => i.id === idA);
+    const itemB = selectedItems.find(i => i.id === idB);
+    if (!itemA || !itemB) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
 
     section.style.display = '';
-    container.innerHTML = '';
 
-    const results = await Promise.all(pairs.map(([a, b]) => {
-        const params = new URLSearchParams({ designAId: a.id, designBId: b.id });
-        return fetchJson('/api/design-comparison/chart?' + params);
-    }));
-
-    pairs.forEach(([dA, dB], idx) => {
-        const data = results[idx];
+    const key = `${idA}|${idB}`;
+    let data;
+    if (elapsedChartCache.key === key && elapsedChartCache.data) {
+        data = elapsedChartCache.data;
+    } else {
+        const params = new URLSearchParams({designAId: idA, designBId: idB});
+        data = await fetchJson('/api/design-comparison/chart?' + params);
         if (!data) return;
-        const divId = `elapsed-chart-${idx}`;
+        elapsedChartCache = {key, data};
+    }
+
+    const variantA = dCalcController.getBoatVariant(idA);
+    const variantB = dCalcController.getBoatVariant(idB);
+
+    // Re-use the existing chart container when it's already for this pair — avoids a
+    // Plotly tear-down/recreate on every onChange tick (handicap edit / variant flip).
+    let titleEl = container.querySelector('.elapsed-chart-title');
+    let chartDiv = container.querySelector('#elapsed-chart-0');
+    let bestFitBtn = container.querySelector('#elapsed-use-best-fit');
+    if (!chartDiv || container.dataset.pairKey !== key) {
+        container.innerHTML = '';
+        container.dataset.pairKey = key;
         const wrapper = document.createElement('div');
         wrapper.style.marginBottom = '1.5rem';
-        const title = document.createElement('div');
-        title.style.cssText = 'font-weight:bold;margin-bottom:0.25rem;';
-        title.textContent = `${dA.label} vs ${dB.label}`;
-        const chartDiv = document.createElement('div');
-        chartDiv.id = divId;
+        titleEl = document.createElement('div');
+        titleEl.className = 'elapsed-chart-title';
+        titleEl.style.cssText = 'font-weight:bold;margin-bottom:0.25rem;';
+        wrapper.appendChild(titleEl);
+        chartDiv = document.createElement('div');
+        chartDiv.id = 'elapsed-chart-0';
         chartDiv.style.cssText = 'width:100%;height:500px;';
-        wrapper.appendChild(title);
         wrapper.appendChild(chartDiv);
+        // "Use Best Fit" — pushes the best-fit slope into the focused-set handicaps
+        // for designs A and B (geometric-mean-balanced against the other anchors).
+        bestFitBtn = document.createElement('button');
+        bestFitBtn.id = 'elapsed-use-best-fit';
+        bestFitBtn.type = 'button';
+        bestFitBtn.style.cssText = 'margin-top:0.5rem;padding:6px 14px;cursor:pointer;';
+        bestFitBtn.addEventListener('click', applyBestFitToHandicaps);
+        wrapper.appendChild(bestFitBtn);
         container.appendChild(wrapper);
-        renderElapsedChart(divId, data, dA.color, dB.color);
-    });
+    }
+    titleEl.textContent = `${itemA.label} vs ${itemB.label}`;
+    renderElapsedChart('elapsed-chart-0', data, itemA.color, itemB.color, variantA, variantB);
+
+    // Refresh the button's label / enabled state to reflect the current fit.
+    const slope = lastElapsedFit?.slope;
+    if (bestFitBtn) {
+        if (slope && isFinite(slope) && slope > 0) {
+            const ratio = 1 / slope;
+            bestFitBtn.disabled = false;
+            bestFitBtn.textContent = `Use Best Fit (handicap ratio ${ratio.toFixed(4)})`;
+            bestFitBtn.title = `Set ${itemA.label} and ${itemB.label} handicaps so their ratio equals `
+                + `${ratio.toFixed(4)} (best-fit elapsed-time slope ${slope.toFixed(4)}), `
+                + `balanced against other handicaps in the focused column.`;
+            bestFitBtn.dataset.idA = idA;
+            bestFitBtn.dataset.idB = idB;
+            bestFitBtn.dataset.ratio = String(ratio);
+        } else {
+            bestFitBtn.disabled = true;
+            bestFitBtn.textContent = 'Use Best Fit — not enough data';
+            bestFitBtn.title = 'Need at least two co-raced points to compute a best-fit slope';
+        }
+    }
 }
 
-function onElapsedFromZeroChange() { loadElapsedCharts(); }
+function applyBestFitToHandicaps() {
+    const btn = document.getElementById('elapsed-use-best-fit');
+    if (!btn || btn.disabled || !dCalcController) return;
+    const idA = btn.dataset.idA;
+    const idB = btn.dataset.idB;
+    const ratio = parseFloat(btn.dataset.ratio);
+    if (!idA || !idB || !isFinite(ratio) || ratio <= 0) return;
+    dCalcController.applyPairwiseFit(idA, idB, ratio);
+}
 
-function renderElapsedChart(divId, data, colorA, colorB) {
-    let points = data.points || [];
+/** Re-renders the elapsed-time chart without refetching; used by the From-0 toggle. */
+function onElapsedFromZeroChange() {
+    loadElapsedCharts();
+}
 
+function median(nums) {
+    if (!nums.length) return null;
+    const s = [...nums].sort((a, b) => a - b);
+    const n = s.length;
+    return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+
+function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
+    let rawPoints = data.points || [];
+
+    // Apply last-12-months filter if active
     if (showLast12Months) {
         const cutoff = new Date();
         cutoff.setFullYear(cutoff.getFullYear() - 1);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
-        points = points.filter(p => p.date >= cutoffStr);
+        rawPoints = rawPoints.filter(p => p.date >= cutoffStr);
     }
+
+    // Each point carries per-design finisher lists; median only the finishes of each
+    // design's currently-selected variant. Drop points where either side has none.
+    const points = rawPoints.map(p => {
+        const aSel = (p.aFinishers || []).filter(f => f.variant === variantA);
+        const bSel = (p.bFinishers || []).filter(f => f.variant === variantB);
+        if (!aSel.length || !bSel.length) return null;
+        return {
+            ...p,
+            y: median(aSel.map(f => f.elapsed)),
+            x: median(bSel.map(f => f.elapsed)),
+            aBoats: aSel.map(f => f.name),
+            bBoats: bSel.map(f => f.name),
+        };
+    }).filter(Boolean);
+
     if (points.length === 0) {
         Plotly.purge(divId);
+        lastElapsedFit = null;
         return;
     }
 
@@ -831,6 +744,7 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const x0 = 0, x1 = xMax + xPad;
 
     const fit = linearFitElapsed(xs, ys);
+    lastElapsedFit = fit;
     if (fit) {
         traces.push({
             x: [x0, x1],
@@ -841,8 +755,9 @@ function renderElapsedChart(divId, data, colorA, colorB) {
         });
     }
 
-    const rfA = selectedVariant === 'nonSpin' ? data.designA.rfNonSpin : data.designA.rfSpin;
-    const rfB = selectedVariant === 'nonSpin' ? data.designB.rfNonSpin : data.designB.rfSpin;
+    // Expected RF ratio line (through origin) — each design under its own variant.
+    const rfA = rfVariantFor(data.designA, variantA);
+    const rfB = rfVariantFor(data.designB, variantB);
     if (rfA && rfB && rfA.value && rfB.value) {
         const slope = rfB.value / rfA.value;
         traces.push({
@@ -916,7 +831,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         allAvailable = e.target.checked;
         loadCandidates();
     });
-    document.getElementById('variant-selector').addEventListener('change', onVariantChange);
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine        = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear')  .addEventListener('change', e => { showTrendLinear   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding') .addEventListener('change', e => { showTrendSliding  = e.target.checked; if (lastChartData) renderChart(lastChartData); });

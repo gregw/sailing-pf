@@ -3154,6 +3154,19 @@ public class AdminApiServlet extends HttpServlet
         Set<String> boatIdsA = dda.boatIds() != null ? dda.boatIds() : Set.of();
         Set<String> boatIdsB = ddb.boatIds() != null ? ddb.boatIds() : Set.of();
 
+        // Index each member boat's residuals by "raceId|divisionName" so every finisher can
+        // be tagged with the variant it sailed. The frontend medians only the finishes of
+        // each design's currently-selected variant.
+        Map<String, Map<String, EntryResidual>> residualIndex = new HashMap<>();
+        for (String bid : boatIdsA)
+        {
+            residualIndex.computeIfAbsent(bid, k -> indexResidualsByRaceDiv(cache.residualsByBoatId().get(k)));
+        }
+        for (String bid : boatIdsB)
+        {
+            residualIndex.computeIfAbsent(bid, k -> indexResidualsByRaceDiv(cache.residualsByBoatId().get(k)));
+        }
+
         // Collect races from all boats of design A
         Set<String> racesToCheck = new HashSet<>();
         for (String bid : boatIdsA)
@@ -3170,22 +3183,41 @@ public class AdminApiServlet extends HttpServlet
 
             for (var div : race.divisions())
             {
-                List<Double> aElapsed = new ArrayList<>();
-                List<Double> bElapsed = new ArrayList<>();
-                List<String> aNames   = new ArrayList<>();
-                List<String> bNames   = new ArrayList<>();
+                String divKey = raceId + "|" + div.name();
+                List<Map<String, Object>> aFinishers = new ArrayList<>();
+                List<Map<String, Object>> bFinishers = new ArrayList<>();
 
                 for (var f : div.finishers())
                 {
                     if (f.elapsedTime() == null) continue;
-                    double elapsed = f.elapsedTime().toSeconds();
+                    boolean inA = boatIdsA.contains(f.boatId());
+                    boolean inB = boatIdsB.contains(f.boatId());
+                    if (!inA && !inB)
+                        continue;
+
+                    Map<String, EntryResidual> idx = residualIndex.get(f.boatId());
+                    EntryResidual r = idx != null ? idx.get(divKey) : null;
+                    // Designs have no two-handed RF — skip two-handed finishes (consistent
+                    // with the design BCF chart). A missing residual defaults to spin.
+                    if (r != null && r.twoHanded())
+                        continue;
+                    String variant = (r != null && r.nonSpinnaker()) ? "nonSpin" : "spin";
+
                     BoatDerived bd = cache.boatDerived().get(f.boatId());
                     String name = bd != null ? bd.boat().name() : f.boatId();
-                    if (boatIdsA.contains(f.boatId())) { aElapsed.add(elapsed); aNames.add(name); }
-                    if (boatIdsB.contains(f.boatId())) { bElapsed.add(elapsed); bNames.add(name); }
+
+                    Map<String, Object> fm = new LinkedHashMap<>();
+                    fm.put("elapsed", (double)f.elapsedTime().toSeconds());
+                    fm.put("variant", variant);
+                    fm.put("name", name);
+                    if (inA)
+                        aFinishers.add(fm);
+                    if (inB)
+                        bFinishers.add(fm);
                 }
 
-                if (aElapsed.isEmpty() || bElapsed.isEmpty()) continue;
+                if (aFinishers.isEmpty() || bFinishers.isEmpty())
+                    continue;
 
                 String seriesName = null;
                 if (race.seriesIds() != null && !race.seriesIds().isEmpty())
@@ -3199,15 +3231,13 @@ public class AdminApiServlet extends HttpServlet
                 }
 
                 Map<String, Object> pt = new LinkedHashMap<>();
-                pt.put("x",          medianOf(bElapsed));
-                pt.put("y",          medianOf(aElapsed));
                 pt.put("date",       race.date() != null ? race.date().toString() : null);
                 pt.put("raceId",     raceId);
                 pt.put("raceName",   raceName(race));
                 pt.put("seriesName", seriesName);
                 pt.put("division",   div.name());
-                pt.put("aBoats",     aNames);
-                pt.put("bBoats",     bNames);
+                pt.put("aFinishers", aFinishers);
+                pt.put("bFinishers", bFinishers);
                 points.add(pt);
             }
         }
@@ -3790,14 +3820,5 @@ public class AdminApiServlet extends HttpServlet
         if (t.isEmpty()) return null;
         try { return Double.parseDouble(t); }
         catch (NumberFormatException e) { return null; }
-    }
-
-    private double medianOf(List<Double> values)
-    {
-        List<Double> sorted = values.stream().sorted().toList();
-        int n = sorted.size();
-        return n % 2 == 0
-            ? (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0
-            : sorted.get(n / 2);
     }
 }

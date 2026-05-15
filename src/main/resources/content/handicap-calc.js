@@ -301,8 +301,12 @@ const HandicapCalc = (function () {
     function create(cfg) {
         const section = cfg.section;
         const table = cfg.table;
+        // 'design' entities have only RF (no PF, no two-handed, no sail number). In design
+        // mode the PF / PFΔ columns and the Sail-No column are dropped, the boat-detail link
+        // and profile popup are suppressed, factors anchor on RF, and showPf stays false.
+        const isDesign = cfg.entityKind === 'design';
         let calcBoats = [];
-        let calcSort = {col: 'pf', dir: 'desc'};
+        let calcSort = {col: isDesign ? 'rf' : 'pf', dir: 'desc'};
         // Per-boat variant override: boatId → 'spin'|'nonSpin'|'twoHanded'
         const boatVariants = new Map();
 
@@ -321,7 +325,7 @@ const HandicapCalc = (function () {
         let sets = [{name: 'Allocated', show: true}];
         let focusedIdx = 0;
         let nextSetN = 2;
-        let showPf = true;
+        let showPf = !isDesign;   // designs have no PF column — keep showPf permanently false
         let showRf = true;
 
         // When cfg.singleSelectShow is true, the PF, RF, and per-set "show" tickboxes act as
@@ -524,15 +528,19 @@ const HandicapCalc = (function () {
             section.style.display = '';
 
             // Leading columns (before set inputs) — sortable.
+            // Designs have no sail number, so that column is dropped in design mode.
             const leadCols = [
-                {key: 'sailno', label: 'Sail No', align: 'left'},
-                {key: 'boatName', label: 'Boat', align: 'left'},
+                ...(isDesign ? [] : [{key: 'sailno', label: 'Sail No', align: 'left'}]),
+                {key: 'boatName', label: isDesign ? 'Design' : 'Boat', align: 'left'},
                 {key: 'variant', label: 'Var', align: 'center'},
             ];
             // Static (non-input) columns after set inputs — sortable.
+            // Design entities have no PF, so the PF / PFΔ columns are omitted.
             const staticCols = [
-                {key: 'pf', label: 'PF', align: 'right'},
-                {key: 'pfDelta', label: 'PFΔ', align: 'right'},
+                ...(isDesign ? [] : [
+                    {key: 'pf', label: 'PF', align: 'right'},
+                    {key: 'pfDelta', label: 'PFΔ', align: 'right'},
+                ]),
                 {key: 'rf', label: 'RF', align: 'right'},
                 {key: 'rfDelta', label: 'RFΔ', align: 'right'},
             ];
@@ -541,7 +549,8 @@ const HandicapCalc = (function () {
             const validSortKeys = new Set([...leadCols.map(c => c.key), ...staticCols.map(c => c.key)]);
             const inputMatch = /^input:(\d+)$/.exec(calcSort.col);
             const inputValid = inputMatch && parseInt(inputMatch[1], 10) < sets.length;
-            if (!validSortKeys.has(calcSort.col) && !inputValid) calcSort = {col: 'pf', dir: 'desc'};
+            if (!validSortKeys.has(calcSort.col) && !inputValid)
+                calcSort = {col: isDesign ? 'rf' : 'pf', dir: 'desc'};
 
             // Sort BEFORE clearing the table — computeDeltas() reads anchor values from
             // existing input elements, so the DOM must still be intact at this point.
@@ -770,14 +779,15 @@ const HandicapCalc = (function () {
             const td = document.createElement('td');
             td.style.cssText = 'text-align:center;padding:1px 4px;white-space:nowrap;';
             const v = boatVariant(b);
-            const hasAll = b.pfAll != null;
+            // Designs supply rfAll (spin/nonSpin only); boats supply pfAll.
+            const hasAll = b.pfAll != null || b.rfAll != null;
 
             if (hasAll) {
                 // Dropdown so the user can switch per-boat variant.
                 const sel = document.createElement('select');
                 sel.style.cssText = 'font-size:0.75rem;padding:1px 2px;max-width:58px;';
                 VARIANT_ORDER.forEach(opt => {
-                    if (b.pfAll[opt] == null) return;
+                    if ((b.pfAll?.[opt] ?? b.rfAll?.[opt]) == null) return;
                     const o = document.createElement('option');
                     o.value = opt;
                     o.textContent = VARIANT_LABELS[opt];
@@ -864,12 +874,22 @@ const HandicapCalc = (function () {
         function makeLeadingCells(b) {
             const color = b.color || '#888';
 
+            const tdName = document.createElement('td');
+            tdName.style.cssText = `color:${color};font-weight:bold;`;
+
+            // Designs have no sail number, no boat-detail page, and no performance profile —
+            // render the name as plain text and skip the link / popup wiring.
+            if (isDesign) {
+                tdName.textContent = b.boatName || b.name;
+                const cells = [tdName, makeVariantCell(b)];
+                if (compareEnabled) cells.unshift(makeCompareCell(b));
+                return cells;
+            }
+
             const tdSailno = document.createElement('td');
             tdSailno.style.cssText = `color:${color};font-weight:bold;font-family:monospace;padding-right:4px;white-space:nowrap;`;
             tdSailno.textContent = b.sailNumber || '—';
 
-            const tdName = document.createElement('td');
-            tdName.style.cssText = `color:${color};font-weight:bold;`;
             const link = document.createElement('a');
             link.href = `boats.html?id=${encodeURIComponent(b.id)}`;
             link.textContent = b.boatName || b.name;
@@ -1208,7 +1228,8 @@ const HandicapCalc = (function () {
             sets = data.sets.map(s => ({name: s.name || 'Allocated', show: s.show !== false}));
             if (sets.length === 0) sets = [{name: 'Allocated', show: true}];
             focusedIdx = Math.max(0, Math.min(sets.length - 1, data.focused | 0));
-            if (typeof data.showPf === 'boolean') showPf = data.showPf;
+            // Designs have no PF column — never restore a persisted showPf for them.
+            if (!isDesign && typeof data.showPf === 'boolean') showPf = data.showPf;
             if (typeof data.showRf === 'boolean') showRf = data.showRf;
             // Restored state may have multiple flags true (e.g. saved by another page
             // without the constraint). Prune to a single flag if singleSelectShow is set.
@@ -1252,7 +1273,8 @@ const HandicapCalc = (function () {
                 if (!boatVariants.has(b.id)) boatVariants.set(b.id, v);
                 applyVariantToPf(b, boatVariants.get(b.id));
             });
-            calcBoats = incoming.filter(b => b.pf != null);
+            // Designs are anchored on RF (they have no PF); boats are anchored on PF.
+            calcBoats = incoming.filter(b => isDesign ? b.rf != null : b.pf != null);
             // Drop compare ticks for boats that are no longer in the calculator.
             if (compareEnabled) {
                 const presentIds = new Set(calcBoats.map(b => b.id));
@@ -1400,15 +1422,18 @@ const HandicapCalc = (function () {
         // `ratio = hcapA/hcapB` while staying as close as possible (in log space) to the
         // consensus scale of the other anchors. With no other anchors the boats anchor
         // to their own PF values (R = 1). Returns true if both inputs were written.
+        // Designs anchor on RF instead of PF (they have no PF).
         function applyPairwiseFit(idA, idB, ratio) {
+            const fKey = isDesign ? 'rf' : 'pf';
+            const wKey = isDesign ? 'rfWeight' : 'pfWeight';
             const boatA = calcBoats.find(b => b.id === idA);
             const boatB = calcBoats.find(b => b.id === idB);
             if (!boatA || !boatB) return false;
-            if (boatA.pf == null || boatA.pf === 0) return false;
-            if (boatB.pf == null || boatB.pf === 0) return false;
+            if (boatA[fKey] == null || boatA[fKey] === 0) return false;
+            if (boatB[fKey] == null || boatB[fKey] === 0) return false;
             if (!isFinite(ratio) || ratio <= 0) return false;
 
-            // R = weighted mean of (entered / pf) over focused-set anchors that aren't A or B.
+            // R = weighted mean of (entered / factor) over focused-set anchors that aren't A or B.
             let R = 1, wSum = 0, num = 0;
             focusedInputCells().forEach(inp => {
                 const id = inp.dataset.boatId;
@@ -1416,19 +1441,19 @@ const HandicapCalc = (function () {
                 const v = parseFloat(inp.value);
                 if (isNaN(v)) return;
                 const b = calcBoats.find(cb => cb.id === id);
-                if (!b || b.pf == null || b.pf === 0) return;
-                const w = (b.pfWeight != null && b.pfWeight > 0) ? b.pfWeight : 1;
+                if (!b || b[fKey] == null || b[fKey] === 0) return;
+                const w = (b[wKey] != null && b[wKey] > 0) ? b[wKey] : 1;
                 wSum += w;
-                num += w * (v / b.pf);
+                num += w * (v / b[fKey]);
             });
             if (wSum > 0) R = num / wSum;
 
-            // Constraint: hcapA = pfA * R * s, hcapB = pfB * R * t, with s/t = ratio·pfB/pfA.
+            // Constraint: hcapA = fA * R * s, hcapB = fB * R * t, with s/t = ratio·fB/fA.
             // Minimising (log s)^2 + (log t)^2 gives s = √q, t = 1/√q (geometric mean).
-            const q = ratio * boatB.pf / boatA.pf;
+            const q = ratio * boatB[fKey] / boatA[fKey];
             const sqrtQ = Math.sqrt(q);
-            const hcapA = boatA.pf * R * sqrtQ;
-            const hcapB = boatB.pf * R / sqrtQ;
+            const hcapA = boatA[fKey] * R * sqrtQ;
+            const hcapB = boatB[fKey] * R / sqrtQ;
             const inpA = focusedInputFor(idA);
             const inpB = focusedInputFor(idB);
             if (inpA) inpA.value = hcapA.toFixed(4);
