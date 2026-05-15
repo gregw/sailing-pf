@@ -140,6 +140,8 @@ public class TaskService
                                Double pfCrossVariantLambda,     // null → default 0.0
                                Double pfGraphCrossVariantLambda, // null → default 0.25
                                Double pfNoRaceFallbackWeight,   // null → default 0.2
+                               Double pfOuterPfConvergenceThreshold, // null → default 1.0e-3
+                               Boolean pfLogOuterDiagnostics,        // null → false
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -198,6 +200,8 @@ public class TaskService
     private volatile double pfCrossVariantLambda = 0.0;
     private volatile double pfGraphCrossVariantLambda = 0.25;
     private volatile double pfNoRaceFallbackWeight = 0.2;
+    private volatile double pfOuterPfConvergenceThreshold = 1.0e-3;
+    private volatile boolean pfLogOuterDiagnostics = false;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -274,6 +278,10 @@ public class TaskService
                 pfGraphCrossVariantLambda = config.pfGraphCrossVariantLambda();
             if (config.pfNoRaceFallbackWeight() != null)
                 pfNoRaceFallbackWeight = config.pfNoRaceFallbackWeight();
+            if (config.pfOuterPfConvergenceThreshold() != null)
+                pfOuterPfConvergenceThreshold = config.pfOuterPfConvergenceThreshold();
+            if (config.pfLogOuterDiagnostics() != null)
+                pfLogOuterDiagnostics = config.pfLogOuterDiagnostics();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -358,7 +366,9 @@ public void stop()
                                        Double pfOuterDampingFactor, Double pfOuterConvergenceThreshold,
                                        Double pfCrossVariantLambda,
                                        Double pfGraphCrossVariantLambda,
-                                       Double pfNoRaceFallbackWeight)
+                                       Double pfNoRaceFallbackWeight,
+                                       Double pfOuterPfConvergenceThreshold,
+                                       Boolean pfLogOuterDiagnostics)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
@@ -379,6 +389,10 @@ public void stop()
             this.pfGraphCrossVariantLambda = pfGraphCrossVariantLambda;
         if (pfNoRaceFallbackWeight != null)
             this.pfNoRaceFallbackWeight = pfNoRaceFallbackWeight;
+        if (pfOuterPfConvergenceThreshold != null)
+            this.pfOuterPfConvergenceThreshold = pfOuterPfConvergenceThreshold;
+        if (pfLogOuterDiagnostics != null)
+            this.pfLogOuterDiagnostics = pfLogOuterDiagnostics;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -471,6 +485,16 @@ public void stop()
     public double pfAsymmetryFactor() { return pfAsymmetryFactor; }
     public double pfOuterDampingFactor() { return pfOuterDampingFactor; }
     public double pfOuterConvergenceThreshold() { return pfOuterConvergenceThreshold; }
+
+    public double pfOuterPfConvergenceThreshold()
+    {
+        return pfOuterPfConvergenceThreshold;
+    }
+
+    public boolean pfLogOuterDiagnostics()
+    {
+        return pfLogOuterDiagnostics;
+    }
     public int slidingAverageCount() { return slidingAverageCount; }
     public int slidingAverageDrops() { return slidingAverageDrops; }
     public double pfConvergenceThreshold() { return pfConvergenceThreshold; }
@@ -737,7 +761,8 @@ public void stop()
             pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
             pfCrossVariantLambda, pfGraphCrossVariantLambda,
-            pfNoRaceFallbackWeight);
+            pfNoRaceFallbackWeight,
+            pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics);
     }
 
     private void persistConfig()
@@ -757,6 +782,7 @@ public void stop()
                     pfOuterDampingFactor, pfOuterConvergenceThreshold, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
                     pfCrossVariantLambda, pfGraphCrossVariantLambda,
                     pfNoRaceFallbackWeight,
+                    pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,

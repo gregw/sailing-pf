@@ -87,44 +87,64 @@
     <h2>PF Parameters <a href="ui-tips.md#configuration" class="info-btn" data-tip="Parameters controlling the PF optimisation algorithm." target="_blank">ⓘ</a></h2>
     <div style="display:grid;grid-template-columns:auto auto;gap:0.3rem 1rem;max-width:420px;align-items:center">
       <label for="pf-lambda">
-        Lambda (regularisation) <a href="ui-tips.md#config-pf-lambda" class="info-btn" data-tip="Regularisation strength: pulls each boat&apos;s PF toward its reference factor. Higher = more trust in certificates." target="_blank">ⓘ</a>:
+          Lambda (regularisation)
+          <a href="ui-tips.md#config-pf-lambda" class="info-btn" data-tip="Regularisation strength: pulls each boat&apos;s PF toward its reference factor. Higher = more trust in certificates. Default 1.0. Typical range 0–10." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-lambda" step="0.1" min="0" style="width:6em">
 
       <label for="pf-convergence">
-        Convergence threshold <a href="ui-tips.md#config-pf-convergence" class="info-btn" data-tip="Inner loop stops when max change to any boat&apos;s log(PF) is below this. Smaller = tighter but slower." target="_blank">ⓘ</a>:
+          Convergence threshold
+          <a href="ui-tips.md#config-pf-convergence" class="info-btn" data-tip="Inner loop stops when max change to any boat&apos;s log(PF) is below this. Smaller = tighter but slower. Default 0.0001. Typical range 0.00001–0.01." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-convergence" step="0.00001" min="0" style="width:8em">
 
       <label for="pf-max-inner">
-        Max inner iterations <a href="ui-tips.md#config-pf-max-inner" class="info-btn" data-tip="Maximum ALS iterations per reweighting cycle. Increase if the inner loop does not converge." target="_blank">ⓘ</a>:
+          Max inner iterations
+          <a href="ui-tips.md#config-pf-max-inner" class="info-btn" data-tip="Maximum ALS iterations per reweighting cycle. Increase if the inner loop does not converge. Default 100. Typical range 50–1000." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-max-inner" step="1" min="1" style="width:6em">
 
       <label for="pf-max-outer">
-        Max outer iterations <a href="ui-tips.md#config-pf-max-outer" class="info-btn" data-tip="Maximum number of outlier-reweighting cycles. Increase if the outer loop does not converge." target="_blank">ⓘ</a>:
+          Max outer iterations
+          <a href="ui-tips.md#config-pf-max-outer" class="info-btn" data-tip="Maximum number of outlier-reweighting cycles. Increase if the outer loop does not converge. Default 5. Typical range 5–50." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-max-outer" step="1" min="1" style="width:6em">
 
       <label for="pf-outlier-k">
-        Outlier K (IQR multiplier) <a href="ui-tips.md#config-pf-outlier-k" class="info-btn" data-tip="IQR multiplier for Cauchy outlier down-weighting. Lower = more aggressive outlier suppression." target="_blank">ⓘ</a>:
+          Outlier K (IQR multiplier)
+          <a href="ui-tips.md#config-pf-outlier-k" class="info-btn" data-tip="IQR multiplier for Cauchy outlier down-weighting. Lower = more aggressive outlier suppression. Default 2.0. Typical range 0.5–5.0." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-outlier-k" step="0.1" min="0" style="width:6em">
 
       <label for="pf-asymmetry">
-        Asymmetry factor <a href="ui-tips.md#config-pf-asymmetry" class="info-btn" data-tip="Extra penalty for boats finishing faster than predicted. Higher = trust unusually fast finishers less." target="_blank">ⓘ</a>:
+          Asymmetry factor
+          <a href="ui-tips.md#config-pf-asymmetry" class="info-btn" data-tip="Extra penalty for boats finishing faster than predicted. Higher = trust unusually fast finishers less. Default 2.0. Typical range 1.0–5.0." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-asymmetry" step="0.1" min="0" style="width:6em">
 
       <label for="pf-outer-damping">
-        Outer damping factor <a href="ui-tips.md#config-pf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles (0–1). Lower values damp oscillation; 1.0 = no damping. Default 0.5." target="_blank">ⓘ</a>:
+          Outer damping factor
+          <a href="ui-tips.md#config-pf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles. Lower values damp oscillation; 1.0 = no damping. Default 0.5. Typical range 0.05–1.0." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-outer-damping" step="0.05" min="0.05" max="1.0" style="width:6em">
 
       <label for="pf-outer-convergence">
-        Outer convergence threshold <a href="ui-tips.md#config-pf-outer-convergence" class="info-btn" data-tip="Outer loop stops when max entry weight change is below this. Set higher (e.g. 0.3) if the dataset cannot reach the default 0.01." target="_blank">ⓘ</a>:
+          Outer convergence threshold
+          <a href="ui-tips.md#config-pf-outer-convergence" class="info-btn" data-tip="Outer loop stops when max entry weight change is below this. Set higher if the dataset cannot reach a tight floor. Default 0.01. Typical range 0.001–0.3." target="_blank">ⓘ</a>:
       </label>
       <input type="number" id="pf-outer-convergence" step="0.01" min="0" style="width:8em">
+
+        <label for="pf-outer-pf-convergence">
+            Outer PF convergence threshold
+            <a href="ui-tips.md#config-pf-outer-pf-convergence" class="info-btn" data-tip="Outer loop also stops when max |Δlog(PF)| between cycles is below this. PFs are the algorithm&apos;s actual output, so converging on PF stability is at least as meaningful as on weight stability. Default 0.001. Typical range 0.0001–0.05." target="_blank">ⓘ</a>:
+        </label>
+        <input type="number" id="pf-outer-pf-convergence" step="0.0001" min="0" style="width:8em">
+
+        <label for="pf-log-diagnostics" style="cursor:pointer">
+            <input type="checkbox" id="pf-log-diagnostics" style="vertical-align:middle">
+            Log outer diagnostics
+            <a href="ui-tips.md#config-pf-log-diagnostics" class="info-btn" data-tip="When enabled, log the top-5 weight flippers and top-5 PF movers per outer cycle. Useful for diagnosing limit-cycle behaviour. Default off." target="_blank">ⓘ</a>
+        </label>
     </div>
     <button onclick="saveSchedule()" style="margin-top:0.5rem"
             title="Save all PF parameters">Save</button>

@@ -318,13 +318,22 @@ public class PfOptimiser
         boolean outerConverged = false;
         double finalMaxDelta = 0;
         double finalMaxWeightChange = 0;
+        double finalMaxPfDelta = 0;
         List<Double> outerDeltaTrace = new ArrayList<>();
+        List<Double> outerPfDeltaTrace = new ArrayList<>();
+        double[][] prevLogPf = new double[3][nBoats];
         for (outerIter = 0; outerIter < config.maxOuterIterations(); outerIter++)
         {
             if (stopCheck.get())
             {
                 LOG.info("PF optimiser: stopped by request after {} outer iterations", outerIter);
                 return new PfResult(Map.of(), Map.of(), Map.of(), totalInner, outerIter, config, null);
+            }
+
+            // Snapshot PFs for this cycle's ΔlogPF metric.
+            for (int v = 0; v < 3; v++)
+            {
+                System.arraycopy(logPf[v], 0, prevLogPf[v], 0, nBoats);
             }
 
             // --- Step 16: ALS inner loop ---
@@ -482,7 +491,10 @@ public class PfOptimiser
                 for (int i = 0; i < entryWeights.length; i++)
                     entryWeights[i] = (1.0 - alpha) * oldWeights[i] + alpha * entryWeights[i];
 
-            // Check outer convergence: max weight change
+            // Check outer convergence: max weight change AND max PF change.
+            // Weights and PFs decouple — weights can bounce in a small band near the Cauchy
+            // curve's steep flank while PFs themselves stabilise. PFs are the algorithm's
+            // actual output, so converging on ΔlogPF is at least as meaningful as Δw.
             double maxWeightChange = 0;
             for (int i = 0; i < entryWeights.length; i++)
             {
@@ -493,11 +505,30 @@ public class PfOptimiser
             finalMaxWeightChange = maxWeightChange;
             outerDeltaTrace.add(maxWeightChange);
 
-            if (maxWeightChange < config.outerConvergenceThreshold())
+            double maxPfDelta = 0;
+            for (int v = 0; v < 3; v++)
+            {
+                for (int b = 0; b < nBoats; b++)
+                {
+                    double d = Math.abs(logPf[v][b] - prevLogPf[v][b]);
+                    if (d > maxPfDelta)
+                        maxPfDelta = d;
+                }
+            }
+            finalMaxPfDelta = maxPfDelta;
+            outerPfDeltaTrace.add(maxPfDelta);
+
+            if (config.logOuterDiagnostics())
+                logOuterCycleDiagnostics(outerIter, entries, entryWeights, oldWeights,
+                    logPf, prevLogPf, logT, divIqrLog, ordinalToBoatId, config, nBoats);
+
+            if (maxWeightChange < config.outerConvergenceThreshold()
+                || maxPfDelta < config.outerPfConvergenceThreshold())
             {
                 outerIter++;
                 outerConverged = true;
-                LOG.info("PF optimiser: outer loop converged in {} iterations, maxWeightChange={}", outerIter, maxWeightChange);
+                LOG.info("PF optimiser: outer loop converged in {} iterations, maxWeightChange={}, maxPfDelta={}",
+                    outerIter, maxWeightChange, maxPfDelta);
                 break;
             }
         }
@@ -507,7 +538,8 @@ public class PfOptimiser
             logPf, logT, divIqrLog, entries, entryWeights, entryCount,
             divEntryIndexes, boatVariantEntries, nBoats, nDivs, totalInner, outerIter,
             innerConverged, outerConverged, finalMaxDelta, finalMaxWeightChange,
-            List.copyOf(outerDeltaTrace), store, boatDerivedMap, varConv);
+            List.copyOf(outerDeltaTrace), finalMaxPfDelta, List.copyOf(outerPfDeltaTrace),
+            store, boatDerivedMap, varConv);
     }
 
     private int determineVariant(Finisher f, Division div, boolean raceForceNonSpin)
@@ -620,6 +652,73 @@ public class PfOptimiser
         }
     }
 
+    /**
+     * Log top-5 weight flippers and top-5 PF movers for this outer cycle.
+     * Helps diagnose limit-cycle behaviour: identifies entries whose Cauchy weight
+     * keeps oscillating between cycles, and boats whose PFs are still moving.
+     */
+    private void logOuterCycleDiagnostics(int outerIter, List<Entry> entries,
+                                          double[] entryWeights, double[] oldWeights,
+                                          double[][] logPf, double[][] prevLogPf,
+                                          double[] logT, double[] divIqrLog,
+                                          String[] ordinalToBoatId,
+                                          PfConfig config, int nBoats)
+    {
+        final int TOP_N = 5;
+        int n = entries.size();
+        Integer[] order = new Integer[n];
+        for (int i = 0; i < n; i++)
+        {
+            order[i] = i;
+        }
+        Arrays.sort(order, (a, b) -> Double.compare(
+            Math.abs(entryWeights[b] - oldWeights[b]),
+            Math.abs(entryWeights[a] - oldWeights[a])));
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("PF optimiser: outer cycle ").append(outerIter + 1).append(" — top weight flippers");
+        for (int k = 0; k < Math.min(TOP_N, n); k++)
+        {
+            int idx = order[k];
+            Entry e = entries.get(idx);
+            double residual = e.logElapsed() + logPf[e.variant()][e.boatOrdinal()] - logT[e.divOrdinal()];
+            double iqr = divIqrLog[e.divOrdinal()];
+            if (iqr <= 0)
+                iqr = 0.01;
+            double effDev = residual < 0 ? Math.abs(residual) * config.asymmetryFactor() : Math.abs(residual);
+            double ratio = effDev / (config.outlierK() * iqr);
+            sb.append(String.format(
+                "%n  [%d] race=%s div=%s boat=%s v=%d residual=%+.4f oldW=%.4f newW=%.4f dev/scale=%.2f",
+                k + 1, e.raceId(), e.divisionName(), e.boatId(), e.variant(),
+                residual, oldWeights[idx], entryWeights[idx], ratio));
+        }
+        LOG.info(sb.toString());
+
+        record PfMove(int variant, int boat, double delta) {}
+        List<PfMove> moves = new ArrayList<>();
+        for (int v = 0; v < 3; v++)
+        {
+            for (int b = 0; b < nBoats; b++)
+            {
+                double d = Math.abs(logPf[v][b] - prevLogPf[v][b]);
+                if (d > 0)
+                    moves.add(new PfMove(v, b, d));
+            }
+        }
+        moves.sort((a, b) -> Double.compare(b.delta(), a.delta()));
+
+        StringBuilder sb2 = new StringBuilder();
+        sb2.append("PF optimiser: outer cycle ").append(outerIter + 1).append(" — top PF movers");
+        for (int k = 0; k < Math.min(TOP_N, moves.size()); k++)
+        {
+            PfMove m = moves.get(k);
+            sb2.append(String.format("%n  [%d] boat=%s v=%d oldLogPf=%+.5f newLogPf=%+.5f ΔlogPf=%.5f",
+                k + 1, ordinalToBoatId[m.boat()], m.variant(),
+                prevLogPf[m.variant()][m.boat()], logPf[m.variant()][m.boat()], m.delta()));
+        }
+        LOG.info(sb2.toString());
+    }
+
     private PfResult assembleResult(PfConfig config,
                                      String[] ordinalToBoatId, DivisionKey[] ordinalToDivKey,
                                     Map<String, double[]> boatLogRf,
@@ -633,6 +732,7 @@ public class PfOptimiser
                                      boolean innerConverged, boolean outerConverged,
                                      double finalMaxDelta, double finalMaxWeightChange,
                                      List<Double> outerDeltaTrace,
+                                    double finalMaxPfDelta, List<Double> outerPfDeltaTrace,
                                     DataStore store, Map<String, BoatDerived> boatDerivedMap,
                                     VariantConverter[][] varConv)
     {
@@ -847,7 +947,9 @@ public class PfOptimiser
             finalMaxDelta, finalMaxWeightChange,
             medianResidual, iqrResidual, pct95Residual,
             downWeightedEntries, highDispersionDivisions,
-            medianBoatConfidence, outerDeltaTrace, config);
+            medianBoatConfidence, outerDeltaTrace,
+            finalMaxPfDelta, outerPfDeltaTrace,
+            config);
 
         LOG.info("PF optimiser: complete. {} boats with PF, {} races with division PF",
             boatPfs.size(), divisionPfsByRaceId.size());

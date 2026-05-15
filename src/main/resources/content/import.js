@@ -76,6 +76,8 @@ async function loadImporters() {
         document.getElementById('pf-asymmetry').value = data.pfConfig.asymmetryFactor;
         document.getElementById('pf-outer-damping').value = data.pfConfig.outerDampingFactor;
         document.getElementById('pf-outer-convergence').value = data.pfConfig.outerConvergenceThreshold;
+        document.getElementById('pf-outer-pf-convergence').value = data.pfConfig.outerPfConvergenceThreshold;
+        document.getElementById('pf-log-diagnostics').checked = !!data.pfConfig.logOuterDiagnostics;
     }
 
     const anyRunning = currentEntries.some(e => e.status === 'running');
@@ -256,12 +258,16 @@ async function saveSchedule() {
     const pfAsymmetryFactor = parseFloat(document.getElementById('pf-asymmetry').value) || null;
     const pfOuterDampingFactor = parseFloat(document.getElementById('pf-outer-damping').value) || null;
     const pfOuterConvergenceThreshold = parseFloat(document.getElementById('pf-outer-convergence').value) || null;
+    const pfOuterPfConvergenceThreshold = parseFloat(document.getElementById('pf-outer-pf-convergence').value) || null;
+    const pfLogOuterDiagnostics = document.getElementById('pf-log-diagnostics').checked;
     const resp = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ days, time, importers, sailsysStartId, sailsysEndId, targetIrcYear,
             pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
-            pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold })
+            pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
+            pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics
+        })
     });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'unknown error' }));

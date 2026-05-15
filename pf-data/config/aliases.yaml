@@ -1169,3 +1169,10 @@ boats:
         name: "smokemirrors"
       - sailNumber: "M7"
         name: "smokenmirros"
+  "1770-sirocco":
+    canonicalName: "Sirocco"
+    aliases:
+      - sailNumber: "1769M"
+        name: "sirocco"
+      - sailNumber: "1769"
+        name: "sirocco"

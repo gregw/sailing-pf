@@ -2702,6 +2702,8 @@ public class AdminApiServlet extends HttpServlet
         result.put("highDispersionDivisions", q.highDispersionDivisions());
         result.put("medianBoatConfidence", q.medianBoatConfidence());
         result.put("outerDeltaTrace", q.outerDeltaTrace());
+        result.put("finalMaxPfDelta", q.finalMaxPfDelta());
+        result.put("outerPfDeltaTrace", q.outerPfDeltaTrace());
         Map<String, Object> cfg = new LinkedHashMap<>();
         cfg.put("lambda", q.config().lambda());
         cfg.put("convergenceThreshold", q.config().convergenceThreshold());
@@ -2711,6 +2713,8 @@ public class AdminApiServlet extends HttpServlet
         cfg.put("asymmetryFactor", q.config().asymmetryFactor());
         cfg.put("outerDampingFactor", q.config().outerDampingFactor());
         cfg.put("outerConvergenceThreshold", q.config().outerConvergenceThreshold());
+        cfg.put("outerPfConvergenceThreshold", q.config().outerPfConvergenceThreshold());
+        cfg.put("logOuterDiagnostics", q.config().logOuterDiagnostics());
         result.put("config", cfg);
         writeJson(resp, result);
     }
@@ -2767,6 +2771,8 @@ public class AdminApiServlet extends HttpServlet
         pfConfig.put("crossVariantLambda", _taskService.pfCrossVariantLambda());
         pfConfig.put("graphCrossVariantLambda", _taskService.pfGraphCrossVariantLambda());
         pfConfig.put("noRaceFallbackWeight", _taskService.pfNoRaceFallbackWeight());
+        pfConfig.put("outerPfConvergenceThreshold", _taskService.pfOuterPfConvergenceThreshold());
+        pfConfig.put("logOuterDiagnostics", _taskService.pfLogOuterDiagnostics());
         result.put("pfConfig", pfConfig);
         result.put("slidingAverageCount", _taskService.slidingAverageCount());
         result.put("slidingAverageDrops", _taskService.slidingAverageDrops());
@@ -2910,6 +2916,11 @@ public class AdminApiServlet extends HttpServlet
             Double pfNoRaceFallbackWeight = (rawNoRaceFallback instanceof Number n12
                 && n12.doubleValue() >= 0 && n12.doubleValue() <= 1.0)
                 ? n12.doubleValue() : null;
+            Object rawOuterPfConvergence = body.get("pfOuterPfConvergenceThreshold");
+            Double pfOuterPfConvergenceThreshold = (rawOuterPfConvergence instanceof Number n13 && n13.doubleValue() > 0)
+                ? n13.doubleValue() : null;
+            Object rawLogDiag = body.get("pfLogOuterDiagnostics");
+            Boolean pfLogOuterDiagnostics = (rawLogDiag instanceof Boolean b1) ? b1 : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
                 sailsysStartRaceId, sailsysEndRaceId,
@@ -2917,7 +2928,8 @@ public class AdminApiServlet extends HttpServlet
                 pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
                 pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
                 pfCrossVariantLambda, pfGraphCrossVariantLambda,
-                pfNoRaceFallbackWeight);
+                pfNoRaceFallbackWeight,
+                pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }

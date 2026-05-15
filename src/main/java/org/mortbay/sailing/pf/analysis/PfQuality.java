@@ -23,5 +23,7 @@ public record PfQuality(
     int highDispersionDivisions,    // divisions where dispersion > 0.10
     double medianBoatConfidence,    // median of boat PF weights
     List<Double> outerDeltaTrace,   // maxWeightChange at end of each outer cycle, in order
+    double finalMaxPfDelta,         // final max |Δlog(PF)| between outer cycles (PF stability metric)
+    List<Double> outerPfDeltaTrace, // maxPfDelta at end of each outer cycle, in order
     PfConfig config                // config used for this run
 ) {}

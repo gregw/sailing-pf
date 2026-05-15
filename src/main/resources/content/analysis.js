@@ -633,8 +633,10 @@ async function loadPfQuality() {
 function fmtTrace(trace) {
     if (!trace || trace.length === 0) return '';
     const f = v => v.toFixed(3);
-    if (trace.length <= 16) return trace.map(f).join(' → ');
-    return [...trace.slice(0, 8).map(f), '\u2026', ...trace.slice(-8).map(f)].join(' → ');
+    if (trace.length <= 20) return trace.map(f).join(' → ');
+    if (trace.length <= 30) [...trace.slice(0, 10).map(f), '\u2026', ...trace.slice(-10).map(f)].join(' → ');
+    const half = Math.floor(trace.length / 2);
+    return [...trace.slice(0, 10).map(f), '\u2026', ...trace.slice(half - 5, half + 5).map(f), '\u2026', ...trace.slice(-10).map(f)].join(' → ');
 }
 
 function renderPfQuality(q) {
@@ -644,12 +646,16 @@ function renderPfQuality(q) {
         ? `converged in ${q.innerIterations} iterations (max\u0394=${fmt(q.finalMaxDelta)})`
         : `<span style="color:#c62828;font-weight:bold">did not converge</span> after ${q.innerIterations} iterations (max\u0394=${fmt(q.finalMaxDelta)})`;
     const traceStr = fmtTrace(q.outerDeltaTrace);
+    const pfTraceStr = fmtTrace(q.outerPfDeltaTrace);
     const traceLine = traceStr
         ? `<br><span style="font-size:0.85em;color:#666;">\u0394w per cycle: ${traceStr}</span>`
         : '';
+    const pfTraceLine = pfTraceStr
+        ? `<br><span style="font-size:0.85em;color:#666;">\u0394log(PF) per cycle: ${pfTraceStr}</span>`
+        : '';
     const outerStatus = q.outerConverged
-        ? `converged in ${q.outerIterations} cycles${traceLine}`
-        : `<span style="color:#c62828;font-weight:bold">did not converge</span> after ${q.outerIterations} cycles (max\u0394w=${fmt(q.finalMaxWeightChange)})${traceLine}`;
+        ? `converged in ${q.outerIterations} cycles${traceLine}${pfTraceLine}`
+        : `<span style="color:#c62828;font-weight:bold">did not converge</span> after ${q.outerIterations} cycles (max\u0394w=${fmt(q.finalMaxWeightChange)}, max\u0394log(PF)=${fmt(q.finalMaxPfDelta)})${traceLine}${pfTraceLine}`;
     const medRes = q.medianResidual;
     const fitColour = medRes < 0.03 ? '#2e7d32' : medRes < 0.08 ? '#f57f17' : '#c62828';
     const dwPct = q.totalEntries > 0 ? (100 * q.downWeightedEntries / q.totalEntries).toFixed(1) : '0';

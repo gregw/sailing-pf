@@ -67,7 +67,7 @@ class PfOptimiserGraphCrossVariantTest
     {
         Scenario s = buildSpinFleetScenario(tempDir, 0L);
         // 3rd-from-last arg = crossVariantLambda (RF-ratio), last = graphCrossVariantLambda
-        PfConfig off = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.0, 0.2);
+        PfConfig off = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.0, 0.2, 1.0e-3, false);
         PfResult baseline = new PfOptimiser().optimise(s.store, s.boatDerived, off, () -> false);
 
         ConversionGraph graph = synthGraph(0.95, 0.05, 50, 0.99);
@@ -93,7 +93,7 @@ class PfOptimiserGraphCrossVariantTest
     void nullGraphIsSafe(@TempDir Path tempDir)
     {
         Scenario s = buildSpinFleetScenario(tempDir, 7L);
-        PfConfig on = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.5, 0.2);
+        PfConfig on = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.5, 0.2, 1.0e-3, false);
         PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, on,
             () -> false, null, TARGET_YEAR);
         assertTrue(!result.boatPfs().isEmpty(),
@@ -115,7 +115,7 @@ class PfOptimiserGraphCrossVariantTest
         // synth slope = 1.0, intercept = 0.0 → spin == nonSpin in graph land.
         // The target boat's race-derived spin and nonSpin PFs should converge.
         ConversionGraph graph = synthGraph(1.0, 0.0, 50, 0.99);
-        PfConfig strongGraph = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 5.0, 0.2);
+        PfConfig strongGraph = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 5.0, 0.2, 1.0e-3, false);
         PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, strongGraph,
             () -> false, graph, TARGET_YEAR);
 
@@ -190,7 +190,7 @@ class PfOptimiserGraphCrossVariantTest
         // Synth graph that says spin = 0.9 × nonSpin (spinnaker boats faster) — would
         // normally push spin PF below nonSpin PF. Cat-rigged boat must NOT be split.
         ConversionGraph graph = synthGraph(0.9, 0.0, 50, 0.99);
-        PfConfig strong = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 5.0, 0.2);
+        PfConfig strong = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 5.0, 0.2, 1.0e-3, false);
         PfResult result = new PfOptimiser().optimise(store, derived, strong,
             () -> false, graph, TARGET_YEAR);
 
@@ -227,7 +227,7 @@ class PfOptimiserGraphCrossVariantTest
     {
         Scenario s = buildSpinFleetScenario(tempDir, 42L);
         ConversionGraph graph = synthGraph(0.95, 0.05, 50, 0.99);
-        PfConfig strong = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 1.0, 0.2);
+        PfConfig strong = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 1.0, 0.2, 1.0e-3, false);
         PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, strong,
             () -> false, graph, TARGET_YEAR);
         assertNotNull(result.quality());
