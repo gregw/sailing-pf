@@ -317,6 +317,7 @@ function startStatusPoller() {
             prevRunningMode = null;
             setStopScheduleVisible(false);
             await loadImporters();
+            await loadUserRequests();
         } else {
             if (prevRunningName && (prevRunningName !== data.name || prevRunningMode !== data.mode)) {
                 setBadge(prevRunningName, prevRunningMode, 'idle');
@@ -353,16 +354,68 @@ function setBadge(name, mode, status) {
     badge.className = 'badge ' + (status === 'running' ? 'badge-running' : 'badge-idle');
 }
 
-async function loadUserRequestsCount() {
+async function loadUserRequests() {
+    const countRow = document.getElementById('user-requests-count-row');
+    const list = document.getElementById('user-requests-list');
+    const hint = document.getElementById('user-requests-list-hint');
     try {
-        const data = await fetchJson('/api/user-requests/count');
-        if (data && data.count != null) {
-            document.getElementById('user-requests-count').textContent = data.count;
+        const data = await fetchJson('/api/user-requests');
+        if (!data) return;
+        document.getElementById('user-requests-count').textContent = data.count ?? 0;
+        if (data.authenticated && Array.isArray(data.entries)) {
+            countRow.style.display = 'none';
+            list.style.display = '';
+            hint.style.display = data.entries.length ? '' : 'none';
+            list.innerHTML = '';
+            for (const entry of data.entries) {
+                const li = document.createElement('li');
+                li.style.padding = '0.2em 0.5em';
+                li.style.borderBottom = '1px solid #eee';
+                li.style.display = 'flex';
+                li.style.alignItems = 'flex-start';
+                li.style.gap = '0.5em';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = !!entry.ticked;
+                cb.title = 'Tick to remove this line on the next database save';
+                cb.addEventListener('change', () => tickUserRequest(entry.line, cb.checked, cb));
+                const span = document.createElement('span');
+                span.style.wordBreak = 'break-all';
+                span.textContent = entry.line;
+                li.appendChild(cb);
+                li.appendChild(span);
+                list.appendChild(li);
+            }
+        } else {
+            countRow.style.display = '';
+            list.style.display = 'none';
+            hint.style.display = 'none';
+            list.innerHTML = '';
         }
     } catch (e) {
-        console.warn('Failed to load user requests count:', e);
+        console.warn('Failed to load user requests:', e);
     }
 }
 
+async function tickUserRequest(line, ticked, cb) {
+    try {
+        const resp = await fetch('/api/user-requests/tick', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({line, ticked})
+        });
+        if (!resp.ok) {
+            cb.checked = !ticked;
+            const err = await resp.json().catch(() => ({}));
+            alert('Failed: ' + (err.error || resp.status));
+        }
+    } catch (e) {
+        cb.checked = !ticked;
+        console.warn('Failed to update tick:', e);
+    }
+}
+
+document.addEventListener('pf:authready', loadUserRequests);
+
 loadImporters();
-loadUserRequestsCount();
+loadUserRequests();

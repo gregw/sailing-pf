@@ -164,7 +164,10 @@
 
   <section>
     <h2>User Requests Log</h2>
-    <p>Number of lines in user-requests.log: <span id="user-requests-count">-</span></p>
+      <p id="user-requests-count-row">Number of lines in user-requests.log: <span id="user-requests-count">-</span></p>
+      <ul id="user-requests-list" style="display:none;list-style:none;padding-left:0;max-height:24em;overflow-y:auto;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:0.85em"></ul>
+      <p id="user-requests-list-hint" style="display:none;color:#666;font-size:0.85em;margin-top:0.4em">Tick lines you have
+          actioned. Ticked lines are removed from the log when the database is saved.</p>
   </section>
 
   <script src="common.js"></script>

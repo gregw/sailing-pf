@@ -143,6 +143,8 @@ public class AdminApiServlet extends HttpServlet
             handleImporters(resp);
         else if ("/user-requests/count".equals(path))
             handleUserRequestsCount(resp);
+        else if ("/user-requests".equals(path))
+            handleUserRequests(req, resp);
         else
             resp.sendError(404);
     }
@@ -246,6 +248,10 @@ public class AdminApiServlet extends HttpServlet
         else if ("/comparison/fetch-handicaps".equals(path))
         {
             handleComparisonFetchHandicaps(req, resp);
+        }
+        else if ("/user-requests/tick".equals(path))
+        {
+            handleUserRequestTick(req, resp);
         }
         else
         {
@@ -1600,6 +1606,57 @@ public class AdminApiServlet extends HttpServlet
             }
         }
         writeJson(resp, Map.of("count", count));
+    }
+
+    /**
+     * GET /api/user-requests — for authenticated users, returns the log lines plus their
+     * current tick state ({@code {authenticated:true, count, entries:[{line,ticked},...]}}).
+     * Unauthenticated users only receive {@code {authenticated:false, count}}.
+     */
+    private void handleUserRequests(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        List<String> lines = _taskService.readUserRequestsLog();
+        if (!isAuthenticated(req))
+        {
+            writeJson(resp, Map.of("authenticated", false, "count", lines.size()));
+            return;
+        }
+        Set<String> ticked = _taskService.getTickedUserRequests();
+        List<Map<String, Object>> entries = new ArrayList<>(lines.size());
+        for (String line : lines)
+        {
+            entries.add(Map.of("line", line, "ticked", ticked.contains(line)));
+        }
+        writeJson(resp, Map.of("authenticated", true, "count", lines.size(), "entries", entries));
+    }
+
+    /**
+     * POST /api/user-requests/tick — marks or unmarks a log line for removal on the next
+     * {@code save-database} run. Body: {@code {line, ticked}}. Authentication is enforced by
+     * {@link WriteAuthFilter}.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleUserRequestTick(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            Object lineObj = body.get("line");
+            if (!(lineObj instanceof String line) || line.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "line is required"));
+                return;
+            }
+            boolean ticked = Boolean.TRUE.equals(body.get("ticked"));
+            _taskService.setUserRequestTicked(line, ticked);
+            writeJson(resp, Map.of("ok", true, "ticked", ticked));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
     }
 
     /**

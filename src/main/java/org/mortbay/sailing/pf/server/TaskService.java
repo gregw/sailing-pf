@@ -221,6 +221,13 @@ public class TaskService
     private volatile String natGatewayIp = null;
     private final Map<String, Instant> lastRunTimes = new ConcurrentHashMap<>();
 
+    /**
+     * Lines from {@code pf-data/log/user-requests.log} marked by an admin for removal.
+     * Cleared when {@link #pruneUserRequestsLog()} rewrites the log file.
+     */
+    private final java.util.Set<String> tickedUserRequests =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public TaskService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
         this.store = store;
@@ -765,6 +772,7 @@ public void stop()
             {
                 store.save();
                 persistConfig();
+                pruneUserRequestsLog();
             }
             default -> throw new IllegalArgumentException("Unknown importer: " + name);
         }
@@ -788,6 +796,83 @@ public void stop()
             pfNoRaceFallbackWeight,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
             pfDubiousFactor, pfMaxFactor);
+    }
+
+    /**
+     * Reads the user-requests log file (one request per line) and returns its lines.
+     * Returns an empty list if the file does not yet exist.
+     */
+    public List<String> readUserRequestsLog()
+    {
+        Path logFile = dataRoot.resolve("log").resolve("user-requests.log");
+        if (!Files.exists(logFile))
+            return List.of();
+        try
+        {
+            return Files.readAllLines(logFile);
+        }
+        catch (IOException e)
+        {
+            LOG.warn("Failed to read user-requests.log: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Returns the set of log lines currently marked for removal on the next save.
+     */
+    public java.util.Set<String> getTickedUserRequests()
+    {
+        return java.util.Set.copyOf(tickedUserRequests);
+    }
+
+    /**
+     * Marks or unmarks a user-request log line for removal on the next save.
+     */
+    public void setUserRequestTicked(String line, boolean ticked)
+    {
+        if (line == null)
+            return;
+        if (ticked)
+            tickedUserRequests.add(line);
+        else
+            tickedUserRequests.remove(line);
+    }
+
+    /**
+     * Rewrites the user-requests log file, dropping any lines currently ticked, then clears the
+     * tick set. Invoked from the save-database task.
+     */
+    public void pruneUserRequestsLog()
+    {
+        if (tickedUserRequests.isEmpty())
+            return;
+        Path logFile = dataRoot.resolve("log").resolve("user-requests.log");
+        if (!Files.exists(logFile))
+        {
+            tickedUserRequests.clear();
+            return;
+        }
+        try
+        {
+            List<String> kept = new ArrayList<>();
+            for (String line : Files.readAllLines(logFile))
+            {
+                if (!tickedUserRequests.contains(line))
+                    kept.add(line);
+            }
+            StringBuilder out = new StringBuilder();
+            for (String line : kept)
+            {
+                out.append(line).append('\n');
+            }
+            Files.writeString(logFile, out.toString());
+            tickedUserRequests.clear();
+        }
+        catch (IOException e)
+        {
+            LOG.warn("Failed to prune user-requests.log: {}", e.getMessage());
+        }
     }
 
     private void persistConfig()
