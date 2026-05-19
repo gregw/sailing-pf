@@ -272,6 +272,35 @@ public class DataStore
         return Optional.empty();
     }
 
+    /**
+     * Read-only lookup by name + club, used by importers whose results pages omit the
+     * sail number column. Returns the boat only when there is exactly one match
+     * (case-insensitive on normalised name) among boats belonging to {@code clubId}.
+     * Candidates whose stored design is currently ignored are skipped, mirroring the
+     * orphan-tolerance in {@link #findOrCreateBoat}.
+     */
+    public Optional<Boat> findBoatByNameAndClub(String rawName, String clubId)
+    {
+        requireStarted();
+        if (clubId == null || clubId.isBlank())
+            return Optional.empty();
+        String normName = IdGenerator.normaliseName(rawName);
+        if (normName.isEmpty())
+            return Optional.empty();
+        List<Boat> matches = new ArrayList<>();
+        for (Boat candidate : boats.values())
+        {
+            if (!normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
+                continue;
+            if (!candidate.hasClub(clubId))
+                continue;
+            if (isDesignIgnored(candidate.designId()))
+                continue;
+            matches.add(candidate);
+        }
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+
     /** Convenience overload for tests — no date, no source. */
     public Boat findOrCreateBoat(String sailNo, String name, String rawDesign)
     {

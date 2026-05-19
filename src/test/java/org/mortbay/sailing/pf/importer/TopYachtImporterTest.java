@@ -238,6 +238,39 @@ class TopYachtImporterTest
         assertNull(importer.extractRaceDate(html));
     }
 
+    @Test
+    void extractRaceDateReadsDashedMonthFormat()
+    {
+        // CYCSA style: "<p>Race 5  (05-Nov-25) PROVISIONAL</p>"
+        String html = "<html><body>" +
+            "<p class='heading1'>Twilight Series </p>" +
+            "<p>Race 5  &nbsp (05-Nov-25)&nbsp PROVISIONAL</p>" +
+            "</body></html>";
+        assertEquals(LocalDate.of(2025, 11, 5), importer.extractRaceDate(html));
+    }
+
+    @Test
+    void extractRaceDateAcceptsFourDigitYearInDashedFormat()
+    {
+        String html = "<html><body><p>Race 1 (3-Jan-2026)</p></body></html>";
+        assertEquals(LocalDate.of(2026, 1, 3), importer.extractRaceDate(html));
+    }
+
+    @Test
+    void extractRaceDateAcceptsFullMonthName()
+    {
+        // RYCT historical regatta: "Race 5   (11-July-2021)"
+        String html = "<html><body><p>Race 5  &nbsp (11-July-2021)&nbsp </p></body></html>";
+        assertEquals(LocalDate.of(2021, 7, 11), importer.extractRaceDate(html));
+    }
+
+    @Test
+    void extractRaceDateAcceptsFullMonthNameWithTwoDigitYear()
+    {
+        String html = "<html><body><p>Race 7 (2-September-24)</p></body></html>";
+        assertEquals(LocalDate.of(2024, 9, 2), importer.extractRaceDate(html));
+    }
+
     // --- parseResultsPage ---
 
     @Test
@@ -394,6 +427,26 @@ class TopYachtImporterTest
             "</table></body></html>";
         ParsedRace parsed = importer.parseResultsPage(html);
         assertNull(parsed);
+    }
+
+    @Test
+    void parseResultsPageAcceptsNoSailNoColumn()
+    {
+        // RYCT layout: Place, Boat Name, Skipper, ETOrd, Fin Tim, Elapsd, AHC, Cor'd T — no Sail No.
+        String html = "<html><body><table class='centre_results_table'>" +
+            "<caption>Division 3  PHS results  Start : 10:10</caption>" +
+            "<tr class='type1'><td>Place</td><td>Boat Name</td><td>Skipper</td>" +
+            "<td>ETOrd</td><td>Fin Tim</td><td>Elapsd</td><td>AHC</td><td>Cor'd T</td></tr>" +
+            "<tr class='type3'><td>1</td><td>FORK IN THE ROAD</td><td>Gary Smith</td>" +
+            "<td>1</td><td>14:31:50</td><td>04:31:50</td><td>1.137</td><td>05:09:04</td></tr>" +
+            "</table></body></html>";
+
+        ParsedRace parsed = importer.parseResultsPage(html);
+        assertNotNull(parsed);
+        ParsedRow row = parsed.divisions().get(0).rows().get(0);
+        assertEquals("", row.sailNo());
+        assertEquals("FORK IN THE ROAD", row.boatName());
+        assertEquals(Duration.ofHours(4).plusMinutes(31).plusSeconds(50), row.elapsed());
     }
 
     @Test

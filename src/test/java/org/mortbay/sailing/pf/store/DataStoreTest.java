@@ -464,6 +464,46 @@ class DataStoreTest {
     }
 
     @Test
+    void findBoatByNameAndClubReturnsBoatWhenUniqueClubMatch(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("1-fork-x", "1", "Fork in the Road", null,
+            List.of("ryct.org.au"), List.of(), List.of("seed"), null, null));
+        store.putBoat(new Boat("2-fork-y", "2", "Fork in the Road", null,
+            List.of("other.com.au"), List.of(), List.of("seed"), null, null));
+
+        var match = store.findBoatByNameAndClub("FORK IN THE ROAD", "ryct.org.au");
+        assertTrue(match.isPresent());
+        assertEquals("1-fork-x", match.get().id());
+    }
+
+    @Test
+    void findBoatByNameAndClubReturnsEmptyOnAmbiguous(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("1-fork-x", "1", "Fork in the Road", null,
+            List.of("ryct.org.au"), List.of(), List.of("seed"), null, null));
+        store.putBoat(new Boat("3-fork-x", "3", "Fork in the Road", null,
+            List.of("ryct.org.au"), List.of(), List.of("seed"), null, null));
+
+        assertFalse(store.findBoatByNameAndClub("Fork in the Road", "ryct.org.au").isPresent());
+    }
+
+    @Test
+    void findBoatByNameAndClubReturnsEmptyWhenClubIdBlank(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("1-fork-x", "1", "Fork in the Road", null,
+            List.of("ryct.org.au"), List.of(), List.of("seed"), null, null));
+
+        assertFalse(store.findBoatByNameAndClub("Fork in the Road", null).isPresent());
+        assertFalse(store.findBoatByNameAndClub("Fork in the Road", "").isPresent());
+    }
+
+    @Test
     void findOrCreateBoatSkipsCandidatesWithIgnoredDesign(@TempDir Path tempDir)
     {
         // Two stored boats share sail+name. One is a legit design-bearing record;

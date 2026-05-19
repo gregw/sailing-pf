@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,6 +77,18 @@ public class TopYachtImporter
         "Race\\s+(\\d+)(?:\\s*-\\s*(\\d{1,2}/\\d{1,2}/\\d{4}))?", Pattern.CASE_INSENSITIVE);
     private static final Pattern RESULTS_PAGE_DATE = Pattern.compile(
         "\\((\\d{1,2}/\\d{1,2}/\\d{4})\\)");
+    // Alternate header form used by some clubs (e.g. CYCSA: "(05-Nov-25)",
+    // RYCT: "(11-July-2021)"). Month may be 3-letter abbreviation or full name.
+    private static final Pattern RESULTS_PAGE_DATE_DMY = Pattern.compile(
+        "\\((\\d{1,2}-[A-Za-z]{3,}-\\d{2,4})\\)");
+    private static final DateTimeFormatter DATE_FMT_DMY_SHORT_2 =
+        DateTimeFormatter.ofPattern("d-MMM-yy");
+    private static final DateTimeFormatter DATE_FMT_DMY_SHORT_4 =
+        DateTimeFormatter.ofPattern("d-MMM-yyyy");
+    private static final DateTimeFormatter DATE_FMT_DMY_LONG_2 =
+        DateTimeFormatter.ofPattern("d-MMMM-yy");
+    private static final DateTimeFormatter DATE_FMT_DMY_LONG_4 =
+        DateTimeFormatter.ofPattern("d-MMMM-yyyy");
     // Caption form: "Start : 12:35" or "Start : 12:35:00" — recovers the start time
     // for divisions whose results table has no Elapsed column, only Fin Tim.
     private static final Pattern CAPTION_START_TIME = Pattern.compile(
@@ -269,9 +282,9 @@ public class TopYachtImporter
     }
 
     /**
-     * Extracts the race date from a results page's header, where TopYacht typically
-     * renders {@code <p>Race N (DD/MM/YYYY)</p>}. Returns null if no parenthesised
-     * date is found in a paragraph that mentions "Race".
+     * Extracts the race date from a results page's header. TopYacht renders one of:
+     * {@code <p>Race N (DD/MM/YYYY)</p>} or {@code <p>Race N (DD-Mon-YY)</p>}.
+     * Returns null if no parenthesised date is found in a paragraph that mentions "Race".
      */
     LocalDate extractRaceDate(String html)
     {
@@ -283,17 +296,59 @@ public class TopYachtImporter
             String text = p.text();
             if (!text.toLowerCase().contains("race"))
                 continue;
-            Matcher m = RESULTS_PAGE_DATE.matcher(text);
-            if (m.find())
+            LocalDate slash = tryParseDate(RESULTS_PAGE_DATE.matcher(text), DATE_FMT);
+            if (slash != null)
+                return slash;
+            LocalDate dashed = tryParseDmy(text);
+            if (dashed != null)
+                return dashed;
+        }
+        return null;
+    }
+
+    private static LocalDate tryParseDate(Matcher m, DateTimeFormatter fmt)
+    {
+        while (m.find())
+        {
+            try
             {
-                try
-                {
-                    return LocalDate.parse(m.group(1), DATE_FMT);
-                }
-                catch (DateTimeParseException ignored)
-                {
-                    // try next match
-                }
+                return LocalDate.parse(m.group(1), fmt);
+            }
+            catch (DateTimeParseException ignored)
+            {
+                // try next match
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Tries the D-Month-Y form. Month may be 3-letter abbreviation (Jan, Feb…) or full
+     * name (January, February, July…). Year may be 2 digits (parsed as 20YY) or 4.
+     */
+    private static LocalDate tryParseDmy(String text)
+    {
+        Matcher m = RESULTS_PAGE_DATE_DMY.matcher(text);
+        while (m.find())
+        {
+            String raw = m.group(1);
+            int lastDash = raw.lastIndexOf('-');
+            int firstDash = raw.indexOf('-');
+            String monthPart = raw.substring(firstDash + 1, lastDash);
+            String yearPart = raw.substring(lastDash + 1);
+            boolean shortMonth = monthPart.length() == 3;
+            DateTimeFormatter fmt;
+            if (yearPart.length() == 2)
+                fmt = shortMonth ? DATE_FMT_DMY_SHORT_2 : DATE_FMT_DMY_LONG_2;
+            else
+                fmt = shortMonth ? DATE_FMT_DMY_SHORT_4 : DATE_FMT_DMY_LONG_4;
+            try
+            {
+                return LocalDate.parse(raw, fmt);
+            }
+            catch (DateTimeParseException ignored)
+            {
+                // try next match / next formatter
             }
         }
         return null;
@@ -335,7 +390,7 @@ public class TopYachtImporter
             boolean divNS = parsedDiv.nonSpinnaker() || seriesNS;
             List<Finisher> finishers = buildFinishers(parsedDiv.rows(), parsedDiv.handicapSystem(),
                 date.getYear(), divNS, parsedDiv.twoHanded(), parsedDiv.windwardLeeward(),
-                url, raceId);
+                url, raceId, club.id(), date);
             divisions.add(new Division(parsedDiv.name(), List.copyOf(finishers)));
             totalFinishers += finishers.size();
         }
@@ -390,7 +445,8 @@ public class TopYachtImporter
             return;
         }
 
-        // Merge all rows from all pages, keyed by sail number.
+        // Merge all rows from all pages, keyed by sail number when present, falling
+        // back to "name:" + boat name when the results page omits sail numbers.
         // The first occurrence establishes boatName/elapsed/clubCode/designName.
         // Subsequent occurrences from other pages add their {system, ahcValue} pair
         // if the elapsed time matches; mismatches are logged and discarded.
@@ -401,13 +457,16 @@ public class TopYachtImporter
             {
                 for (ParsedRow row : div.rows())
                 {
-                    MergeEntry existing = merged.get(row.sailNo());
+                    String key = (row.sailNo() != null && !row.sailNo().isBlank())
+                        ? row.sailNo()
+                        : "name:" + IdGenerator.normaliseName(row.boatName());
+                    MergeEntry existing = merged.get(key);
                     if (existing == null)
                     {
                         MergeEntry entry = new MergeEntry(row.boatName(), row.elapsed(),
                             row.clubCode(), row.designName());
                         entry.sysAhcs.add(new SysAhc(div.handicapSystem(), row.ahcValue(), div.twoHanded(), div.windwardLeeward()));
-                        merged.put(row.sailNo(), entry);
+                        merged.put(key, entry);
                     }
                     else
                     {
@@ -447,16 +506,17 @@ public class TopYachtImporter
         List<Finisher> finishers = new ArrayList<>();
         for (Map.Entry<String, MergeEntry> e : merged.entrySet())
         {
-            String sailNo = e.getKey();
+            String key = e.getKey();
             MergeEntry me = e.getValue();
+            // Keys starting with "name:" came from rows whose results page had no sail
+            // number column; we did not capture a sail for them. Pass an empty sailNo so
+            // resolveBoat falls back to the name+club lookup.
+            String sailNo = key.startsWith("name:") ? "" : key;
 
-            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, date, SOURCE);
+            Boat boat = resolveBoat(sailNo, me.boatName, me.designName, date, club.id(),
+                raceId, sourceUrls.toString());
             if (boat == null)
-            {
-                ImporterLog.warn(LOG, "TopYacht: skipping finisher — ambiguous boat match for sail={} name='{}' design='{}' in race={} (urls={}); see log/ambiguous-boats.log",
-                    sailNo, me.boatName, me.designName, raceId, sourceUrls);
                 continue;
-            }
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
@@ -784,7 +844,9 @@ public class TopYachtImporter
             }
 
             boolean canDeriveFromFinish = elapsedIdx < 0 && finishIdx >= 0 && startTime != null;
-            if (sailIdx < 0 || nameIdx < 0 || (elapsedIdx < 0 && !canDeriveFromFinish))
+            // Sail-No is optional: some clubs (e.g. RYCT) publish results pages with only
+            // boat name. buildFinishers falls back to a name+club lookup in that case.
+            if (nameIdx < 0 || (elapsedIdx < 0 && !canDeriveFromFinish))
             {
                 ImporterLog.warn(LOG, "TopYacht: required columns not found (sail={}, name={}, elapsed={}, finish={}, start={}); skipping division (system={}, division='{}', url={})",
                     sailIdx, nameIdx, elapsedIdx, finishIdx, startTime, handicapSystem, divisionName, url);
@@ -794,16 +856,19 @@ public class TopYachtImporter
             // Parse data rows
             List<ParsedRow> rows = new ArrayList<>();
             int timeIdx = elapsedIdx >= 0 ? elapsedIdx : finishIdx;
+            int minCols = Math.max(nameIdx, timeIdx);
+            if (sailIdx >= 0)
+                minCols = Math.max(minCols, sailIdx);
             for (Element row : table.select("tr.type3, tr.type4"))
             {
                 Elements cells = row.select("td");
-                if (cells.size() <= Math.max(sailIdx, Math.max(nameIdx, timeIdx)))
+                if (cells.size() <= minCols)
                     continue;
 
-                String sailNo = cells.get(sailIdx).text().trim();
+                String sailNo = sailIdx >= 0 ? cells.get(sailIdx).text().trim() : "";
                 String boatName = cells.get(nameIdx).text().trim();  // Jsoup strips <a> and gives text
 
-                if (sailNo.isBlank() || boatName.isBlank())
+                if (boatName.isBlank())
                     continue;
 
                 Duration elapsed;
@@ -848,20 +913,48 @@ public class TopYachtImporter
      *
      * @param nonSpinnaker true if all finishers in this division raced non-spinnaker
      */
+    /**
+     * Resolves a finisher row to a Boat. Normal path is {@code findOrCreateBoat} keyed on
+     * sail+name. When the results page omits the sail number, falls back to a name+club
+     * lookup restricted to boats already known to the organising club; the row is skipped
+     * (with a WARN) if the lookup is empty or ambiguous, so we never invent a designless
+     * boat from a name alone.
+     */
+    private Boat resolveBoat(String rawSailNo, String boatName, String designName,
+                             LocalDate date, String organisingClubId, String raceId, String url)
+    {
+        if (rawSailNo != null && !rawSailNo.isBlank())
+        {
+            Boat boat = store.findOrCreateBoat(rawSailNo, boatName, designName, date, SOURCE);
+            if (boat == null)
+                ImporterLog.warn(LOG, "TopYacht: skipping finisher — ambiguous boat match for sail={} name='{}' design='{}' in race={} (url={}); see log/ambiguous-boats.log",
+                    rawSailNo, boatName, designName, raceId, url);
+            return boat;
+        }
+
+        // No sail on the results page — restrict the lookup to the organising club.
+        Optional<Boat> match = store.findBoatByNameAndClub(boatName, organisingClubId);
+        if (match.isEmpty())
+        {
+            ImporterLog.warn(LOG, "TopYacht: skipping finisher — no unique name+club match for name='{}' club={} in race={} (url={})",
+                boatName, organisingClubId, raceId, url);
+            return null;
+        }
+        return match.get();
+    }
+
     private List<Finisher> buildFinishers(List<ParsedRow> rows, String handicapSystem,
                                           int year, boolean nonSpinnaker, boolean twoHanded,
-                                          boolean windwardLeeward, String url, String raceId)
+                                          boolean windwardLeeward, String url, String raceId,
+                                          String organisingClubId, LocalDate date)
     {
         List<Finisher> finishers = new ArrayList<>();
         for (ParsedRow row : rows)
         {
-            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), null, SOURCE);
+            Boat boat = resolveBoat(row.sailNo(), row.boatName(), row.designName(),
+                date, organisingClubId, raceId, url);
             if (boat == null)
-            {
-                ImporterLog.warn(LOG, "TopYacht: skipping finisher — ambiguous boat match for sail={} name='{}' design='{}' in race={} (url={}); see log/ambiguous-boats.log",
-                    row.sailNo(), row.boatName(), row.designName(), raceId, url);
                 continue;
-            }
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
