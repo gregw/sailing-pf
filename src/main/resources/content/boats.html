@@ -107,8 +107,14 @@
             <input type="text" id="edit-boat-name" style="font-family:monospace;padding:3px 6px;">
             <label for="edit-boat-design">Design:</label>
             <select id="edit-boat-design" style="font-family:monospace;padding:3px 6px;"></select>
-            <label for="edit-boat-club">Club:</label>
-            <select id="edit-boat-club" style="font-family:monospace;padding:3px 6px;"></select>
+            <label style="align-self:start;padding-top:4px;">Clubs:</label>
+            <div id="edit-boat-clubs" style="display:flex;flex-direction:column;gap:0.25rem;">
+                <div id="edit-boat-clubs-list" style="display:flex;flex-direction:column;gap:0.2rem;"></div>
+                <div style="display:flex;gap:0.3rem;align-items:center;">
+                    <select id="edit-boat-club-add" style="font-family:monospace;padding:3px 6px;"></select>
+                    <button type="button" onclick="addBoatClub()">Add</button>
+                </div>
+            </div>
         </div>
         <div id="edit-email-row" style="display:none; margin-bottom:0.5rem;">
             <label for="edit-email" style="font-size:0.9rem;">Your email (optional): </label>

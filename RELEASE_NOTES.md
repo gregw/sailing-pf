@@ -4,6 +4,7 @@
 
 ### May 2026
 
+- **Boat's club**: Allow multiple clubs to be selected and edited.
 - **Back Calculated Factor charts**: Updated by selected factor set.
 - **Elapsed Time Comparison**: Added to handicap calculator.
 - **PF Optimizer Invariants**: Many improvements to PF optimizer.

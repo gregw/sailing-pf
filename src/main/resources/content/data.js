@@ -1449,6 +1449,9 @@ async function requestIgnore() {
 let editingBoatId = null;
 let editChoicesLoaded = false;
 
+/** Cached {id, shortName, longName} entries for the club selector. */
+let editClubCatalogue = [];
+
 async function loadEditChoices() {
     if (editChoicesLoaded) return;
     editChoicesLoaded = true;
@@ -1472,8 +1475,18 @@ async function loadEditChoices() {
         designSel.value = cur;
     }
 
-    const clubSel = document.getElementById('edit-boat-club');
     if (clubsResp && clubsResp.items) {
+        editClubCatalogue = clubsResp.items.map(c => ({
+            id: c.id,
+            shortName: c.shortName || '',
+            longName: c.longName || ''
+        }));
+        rebuildAddClubSelect();
+    }
+
+    // The simple single-club selector used by the bulk-edit panel still exists.
+    const clubSel = document.getElementById('edit-club-select');
+    if (clubSel && clubsResp && clubsResp.items) {
         const noClubOpt = document.createElement('option');
         noClubOpt.value = '';
         noClubOpt.textContent = '— No Club —';
@@ -1489,6 +1502,105 @@ async function loadEditChoices() {
     }
 }
 
+/** Returns the current set of club ids selected on the edit form, in order. */
+function getEditingBoatClubIds() {
+    const list = document.getElementById('edit-boat-clubs-list');
+    if (!list) return [];
+    return Array.from(list.querySelectorAll('[data-club-id]'))
+        .map(el => el.getAttribute('data-club-id'))
+        .filter(id => id);
+}
+
+/** Renders the list of clubs currently assigned to the boat being edited. */
+function renderEditingBoatClubs(clubIds) {
+    const list = document.getElementById('edit-boat-clubs-list');
+    if (!list) return;
+    list.replaceChildren();
+    if (!clubIds || clubIds.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.color = '#888';
+        empty.style.fontSize = '0.9rem';
+        empty.textContent = '— no clubs —';
+        list.appendChild(empty);
+        rebuildAddClubSelect();
+        return;
+    }
+    clubIds.forEach((id, idx) => {
+        const meta = editClubCatalogue.find(c => c.id === id);
+        const row = document.createElement('div');
+        row.setAttribute('data-club-id', id);
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '0.3rem';
+
+        const label = document.createElement('span');
+        label.style.fontFamily = 'monospace';
+        label.textContent = meta && meta.shortName
+            ? `${meta.shortName} — ${id}${idx === 0 ? '  (primary)' : ''}`
+            : `${id}${idx === 0 ? '  (primary)' : ''}`;
+        row.appendChild(label);
+
+        if (idx > 0) {
+            const primaryBtn = document.createElement('button');
+            primaryBtn.type = 'button';
+            primaryBtn.textContent = 'Make primary';
+            primaryBtn.onclick = () => {
+                const cur = getEditingBoatClubIds();
+                const i = cur.indexOf(id);
+                if (i > 0) {
+                    cur.splice(i, 1);
+                    cur.unshift(id);
+                }
+                renderEditingBoatClubs(cur);
+            };
+            row.appendChild(primaryBtn);
+        }
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = 'Remove';
+        removeBtn.onclick = () => {
+            renderEditingBoatClubs(getEditingBoatClubIds().filter(x => x !== id));
+        };
+        row.appendChild(removeBtn);
+        list.appendChild(row);
+    });
+    rebuildAddClubSelect();
+}
+
+/** Refreshes the options of the "add club" selector to exclude already-selected clubs. */
+function rebuildAddClubSelect() {
+    const sel = document.getElementById('edit-boat-club-add');
+    if (!sel) return;
+    const selected = new Set(getEditingBoatClubIds());
+    const opts = [];
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '— pick a club to add —';
+    opts.push(placeholder);
+    for (const c of editClubCatalogue) {
+        if (selected.has(c.id)) continue;
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.shortName ? `${c.shortName} — ${c.id}` : c.id;
+        opts.push(o);
+    }
+    sel.replaceChildren(...opts);
+}
+
+/** Appends the currently-chosen club from the add-selector to the boat's club list. */
+function addBoatClub() {
+    const sel = document.getElementById('edit-boat-club-add');
+    if (!sel) return;
+    const id = sel.value.trim();
+    if (!id) return;
+    const cur = getEditingBoatClubIds();
+    if (!cur.includes(id)) {
+        cur.push(id);
+        renderEditingBoatClubs(cur);
+    }
+    sel.value = '';
+}
+
 /** Opens the edit panel for the single currently-selected boat. */
 function showEditPanel() {
     const ids = Array.from(state.selected.boats);
@@ -1501,13 +1613,16 @@ function showEditPanel() {
                                                     : ('Request edit for Boat ' + item.id);
     document.getElementById('edit-boat-sail').value = item.sailNumber || '';
     document.getElementById('edit-boat-name').value = item.name || '';
+    const initialClubIds = Array.isArray(item.clubIds)
+        ? [...item.clubIds]
+        : (item.clubId ? [item.clubId] : []);
     // Populate selects before setting value so the option exists
     loadEditChoices().then(() => {
         document.getElementById('edit-boat-design').value = item.designId || '';
-        document.getElementById('edit-boat-club').value = item.clubId || '';
+        renderEditingBoatClubs(initialClubIds);
     });
     document.getElementById('edit-boat-design').value = item.designId || '';
-    document.getElementById('edit-boat-club').value = item.clubId || '';
+    renderEditingBoatClubs(initialClubIds);
     document.getElementById('edit-status-boats').textContent = '';
     document.getElementById('edit-panel-boats').style.display = '';
     applyMergeAuthState();
@@ -1609,13 +1724,12 @@ async function saveBoatEdit() {
     const statusEl = document.getElementById('edit-status-boats');
     statusEl.textContent = 'Saving…';
 
-    const clubVal = document.getElementById('edit-boat-club').value.trim();
     const body = {
         boatId: editingBoatId,
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
-        clubId: clubVal || null
+        clubIds: getEditingBoatClubIds()
     };
 
     const result = await fetchJson('/api/boats/edit', {
@@ -1645,13 +1759,12 @@ async function requestBoatEdit() {
 
     const email = document.getElementById('edit-email')?.value.trim() || '';
     const message = document.getElementById('edit-message')?.value.trim() || '';
-    const clubValReq = document.getElementById('edit-boat-club').value.trim();
     const body = {
         boatId: editingBoatId,
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
-        clubId: clubValReq || null,
+        clubIds: getEditingBoatClubIds(),
         ...(email && { email }),
         ...(message && { message })
     };
@@ -1779,6 +1892,10 @@ function showEditClubPanel() {
     document.getElementById('edit-club-long-name').value = item.longName || '';
     document.getElementById('edit-club-state').value = item.state || '';
     document.getElementById('edit-club-email').value = item.email || '';
+    const topyachtEl = document.getElementById('edit-club-topyacht');
+    if (topyachtEl) topyachtEl.value = Array.isArray(item.topyachtUrls)
+        ? item.topyachtUrls.join('\n')
+        : '';
     document.getElementById('edit-status-clubs').textContent = '';
     document.getElementById('edit-panel-clubs').style.display = '';
     const w = isWriteAllowed();
@@ -1829,12 +1946,17 @@ async function copyClubEmails() {
 }
 
 function buildClubEditBody() {
+    const topyachtEl = document.getElementById('edit-club-topyacht');
+    const topyachtUrls = topyachtEl
+        ? topyachtEl.value.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0)
+        : [];
     return {
         clubId: editingClubId,
         shortName: document.getElementById('edit-club-short-name').value.trim(),
         longName: document.getElementById('edit-club-long-name').value.trim(),
         state: document.getElementById('edit-club-state').value.trim(),
-        email: document.getElementById('edit-club-email').value.trim()
+        email: document.getElementById('edit-club-email').value.trim(),
+        topyachtUrls
     };
 }
 

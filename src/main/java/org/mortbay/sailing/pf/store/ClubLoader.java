@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -216,6 +217,60 @@ class ClubLoader
     }
 
     /**
+     * Assigns a boatId to a list of clubs in clubs.yaml (per-club {@code boats} list).
+     * Removes the boatId from {@code noclub} and from any other club's {@code boats} list
+     * not in {@code clubIds}; appends the boatId to each listed club's {@code boats}.
+     * <p>
+     * If {@code clubIds} is empty, the boatId is moved to the {@code noclub} list.
+     */
+    static void setBoatClubs(Path configDir, String boatId, List<String> clubIds)
+    {
+        if (clubIds == null || clubIds.isEmpty())
+        {
+            setBoatNoClub(configDir, boatId);
+            return;
+        }
+
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return;
+
+        // Remove from noclub
+        if (seedFile.noclub != null)
+            seedFile.noclub.remove(boatId);
+
+        Set<String> wanted = new LinkedHashSet<>(clubIds);
+
+        // Strip the entry from any club not in `wanted`, and ensure each wanted club has it
+        if (seedFile.clubs == null)
+            seedFile.clubs = new LinkedHashMap<>();
+        for (Map.Entry<String, SeedEntry> e : seedFile.clubs.entrySet())
+        {
+            SeedEntry entry = e.getValue();
+            if (entry.boats == null)
+                continue;
+            if (!wanted.contains(e.getKey()))
+                entry.boats.remove(boatId);
+        }
+        for (String cid : wanted)
+        {
+            SeedEntry entry = seedFile.clubs.get(cid);
+            if (entry == null)
+            {
+                entry = new SeedEntry();
+                seedFile.clubs.put(cid, entry);
+            }
+            if (entry.boats == null)
+                entry.boats = new ArrayList<>();
+            if (!entry.boats.contains(boatId))
+                entry.boats.add(boatId);
+        }
+
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: boatId {} assigned to clubs {}", boatId, wanted);
+    }
+
+    /**
      * Marks a boatId as having no club in clubs.yaml (adds to {@code noclub} list).
      * Removes the boatId from all per-club {@code boats} lists.
      */
@@ -372,6 +427,58 @@ class ClubLoader
     }
 
     /**
+     * Replaces the {@code topyacht} URL list for a club in clubs.yaml. Each value is written
+     * verbatim. A null or empty {@code topyachtUrls} clears the field. If the club has no
+     * entry yet, one is auto-created using {@code shortNameIfNew}. Returns true if the file
+     * was changed.
+     */
+    static boolean updateClubTopyachtUrls(Path configDir, String clubId, String shortNameIfNew,
+                                          List<String> topyachtUrls)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return false;
+        if (seedFile.clubs == null)
+            seedFile.clubs = new LinkedHashMap<>();
+
+        List<String> cleaned;
+        if (topyachtUrls == null || topyachtUrls.isEmpty())
+            cleaned = null;
+        else
+        {
+            List<String> tmp = new ArrayList<>();
+            for (String u : topyachtUrls)
+            {
+                if (u == null)
+                    continue;
+                String t = u.trim();
+                if (!t.isEmpty() && !tmp.contains(t))
+                    tmp.add(t);
+            }
+            cleaned = tmp.isEmpty() ? null : tmp;
+        }
+
+        SeedEntry entry = seedFile.clubs.get(clubId);
+        boolean created = false;
+        if (entry == null)
+        {
+            entry = new SeedEntry();
+            entry.shortName = shortNameIfNew;
+            seedFile.clubs.put(clubId, entry);
+            created = true;
+        }
+
+        if (!created && Objects.equals(entry.topyacht, cleaned))
+            return false;
+
+        entry.topyacht = cleaned;
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: club {} topyacht URLs updated ({} entries)",
+            clubId, cleaned == null ? 0 : cleaned.size());
+        return true;
+    }
+
+    /**
      * Removes a boatId from clubs.yaml — from {@code noclub} and all per-club {@code boats} lists.
      */
     static void removeBoatId(Path configDir, String boatId)
@@ -468,9 +575,9 @@ class ClubLoader
          */
         private final Map<String, String> overridesByKey;
         /**
-         * boatId → clubId for boats explicitly assigned to a club
+         * boatId → ordered list of clubIds that include this boat in their boats list.
          */
-        private final Map<String, String> boatIdToClubId;
+        private final Map<String, List<String>> boatIdToClubIds;
         /**
          * boatIds explicitly set to have no club
          */
@@ -481,7 +588,7 @@ class ClubLoader
             if (file == null)
             {
                 overridesByKey = Map.of();
-                boatIdToClubId = Map.of();
+                boatIdToClubIds = Map.of();
                 noclubBoatIds = Set.of();
                 return;
             }
@@ -501,8 +608,8 @@ class ClubLoader
             }
             overridesByKey = Collections.unmodifiableMap(byKey);
 
-            // BoatId-based: per-club boats lists
-            Map<String, String> byBoatId = new HashMap<>();
+            // BoatId-based: per-club boats lists (a boatId may belong to several clubs)
+            Map<String, List<String>> byBoatId = new LinkedHashMap<>();
             if (file.clubs != null)
             {
                 for (Map.Entry<String, SeedEntry> e : file.clubs.entrySet())
@@ -512,12 +619,15 @@ class ClubLoader
                         continue;
                     for (String boatId : entry.boats)
                     {
-                        if (boatId != null)
-                            byBoatId.put(boatId, e.getKey());
+                        if (boatId == null)
+                            continue;
+                        byBoatId.computeIfAbsent(boatId, k -> new ArrayList<>()).add(e.getKey());
                     }
                 }
             }
-            boatIdToClubId = Collections.unmodifiableMap(byBoatId);
+            Map<String, List<String>> frozen = new LinkedHashMap<>();
+            byBoatId.forEach((k, v) -> frozen.put(k, List.copyOf(v)));
+            boatIdToClubIds = Collections.unmodifiableMap(frozen);
 
             // BoatId-based: noclub list
             Set<String> noclub = new HashSet<>();
@@ -531,23 +641,24 @@ class ClubLoader
 
             if (!byKey.isEmpty())
                 LOG.info("Loaded club catalogue: {} sail+name override(s)", byKey.size());
-            if (!byBoatId.isEmpty() || !noclub.isEmpty())
+            if (!boatIdToClubIds.isEmpty() || !noclub.isEmpty())
                 LOG.info("Loaded club catalogue: {} boatId club assignment(s), {} no-club boatId(s)",
-                    byBoatId.size(), noclub.size());
+                    boatIdToClubIds.size(), noclub.size());
         }
 
         /**
          * Returns the boatId-based club override:
-         * null  → no boatId-based override (fall through to sail+name lookup)
-         * ""    → explicit no-club
-         * other → explicit clubId
+         * null          → no boatId-based override (fall through to sail+name lookup)
+         * empty list    → explicit no-club
+         * non-empty list → explicit list of clubIds (first entry is primary)
          */
-        String resolveBoatIdOverride(String boatId)
+        List<String> resolveBoatIdOverride(String boatId)
         {
             if (boatId == null)
                 return null;
-            if (noclubBoatIds.contains(boatId)) return "";
-            return boatIdToClubId.get(boatId);
+            if (noclubBoatIds.contains(boatId))
+                return List.of();
+            return boatIdToClubIds.get(boatId);
         }
 
         /**

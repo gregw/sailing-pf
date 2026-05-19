@@ -195,6 +195,14 @@ a { color: #2255aa; }
 .importer-table th, .importer-table td { padding-left: 0.75rem; padding-right: 0.75rem; }
 .importer-table td:nth-child(3) { white-space: nowrap; }
 tr.excluded td { color: #aaa; }
+
+tr.excluded .link-btn {
+    color: #aaa;
+}
+
+tr.excluded .link-btn:hover {
+    color: #888;
+}
 .excluded-inline { color: #aaa; }
 .link-btn.excluded-link { color: #7a8fb0; }
 .link-btn.excluded-link:hover { color: #5a6f90; }

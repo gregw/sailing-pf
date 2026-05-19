@@ -409,7 +409,7 @@ class TopYachtImporterTest
         importer.processResultsPage(TEST_CLUB, "Performance Racing", 7, LocalDate.of(2024, 8, 15), html, null);
 
         Boat boat = store.boats().values().iterator().next();
-        assertEquals("dssinc.org.au", boat.clubId());
+        assertEquals("dssinc.org.au", boat.primaryClubId());
     }
 
     @Test

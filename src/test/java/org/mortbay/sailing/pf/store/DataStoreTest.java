@@ -117,8 +117,8 @@ class DataStoreTest {
             "clubs:\n  myc.com.au:\n    shortName: MYC\n    state: NSW\n    fullName: Manly Yacht Club\n");
 
         List<Boat> boats = List.of(
-                new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), null, null),
-                new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of(), List.of(), null, null)
+            new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", List.of("myc.com.au"), List.of(), List.of(), null, null),
+            new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", List.of("myc.com.au"), List.of(), List.of(), null, null)
         );
 
         DataStore store = new DataStore(tempDir);
@@ -142,6 +142,26 @@ class DataStoreTest {
         DataStore store3 = new DataStore(tempDir);
         store3.start();
         assertEquals(List.of(club), List.copyOf(store3.clubs().values()));
+    }
+
+    @Test
+    void legacyBoatJsonWithSingleClubIdDeserialises(@TempDir Path tempDir) throws IOException
+    {
+        // A pre-multi-club boat record on disk had a scalar "clubId" field. The new
+        // record exposes a "clubIds" list; the @JsonCreator factory accepts either form.
+        Path boatsDir = tempDir.resolve("imported/boats");
+        Files.createDirectories(boatsDir);
+        Files.writeString(boatsDir.resolve("legacy-boat.json"),
+            "{\"id\":\"legacy-boat\",\"sailNumber\":\"AUS9\",\"name\":\"Legacy\","
+                + "\"designId\":null,\"clubId\":\"myc.com.au\","
+                + "\"certificates\":[],\"sources\":[\"SailSys\"],\"lastUpdated\":null}");
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat boat = store.boats().get("legacy-boat");
+        assertNotNull(boat);
+        assertEquals(List.of("myc.com.au"), boat.clubIds());
+        assertEquals("myc.com.au", boat.primaryClubId());
     }
 
     @Test
@@ -177,8 +197,8 @@ class DataStoreTest {
 
     @Test
     void eachBoatInOwnFile(@TempDir Path tempDir) {
-        Boat boat1 = new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), null, null);
-        Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of(), List.of(), null, null);
+        Boat boat1 = new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", List.of("myc.com.au"), List.of(), List.of(), null, null);
+        Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", List.of("myc.com.au"), List.of(), List.of(), null, null);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -201,7 +221,7 @@ class DataStoreTest {
         Certificate cert = new Certificate(
                 "ORC", 2020, 588.4, false, false, false, false, "AUS-2020-1234",
                 LocalDate.of(2021, 6, 30));
-        Boat boat = new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", "myc.com.au",
+        Boat boat = new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", List.of("myc.com.au"),
                 List.of(cert), List.of(), null, null);
 
         DataStore store = new DataStore(tempDir);
@@ -812,7 +832,7 @@ class DataStoreTest {
 
         // Boat B: already exists under the keep design with same sail+name — will collide
         Certificate cert = new Certificate("ORC", 2023, 0.95, false, false, false, false, null, null);
-        Boat boatB = new Boat("AUS1-foo-keep", "AUS1", "Foo", "keep", "myclub.com",
+        Boat boatB = new Boat("AUS1-foo-keep", "AUS1", "Foo", "keep", List.of("myclub.com"),
                 List.of(cert), List.of("ORC"), null, null);
         store.putBoat(boatB);
 
@@ -832,7 +852,7 @@ class DataStoreTest {
         Boat merged = store.boats().get("AUS1-foo-keep");
         assertEquals("keep", merged.designId());
         // clubId from keep boat
-        assertEquals("myclub.com", merged.clubId());
+        assertEquals("myclub.com", merged.primaryClubId());
         // Certificate from keep boat
         assertEquals(1, merged.certificates().size());
         // Sources merged
@@ -1029,7 +1049,7 @@ class DataStoreTest {
         // keep; the ignore cascade should merge the d1 record INTO the designless one.
         Certificate cert = new Certificate("ORC", 2024, 0.95, false, false, false, false, null, null);
         store.putBoat(new Boat("6333-georgiaexpress-d1", "6333", "Georgia Express", "d1",
-                "myclub.com", List.of(cert), List.of("ORC:D1"), null, null));
+            List.of("myclub.com"), List.of(cert), List.of("ORC:D1"), null, null));
         store.putBoat(new Boat("6333-georgiaexpress", "6333", "Georgia Express", null,
                 null, List.of(), List.of("TopYacht:D1"), null, null));
 

@@ -455,7 +455,7 @@ public class AdminApiServlet extends HttpServlet
             List<Boat> all = store.boats().values().stream()
                 .filter(b -> finalCandidateIds == null || finalCandidateIds.contains(b.id()))
                 .filter(b -> filterDesignId == null || filterDesignId.equals(b.designId()))
-                .filter(b -> filterClubId   == null || filterClubId.equals(b.clubId()))
+                .filter(b -> filterClubId == null || b.hasClub(filterClubId))
                 .filter(b -> showExcluded
                     || (!store.isBoatExcluded(b.id())
                         && (b.designId() == null || !store.isDesignExcluded(b.designId()))))
@@ -471,7 +471,8 @@ public class AdminApiServlet extends HttpServlet
                     case "sailNumber" -> Comparator.comparing(Boat::sailNumber, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
                     case "name"       -> Comparator.comparing(Boat::name,       Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
                     case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
-                    case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
+                    case "clubId" ->
+                        Comparator.comparing(Boat::primaryClubId, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
                     case "spinRef"      -> Comparator.comparing(
                                             (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.referenceFactors() != null && bd2.referenceFactors().spin() != null) ? bd2.referenceFactors().spin().value() : 0.0; },
                                             Comparator.<Double>naturalOrder());
@@ -508,9 +509,12 @@ public class AdminApiServlet extends HttpServlet
                 row.put("designId",   b.designId());
                 row.put("designExcluded", b.designId() != null && store.isDesignExcluded(b.designId()));
                 row.put("designIgnored",  b.designId() != null && store.isDesignIgnored(b.designId()));
-                row.put("clubId",     b.clubId());
-                putClubNaming(row, b.clubId());
-                row.put("clubExcluded", b.clubId() != null && store.isClubExcluded(b.clubId()));
+                row.put("clubId", b.primaryClubId());
+                row.put("clubIds", b.clubIds());
+                putClubNaming(row, b.primaryClubId());
+                row.put("clubNames", clubNamings(b.clubIds()));
+                row.put("clubExcluded", !b.clubIds().isEmpty()
+                    && b.clubIds().stream().allMatch(store::isClubExcluded));
                 BoatDerived bd = cache.boatDerived().get(b.id());
                 ReferenceFactors rf = (bd != null) ? bd.referenceFactors() : null;
                 row.put("spinRef",      rf != null && rf.spin()      != null ? factorMap(rf.spin())      : null);
@@ -791,7 +795,7 @@ public class AdminApiServlet extends HttpServlet
                         .filter(r -> c.id().equals(r.clubId()))
                         .count();
                     long boatCount = store.boats().values().stream()
-                        .filter(b -> c.id().equals(b.clubId()))
+                        .filter(b -> b.hasClub(c.id()))
                         .count();
 
                     Map<String, Object> row = new LinkedHashMap<>();
@@ -800,6 +804,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("longName", c.longName());
                     row.put("state", c.state());
                     row.put("email", c.email());
+                    row.put("topyachtUrls", c.topyachtUrls() == null ? List.of() : c.topyachtUrls());
                     long seriesCount = c.series() == null ? 0
                         : c.series().stream().filter(s -> !s.isCatchAll()).count();
                     row.put("boats", boatCount > 0 ? boatCount : null);
@@ -940,11 +945,12 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * POST /api/clubs/edit — edits a club's shortName, longName, state, and/or email.
+     * POST /api/clubs/edit — edits a club's shortName, longName, state, email, and/or
+     * topyacht URLs.
      * <p>
      * Accepts JSON with {@code clubId} (current id), and any of {@code shortName},
-     * {@code longName}, {@code state}, {@code email}. Responds 404 if the club is unknown,
-     * 400 for validation errors.
+     * {@code longName}, {@code state}, {@code email}, {@code topyachtUrls} (array of
+     * strings). Responds 404 if the club is unknown, 400 for validation errors.
      */
     @SuppressWarnings("unchecked")
     private void handleEditClub(HttpServletRequest req, HttpServletResponse resp) throws IOException
@@ -982,20 +988,45 @@ public class AdminApiServlet extends HttpServlet
             String newEmail = body.containsKey("email")
                 ? nullIfBlank((String)body.get("email")) : club.email();
 
+            boolean topyachtTouched = body.containsKey("topyachtUrls");
+            List<String> newTopyachtUrls = club.topyachtUrls();
+            if (topyachtTouched)
+            {
+                Object raw = body.get("topyachtUrls");
+                List<String> tmp = new ArrayList<>();
+                if (raw instanceof List<?> list)
+                {
+                    for (Object o : list)
+                    {
+                        if (o == null)
+                            continue;
+                        String s = o.toString().trim();
+                        if (!s.isEmpty() && !tmp.contains(s))
+                            tmp.add(s);
+                    }
+                }
+                newTopyachtUrls = List.copyOf(tmp);
+            }
+
             boolean shortNameChanged = !java.util.Objects.equals(newShortName, club.shortName());
             boolean metaChanged = !java.util.Objects.equals(newLongName, club.longName())
                 || !java.util.Objects.equals(newState, club.state())
                 || !java.util.Objects.equals(newEmail, club.email());
+            boolean topyachtChanged = topyachtTouched
+                && !java.util.Objects.equals(newTopyachtUrls,
+                club.topyachtUrls() == null ? List.of() : club.topyachtUrls());
 
-            if (!shortNameChanged && !metaChanged)
+            if (!shortNameChanged && !metaChanged && !topyachtChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true));
                 return;
             }
 
-            // longName, state, email are YAML-owned — write to clubs.yaml.
+            // longName, state, email, topyachtUrls are YAML-owned — write to clubs.yaml.
             if (metaChanged)
                 store.updateClubMeta(clubId, newLongName, newState, newEmail);
+            if (topyachtChanged)
+                store.updateClubTopyachtUrls(clubId, newTopyachtUrls);
 
             // shortName is JSON-owned — rewrite the Club JSON record. Re-fetch first so
             // we pick up any YAML-side updates from the call above.
@@ -1276,7 +1307,6 @@ public class AdminApiServlet extends HttpServlet
             String newSailNumber = (String) body.get("sailNumber");
             String newName = (String) body.get("name");
             String newDesignId = body.containsKey("designId") ? (String) body.get("designId") : null;
-            String newClubId = body.containsKey("clubId") ? (String) body.get("clubId") : null;
 
             if (boatId == null || boatId.isBlank())
             {
@@ -1296,7 +1326,38 @@ public class AdminApiServlet extends HttpServlet
             String sail = (newSailNumber != null && !newSailNumber.isBlank()) ? newSailNumber.trim() : boat.sailNumber();
             String name = (newName != null && !newName.isBlank()) ? newName.trim() : boat.name();
             String designId = body.containsKey("designId") ? (newDesignId != null && !newDesignId.isBlank() ? newDesignId.trim() : null) : boat.designId();
-            String clubId = body.containsKey("clubId") ? (newClubId != null && !newClubId.isBlank() ? newClubId.trim() : null) : boat.clubId();
+
+            // Resolve clubIds — accept either a `clubIds` array or the legacy single `clubId`.
+            boolean clubIdsTouched = body.containsKey("clubIds") || body.containsKey("clubId");
+            List<String> clubIds;
+            if (body.containsKey("clubIds"))
+            {
+                Object raw = body.get("clubIds");
+                List<String> tmp = new ArrayList<>();
+                if (raw instanceof List<?> list)
+                {
+                    for (Object o : list)
+                    {
+                        if (o == null)
+                            continue;
+                        String s = o.toString().trim();
+                        if (!s.isEmpty() && !tmp.contains(s))
+                            tmp.add(s);
+                    }
+                }
+                clubIds = List.copyOf(tmp);
+            }
+            else if (body.containsKey("clubId"))
+            {
+                String singleClubId = (String)body.get("clubId");
+                clubIds = (singleClubId != null && !singleClubId.isBlank())
+                    ? List.of(singleClubId.trim())
+                    : List.of();
+            }
+            else
+            {
+                clubIds = boat.clubIds();
+            }
 
             // Compute the new boat ID
             Design design = designId != null ? store.designs().get(designId) : null;
@@ -1312,7 +1373,7 @@ public class AdminApiServlet extends HttpServlet
             }
 
             // Create updated boat record
-            Boat updated = new Boat(newBoatId, sail, name, designId, clubId,
+            Boat updated = new Boat(newBoatId, sail, name, designId, clubIds,
                 boat.certificates(), boat.sources(), java.time.Instant.now(), null);
             store.putBoat(updated);
 
@@ -1381,15 +1442,17 @@ public class AdminApiServlet extends HttpServlet
             }
 
             // Write club override to clubs.yaml
-            if (body.containsKey("clubId"))
+            if (clubIdsTouched)
             {
-                if (clubId != null)
+                if (!clubIds.isEmpty())
                 {
-                    // Keep legacy sail+name override for boats that may be re-created
-                    if (!Objects.equals(clubId, boat.clubId()))
-                        store.addClubOverride(sail, name, clubId);
+                    // Keep legacy sail+name override pointing at the primary club so re-creations
+                    // pick up at least the primary affiliation
+                    String primaryClubId = clubIds.getFirst();
+                    if (!Objects.equals(primaryClubId, boat.primaryClubId()))
+                        store.addClubOverride(sail, name, primaryClubId);
                     // BoatId-based override (takes priority over sail+name on future imports)
-                    store.setBoatClubOverrideById(newBoatId, clubId);
+                    store.setBoatClubsOverrideById(newBoatId, clubIds);
                     if (idChanged)
                         store.removeBoatFromClubConfig(boatId);
                 }
@@ -3076,6 +3139,27 @@ public class AdminApiServlet extends HttpServlet
         Club c = resolveClub(clubId);
         row.put("clubShortName", c != null ? c.shortName() : null);
         row.put("clubLongName",  c != null ? c.longName()  : null);
+    }
+
+    /**
+     * Builds parallel {id, shortName, longName} entries for a list of club ids.
+     */
+    private List<Map<String, Object>> clubNamings(List<String> clubIds)
+    {
+        if (clubIds == null || clubIds.isEmpty())
+            return List.of();
+        List<Map<String, Object>> out = new ArrayList<>(clubIds.size());
+        for (String id : clubIds)
+        {
+            Club c = resolveClub(id);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", id);
+            row.put("shortName", c != null ? c.shortName() : null);
+            row.put("longName", c != null ? c.longName() : null);
+            row.put("excluded", store.isClubExcluded(id));
+            out.add(row);
+        }
+        return out;
     }
 
     private <T> Map<String, Object> paginate(List<T> all, int page, int size)

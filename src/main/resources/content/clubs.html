@@ -53,7 +53,7 @@
 
     <div id="edit-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
         <strong id="edit-panel-title-clubs">Edit Club</strong>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:600px;margin:0.5rem 0;">
             <label for="edit-club-short-name">Short name:</label>
             <input type="text" id="edit-club-short-name" style="padding:3px 6px;">
             <label for="edit-club-long-name">Full name:</label>
@@ -62,6 +62,8 @@
             <input type="text" id="edit-club-state" style="padding:3px 6px; max-width:80px;">
             <label for="edit-club-email">Email:</label>
             <input type="email" id="edit-club-email" style="padding:3px 6px;">
+            <label for="edit-club-topyacht" style="align-self:start;padding-top:4px;">TopYacht URLs:</label>
+            <textarea id="edit-club-topyacht" rows="3" style="font-family:monospace;padding:3px 6px;width:100%;" placeholder="One URL per line"></textarea>
         </div>
         <div id="edit-club-email-row" style="display:none; margin-bottom:0.5rem;">
             <label for="edit-request-email-clubs" style="font-size:0.9rem;">Your email (optional): </label>

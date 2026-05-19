@@ -366,7 +366,7 @@ public class BwpsImporter
                 ? detail.type() : null;
             Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, designName, raceDate, SOURCE);
 
-            if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null
+            if (detail.club() != null && !detail.club().isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(detail.club(), null,
@@ -374,7 +374,7 @@ public class BwpsImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.certificates(),
+                        boat.designId(), List.of(fromClub.id()), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -1246,7 +1246,7 @@ public class BwpsImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), List.copyOf(certs),
+            boat.designId(), boat.clubIds(), List.copyOf(certs),
             addSource(boat.sources(), source), Instant.now(), null));
         LOG.debug("{}: inferred {} cert {} (TCF={} twoHanded={}) for boat {}",
             source, system, certNumber, tcf, twoHanded, boat.id());

@@ -217,7 +217,7 @@ public class DataStore
 
     public boolean isExplicitlyNoClub(String boatId)
     {
-        String override = clubCatalogue.resolveBoatIdOverride(boatId);
+        List<String> override = clubCatalogue.resolveBoatIdOverride(boatId);
         return override != null && override.isEmpty();
     }
 
@@ -383,7 +383,7 @@ public class DataStore
                     normSailNo,
                     candidate.name(),
                     resolvedDesignId,
-                    candidate.clubId(),
+                    candidate.clubIds(),
                     candidate.certificates(),
                     addSource(candidate.sources(), sourceDesign), Instant.now(), candidate.loadedAt());
                 String oldId = candidate.id();
@@ -414,26 +414,33 @@ public class DataStore
             }
 
             // BoatId-based override takes priority over legacy sail+name override
-            String boatIdOverride = clubCatalogue.resolveBoatIdOverride(newBoatId);
-            String newClubId;
+            List<String> boatIdOverride = clubCatalogue.resolveBoatIdOverride(newBoatId);
+            List<String> newClubIds;
             if (boatIdOverride != null)
             {
-                newClubId = boatIdOverride.isEmpty() ? null : boatIdOverride;
+                newClubIds = boatIdOverride;
                 LOG.info("Boat {}: boatId club override → {}", newBoatId,
-                    boatIdOverride.isEmpty() ? "no-club" : newClubId);
+                    boatIdOverride.isEmpty() ? "no-club" : boatIdOverride);
             }
             else
             {
-                newClubId = clubCatalogue.resolveClubOverride(normSailNo, rawName);
-                if (newClubId != null)
-                    LOG.info("Boat {}/{}: sail+name club override → {}", normSailNo, rawName, newClubId);
+                String sailNameOverride = clubCatalogue.resolveClubOverride(normSailNo, rawName);
+                if (sailNameOverride != null)
+                {
+                    newClubIds = List.of(sailNameOverride);
+                    LOG.info("Boat {}/{}: sail+name club override → {}", normSailNo, rawName, sailNameOverride);
+                }
+                else
+                {
+                    newClubIds = List.of();
+                }
             }
             Boat newBoat = new Boat(
                 newBoatId,
                 normSailNo,
                 rawName,
                 design != null ? design.id() : null,
-                newClubId,
+                newClubIds,
                 List.of(),
                 List.of(sourceDesign),
                 Instant.now(),
@@ -549,6 +556,20 @@ public class DataStore
         List<String> updated = new ArrayList<>(existing);
         updated.add(source);
         return List.copyOf(updated);
+    }
+
+    /**
+     * Merge two ordered club id lists, preserving order, dropping duplicates.
+     */
+    private static List<String> mergeClubIds(List<String> a, List<String> b)
+    {
+        if (a == null || a.isEmpty())
+            return b == null ? List.of() : List.copyOf(b);
+        if (b == null || b.isEmpty())
+            return List.copyOf(a);
+        LinkedHashSet<String> merged = new LinkedHashSet<>(a);
+        merged.addAll(b);
+        return List.copyOf(merged);
     }
 
     /**
@@ -856,20 +877,20 @@ public class DataStore
                     Set<String> mergedSources = new LinkedHashSet<>(existingAtNewId.sources());
                     mergedSources.addAll(boat.sources());
 
-                    String clubId = existingAtNewId.clubId() != null ? existingAtNewId.clubId() : boat.clubId();
+                    List<String> mergedClubIds = mergeClubIds(existingAtNewId.clubIds(), boat.clubIds());
                     toWrite = new Boat(newId, existingAtNewId.sailNumber(), existingAtNewId.name(), keepId,
-                        clubId, List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
+                        mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
                 }
                 else
                 {
                     toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                        boat.clubId(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                        boat.clubIds(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
                 }
             }
             else
             {
                 toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                    boat.clubId(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                    boat.clubIds(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
             }
             putBoat(toWrite);
             updatedBoats++;
@@ -1024,6 +1045,30 @@ public class DataStore
             : seed.shortName();
         boolean changed = ClubLoader.updateClubMeta(configDir, clubId, shortNameIfNew,
             longName, state, email);
+        if (!changed)
+            return;
+
+        clubSeed = ClubLoader.load(configDir);
+        if (existing != null)
+            clubs.put(clubId, enrichWithSeed(existing));
+    }
+
+    /**
+     * Updates the YAML-owned {@code topyacht} URL list for a club. A null or empty
+     * list clears the field. Auto-creates the YAML entry if missing.
+     */
+    public void updateClubTopyachtUrls(String clubId, List<String> topyachtUrls)
+    {
+        requireStarted();
+        Club existing = clubs.get(clubId);
+        Club seed = clubSeed.get(clubId);
+        if (existing == null && seed == null)
+            throw new IllegalArgumentException("Unknown club: " + clubId);
+
+        String shortNameIfNew = existing != null ? existing.shortName()
+            : seed.shortName();
+        boolean changed = ClubLoader.updateClubTopyachtUrls(configDir, clubId,
+            shortNameIfNew, topyachtUrls);
         if (!changed)
             return;
 
@@ -1191,9 +1236,9 @@ public class DataStore
                 Set<String> mergedSources = new LinkedHashSet<>(target.sources());
                 mergedSources.addAll(boat.sources());
                 mergedSources.add(note);
-                String clubId = target.clubId() != null ? target.clubId() : boat.clubId();
+                List<String> mergedClubIds = mergeClubIds(target.clubIds(), boat.clubIds());
                 Boat merged = new Boat(newId, target.sailNumber(), target.name(), null,
-                    clubId, List.copyOf(certMap.values()), List.copyOf(mergedSources),
+                    mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources),
                     Instant.now(), null);
                 removeBoat(boat.id());
                 putBoat(merged);
@@ -1208,7 +1253,7 @@ public class DataStore
             {
                 // Simple rename: strip the design suffix in place.
                 Boat updated = new Boat(newId, boat.sailNumber(), boat.name(), null,
-                    boat.clubId(), boat.certificates(),
+                    boat.clubIds(), boat.certificates(),
                     addSource(boat.sources(), note), Instant.now(), null);
                 if (!newId.equals(boat.id()))
                 {
@@ -1559,6 +1604,17 @@ public class DataStore
     }
 
     /**
+     * Assigns a boatId to a list of clubs in clubs.yaml and reloads the catalogue.
+     * An empty list moves the boatId to the {@code noclub} list.
+     */
+    public void setBoatClubsOverrideById(String boatId, List<String> clubIds)
+    {
+        requireStarted();
+        ClubLoader.setBoatClubs(configDir, boatId, clubIds);
+        reloadClubCatalogue();
+    }
+
+    /**
      * Marks a boatId as explicitly having no club in clubs.yaml and reloads the catalogue.
      */
     public void setBoatNoClubById(String boatId)
@@ -1647,17 +1703,20 @@ public class DataStore
             for (Certificate c : mb.certificates())
                 certMap.putIfAbsent(certKey(c), c);
 
-        // Prefer a non-null designId and clubId from any of the boats
+        // Prefer a non-null designId from any of the boats; union all club ids
         String designId = keepBoat.designId() != null ? keepBoat.designId()
             : toMerge.stream().map(Boat::designId).filter(Objects::nonNull).findFirst().orElse(null);
-        String clubId = keepBoat.clubId() != null ? keepBoat.clubId()
-            : toMerge.stream().map(Boat::clubId).filter(Objects::nonNull).findFirst().orElse(null);
+        List<String> mergedClubIds = keepBoat.clubIds();
+        for (Boat mb : toMerge)
+        {
+            mergedClubIds = mergeClubIds(mergedClubIds, mb.clubIds());
+        }
 
         Set<String> mergedSources = new LinkedHashSet<>(keepBoat.sources());
         for (Boat mb : toMerge)
             mergedSources.addAll(mb.sources());
         Boat mergedBoat = new Boat(keepBoat.id(), keepBoat.sailNumber(), keepBoat.name(),
-            designId, clubId,
+            designId, mergedClubIds,
             List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
         putBoat(mergedBoat);
 
@@ -1827,20 +1886,20 @@ public class DataStore
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
 
         // noclub correction: boats that have a persisted clubId but are listed in the noclub
-        // config get their club cleared. This fixes boats that were assigned a club before the
+        // config get their clubs cleared. This fixes boats that were assigned a club before the
         // noclub entry was added, or before the importer guard was in place.
         {
             List<Boat> noclubViolations = boats.values().stream()
-                .filter(b -> b.clubId() != null && isExplicitlyNoClub(b.id()))
+                .filter(b -> !b.clubIds().isEmpty() && isExplicitlyNoClub(b.id()))
                 .toList();
             if (!noclubViolations.isEmpty())
             {
                 LOG.warn("Correcting {} boat(s) with a club that are listed in noclub", noclubViolations.size());
                 for (Boat b : noclubViolations)
                 {
-                    LOG.warn("noclub correction: clearing clubId '{}' from boat {}", b.clubId(), b.id());
+                    LOG.warn("noclub correction: clearing clubIds {} from boat {}", b.clubIds(), b.id());
                     putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
-                        null, b.certificates(), b.sources(), Instant.now(), null));
+                        List.of(), b.certificates(), b.sources(), Instant.now(), null));
                 }
             }
         }
@@ -1878,7 +1937,7 @@ public class DataStore
                         LOG.info("Design alias correction: updating designId {} → {} for boat {}",
                             b.designId(), canonDesignId, b.id());
                         Boat updated = new Boat(canonBoatId, b.sailNumber(), b.name(), canonDesignId,
-                            b.clubId(), b.certificates(), b.sources(), Instant.now(), null);
+                            b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
                         removeBoat(b.id());
                         putBoat(updated);
                         rewriteFinisherBoatId(b.id(), canonBoatId);
@@ -1937,7 +1996,7 @@ public class DataStore
                             LOG.info("Auto-renaming stale boat {} → {} (canonical sail per alias seed)",
                                 b.id(), canonId);
                             Boat renamed = new Boat(canonId, canonSail, displayName, b.designId(),
-                                b.clubId(), b.certificates(), b.sources(), Instant.now(), null);
+                                b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
                             String oldId = b.id();
                             removeBoat(oldId);
                             putBoat(renamed);

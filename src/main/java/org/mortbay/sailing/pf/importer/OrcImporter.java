@@ -17,7 +17,6 @@ import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Certificate;
-import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -307,7 +306,7 @@ public class OrcImporter
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(),
+            boat.designId(), boat.clubIds(),
             List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
     }
 

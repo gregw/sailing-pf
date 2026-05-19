@@ -127,6 +127,7 @@ public class TopYachtImporter
         Path logDir = store.dataRoot().resolve("log");
         Files.createDirectories(logDir);
         errorFile = logDir.resolve("topyacht-errors.txt");
+        Files.deleteIfExists(errorFile);
         // topyachtUrls are configured in the seed (clubs.yaml); merge seed + persisted
         // so we don't miss clubs that haven't been imported yet.
         List<Club> allClubs = Stream.concat(
@@ -353,7 +354,7 @@ public class TopYachtImporter
 
             Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, date, SOURCE);
 
-            if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null
+            if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(me.clubCode, null,
@@ -361,7 +362,7 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.certificates(),
+                        boat.designId(), List.of(fromClub.id()), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -719,7 +720,7 @@ public class TopYachtImporter
         {
             Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), null, SOURCE);
 
-            if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null
+            if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(row.clubCode(), null,
@@ -727,7 +728,7 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.certificates(),
+                        boat.designId(), List.of(fromClub.id()), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -793,7 +794,7 @@ public class TopYachtImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), List.copyOf(certs),
+            boat.designId(), boat.clubIds(), List.copyOf(certs),
             addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;

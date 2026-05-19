@@ -774,10 +774,10 @@ public class SailSysImporter
 
         // Assign club if missing and not explicitly marked no-club in config
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);
-        if (boatClub != null && boat.clubId() == null && !store.isExplicitlyNoClub(boat.id()))
+        if (boatClub != null && boat.clubIds().isEmpty() && !store.isExplicitlyNoClub(boat.id()))
         {
             store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                boat.designId(), boatClub.id(),
+                boat.designId(), List.of(boatClub.id()),
                 boat.certificates(), addSource(boat.sources(), SOURCE), Instant.now(), null));
             boat = store.boats().get(boat.id());
         }
@@ -857,7 +857,7 @@ public class SailSysImporter
         List<Certificate> certs = new ArrayList<>(current.certificates());
         certs.add(cert);
         store.putBoat(new Boat(current.id(), current.sailNumber(), current.name(),
-            current.designId(), current.clubId(),
+            current.designId(), current.clubIds(),
             List.copyOf(certs),
             addSource(current.sources(), SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "")),
             Instant.now(), null));

@@ -5,10 +5,12 @@ import java.util.EnumSet;
 
 import jakarta.servlet.DispatcherType;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.transport.HttpClientTransportDynamic;
 import org.eclipse.jetty.ee10.servlet.FilterHolder;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.ee10.servlet.SessionHandler;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.security.Constraint;
 import org.eclipse.jetty.security.SecurityHandler;
 import org.eclipse.jetty.security.openid.OpenIdAuthenticator;
@@ -16,6 +18,7 @@ import org.eclipse.jetty.security.openid.OpenIdConfiguration;
 import org.eclipse.jetty.security.openid.OpenIdLoginService;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +34,14 @@ public class PfServer
         DataStore store = new DataStore(dataRoot);
         store.start();
 
-        HttpClient httpClient = new HttpClient();
+        // Some sailing result hosts serve incomplete certificate chains; accept any cert
+        // so importers don't fail with PKIX path-building errors.
+        SslContextFactory.Client ssl = new SslContextFactory.Client();
+        ssl.setTrustAll(true);
+        ssl.setEndpointIdentificationAlgorithm(null);
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSslContextFactory(ssl);
+        HttpClient httpClient = new HttpClient(new HttpClientTransportDynamic(clientConnector));
         httpClient.start();
 
         TaskService taskService = new TaskService(store, httpClient, dataRoot);
