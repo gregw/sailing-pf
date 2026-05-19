@@ -24,7 +24,7 @@ fi
 echo "==> Installing project to $INSTALL_DIR…"
 mkdir -p "$INSTALL_DIR"
 # Copy the project source so Maven can be run from there
-rsync -a --exclude='.git' --exclude='pf-data' --exclude='target' \
+rsync -a --delete --exclude='.git' --exclude='pf-data' --exclude='target' \
     "$(dirname "$0")/../" "$INSTALL_DIR/"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
