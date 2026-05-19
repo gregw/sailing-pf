@@ -3,6 +3,7 @@ package org.mortbay.sailing.pf.importer;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
@@ -335,6 +336,54 @@ class TopYachtImporterTest
     }
 
     @Test
+    void parseResultsPageDerivesElapsedFromStartAndFinishWhenElapsedColumnMissing()
+    {
+        // BBYC AusDay 2022 style: no Elapsed column, only Fin Tim + Start in caption.
+        String html = resultsHtmlNoElapsed("Division 2  Mixed Class HC results  Start : 12:35", List.of(
+            resultRowFinishOnly("1", "Resurgent", "5314", "D2", "P Widders", "15:59:06"),
+            resultRowFinishOnly("2", "Kalevala", "6329", "D2", "P Bennett", "16:08:10")
+        ));
+
+        ParsedRace parsed = importer.parseResultsPage(html);
+        assertNotNull(parsed);
+        ParsedDivision div = parsed.divisions().get(0);
+        assertEquals(2, div.rows().size());
+        // 15:59:06 - 12:35:00 = 3h 24m 6s
+        assertEquals(Duration.ofHours(3).plusMinutes(24).plusSeconds(6), div.rows().get(0).elapsed());
+        // 16:08:10 - 12:35:00 = 3h 33m 10s
+        assertEquals(Duration.ofHours(3).plusMinutes(33).plusSeconds(10), div.rows().get(1).elapsed());
+    }
+
+    @Test
+    void parseResultsPageSkipsFinishOnlyDivisionWhenStartTimeMissing()
+    {
+        // No "Start :" in caption — without it we cannot derive elapsed.
+        String html = resultsHtmlNoElapsed("PHS results", List.of(
+            resultRowFinishOnly("1", "Boat", "AUS1", "D1", "Skip", "15:00:00")
+        ));
+        ParsedRace parsed = importer.parseResultsPage(html);
+        assertNull(parsed);
+    }
+
+    @Test
+    void deriveElapsedRollsOverMidnight()
+    {
+        // Start 22:00, finish 02:00 → 4h (next day).
+        assertEquals(Duration.ofHours(4),
+            TopYachtImporter.deriveElapsed(LocalTime.of(22, 0), LocalTime.of(2, 0)));
+    }
+
+    @Test
+    void parseTimeOfDayAcceptsHmFormAndSkipsDnf()
+    {
+        assertEquals(LocalTime.of(12, 35), TopYachtImporter.parseTimeOfDay("12:35"));
+        assertEquals(LocalTime.of(15, 59, 6), TopYachtImporter.parseTimeOfDay("15:59:06"));
+        assertNull(TopYachtImporter.parseTimeOfDay("DNF"));
+        assertNull(TopYachtImporter.parseTimeOfDay(""));
+        assertNull(TopYachtImporter.parseTimeOfDay("not a time"));
+    }
+
+    @Test
     void parseResultsPageReturnsNullWhenRequiredColumnMissing()
     {
         // Table with no elapsed column — division is skipped, so no valid divisions → null
@@ -655,6 +704,40 @@ class TopYachtImporterTest
             "<td></td>" +
             "<td>DNF</td>" +
             "<td></td><td></td><td></td>" +
+            "</tr>";
+    }
+
+    /**
+     * Mirrors BBYC 2022 AusDay layout: Place, Boat Name, Sail No, Class, Skipper, Fin Tim, Score — no Elapsed column.
+     */
+    private String resultsHtmlNoElapsed(String caption, List<String> dataRows)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<html><body><table class='centre_results_table'>");
+        sb.append("<caption>").append(caption).append("</caption>");
+        sb.append("<tr class='type1 txtsize'>");
+        sb.append("<td>Place</td><td>Boat Name</td><td>Sail No</td>");
+        sb.append("<td>Class</td><td>Skipper</td><td>Fin Tim</td><td>Score</td>");
+        sb.append("</tr>");
+        for (String row : dataRows)
+        {
+            sb.append(row);
+        }
+        sb.append("</table></body></html>");
+        return sb.toString();
+    }
+
+    private String resultRowFinishOnly(String place, String name, String sail,
+                                       String design, String skipper, String finTime)
+    {
+        return "<tr class='type3 txtsize'>" +
+            "<td class='boldText centre_align'>" + place + "</td>" +
+            "<td>" + name + "</td>" +
+            "<td>" + sail + "</td>" +
+            "<td>" + design + "</td>" +
+            "<td>" + skipper + "</td>" +
+            "<td>" + finTime + "</td>" +
+            "<td>1.0</td>" +
             "</tr>";
     }
 

@@ -8,6 +8,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -75,6 +76,10 @@ public class TopYachtImporter
         "Race\\s+(\\d+)(?:\\s*-\\s*(\\d{1,2}/\\d{1,2}/\\d{4}))?", Pattern.CASE_INSENSITIVE);
     private static final Pattern RESULTS_PAGE_DATE = Pattern.compile(
         "\\((\\d{1,2}/\\d{1,2}/\\d{4})\\)");
+    // Caption form: "Start : 12:35" or "Start : 12:35:00" — recovers the start time
+    // for divisions whose results table has no Elapsed column, only Fin Tim.
+    private static final Pattern CAPTION_START_TIME = Pattern.compile(
+        "Start\\s*:\\s*(\\d{1,2}:\\d{1,2}(?::\\d{1,2})?)", Pattern.CASE_INSENSITIVE);
 
     /**
      * Maps known handicap system name fragments (upper-cased, possibly multi-word)
@@ -645,6 +650,13 @@ public class TopYachtImporter
             boolean captionNonSpinnaker = false;
             boolean captionTwoHanded = false;
             boolean captionWindwardLeeward = false;
+            LocalTime startTime = null;
+            if (caption != null)
+            {
+                Matcher startM = CAPTION_START_TIME.matcher(caption.text());
+                if (startM.find())
+                    startTime = parseTimeOfDay(startM.group(1));
+            }
             if (caption != null)
             {
                 // Normalise underscores to spaces so "ORC_NS_AP" → "ORC NS AP", "IRC_SH" → "IRC SH"
@@ -750,7 +762,7 @@ public class TopYachtImporter
                 continue;
             }
 
-            int sailIdx = -1, nameIdx = -1, elapsedIdx = -1, clubIdx = -1, designIdx = -1, ahcIdx = -1;
+            int sailIdx = -1, nameIdx = -1, elapsedIdx = -1, finishIdx = -1, clubIdx = -1, designIdx = -1, ahcIdx = -1;
             Elements headers = headerRow.select("td");
             for (int i = 0; i < headers.size(); i++)
             {
@@ -761,6 +773,8 @@ public class TopYachtImporter
                     nameIdx = i;
                 else if (h.contains("elapsd") || h.contains("elapsed"))
                     elapsedIdx = i;
+                else if (h.contains("fin tim") || h.contains("finish") || h.contains("fintim"))
+                    finishIdx = i;
                 else if (h.contains("from") || h.equals("club"))
                     clubIdx = i;
                 else if (h.contains("class") || h.contains("design") || h.equals("type"))
@@ -769,29 +783,39 @@ public class TopYachtImporter
                     ahcIdx = i;
             }
 
-            if (sailIdx < 0 || nameIdx < 0 || elapsedIdx < 0)
+            boolean canDeriveFromFinish = elapsedIdx < 0 && finishIdx >= 0 && startTime != null;
+            if (sailIdx < 0 || nameIdx < 0 || (elapsedIdx < 0 && !canDeriveFromFinish))
             {
-                ImporterLog.warn(LOG, "TopYacht: required columns not found (sail={}, name={}, elapsed={}); skipping division (system={}, division='{}', url={})",
-                    sailIdx, nameIdx, elapsedIdx, handicapSystem, divisionName, url);
+                ImporterLog.warn(LOG, "TopYacht: required columns not found (sail={}, name={}, elapsed={}, finish={}, start={}); skipping division (system={}, division='{}', url={})",
+                    sailIdx, nameIdx, elapsedIdx, finishIdx, startTime, handicapSystem, divisionName, url);
                 continue;
             }
 
             // Parse data rows
             List<ParsedRow> rows = new ArrayList<>();
+            int timeIdx = elapsedIdx >= 0 ? elapsedIdx : finishIdx;
             for (Element row : table.select("tr.type3, tr.type4"))
             {
                 Elements cells = row.select("td");
-                if (cells.size() <= Math.max(sailIdx, Math.max(nameIdx, elapsedIdx)))
+                if (cells.size() <= Math.max(sailIdx, Math.max(nameIdx, timeIdx)))
                     continue;
 
                 String sailNo = cells.get(sailIdx).text().trim();
                 String boatName = cells.get(nameIdx).text().trim();  // Jsoup strips <a> and gives text
-                String elapsedText = cells.get(elapsedIdx).text().trim();
 
                 if (sailNo.isBlank() || boatName.isBlank())
                     continue;
 
-                Duration elapsed = parseElapsed(elapsedText);
+                Duration elapsed;
+                if (elapsedIdx >= 0)
+                {
+                    elapsed = parseElapsed(cells.get(elapsedIdx).text().trim());
+                }
+                else
+                {
+                    LocalTime finish = parseTimeOfDay(cells.get(finishIdx).text().trim());
+                    elapsed = finish != null ? deriveElapsed(startTime, finish) : null;
+                }
                 if (elapsed == null)
                     continue;  // DNF, DNS, RET, or unparseable — skip this finisher
 
@@ -1066,6 +1090,50 @@ public class TopYachtImporter
         {
             return null;
         }
+    }
+
+    /**
+     * Parses "HH:MM" or "HH:MM:SS" as a wall-clock time; returns null for DNF/blank/garbage.
+     */
+    static LocalTime parseTimeOfDay(String text)
+    {
+        if (text == null || text.isBlank())
+            return null;
+        String upper = text.trim().toUpperCase();
+        if (upper.equals("DNF") || upper.equals("DNS") || upper.equals("RET")
+            || upper.equals("DNC") || upper.equals("OCS") || upper.equals("DSQ"))
+            return null;
+        String[] parts = text.trim().split(":");
+        if (parts.length < 2 || parts.length > 3)
+            return null;
+        try
+        {
+            int h = Integer.parseInt(parts[0].trim());
+            int m = Integer.parseInt(parts[1].trim());
+            int s = parts.length == 3 ? Integer.parseInt(parts[2].trim()) : 0;
+            if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59)
+                return null;
+            return LocalTime.of(h, m, s);
+        }
+        catch (NumberFormatException e)
+        {
+            return null;
+        }
+    }
+
+    /**
+     * Derives elapsed time from start and finish wall-clock times, rolling forward 24h
+     * when the finish is earlier than the start (race crossed midnight). Returns null if
+     * either input is null.
+     */
+    static Duration deriveElapsed(LocalTime start, LocalTime finish)
+    {
+        if (start == null || finish == null)
+            return null;
+        long diff = finish.toSecondOfDay() - start.toSecondOfDay();
+        if (diff < 0)
+            diff += 24L * 3600L;
+        return Duration.ofSeconds(diff);
     }
 
     private static String stripQuery(String href)

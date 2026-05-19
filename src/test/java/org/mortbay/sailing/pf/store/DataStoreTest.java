@@ -463,6 +463,43 @@ class DataStoreTest {
         assertEquals(1, store.designs().size());
     }
 
+    @Test
+    void findOrCreateBoatSkipsCandidatesWithIgnoredDesign(@TempDir Path tempDir)
+    {
+        // Two stored boats share sail+name. One is a legit design-bearing record;
+        // the other is an orphan whose designId is now marked ignored (e.g. the
+        // ignore cascade ran before the orphan was created, or before it ran at all).
+        // The orphan should be invisible to matching so the design-bearing record
+        // wins unambiguously — no ambiguous-match warning.
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design real = new Design("beneteaufirst367", "Beneteau First 36.7",
+            List.of(), List.of(), null, false, null);
+        store.putDesign(real);
+        Design ignored = new Design("d2", "D2",
+            List.of(), List.of(), null, false, null);
+        store.putDesign(ignored);
+
+        Boat designed = new Boat("R367-celeste-beneteaufirst367", "R367", "Celeste",
+            "beneteaufirst367", List.of(), List.of(), List.of("seed"), null, null);
+        store.putBoat(designed);
+        // Orphan boat — id without design suffix but designId still references d2.
+        Boat orphan = new Boat("R367-celeste", "R367", "Celeste",
+            "d2", List.of(), List.of(), List.of("seed"), null, null);
+        store.putBoat(orphan);
+
+        // Mark d2 ignored WITHOUT cascading (write directly to design.yaml-style state
+        // is not exposed; emulate the user's seen state by toggling and then re-putting
+        // the orphan with its original designId, since cascade would otherwise clear it).
+        store.setDesignIgnored("d2", true);
+        store.putBoat(orphan);
+
+        Boat result = store.findOrCreateBoat("R367", "Celeste", null);
+
+        assertNotNull(result);
+        assertEquals("R367-celeste-beneteaufirst367", result.id());
+    }
+
     // --- Alias seed integration ---
 
     @Test

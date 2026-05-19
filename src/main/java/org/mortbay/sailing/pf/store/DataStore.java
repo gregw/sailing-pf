@@ -348,6 +348,11 @@ public class DataStore
                 continue;
             if (!normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
                 continue;
+            // Candidate's stored design is now marked ignored — the boat is effectively
+            // a stale orphan that should not influence matching. Treat it as invisible
+            // so an unambiguous design-bearing match can win.
+            if (isDesignIgnored(candidate.designId()))
+                continue;
 
             // Found a sail+name match, let's consider the designs.
 
