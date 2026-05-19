@@ -165,7 +165,8 @@ public class TopYachtImporter
             // TODO: log a warning if series name contains two-handed hints
             String lower = sl.name().toLowerCase();
             if (lower.contains("two") || lower.contains("2h") || lower.contains("2-handed"))
-                ImporterLog.warn(LOG,"TopYacht: possible two-handed series '{}' — two-handed detection not yet implemented", sl.name());
+                ImporterLog.warn(LOG, "TopYacht: possible two-handed series '{}' (club={}, url={}) — two-handed detection not yet implemented",
+                    sl.name(), club.id(), sl.url());
 
             try
             {
@@ -203,14 +204,14 @@ public class TopYachtImporter
             else
             {
                 // Multiple results pages (e.g. IRC + ORC): fetch all, merge finishers
-                List<ParsedRace> parsedList = new ArrayList<>();
+                List<UrlAndRace> parsedList = new ArrayList<>();
                 for (String url : row.resultsUrls())
                 {
                     try
                     {
-                        ParsedRace pr = parseResultsPage(fetch(url));
+                        ParsedRace pr = parseResultsPage(fetch(url), url);
                         if (pr != null)
-                            parsedList.add(pr);
+                            parsedList.add(new UrlAndRace(url, pr));
                         else
                             appendParseError(url);
                     }
@@ -220,7 +221,7 @@ public class TopYachtImporter
                     }
                 }
                 if (!parsedList.isEmpty())
-                    processResultsPages(club, seriesName, row.number(), row.date(), parsedList);
+                    processResultsPagesWithUrls(club, seriesName, row.number(), row.date(), parsedList);
             }
         }
     }
@@ -233,7 +234,7 @@ public class TopYachtImporter
     void processResultsPage(Club club, String seriesName, int raceNumber, LocalDate date,
                              String html, String url)
     {
-        ParsedRace parsed = parseResultsPage(html);
+        ParsedRace parsed = parseResultsPage(html, url);
         if (parsed == null)
         {
             appendParseError(url);
@@ -260,7 +261,8 @@ public class TopYachtImporter
         {
             boolean divNS = parsedDiv.nonSpinnaker() || seriesNS;
             List<Finisher> finishers = buildFinishers(parsedDiv.rows(), parsedDiv.handicapSystem(),
-                date.getYear(), divNS, parsedDiv.twoHanded(), parsedDiv.windwardLeeward());
+                date.getYear(), divNS, parsedDiv.twoHanded(), parsedDiv.windwardLeeward(),
+                url, raceId);
             divisions.add(new Division(parsedDiv.name(), List.copyOf(finishers)));
             totalFinishers += finishers.size();
         }
@@ -274,16 +276,39 @@ public class TopYachtImporter
     }
 
     /**
+     * Test-friendly overload that accepts only the parsed pages and treats their source
+     * URLs as unknown — log lines emitted by this path will show {@code urls=[]}.
+     * Production code uses {@link #processResultsPagesWithUrls} so URLs are retained.
+     */
+    void processResultsPages(Club club, String seriesName, int raceNumber,
+                             LocalDate date, List<ParsedRace> parsedList)
+    {
+        List<UrlAndRace> withNullUrls = new ArrayList<>(parsedList.size());
+        for (ParsedRace pr : parsedList)
+        {
+            withNullUrls.add(new UrlAndRace(null, pr));
+        }
+        processResultsPagesWithUrls(club, seriesName, raceNumber, date, withNullUrls);
+    }
+
+    /**
      * Processes multiple results pages for the same race (e.g. IRC + ORC AP).
      * Merges all finishers from all pages into a single unnamed Division, deduplicating
      * by sail number. Infers certificates from AHC column values for non-PHS systems.
-     * Package-private for testing.
+     * The source URLs are retained per page for log context.
      */
-    void processResultsPages(Club club, String seriesName, int raceNumber,
-                              LocalDate date, List<ParsedRace> parsedList)
+    void processResultsPagesWithUrls(Club club, String seriesName, int raceNumber,
+                                     LocalDate date, List<UrlAndRace> parsedList)
     {
         String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
         String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
+
+        // List of source urls (may contain nulls in tests) — included in log messages
+        List<String> sourceUrls = new ArrayList<>(parsedList.size());
+        for (UrlAndRace ur : parsedList)
+        {
+            sourceUrls.add(ur.url());
+        }
 
         if (store.races().containsKey(raceId) && !isRecentRace(date))
         {
@@ -297,9 +322,9 @@ public class TopYachtImporter
         // Subsequent occurrences from other pages add their {system, ahcValue} pair
         // if the elapsed time matches; mismatches are logged and discarded.
         LinkedHashMap<String, MergeEntry> merged = new LinkedHashMap<>();
-        for (ParsedRace pr : parsedList)
+        for (UrlAndRace ur : parsedList)
         {
-            for (ParsedDivision div : pr.divisions())
+            for (ParsedDivision div : ur.parsed().divisions())
             {
                 for (ParsedRow row : div.rows())
                 {
@@ -318,9 +343,9 @@ public class TopYachtImporter
                         if (diffSeconds > 1)
                         {
                             ImporterLog.error(LOG,"TopYacht: sail {} '{}' has conflicting elapsed times " +
-                                "{} vs {} in race {} — discarding duplicate",
+                                    "{} vs {} in race {} — discarding duplicate (urls={})",
                                 row.sailNo(), row.boatName(),
-                                existing.elapsed, row.elapsed(), raceId);
+                                existing.elapsed, row.elapsed(), raceId, sourceUrls);
                         }
                         else
                         {
@@ -335,13 +360,13 @@ public class TopYachtImporter
         // Division-level: true if ANY of the merged pages detected an NS division.
         boolean seriesNS = isNonSpinSeries(seriesName);
         boolean divNS = seriesNS || parsedList.stream()
-            .flatMap(pr -> pr.divisions().stream())
+            .flatMap(ur -> ur.parsed().divisions().stream())
             .anyMatch(ParsedDivision::nonSpinnaker);
 
         // Derive race handicapSystem from the distinct systems seen across all pages
         LinkedHashSet<String> systems = new LinkedHashSet<>();
-        for (ParsedRace pr : parsedList)
-            for (ParsedDivision div : pr.divisions())
+        for (UrlAndRace ur : parsedList)
+            for (ParsedDivision div : ur.parsed().divisions())
                 systems.add(div.handicapSystem());
         String handicapSystem = String.join("/", systems);
 
@@ -353,12 +378,18 @@ public class TopYachtImporter
             MergeEntry me = e.getValue();
 
             Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, date, SOURCE);
+            if (boat == null)
+            {
+                ImporterLog.warn(LOG, "TopYacht: skipping finisher — ambiguous boat match for sail={} name='{}' design='{}' in race={} (urls={}); see log/ambiguous-boats.log",
+                    sailNo, me.boatName, me.designName, raceId, sourceUrls);
+                continue;
+            }
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(me.clubCode, null,
-                    "TopYacht boat sailNo=" + sailNo + " name=" + me.boatName);
+                    "TopYacht boat sailNo=" + sailNo + " name=" + me.boatName + " urls=" + sourceUrls);
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
@@ -383,7 +414,8 @@ public class TopYachtImporter
 
             if (me.elapsed != null && (me.elapsed.isNegative() || me.elapsed.isZero()))
             {
-                ImporterLog.warn(LOG,"TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), me.elapsed);
+                ImporterLog.warn(LOG, "TopYacht: skipping finisher '{}' (sail={} name='{}'): non-positive elapsed {} in race={} (urls={})",
+                    boat.id(), sailNo, me.boatName, me.elapsed, raceId, sourceUrls);
                 continue;
             }
             finishers.add(new Finisher(boat.id(), me.elapsed, divNS, certNumber));
@@ -475,7 +507,7 @@ public class TopYachtImporter
             }
             catch (NumberFormatException | DateTimeParseException e)
             {
-                LOG.debug("TopYacht: could not parse race label '{}': {}", label, e.getMessage());
+                LOG.debug("TopYacht: could not parse race label '{}' on series page url={}: {}", label, baseUrl, e.getMessage());
                 continue;
             }
 
@@ -505,13 +537,21 @@ public class TopYachtImporter
         return result;
     }
 
+    /**
+     * Test-friendly overload — no URL context for log lines.
+     */
     ParsedRace parseResultsPage(String html)
+    {
+        return parseResultsPage(html, null);
+    }
+
+    ParsedRace parseResultsPage(String html, String url)
     {
         Document doc = Jsoup.parse(html);
         Elements tables = doc.select("table.centre_results_table");
         if (tables.isEmpty())
         {
-            ImporterLog.warn(LOG,"TopYacht: no centre_results_table found in results page");
+            ImporterLog.warn(LOG, "TopYacht: no centre_results_table found in results page url={}", url);
             return null;
         }
 
@@ -633,7 +673,8 @@ public class TopYachtImporter
             Element headerRow = table.selectFirst("tr.type1");
             if (headerRow == null)
             {
-                ImporterLog.warn(LOG,"TopYacht: no header row (type1) found in results table; skipping division");
+                ImporterLog.warn(LOG, "TopYacht: no header row (type1) found in results table; skipping division (system={}, division='{}', url={})",
+                    handicapSystem, divisionName, url);
                 continue;
             }
 
@@ -658,8 +699,8 @@ public class TopYachtImporter
 
             if (sailIdx < 0 || nameIdx < 0 || elapsedIdx < 0)
             {
-                ImporterLog.warn(LOG,"TopYacht: required columns not found (sail={}, name={}, elapsed={}); skipping division",
-                    sailIdx, nameIdx, elapsedIdx);
+                ImporterLog.warn(LOG, "TopYacht: required columns not found (sail={}, name={}, elapsed={}); skipping division (system={}, division='{}', url={})",
+                    sailIdx, nameIdx, elapsedIdx, handicapSystem, divisionName, url);
                 continue;
             }
 
@@ -713,18 +754,24 @@ public class TopYachtImporter
      */
     private List<Finisher> buildFinishers(List<ParsedRow> rows, String handicapSystem,
                                           int year, boolean nonSpinnaker, boolean twoHanded,
-                                          boolean windwardLeeward)
+                                          boolean windwardLeeward, String url, String raceId)
     {
         List<Finisher> finishers = new ArrayList<>();
         for (ParsedRow row : rows)
         {
             Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), null, SOURCE);
+            if (boat == null)
+            {
+                ImporterLog.warn(LOG, "TopYacht: skipping finisher — ambiguous boat match for sail={} name='{}' design='{}' in race={} (url={}); see log/ambiguous-boats.log",
+                    row.sailNo(), row.boatName(), row.designName(), raceId, url);
+                continue;
+            }
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubIds().isEmpty()
                 && !store.isExplicitlyNoClub(boat.id()))
             {
                 Club fromClub = store.findUniqueClubByShortName(row.clubCode(), null,
-                    "TopYacht boat sailNo=" + row.sailNo() + " name=" + row.boatName());
+                    "TopYacht boat sailNo=" + row.sailNo() + " name=" + row.boatName() + " url=" + url);
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
@@ -743,7 +790,8 @@ public class TopYachtImporter
 
             if (row.elapsed() != null && (row.elapsed().isNegative() || row.elapsed().isZero()))
             {
-                ImporterLog.warn(LOG,"TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), row.elapsed());
+                ImporterLog.warn(LOG, "TopYacht: skipping finisher '{}' (sail={} name='{}'): non-positive elapsed {} in race={} (url={})",
+                    boat.id(), row.sailNo(), row.boatName(), row.elapsed(), raceId, url);
                 continue;
             }
             finishers.add(new Finisher(boat.id(), row.elapsed(), nonSpinnaker, certNumber));
@@ -987,6 +1035,11 @@ public class TopYachtImporter
 
     record ParsedRow(String sailNo, String boatName, Duration elapsed,
                      String clubCode, String designName, String ahcValue) {}
+
+    /**
+     * Pairs a results-page URL with its parsed content so log messages can identify the source.
+     */
+    record UrlAndRace(String url, ParsedRace parsed) {}
 
     /** Accumulates data from multiple results pages for the same race, keyed by sail number. */
     private static class MergeEntry

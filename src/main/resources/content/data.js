@@ -96,6 +96,56 @@ function clubColumn(anchor, sortKey) {
     };
 }
 
+/** Build a single inline link button for a club entry from `clubNames`. */
+function clubLinkButton(entry) {
+    const id = entry.id || '';
+    const short = entry.shortName || id;
+    const long = entry.longName || '';
+    const title = id ? (id + (long ? ' — ' + long : '')) : '';
+    const btn = document.createElement('button');
+    btn.className = 'link-btn' + (entry.excluded ? ' excluded-link' : '');
+    btn.textContent = short;
+    if (title) btn.title = title;
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        if (id) gotoEntity('clubs', {q: id});
+    };
+    return btn;
+}
+
+/**
+ * Club action column for the boats tab — renders all of a boat's clubs as a
+ * comma-separated list of links when there are 2 or more, falling back to the
+ * standard single-club rendering otherwise. Sorts by the primary clubId.
+ */
+function boatsClubColumn() {
+    return {
+        label: 'Club', type: 'action', anchor: 'col-boat-club', sortKey: 'clubId',
+        tip: 'Home club(s). Click a club to see it on the Clubs tab; hover for id and full name.',
+        customCell: (td, item) => {
+            const clubs = Array.isArray(item.clubNames) ? item.clubNames : [];
+            if (clubs.length <= 1) {
+                const d = clubDisplay(item);
+                if (!d.short) return;
+                const btn = document.createElement('button');
+                btn.className = 'link-btn' + (d.excluded ? ' excluded-link' : '');
+                btn.textContent = d.short;
+                if (d.title) btn.title = d.title;
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    openClubTab(item);
+                };
+                td.appendChild(btn);
+                return;
+            }
+            clubs.forEach((c, i) => {
+                if (i > 0) td.appendChild(document.createTextNode(', '));
+                td.appendChild(clubLinkButton(c));
+            });
+        }
+    };
+}
+
 const COLUMNS = {
     boats: [
         { label: 'ID',     key: 'id',     anchor: 'col-boat-id',      tip: 'Unique boat identifier derived from sail number, name and design.', cls: 'id-col' },
@@ -133,7 +183,7 @@ const COLUMNS = {
         { label: 'PP', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
             tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, Chaotic and Stability spokes (last 12 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
-        clubColumn('col-boat-club', 'clubId'),
+        boatsClubColumn(),
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
           tip: 'Number of recorded finishes; click to view this boat\'s races.',
           render: item => item.finishes ? String(item.finishes) : '',
@@ -579,25 +629,29 @@ function renderTable(entity, items, append) {
             const td = document.createElement('td');
             if (col.cls) td.className = col.cls;
             if (col.type === 'action') {
-                const text = col.render ? col.render(item) : col.label;
-                const extraClass = col.btnClass ? col.btnClass(item) : '';
-                const tooltip = col.title ? col.title(item) : null;
-                if (text && col.action) {
-                    const btn = document.createElement('button');
-                    btn.className = 'link-btn' + (extraClass ? ' ' + extraClass : '');
-                    btn.textContent = text;
-                    if (tooltip) btn.title = tooltip;
-                    else if (col.cls && text) btn.title = text; // Add title for truncated text cells
-                    btn.onclick = (e) => {
-                        e.stopPropagation();
-                        col.action(item);
-                    };
-                    td.appendChild(btn);
+                if (col.customCell) {
+                    col.customCell(td, item);
                 } else {
-                    td.textContent = text || '';
-                    if (tooltip) td.title = tooltip;
-                    else if (col.cls && text) td.title = text; // Add title for truncated text cells
-                    if (extraClass) td.className = ((td.className || '') + ' ' + extraClass).trim();
+                    const text = col.render ? col.render(item) : col.label;
+                    const extraClass = col.btnClass ? col.btnClass(item) : '';
+                    const tooltip = col.title ? col.title(item) : null;
+                    if (text && col.action) {
+                        const btn = document.createElement('button');
+                        btn.className = 'link-btn' + (extraClass ? ' ' + extraClass : '');
+                        btn.textContent = text;
+                        if (tooltip) btn.title = tooltip;
+                        else if (col.cls && text) btn.title = text; // Add title for truncated text cells
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            col.action(item);
+                        };
+                        td.appendChild(btn);
+                    } else {
+                        td.textContent = text || '';
+                        if (tooltip) td.title = tooltip;
+                        else if (col.cls && text) td.title = text; // Add title for truncated text cells
+                        if (extraClass) td.className = ((td.className || '') + ' ' + extraClass).trim();
+                    }
                 }
             } else {
                 const v = col.key != null ? item[col.key] : item;
