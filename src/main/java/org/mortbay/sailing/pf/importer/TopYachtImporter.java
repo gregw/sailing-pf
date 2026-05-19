@@ -60,7 +60,7 @@ import org.slf4j.LoggerFactory;
  * unnamed Division. Duplicate sail numbers with matching elapsed times produce one
  * Finisher; mismatched elapsed times are logged as errors and discarded.
  * <p>
- * TODO: Two-handed detection — TopYacht may indicate two-handed races in the series name,
+ * TODO: Two-handed detection -- TopYacht may indicate two-handed races in the series name,
  * caption, or a column. No example found yet. A LOG.warn is emitted when the series name
  * contains "two", "2h", or "2-handed" as a breadcrumb for future investigation.
  */
@@ -71,6 +71,7 @@ public class TopYachtImporter
     static final String SOURCE = "TopYacht";
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d/M/yyyy");
+    private static final DateTimeFormatter DATE_FMT_MDY = DateTimeFormatter.ofPattern("M/d/yyyy");
     // Date portion is optional: some clubs (e.g. BBYC 2025-26) use bare "Race N" labels
     // on the series index and surface the date only on the linked results page.
     private static final Pattern RACE_LABEL = Pattern.compile(
@@ -89,7 +90,7 @@ public class TopYachtImporter
         DateTimeFormatter.ofPattern("d-MMMM-yy");
     private static final DateTimeFormatter DATE_FMT_DMY_LONG_4 =
         DateTimeFormatter.ofPattern("d-MMMM-yyyy");
-    // Caption form: "Start : 12:35" or "Start : 12:35:00" — recovers the start time
+    // Caption form: "Start : 12:35" or "Start : 12:35:00" -- recovers the start time
     // for divisions whose results table has no Elapsed column, only Fin Tim.
     private static final Pattern CAPTION_START_TIME = Pattern.compile(
         "Start\\s*:\\s*(\\d{1,2}:\\d{1,2}(?::\\d{1,2})?)", Pattern.CASE_INSENSITIVE);
@@ -187,7 +188,7 @@ public class TopYachtImporter
             // TODO: log a warning if series name contains two-handed hints
             String lower = sl.name().toLowerCase();
             if (lower.contains("two") || lower.contains("2h") || lower.contains("2-handed"))
-                ImporterLog.warn(LOG, "TopYacht: possible two-handed series '{}' (club={}, url={}) — two-handed detection not yet implemented",
+                ImporterLog.warn(LOG, "TopYacht: possible two-handed series '{}' (club={}, url={}) -- two-handed detection not yet implemented",
                     sl.name(), club.id(), sl.url());
 
             try
@@ -264,7 +265,7 @@ public class TopYachtImporter
     }
 
     /**
-     * Returns the race row's date, or — if the row label omitted it — the date extracted
+     * Returns the race row's date, or -- if the row label omitted it -- the date extracted
      * from the (already-fetched) results page. Warns and returns null if neither source
      * yields a date, so the silent-skip cannot recur.
      */
@@ -296,7 +297,7 @@ public class TopYachtImporter
             String text = p.text();
             if (!text.toLowerCase().contains("race"))
                 continue;
-            LocalDate slash = tryParseDate(RESULTS_PAGE_DATE.matcher(text), DATE_FMT);
+            LocalDate slash = tryParseSlash(text);
             if (slash != null)
                 return slash;
             LocalDate dashed = tryParseDmy(text);
@@ -306,20 +307,42 @@ public class TopYachtImporter
         return null;
     }
 
-    private static LocalDate tryParseDate(Matcher m, DateTimeFormatter fmt)
+    private static LocalDate tryParseSlash(String text)
     {
+        Matcher m = RESULTS_PAGE_DATE.matcher(text);
         while (m.find())
+        {
+            LocalDate d = parseSlashDate(m.group(1));
+            if (d != null)
+                return d;
+        }
+        return null;
+    }
+
+    /**
+     * Parses a slash-separated date, accepting both {@code d/M/yyyy} (the dominant
+     * Australian form used everywhere else in the codebase) and {@code M/d/yyyy} (which
+     * TopYacht occasionally emits, e.g. RYCV NoelexNat series). DMY is tried first so
+     * ambiguous dates like {@code 5/6/2021} resolve as 5 June, matching local convention;
+     * unambiguous US dates like {@code 5/22/2021} fall through to MDY.
+     */
+    static LocalDate parseSlashDate(String raw)
+    {
+        try
+        {
+            return LocalDate.parse(raw, DATE_FMT);
+        }
+        catch (DateTimeParseException ignored)
         {
             try
             {
-                return LocalDate.parse(m.group(1), fmt);
+                return LocalDate.parse(raw, DATE_FMT_MDY);
             }
-            catch (DateTimeParseException ignored)
+            catch (DateTimeParseException ignored2)
             {
-                // try next match
+                return null;
             }
         }
-        return null;
     }
 
     /**
@@ -405,7 +428,7 @@ public class TopYachtImporter
 
     /**
      * Test-friendly overload that accepts only the parsed pages and treats their source
-     * URLs as unknown — log lines emitted by this path will show {@code urls=[]}.
+     * URLs as unknown -- log lines emitted by this path will show {@code urls=[]}.
      * Production code uses {@link #processResultsPagesWithUrls} so URLs are retained.
      */
     void processResultsPages(Club club, String seriesName, int raceNumber,
@@ -431,7 +454,7 @@ public class TopYachtImporter
         String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
         String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
 
-        // List of source urls (may contain nulls in tests) — included in log messages
+        // List of source urls (may contain nulls in tests) -- included in log messages
         List<String> sourceUrls = new ArrayList<>(parsedList.size());
         for (UrlAndRace ur : parsedList)
         {
@@ -475,7 +498,7 @@ public class TopYachtImporter
                         if (diffSeconds > 1)
                         {
                             ImporterLog.error(LOG,"TopYacht: sail {} '{}' has conflicting elapsed times " +
-                                    "{} vs {} in race {} — discarding duplicate (urls={})",
+                                    "{} vs {} in race {} -- discarding duplicate (urls={})",
                                 row.sailNo(), row.boatName(),
                                 existing.elapsed, row.elapsed(), raceId, sourceUrls);
                         }
@@ -598,7 +621,7 @@ public class TopYachtImporter
 
         // Identify excluded column indices from the header row.
         // Columns labelled "Notes", "Entrants", or "Finish Times" do not contain
-        // results links — the first two contain admin pages, the last contains raw
+        // results links -- the first two contain admin pages, the last contains raw
         // finish-time pages that lack the centre_results_table structure.
         Set<Integer> excludedCols = new HashSet<>();
         Element headerRow = table.selectFirst("tr");
@@ -638,7 +661,10 @@ public class TopYachtImporter
                 number = Integer.parseInt(m.group(1));
                 // Date is optional in the row label; if absent, processSeriesPage will
                 // resolve it from the linked results page.
-                date = m.group(2) != null ? LocalDate.parse(m.group(2), DATE_FMT) : null;
+                date = m.group(2) != null ? parseSlashDate(m.group(2)) : null;
+                if (m.group(2) != null && date == null)
+                    throw new DateTimeParseException("Unparseable as d/M/yyyy or M/d/yyyy",
+                        m.group(2), 0);
             }
             catch (NumberFormatException | DateTimeParseException e)
             {
@@ -675,7 +701,7 @@ public class TopYachtImporter
     }
 
     /**
-     * Test-friendly overload — no URL context for log lines.
+     * Test-friendly overload -- no URL context for log lines.
      */
     ParsedRace parseResultsPage(String html)
     {
@@ -782,7 +808,7 @@ public class TopYachtImporter
                                 case "NS" -> captionNonSpinnaker = true;
                                 case "WL" -> captionWindwardLeeward = true;
                                 case "DH", "2HD", "SH" -> captionTwoHanded = true;
-                                // AP, LO, MD, HI, I, O, C — recognised, no additional flags
+                                // AP, LO, MD, HI, I, O, C -- recognised, no additional flags
                                 default -> {}
                             }
                         }
@@ -808,7 +834,7 @@ public class TopYachtImporter
                 }
                 else
                 {
-                    // "results" not found or is first word — fall back to first word
+                    // "results" not found or is first word -- fall back to first word
                     handicapSystem = words.length > 0 ? words[0].toUpperCase() : "UNKNOWN";
                 }
             }
@@ -882,7 +908,7 @@ public class TopYachtImporter
                     elapsed = finish != null ? deriveElapsed(startTime, finish) : null;
                 }
                 if (elapsed == null)
-                    continue;  // DNF, DNS, RET, or unparseable — skip this finisher
+                    continue;  // DNF, DNS, RET, or unparseable -- skip this finisher
 
                 String clubCode = (clubIdx >= 0 && clubIdx < cells.size())
                     ? cells.get(clubIdx).text().trim() : null;
@@ -927,16 +953,16 @@ public class TopYachtImporter
         {
             Boat boat = store.findOrCreateBoat(rawSailNo, boatName, designName, date, SOURCE);
             if (boat == null)
-                ImporterLog.warn(LOG, "TopYacht: skipping finisher — ambiguous boat match for sail={} name='{}' design='{}' in race={} (url={}); see log/ambiguous-boats.log",
+                ImporterLog.warn(LOG, "TopYacht: skipping finisher -- ambiguous boat match for sail={} name='{}' design='{}' in race={} (url={}); see log/ambiguous-boats.log",
                     rawSailNo, boatName, designName, raceId, url);
             return boat;
         }
 
-        // No sail on the results page — restrict the lookup to the organising club.
+        // No sail on the results page -- restrict the lookup to the organising club.
         Optional<Boat> match = store.findBoatByNameAndClub(boatName, organisingClubId);
         if (match.isEmpty())
         {
-            ImporterLog.warn(LOG, "TopYacht: skipping finisher — no unique name+club match for name='{}' club={} in race={} (url={})",
+            ImporterLog.warn(LOG, "TopYacht: skipping finisher -- no unique name+club match for name='{}' club={} in race={} (url={})",
                 boatName, organisingClubId, raceId, url);
             return null;
         }
@@ -1088,7 +1114,7 @@ public class TopYachtImporter
 
     /**
      * Returns true only for measurement-based handicap systems (IRC, ORC, AMS).
-     * Any other system — PHS, TCF, CBH, or unknown — is treated as performance-based
+     * Any other system -- PHS, TCF, CBH, or unknown -- is treated as performance-based
      * and must not produce inferred certificates.
      */
     private static boolean isMeasurementHandicapSystem(String system)
@@ -1117,7 +1143,7 @@ public class TopYachtImporter
         Club club = store.clubs().get(clubId);
         if (club == null)
         {
-            // Club not yet persisted — initialise from seed so series can be recorded
+            // Club not yet persisted -- initialise from seed so series can be recorded
             Club seed = store.clubSeed().get(clubId);
             if (seed == null)
                 return;

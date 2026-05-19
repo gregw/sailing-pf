@@ -45,11 +45,11 @@ import static org.eclipse.jetty.util.StringUtil.isNotBlank;
  * Reads and writes the data store.
  * <p>
  * Layout:
- * {root}/races/{clubId}/{seriesSlug}/{raceId}.json  — one file per Race, in subdirectories
- * {root}/boats/{boatId}.json       — one file per Boat (embeds certificates)
- * {root}/designs/{designId}.json   — one file per Design
- * {root}/clubs/{clubId}.json       — one file per Club (embeds series)
- * {root}/catalogue/makers.json     — all Makers (small stable collection)
+ * {root}/races/{clubId}/{seriesSlug}/{raceId}.json  -- one file per Race, in subdirectories
+ * {root}/boats/{boatId}.json       -- one file per Boat (embeds certificates)
+ * {root}/designs/{designId}.json   -- one file per Design
+ * {root}/clubs/{clubId}.json       -- one file per Club (embeds series)
+ * {root}/catalogue/makers.json     -- all Makers (small stable collection)
  * <p>
  * Call {@link #start()} to load all data into memory, {@link #save()} to flush dirty
  * entities to disk, and {@link #stop()} to flush and clear the in-memory maps.
@@ -87,7 +87,7 @@ public class DataStore
     private final Path clubsDir;
     private final Path catalogueDir;
 
-    // In-memory maps — null before start()
+    // In-memory maps -- null before start()
     private Map<String, Race> races;
     private Map<String, Boat> boats;
     private Map<String, Design> designs;
@@ -99,7 +99,7 @@ public class DataStore
     private List<Maker> makers;
     private boolean makersDirty;
 
-    // Mutable exclusion sets — persisted to config/exclusions.yaml, managed via admin UI.
+    // Mutable exclusion sets -- persisted to config/exclusions.yaml, managed via admin UI.
     // Map values are the operator-supplied (or auto-supplied) reason for exclusion;
     // empty string when no reason was given. LinkedHashMap preserves insertion order
     // so the YAML stays diff-friendly across saves.
@@ -222,7 +222,7 @@ public class DataStore
     }
 
     /**
-     * Reads — never creates — an existing Boat by sail number and/or name, honouring
+     * Reads -- never creates -- an existing Boat by sail number and/or name, honouring
      * the alias system ({@code aliases.yaml}) and AUS-prefix collapsing. Used by
      * read-only server paths (e.g. fetch-handicaps) where creating a phantom boat
      * would be wrong.
@@ -231,7 +231,7 @@ public class DataStore
      * whichever key(s) are present and still requires a unique match.
      * <p>
      * Returns {@code Optional.empty()} when there is no match <em>or</em> when more
-     * than one candidate would match (ambiguous — treated the same as no match by
+     * than one candidate would match (ambiguous -- treated the same as no match by
      * callers, who must not silently create a phantom).
      */
     public Optional<Boat> findBoat(String rawSailNo, String rawName)
@@ -301,7 +301,9 @@ public class DataStore
         return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 
-    /** Convenience overload for tests — no date, no source. */
+    /**
+     * Convenience overload for tests -- no date, no source.
+     */
     public Boat findOrCreateBoat(String sailNo, String name, String rawDesign)
     {
         return findOrCreateBoat(sailNo, name, rawDesign, null, "test");
@@ -356,8 +358,8 @@ public class DataStore
             designId = overrideDesignId;
             rawDesign = designs.containsKey(designId) ? designs.get(designId).canonicalName() : overrideDesignId;
         }
-        // If the resolved design is ignored — via the curated {@code ignored:} list in
-        // design.yaml or via the runtime user-toggled set — treat the incoming boat as
+        // If the resolved design is ignored -- via the curated {@code ignored:} list in
+        // design.yaml or via the runtime user-toggled set -- treat the incoming boat as
         // design-less for matching purposes, otherwise a new designless record would get
         // created alongside an existing properly-designed one.
         if (isDesignIgnored(designId))
@@ -377,7 +379,7 @@ public class DataStore
                 continue;
             if (!normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
                 continue;
-            // Candidate's stored design is now marked ignored — the boat is effectively
+            // Candidate's stored design is now marked ignored -- the boat is effectively
             // a stale orphan that should not influence matching. Treat it as invisible
             // so an unambiguous design-bearing match can win.
             if (isDesignIgnored(candidate.designId()))
@@ -488,7 +490,7 @@ public class DataStore
             return matches.getFirst();
 
         // We have multiple boats with the same sailNo, name but different designs, so we don't know which one this is?
-        LOG.warn("Ambiguous boat match: sailNo={} name={} design={} — {} candidates with different designs",
+        LOG.warn("Ambiguous boat match: sailNo={} name={} design={} -- {} candidates with different designs",
             normSailNo, normName, designId, matches.size());
         logAmbiguousMatch(source, normSailNo, normName, designId, matches);
         return null;
@@ -498,7 +500,7 @@ public class DataStore
      * Append a single tab-separated record describing an ambiguous boat match to
      * {@code <dataRoot>/log/ambiguous-boats.log}. Each record names the source importer,
      * the incoming sail/name/design, and the list of existing candidate boats (boatId:designId).
-     * Failures are reported via {@code LOG.warn} and never propagate — logging must not
+     * Failures are reported via {@code LOG.warn} and never propagate -- logging must not
      * break an import.
      */
     private void logAmbiguousMatch(String source, String normSailNo, String normName,
@@ -542,7 +544,7 @@ public class DataStore
         return rawDesign != null && !rawDesign.isBlank() ? source + ":" + rawDesign : source;
     }
 
-    /** Finds or creates a design by class name — used internally by findOrCreateBoat. */
+    /** Finds or creates a design by class name -- used internally by findOrCreateBoat. */
     private Design findOrCreateDesign(String className)
     {
         if (className == null || className.isBlank())
@@ -566,7 +568,7 @@ public class DataStore
             Design existing = designs.get(canonicalId);
             if (existing != null)
                 return existing;
-            // Canonical design not yet in store — create it using the seed's canonical name
+            // Canonical design not yet in store -- create it using the seed's canonical name
             String seedName = aliases.designCanonicalName(canonicalId);
             design = new Design(canonicalId, seedName != null ? seedName : className.trim(),
                 List.of(), List.of(), null, false, null);
@@ -623,7 +625,7 @@ public class DataStore
             .toList();
         List<Club> nonExcluded = allClubs.stream().filter(c -> !isClubExcluded(c.id())).toList();
 
-        // Primary: exact short name match — prefer non-excluded, fall back to all if needed
+        // Primary: exact short name match -- prefer non-excluded, fall back to all if needed
         List<Club> matches = nonExcluded.stream()
             .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
             .toList();
@@ -644,7 +646,7 @@ public class DataStore
                     .toList();
         }
 
-        // Fallback: compound name (e.g. "CYCA/RPEYC") — try each slash-separated token in order
+        // Fallback: compound name (e.g. "CYCA/RPEYC") -- try each slash-separated token in order
         if (matches.isEmpty() && shortName.contains("/"))
         {
             for (String token : shortName.split("/"))
@@ -680,7 +682,7 @@ public class DataStore
                 .toList();
             if (narrowed.size() == 1)
                 return narrowed.getFirst();
-            // Narrowing didn't resolve it — fall through to ambiguity log below
+            // Narrowing didn't resolve it -- fall through to ambiguity log below
             matches = narrowed.isEmpty() ? matches : narrowed;
         }
         if (matches.size() > 1)
@@ -689,7 +691,7 @@ public class DataStore
             List<Club> preferNonExcluded = matches.stream().filter(c -> !isClubExcluded(c.id())).toList();
             if (preferNonExcluded.size() == 1)
                 return preferNonExcluded.getFirst();
-            LOG.warn("Ambiguous club name={} — {} matches ({}); clubId not set ({})",
+            LOG.warn("Ambiguous club name={} -- {} matches ({}); clubId not set ({})",
                 shortName, matches.size(),
                 matches.stream().map(c -> c.id() + "/" + c.state()).toList(),
                 context);
@@ -724,7 +726,7 @@ public class DataStore
         }
         if (matches.size() > 1)
         {
-            LOG.error("Ambiguous club shortName={} state={} — {} matches ({})",
+            LOG.error("Ambiguous club shortName={} state={} -- {} matches ({})",
                 shortName, state, matches.size(), context);
             return null;
         }
@@ -770,7 +772,7 @@ public class DataStore
         {
             RaceSanityChecker.check(race).ifPresent(issue ->
             {
-                String reason = "sanity-check: " + issue.checkName() + " — " + issue.description();
+                String reason = "sanity-check: " + issue.checkName() + " -- " + issue.description();
                 excludedRaces.put(race.id(), reason);
                 LOG.info("Race sanity check '{}' auto-excluded race {}: {}",
                     issue.checkName(), race.id(), issue.description());
@@ -868,7 +870,7 @@ public class DataStore
             toMerge.add(d);
         }
 
-        // Build merged aliases — add canonical names and existing aliases from merged-away designs
+        // Build merged aliases -- add canonical names and existing aliases from merged-away designs
         Set<String> allAliases = new LinkedHashSet<>(keepDesign.aliases());
         for (Design md : toMerge)
         {
@@ -990,7 +992,7 @@ public class DataStore
     /**
      * Returns true if the given design ID is configured as excluded (dinghy/OTB class).
      * The PF optimiser uses this to skip excluded designs during calculation.
-     * Raw records are still created — exclusion is a configuration concern, not a data concern.
+     * Raw records are still created -- exclusion is a configuration concern, not a data concern.
      * Checks both the static design.yaml catalogue and any UI-driven overrides.
      */
     // Design excluded/ignored state is persisted in design.yaml (curated catalogue) and
@@ -1063,7 +1065,7 @@ public class DataStore
 
     /**
      * Updates the YAML-owned metadata fields ({@code longName}, {@code state}, {@code email})
-     * for a club. Each value is written verbatim — passing {@code null} clears the field.
+     * for a club. Each value is written verbatim -- passing {@code null} clears the field.
      * Auto-creates the YAML entry if missing. Refreshes the in-memory seed and the
      * corresponding entry in the persisted clubs map.
      */
@@ -1114,14 +1116,14 @@ public class DataStore
     /**
      * Returns a copy of {@code json} with the YAML-owned fields populated from the matching
      * entry in {@link #clubSeed}. If no seed entry exists, leaves the YAML fields empty and
-     * logs a warning — the club exists in JSON but has no clubs.yaml entry.
+     * logs a warning -- the club exists in JSON but has no clubs.yaml entry.
      */
     private Club enrichWithSeed(Club json)
     {
         Club seed = clubSeed.get(json.id());
         if (seed == null)
         {
-            LOG.warn("Club {} loaded from JSON has no entry in clubs.yaml — YAML-owned fields will be empty",
+            LOG.warn("Club {} loaded from JSON has no entry in clubs.yaml -- YAML-owned fields will be empty",
                 json.id());
             return new Club(json.id(), json.shortName(),
                 null, null, false, null, List.of(), List.of(),
@@ -1233,7 +1235,7 @@ public class DataStore
      * the target) and race finisher references rewritten from the old id to the target.
      * A {@code "Ignored:<designId>"} entry is added to the affected boat's sources.
      * <p>
-     * When setting to false, only the flag changes — previously de-designed boats are
+     * When setting to false, only the flag changes -- previously de-designed boats are
      * not restored (their original design is unrecoverable). Callers must call
      * {@link #save()} to persist the entity-level changes.
      */
@@ -1302,7 +1304,7 @@ public class DataStore
                 else
                 {
                     // Boat id already has no suffix (shouldn't really happen since the
-                    // match was on designId) — just annotate the sources.
+                    // match was on designId) -- just annotate the sources.
                     putBoat(updated);
                 }
             }
@@ -1729,7 +1731,7 @@ public class DataStore
             toMerge.add(b);
         }
 
-        // Merge certificates — deduplicate by system+year+variant; keep boat's certs take priority
+        // Merge certificates -- deduplicate by system+year+variant; keep boat's certs take priority
         Map<String, Certificate> certMap = new LinkedHashMap<>();
         for (Certificate c : keepBoat.certificates())
             certMap.put(certKey(c), c);
@@ -1879,7 +1881,7 @@ public class DataStore
         {
             boats.put(b.id(), b);
             if (b.sources().isEmpty())
-                LOG.warn("Boat {} has no sources — likely a stale entry, consider deleting {}", b.id(), b.id() + ".json");
+                LOG.warn("Boat {} has no sources -- likely a stale entry, consider deleting {}", b.id(), b.id() + ".json");
         });
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
@@ -1986,7 +1988,7 @@ public class DataStore
         // This repairs boats that were created before the alias entry was added and prevents
         // them from persisting across imports via the direct boats.get(boatId) fast path.
         // After merging we also consolidate aliases.yaml: an orphan alias entry keyed by the
-        // stale (sail, name) — typically left over from a previous merge — gets absorbed into
+        // stale (sail, name) -- typically left over from a previous merge -- gets absorbed into
         // the canonical entry, otherwise the next import would re-resolve the stale identity
         // and recreate the JSON boat record.
         {
@@ -2242,7 +2244,7 @@ public class DataStore
     private void requireStarted()
     {
         if (boats == null)
-            throw new IllegalStateException("DataStore not started — call start() first");
+            throw new IllegalStateException("DataStore not started -- call start() first");
     }
 
     private void write(Path path, Object value)

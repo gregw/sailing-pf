@@ -35,13 +35,13 @@ public class AmsImporter
 
     private static final String LIST_URL = "https://topyacht.com.au/ams/ams_list.php";
 
-    // Matches <tr ...>…</tr> — captures the row content (header rows are filtered out
+    // Matches <tr ...>…</tr> -- captures the row content (header rows are filtered out
     // downstream when certDate or rating values fail to parse)
     private static final Pattern ROW_PATTERN =
         Pattern.compile("<tr[^>]*>(.*?)</tr>",
                         Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
-    // Matches <td ...>content</td> — captures cell content (may contain nested tags)
+    // Matches <td ...>content</td> -- captures cell content (may contain nested tags)
     private static final Pattern TD_PATTERN =
         Pattern.compile("<td[^>]*>(.*?)</td>",
                         Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
@@ -157,7 +157,7 @@ public class AmsImporter
         Boat boat = store.findOrCreateBoat(sailNo.trim(), boatName.trim(), (String) null, fakeDate, SOURCE);
         if (boat == null)
         {
-            ImporterLog.warn(LOG,"AMS: ambiguous boat (multiple designs) for sail={} name={} — skipping cert {}", sailNo, boatName, certNo);
+            ImporterLog.warn(LOG, "AMS: ambiguous boat (multiple designs) for sail={} name={} -- skipping cert {}", sailNo, boatName, certNo);
             return;
         }
 

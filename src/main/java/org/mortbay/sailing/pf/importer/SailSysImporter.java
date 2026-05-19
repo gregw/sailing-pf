@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  *       not PHS, TPR, YRD, or other performance-based system).</li>
  *   <li>For each system, extracts the actual race-time handicap from
  *       {@code calculations[].handicapCreatedFrom} matched by {@code handicapDefinitionId}
- *       — this is the value actually used for scoring, not the current stored certificate
+ *       -- this is the value actually used for scoring, not the current stored certificate
  *       value which may be from a later year.</li>
  *   <li>Creates an inferred certificate linked to the race finisher.  When a certificate
  *       already exists on the boat with the same system, year (±1), value, nonSpinnaker,
@@ -171,7 +171,7 @@ public class SailSysImporter
             processed++;
             if (processed % SAVE_INTERVAL == 0)
             {
-                LOG.info("Processed {} files — saving", processed);
+                LOG.info("Processed {} files -- saving", processed);
                 store.save();
             }
         }
@@ -230,13 +230,13 @@ public class SailSysImporter
             processed++;
             if (processed % SAVE_INTERVAL == 0)
             {
-                LOG.info("Fetched {} races (id={}) — saving", processed, id);
+                LOG.info("Fetched {} races (id={}) -- saving", processed, id);
                 store.save();
             }
 
             if (stop.getAsBoolean())
             {
-                LOG.info("Stop requested — stopping after race id={}", id);
+                LOG.info("Stop requested -- stopping after race id={}", id);
                 break;
             }
             id++;
@@ -318,7 +318,7 @@ public class SailSysImporter
                 else
                 {
                     // Error response (series locked / not yet published / not found):
-                    // the race may still become available — refetch while the cached error
+                    // the race may still become available -- refetch while the cached error
                     // is within the young window, then settle on the cached error afterwards.
                     useCache = isStale(cachedFile, youngCacheMaxAgeDays);
                 }
@@ -371,7 +371,7 @@ public class SailSysImporter
             processed++;
             if (processed % SAVE_INTERVAL == 0)
             {
-                LOG.info("Fetched {} races (id={}) — saving", processed, id);
+                LOG.info("Fetched {} races (id={}) -- saving", processed, id);
                 store.save();
             }
         }
@@ -452,7 +452,7 @@ public class SailSysImporter
 
         int number = data.number != null ? data.number : 0;
 
-        // Organising club — required for race ID and series registration.
+        // Organising club -- required for race ID and series registration.
         // Excluded clubs are filtered out by findUniqueClubByShortName; if the club name
         // resolves only to excluded clubs, skip the race entirely.
         Club organizingClub = null;
@@ -462,7 +462,7 @@ public class SailSysImporter
             organizingClub = store.findUniqueClubByShortName(data.club.shortName, data.club.longName, context);
             if (organizingClub == null && store.isClubNameExcluded(data.club.shortName))
             {
-                LOG.debug("SailSys: skipping race id={} — organising club '{}' is excluded",
+                LOG.debug("SailSys: skipping race id={} -- organising club '{}' is excluded",
                     data.id, data.club.shortName);
                 return;
             }
@@ -484,7 +484,7 @@ public class SailSysImporter
             data.competitors, actualSystems, raceDate, organizingClub);
 
         // If SailSys produced no finishers and a race for the same club + date already
-        // exists from BWPS or RSHYR, don't create/merge — just extract certificates.
+        // exists from BWPS or RSHYR, don't create/merge -- just extract certificates.
         // This avoids creating empty duplicates of races whose results come from
         // dedicated importers (BWPS blue water pointscore, RSHYR Sydney Hobart).
         if (divisions.isEmpty() && hasDedicatedImporterRace(clubId, raceDate))
@@ -527,7 +527,7 @@ public class SailSysImporter
         {
             String reason = "series-pattern: name='" + data.name + "' series='" + seriesName + "'";
             store.setRaceExcluded(raceId, true, reason);
-            LOG.info("SailSys: auto-excluded race '{}' (id={}) — name/series matched exclusion pattern",
+            LOG.info("SailSys: auto-excluded race '{}' (id={}) -- name/series matched exclusion pattern",
                 data.name, data.id);
         }
 
@@ -557,7 +557,7 @@ public class SailSysImporter
 
     /**
      * Builds finishers from a division's entries, attaching the first matching measurement
-     * certificate when available.  Boats are never excluded for lacking cert data — every
+     * certificate when available.  Boats are never excluded for lacking cert data -- every
      * entrant with a valid elapsed time becomes a finisher.
      */
     private List<Finisher> buildFinishers(List<EntryData> items,
@@ -657,7 +657,7 @@ public class SailSysImporter
                 }
             }
         }
-        LOG.info("SailSys: cert-only mode for race at {} on {} — {} boat(s) processed " +
+        LOG.info("SailSys: cert-only mode for race at {} on {} -- {} boat(s) processed " +
             "(race already imported by dedicated importer)",
             organizingClub != null ? organizingClub.id() : "?", raceDate, count);
     }
@@ -714,16 +714,16 @@ public class SailSysImporter
 
                 if (idx < 0)
                 {
-                    // New boat not in existing division — add it
+                    // New boat not in existing division -- add it
                     mergedFinishers.add(iFinisher);
                 }
                 else if (mergedFinishers.get(idx).certificateNumber() == null
                     && iFinisher.certificateNumber() != null)
                 {
-                    // Existing finisher has no cert, incoming has one — upgrade
+                    // Existing finisher has no cert, incoming has one -- upgrade
                     mergedFinishers.set(idx, iFinisher);
                 }
-                // else: existing already has cert data or incoming has nothing new — keep existing
+                // else: existing already has cert data or incoming has nothing new -- keep existing
             }
             merged.add(new Division(eDiv.name(), List.copyOf(mergedFinishers)));
         }
@@ -768,7 +768,7 @@ public class SailSysImporter
         Boat boat = store.findOrCreateBoat(sailNo, name, designName, raceDate, SOURCE);
         if (boat == null)
         {
-            ImporterLog.warn(LOG, "Skipping ambiguous boat sailNo={} name={} — multiple designs in store", sailNo, name);
+            ImporterLog.warn(LOG, "Skipping ambiguous boat sailNo={} name={} -- multiple designs in store", sailNo, name);
             return null;
         }
 

@@ -107,7 +107,7 @@ public class OrcImporter
 
         NodeList certNodes = listDoc.getElementsByTagName("ROW");
         if (certNodes.getLength() == 0)
-            ImporterLog.warn(LOG,"No ROW nodes found — check XML for correct tag name");
+            ImporterLog.warn(LOG, "No ROW nodes found -- check XML for correct tag name");
         LOG.info("Processing {} certificate entries", certNodes.getLength());
 
         Path certsDir = cacheDir != null ? cacheDir.resolve("certs") : null;
@@ -141,7 +141,7 @@ public class OrcImporter
             }
             catch (Exception e)
             {
-                ImporterLog.warn(LOG,"Skipping cert dxtID={}: failed to fetch cert page — {}", dxtId, e.getMessage());
+                ImporterLog.warn(LOG, "Skipping cert dxtID={}: failed to fetch cert page -- {}", dxtId, e.getMessage());
                 continue;
             }
 
@@ -172,11 +172,11 @@ public class OrcImporter
                     LOG.info("Using cached ORC list (age={}d, max={}d)", agedays, listMaxAgeDays);
                     return Files.readString(listFile, StandardCharsets.UTF_8);
                 }
-                LOG.info("ORC list cache is stale (age={}d >= max={}d) — re-fetching", agedays, listMaxAgeDays);
+                LOG.info("ORC list cache is stale (age={}d >= max={}d) -- re-fetching", agedays, listMaxAgeDays);
             }
             else
             {
-                LOG.info("No cached ORC list found — fetching from {}", LIST_URL);
+                LOG.info("No cached ORC list found -- fetching from {}", LIST_URL);
             }
             String xml = fetch(LIST_URL);
             Files.writeString(listFile, xml, StandardCharsets.UTF_8);

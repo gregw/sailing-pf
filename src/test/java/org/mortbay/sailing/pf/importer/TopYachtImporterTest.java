@@ -198,6 +198,36 @@ class TopYachtImporterTest
     }
 
     @Test
+    void parseSeriesPageAcceptsUsStyleMdyWhenDmyImpossible()
+    {
+        // RYCV NoelexNat 2021 series uses M/D/YYYY: "Race 4 - 5/22/2021" = 22 May 2021.
+        String html = seriesHtml(
+            "<tr class='type4 txtsize'>" +
+                "  <td>Race 4 - 5/22/2021</td>" +
+                "  <td><a href='04RGrp1.htm'><img></a></td>" +
+                "  <td></td>" +
+                "</tr>");
+
+        List<TopYachtImporter.RaceRow> rows =
+            importer.parseSeriesPage(html, "https://www.topyacht.net.au/results/rycv/2021/winter/NoelexNat/series.htm");
+
+        assertEquals(1, rows.size());
+        assertEquals(LocalDate.of(2021, 5, 22), rows.get(0).date());
+    }
+
+    @Test
+    void parseSlashDatePrefersDmyWhenAmbiguous()
+    {
+        // 5/6/2021 is ambiguous; DMY wins per Australian convention.
+        assertEquals(LocalDate.of(2021, 6, 5), TopYachtImporter.parseSlashDate("5/6/2021"));
+        // 5/22/2021 can only be parsed as M/D.
+        assertEquals(LocalDate.of(2021, 5, 22), TopYachtImporter.parseSlashDate("5/22/2021"));
+        // 22/5/2021 can only be parsed as D/M.
+        assertEquals(LocalDate.of(2021, 5, 22), TopYachtImporter.parseSlashDate("22/5/2021"));
+        assertNull(TopYachtImporter.parseSlashDate("nonsense"));
+    }
+
+    @Test
     void parseSeriesPageAcceptsBareRaceLabelWithoutDate()
     {
         // BBYC 2025-26 templates label rows as just "Race N"; the date lives on the
