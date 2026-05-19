@@ -406,3 +406,42 @@ boatDesignOverrides:
       name: "San Toy"
       from: null
       until: null
+- designId: "endeavour26"
+  canonicalName: "Endeavour 26"
+  boats:
+    - sailNumber: "BH57"
+      name: "Wundurra"
+      from: null
+      until: null
+    - sailNumber: "6191"
+      name: "Tic Tacs"
+      from: null
+      until: null
+- designId: "farr1020"
+  canonicalName: "FARR 1020"
+  boats:
+    - sailNumber: "2189"
+      name: "Griffin"
+      from: null
+      until: null
+- designId: "sydney32"
+  canonicalName: "Sydney 32"
+  boats:
+    - sailNumber: "6329"
+      name: "Kalevala"
+      from: null
+      until: null
+- designId: "jboatsj109"
+  canonicalName: "J Boats J/109"
+  boats:
+    - sailNumber: "9109"
+      name: "Vamos"
+      from: null
+      until: null
+- designId: "melges24"
+  canonicalName: "MELGES 24"
+  boats:
+    - sailNumber: "795"
+      name: "PANTHER"
+      from: null
+      until: null

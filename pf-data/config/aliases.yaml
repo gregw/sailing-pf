@@ -569,6 +569,12 @@ designs:
       - "11mod"
       - "11 metre One Design"
       - "11metreonedesign"
+      - "Pacesetter 11m One Design"
+      - "pacesetter11monedesign"
+      - "Lidgard 11m"
+      - "lidgard11m"
+      - "Shaw 11 metre"
+      - "shaw11metre"
   archambaultsurprise:
     canonicalName: "Archambault Surprise"
     aliases:
@@ -585,6 +591,22 @@ designs:
       - "vplpverdiermaxi100ft"
       - "Hogson Yachts / VPLP / Guillaume Verdier VPLP 100"
       - "hogsonyachtsvplpguillaumeverdiervplp100"
+  sydney32od:
+    canonicalName: "SYDNEY 32 OD"
+    aliases:
+      - "Sydney 32"
+      - "sydney32"
+  farr40:
+    canonicalName: "Farr 40"
+    aliases:
+      - "FARR 40 OD"
+      - "farr40od"
+  sydney32:
+    canonicalName: "Sydney 32"
+    aliases:
+      - "SYDNEY 32 OD"
+      - "sydney32od"
+      - "Sydney 32"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -1192,3 +1214,19 @@ boats:
         name: "shkscallywag"
       - sailNumber: "HKG2276"
         name: "shkscallywag100"
+  "795-panther":
+    canonicalName: "PANTHER"
+    aliases:
+      - sailNumber: "795"
+        name: "m24panther"
+  "807-nomercy":
+    canonicalName: "No Mercy"
+    aliases:
+      - sailNumber: "AUS807"
+        name: "nomercy"
+      - sailNumber: "24AUS807"
+        name: "nomercy"
+      - sailNumber: "24AUS807D1"
+        name: "nomercydiv2"
+      - sailNumber: "24AUS807D1"
+        name: "nomercydiv1"

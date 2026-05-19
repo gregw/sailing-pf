@@ -196,6 +196,47 @@ class TopYachtImporterTest
         assertEquals(LocalDate.of(2024, 8, 9), rows.get(0).date());
     }
 
+    @Test
+    void parseSeriesPageAcceptsBareRaceLabelWithoutDate()
+    {
+        // BBYC 2025-26 templates label rows as just "Race N"; the date lives on the
+        // linked results page. The row must still be captured so processSeriesPage
+        // can resolve the date downstream.
+        String html = seriesHtml(
+            "<tr class='type4 txtsize'>" +
+                "  <td class='type_x left_align'>Race 21</td>" +
+                "  <td class='type_x centre_align'><a href='21RGrp3.htm'><img></a></td>" +
+                "</tr>");
+
+        List<TopYachtImporter.RaceRow> rows =
+            importer.parseSeriesPage(html, "https://www.topyacht.net.au/results/botanybay/2025/club_series/SatBay2025-26/series.htm");
+
+        assertEquals(1, rows.size());
+        assertEquals(21, rows.get(0).number());
+        assertNull(rows.get(0).date());
+        assertEquals(1, rows.get(0).resultsUrls().size());
+        assertTrue(rows.get(0).resultsUrls().get(0).endsWith("21RGrp3.htm"));
+    }
+
+    @Test
+    void extractRaceDateReadsParenthesisedDateFromHeader()
+    {
+        String html = "<html><body>" +
+            "<p class='heading1'>Saturday Bay 2025-26 </p>" +
+            "<p>Race 21  &nbsp (18/04/2026)&nbsp </p>" +
+            "<p>Updated: 18/04/2026 3:55:36 PM</p>" +
+            "</body></html>";
+
+        assertEquals(LocalDate.of(2026, 4, 18), importer.extractRaceDate(html));
+    }
+
+    @Test
+    void extractRaceDateReturnsNullWhenNoRaceParagraphHasDate()
+    {
+        String html = "<html><body><p>Some other content (not a date)</p></body></html>";
+        assertNull(importer.extractRaceDate(html));
+    }
+
     // --- parseResultsPage ---
 
     @Test

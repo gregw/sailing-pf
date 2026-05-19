@@ -6,15 +6,15 @@
 importers:
 - name: "orc"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "ams"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
@@ -57,7 +57,7 @@ recentRaceReimportDays: 30
 
 # --- SailSys importer ---
 sailsysNextRaceId: 33047
-sailsysEndRaceId: 41410
+sailsysEndRaceId: 41418
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
@@ -76,21 +76,21 @@ minAnalysisPairs: 8
 clubCertificateWeight: 0.9
 
 # --- PF optimiser ---
-pfLambda: 1.0
-pfOutlierK: 1.5
-pfAsymmetryFactor: 1.75
+pfLambda: 1.5
+pfOutlierK: 2.2
+pfAsymmetryFactor: 1.5
 pfOuterDampingFactor: 0.15
-pfOuterConvergenceThreshold: 0.11
+pfOuterConvergenceThreshold: 0.1
 pfConvergenceThreshold: 0.06
 pfMaxInnerIterations: 100
 pfMaxOuterIterations: 25
 pfCrossVariantLambda: 0.0
 pfGraphCrossVariantLambda: 0.25
 pfNoRaceFallbackWeight: 0.2
-pfOuterPfConvergenceThreshold: 0.01
+pfOuterPfConvergenceThreshold: 0.006
 pfLogOuterDiagnostics: true
-pfDubiousFactor: 1.5
-pfMaxFactor: 2.0
+pfDubiousFactor: 1.6
+pfMaxFactor: 2.5
 
 # --- Sliding average / consistency ---
 slidingAverageCount: 8
@@ -113,14 +113,14 @@ adminPort: 8888
 userPort: 8080
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
-  bwps/api: "2026-05-08T22:39:31.469690392Z"
-  analysis/run: "2026-05-19T01:01:13.886199093Z"
-  pf-optimise/run: "2026-05-19T01:01:15.396243212Z"
-  save-database/run: "2026-05-19T01:01:17.264122007Z"
-  topyacht/api: "2026-05-12T16:21:17.404022615Z"
-  build-indexes/run: "2026-05-19T01:01:13.464181207Z"
-  reference-factors/run: "2026-05-19T01:01:14.739883202Z"
-  sailsys-races/run: "2026-05-12T16:00:00.004566235Z"
-  ams/api: "2026-05-08T22:39:29.540390586Z"
-  orc/api: "2026-05-08T22:39:24.392950184Z"
+  bwps/api: "2026-05-17T16:00:08.078787401Z"
+  analysis/run: "2026-05-19T02:04:43.473286060Z"
+  orc/api: "2026-05-17T16:00:00.005828629Z"
+  pf-optimise/run: "2026-05-19T02:04:47.653412763Z"
+  save-database/run: "2026-05-19T02:04:54.194035523Z"
+  topyacht/api: "2026-05-19T02:05:39.869787150Z"
+  build-indexes/run: "2026-05-19T02:04:42.440509737Z"
+  reference-factors/run: "2026-05-19T02:04:45.582560008Z"
+  sailsys-races/run: "2026-05-17T16:00:18.785115034Z"
+  ams/api: "2026-05-17T16:00:05.513967811Z"
 

@@ -412,7 +412,17 @@ clubs:
       - "https://www.topyacht.net.au/results/botanybay/2023/club_series/"
       - "https://www.topyacht.net.au/results/botanybay/2024/club_series/"
       - "https://www.topyacht.net.au/results/botanybay/2025/club_series/"
-    boats: null
+    boats:
+      - "BH57-wundurra-endeavour26"
+      - "2189-griffin-farr1020"
+      - "6191-tictacs-endeavour26"
+      - "6329-kalevala-sydney32"
+      - "4002-stockade-eureka31"
+      - "5314-resurgent-ross930"
+      - "9109-vamos-jboatsj109"
+      - "807-nomercy-melges24"
+      - "943-nomercy-etchells"
+      - "795-panther-melges24"
   cronullasailingclub.com.au:
     shortName: "CSC"
     state: "NSW"
@@ -421,7 +431,10 @@ clubs:
     email: "sailing@cronullasailingclub.com.au, info@cronullasailingclub.com.au"
     aliases: []
     topyacht: null
-    boats: null
+    boats:
+      - "807-nomercy-melges24"
+      - "943-nomercy-etchells"
+      - "795-panther-melges24"
   rmycph.com.au:
     shortName: "RMYC (PH)"
     state: "NSW"
@@ -1052,6 +1065,27 @@ boatClubOverrides:
   - sailNumber: "MH137"
     name: "Plum Crazy"
     clubId: "myc.org.au"
+  - sailNumber: "BH57"
+    name: "Wundurra"
+    clubId: "bbyc.com.au"
+  - sailNumber: "2189"
+    name: "Griffin"
+    clubId: "bbyc.com.au"
+  - sailNumber: "6191"
+    name: "Tic Tacs"
+    clubId: "bbyc.com.au"
+  - sailNumber: "6329"
+    name: "Kalevala"
+    clubId: "bbyc.com.au"
+  - sailNumber: "4002"
+    name: "Stockade"
+    clubId: "bbyc.com.au"
+  - sailNumber: "5314"
+    name: "Resurgent"
+    clubId: "bbyc.com.au"
+  - sailNumber: "9109"
+    name: "Vamos"
+    clubId: "bbyc.com.au"
 noclub:
   - "1255-melody-swansondart"
   - "1161-wildlife-etchells"

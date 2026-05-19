@@ -69,8 +69,12 @@ public class TopYachtImporter
     static final String SOURCE = "TopYacht";
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d/M/yyyy");
+    // Date portion is optional: some clubs (e.g. BBYC 2025-26) use bare "Race N" labels
+    // on the series index and surface the date only on the linked results page.
     private static final Pattern RACE_LABEL = Pattern.compile(
-        "Race\\s+(\\d+)\\s*-\\s*(\\d{1,2}/\\d{1,2}/\\d{4})", Pattern.CASE_INSENSITIVE);
+        "Race\\s+(\\d+)(?:\\s*-\\s*(\\d{1,2}/\\d{1,2}/\\d{4}))?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RESULTS_PAGE_DATE = Pattern.compile(
+        "\\((\\d{1,2}/\\d{1,2}/\\d{4})\\)");
 
     /**
      * Maps known handicap system name fragments (upper-cased, possibly multi-word)
@@ -194,7 +198,10 @@ public class TopYachtImporter
                 try
                 {
                     String html2 = fetch(url);
-                    processResultsPage(club, seriesName, row.number(), row.date(), html2, url);
+                    LocalDate date = resolveRaceDate(row, html2, url, seriesUrl);
+                    if (date == null)
+                        continue;
+                    processResultsPage(club, seriesName, row.number(), date, html2, url);
                 }
                 catch (Exception e)
                 {
@@ -205,11 +212,19 @@ public class TopYachtImporter
             {
                 // Multiple results pages (e.g. IRC + ORC): fetch all, merge finishers
                 List<UrlAndRace> parsedList = new ArrayList<>();
+                String firstHtml = null;
+                String firstUrl = null;
                 for (String url : row.resultsUrls())
                 {
                     try
                     {
-                        ParsedRace pr = parseResultsPage(fetch(url), url);
+                        String html2 = fetch(url);
+                        if (firstHtml == null)
+                        {
+                            firstHtml = html2;
+                            firstUrl = url;
+                        }
+                        ParsedRace pr = parseResultsPage(html2, url);
                         if (pr != null)
                             parsedList.add(new UrlAndRace(url, pr));
                         else
@@ -220,10 +235,63 @@ public class TopYachtImporter
                         ImporterLog.error(LOG,"Failed to fetch results url={}: {}", url, e.getMessage());
                     }
                 }
-                if (!parsedList.isEmpty())
-                    processResultsPagesWithUrls(club, seriesName, row.number(), row.date(), parsedList);
+                if (parsedList.isEmpty())
+                    continue;
+                LocalDate date = resolveRaceDate(row, firstHtml, firstUrl, seriesUrl);
+                if (date == null)
+                    continue;
+                processResultsPagesWithUrls(club, seriesName, row.number(), date, parsedList);
             }
         }
+    }
+
+    /**
+     * Returns the race row's date, or — if the row label omitted it — the date extracted
+     * from the (already-fetched) results page. Warns and returns null if neither source
+     * yields a date, so the silent-skip cannot recur.
+     */
+    private LocalDate resolveRaceDate(RaceRow row, String resultsHtml, String resultsUrl, String seriesUrl)
+    {
+        if (row.date() != null)
+            return row.date();
+        LocalDate fromPage = extractRaceDate(resultsHtml);
+        if (fromPage != null)
+            return fromPage;
+        ImporterLog.warn(LOG,
+            "TopYacht: no date for race {} on series {} (no date in row label, none in results page {}); skipping",
+            row.number(), seriesUrl, resultsUrl);
+        return null;
+    }
+
+    /**
+     * Extracts the race date from a results page's header, where TopYacht typically
+     * renders {@code <p>Race N (DD/MM/YYYY)</p>}. Returns null if no parenthesised
+     * date is found in a paragraph that mentions "Race".
+     */
+    LocalDate extractRaceDate(String html)
+    {
+        if (html == null)
+            return null;
+        Document doc = Jsoup.parse(html);
+        for (Element p : doc.select("p"))
+        {
+            String text = p.text();
+            if (!text.toLowerCase().contains("race"))
+                continue;
+            Matcher m = RESULTS_PAGE_DATE.matcher(text);
+            if (m.find())
+            {
+                try
+                {
+                    return LocalDate.parse(m.group(1), DATE_FMT);
+                }
+                catch (DateTimeParseException ignored)
+                {
+                    // try next match
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -503,11 +571,15 @@ public class TopYachtImporter
             try
             {
                 number = Integer.parseInt(m.group(1));
-                date = LocalDate.parse(m.group(2), DATE_FMT);
+                // Date is optional in the row label; if absent, processSeriesPage will
+                // resolve it from the linked results page.
+                date = m.group(2) != null ? LocalDate.parse(m.group(2), DATE_FMT) : null;
             }
             catch (NumberFormatException | DateTimeParseException e)
             {
-                LOG.debug("TopYacht: could not parse race label '{}' on series page url={}: {}", label, baseUrl, e.getMessage());
+                ImporterLog.warn(LOG,
+                    "TopYacht: could not parse race label '{}' on series page url={}: {}",
+                    label, baseUrl, e.getMessage());
                 continue;
             }
 
