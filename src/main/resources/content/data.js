@@ -1066,6 +1066,10 @@ function updateMergeBar(entity) {
     const includeBtn = document.getElementById('include-btn-' + entity);
     if (excludeBtn) excludeBtn.style.display = (n >= 1 && anyIncluded) ? '' : 'none';
     if (includeBtn) includeBtn.style.display = (n >= 1 && anyExcluded) ? '' : 'none';
+
+    // Flag as dubious — open to all users (no auth split); clubs has no such button.
+    const dubiousBtn = document.getElementById('dubious-btn-' + entity);
+    if (dubiousBtn) dubiousBtn.style.display = (n >= 1) ? '' : 'none';
 }
 
 /** Returns true if the item is currently excluded (as seen by the last list fetch). */
@@ -1080,6 +1084,7 @@ function clearSelection(entity) {
     updateMergeBar(entity);
     hideMergePanel(entity);
     hideExcludePanel(entity);
+    hideDubiousPanel(entity);
     if (entity === 'boats') {
         hideEditPanel();
         hideBoatClubPanel();
@@ -1141,6 +1146,7 @@ function syncRequestEmail(value) {
     ALL_ENTITIES.forEach(e => {
         ids.push('merge-email-' + e);
         ids.push('exclude-email-' + e);
+        ids.push('dubious-email-' + e);
     });
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -1398,6 +1404,66 @@ async function requestExclude(entity) {
         hideExcludePanel(entity);
     } else {
         statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
+// ---- Flag as dubious (boats / designs / series / races) ----
+
+/** Opens the confirmation panel listing the selected records to be flagged as dubious. */
+function showDubiousPanel(entity) {
+    const panel = document.getElementById('dubious-panel-' + entity);
+    const list = document.getElementById('dubious-list-' + entity);
+    const title = document.getElementById('dubious-panel-title-' + entity);
+    if (!panel) return;
+    document.getElementById('dubious-status-' + entity).textContent = '';
+    const items = Array.from(state.selectedData[entity].values());
+    const noun = entity === 'series' ? 'series'
+        : (ENTITY_NOUNS[entity] + (items.length !== 1 ? 's' : ''));
+    title.textContent = 'Flag ' + items.length + ' ' + noun + ' as dubious?';
+    list.innerHTML = '';
+    items.forEach(it => {
+        const line = document.createElement('div');
+        line.style.fontFamily = 'monospace';
+        line.style.fontSize = '0.9rem';
+        line.textContent = describeItem(entity, it);
+        list.appendChild(line);
+    });
+    const msgInput = document.getElementById('dubious-message-' + entity);
+    if (msgInput) msgInput.value = '';
+    panel.style.display = '';
+}
+
+function hideDubiousPanel(entity) {
+    const panel = document.getElementById('dubious-panel-' + entity);
+    if (panel) panel.style.display = 'none';
+}
+
+/** Records a "dubious" flag for the selected records in the user-requests log. */
+async function submitDubious(entity) {
+    const statusEl = document.getElementById('dubious-status-' + entity);
+    const ids = Array.from(state.selectedData[entity].values())
+        .map(it => it.id).filter(Boolean);
+    if (ids.length === 0) {
+        hideDubiousPanel(entity);
+        return;
+    }
+    const body = {ids};
+    const email = document.getElementById('dubious-email-' + entity)?.value.trim() || '';
+    const message = document.getElementById('dubious-message-' + entity)?.value.trim() || '';
+    if (email) body.email = email;
+    if (message) body.message = message;
+    statusEl.textContent = 'Submitting…';
+    const result = await fetchJson('/api/' + entity + '/dubious-request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    if (result && result.ok) {
+        statusEl.textContent = 'Flag recorded for admin review.';
+        clearSelection(entity);
+        hideDubiousPanel(entity);
+    } else {
+        statusEl.textContent = 'Failed to record — see console.';
     }
 }
 

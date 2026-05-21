@@ -267,19 +267,30 @@ public class TopYachtImporter
     /**
      * Returns the race row's date, or -- if the row label omitted it -- the date extracted
      * from the (already-fetched) results page. Warns and returns null if neither source
-     * yields a date, so the silent-skip cannot recur.
+     * yields a date, so the silent-skip cannot recur. Also warns and returns null when the
+     * resolved date is implausibly far in the future (e.g. MHYC's "30/09/2090" typo for
+     * 2020) so a typo'd source page cannot poison the database with a bogus race.
      */
-    private LocalDate resolveRaceDate(RaceRow row, String resultsHtml, String resultsUrl, String seriesUrl)
+    LocalDate resolveRaceDate(RaceRow row, String resultsHtml, String resultsUrl, String seriesUrl)
     {
-        if (row.date() != null)
-            return row.date();
-        LocalDate fromPage = extractRaceDate(resultsHtml);
-        if (fromPage != null)
-            return fromPage;
-        ImporterLog.warn(LOG,
-            "TopYacht: no date for race {} on series {} (no date in row label, none in results page {}); skipping",
-            row.number(), seriesUrl, resultsUrl);
-        return null;
+        LocalDate date = row.date();
+        if (date == null)
+            date = extractRaceDate(resultsHtml);
+        if (date == null)
+        {
+            ImporterLog.warn(LOG,
+                "TopYacht: no date for race {} on series {} (no date in row label, none in results page {}); skipping",
+                row.number(), seriesUrl, resultsUrl);
+            return null;
+        }
+        if (date.isAfter(LocalDate.now().plusYears(1)))
+        {
+            ImporterLog.warn(LOG,
+                "TopYacht: implausible future date {} for race {} on series {} (results page {}); likely a source-page typo, skipping",
+                date, row.number(), seriesUrl, resultsUrl);
+            return null;
+        }
+        return date;
     }
 
     /**

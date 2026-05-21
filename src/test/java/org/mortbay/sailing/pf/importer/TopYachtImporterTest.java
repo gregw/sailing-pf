@@ -262,6 +262,20 @@ class TopYachtImporterTest
     }
 
     @Test
+    void resolveRaceDateSkipsImplausibleFutureDate()
+    {
+        // MHYC's results page literally renders "Race 5 (30/09/2090)" -- a source-page
+        // typo for 2020. The date parses fine, but a race ~64 years in the future must
+        // not be imported, so resolveRaceDate warns and returns null.
+        String html = "<html><body>" +
+            "<p class='heading1'>Non Pointscore Pacific Rigging Wednesday Series </p>" +
+            "<p>Race 5  &nbsp (30/09/2090)&nbsp Pacific Rigging</p>" +
+            "</body></html>";
+        TopYachtImporter.RaceRow row = new TopYachtImporter.RaceRow(5, null, List.of("05RGrp2.htm"));
+        assertNull(importer.resolveRaceDate(row, html, "05RGrp2.htm", "series.htm"));
+    }
+
+    @Test
     void extractRaceDateReturnsNullWhenNoRaceParagraphHasDate()
     {
         String html = "<html><body><p>Some other content (not a date)</p></body></html>";

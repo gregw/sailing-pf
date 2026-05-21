@@ -241,7 +241,9 @@ public class AdminApiServlet extends HttpServlet
             || "/boats/exclude-request".equals(path) || "/designs/exclude-request".equals(path)
             || "/clubs/exclude-request".equals(path) || "/races/exclude-request".equals(path)
             || "/series/exclude-request".equals(path)
-            || "/designs/ignore-request".equals(path))
+            || "/designs/ignore-request".equals(path)
+            || "/boats/dubious-request".equals(path) || "/designs/dubious-request".equals(path)
+            || "/series/dubious-request".equals(path) || "/races/dubious-request".equals(path))
         {
             handleUserRequest(path, req, resp);
         }
@@ -1625,7 +1627,7 @@ public class AdminApiServlet extends HttpServlet
 
     /**
      * POST /api/boats/merge-request, /api/designs/merge-request, /api/boats/edit-request,
-     * /api/designs/edit-request
+     * /api/designs/edit-request, /api/{boats,designs,series,races}/dubious-request
      * — records a user request to a log file in {@code pf-data/log/} for later admin review.
      * These endpoints are open to unauthenticated (read-only) users.
      */

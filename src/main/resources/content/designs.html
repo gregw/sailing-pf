@@ -59,7 +59,26 @@
         <button id="unignore-btn-designs" onclick="showIgnorePanel(false)" style="margin-left:0.5rem;display:none;">Do Not
             Ignore…
         </button>
+        <button id="dubious-btn-designs" onclick="showDubiousPanel('designs')" style="margin-left:0.5rem;display:none;">Flag as
+            dubious…
+        </button>
         <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="dubious-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="dubious-panel-title-designs"></strong>
+        <div id="dubious-list-designs" style="margin:0.6rem 0;"></div>
+        <div style="margin-bottom:0.5rem;">
+            <label for="dubious-message-designs" style="font-size:0.9rem;">Why is this dubious? (optional):</label><br>
+            <textarea id="dubious-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+        </div>
+        <div style="margin-bottom:0.5rem;">
+            <label for="dubious-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="dubious-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <button id="dubious-submit-designs" onclick="submitDubious('designs')">Submit</button>
+        <button onclick="hideDubiousPanel('designs')" style="margin-left:0.5rem;">Cancel</button>
+        <div id="dubious-status-designs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="edit-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">

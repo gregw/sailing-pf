@@ -25,6 +25,8 @@ class WriteAuthFilter implements Filter
         "/api/clubs/exclude-request", "/api/races/exclude-request",
         "/api/series/exclude-request",
         "/api/designs/ignore-request",
+        "/api/boats/dubious-request", "/api/designs/dubious-request",
+        "/api/series/dubious-request", "/api/races/dubious-request",
         "/api/comparison/fetch-handicaps");
     private final AuthConfig authConfig;
 
