@@ -11,6 +11,70 @@ For more information see [`src/main/resources/content/docs.md`](https://github.c
 Source code: Apache License 2.0. Contributions and issue reports welcome via
 [GitHub Issues](https://github.com/gregw/sailing-pf/issues).
 
+## Getting Started
+
+This is a Java 21 / Maven project. The only dependencies are a JDK (21 or later)
+and Maven — Maven downloads everything else on the first build.
+
+### 1. Install a JDK and Maven
+
+**Linux (Debian/Ubuntu)**
+
+```bash
+sudo apt update
+sudo apt install default-jdk maven git
+```
+
+**macOS** (with [Homebrew](https://brew.sh))
+
+```bash
+brew install openjdk maven git
+```
+
+**Windows**
+
+Install [Git for Windows](https://git-scm.com/download/win), a JDK such as
+[Temurin 21](https://adoptium.net/temurin/releases/?version=21), and
+[Maven](https://maven.apache.org/download.cgi) (add its `bin` directory to your
+`PATH`). The commands below then work from PowerShell or Git Bash.
+
+Verify the tools are on your `PATH`:
+
+```bash
+java -version    # should report 21 or later
+mvn -version
+```
+
+### 2. Get the code and build
+
+```bash
+git clone https://github.com/gregw/sailing-pf.git
+cd sailing-pf
+mvn compile
+```
+
+### 3. Populate the database
+
+The project reads and writes a data directory (referred to as `pf-data`). To
+build one from scratch, run the `FullImport` class — it runs every importer in
+turn (SailSys, TopYacht, BWPS, ORC, AMS) against a single data directory:
+
+```bash
+mvn exec:java -Dexec.mainClass=org.mortbay.sailing.pf.importer.FullImport -Dpf-data=pf-data
+```
+
+This fetches race data over the network and may take a while. The data
+directory is created if it does not exist; re-running updates it in place.
+
+### 4. Run the server
+
+```bash
+mvn exec:java -Dpf-data=pf-data
+```
+
+Then open the public UI at <http://localhost:8080> and the admin UI at
+<http://localhost:8888>.
+
 ## Running locally
 
 ```bash

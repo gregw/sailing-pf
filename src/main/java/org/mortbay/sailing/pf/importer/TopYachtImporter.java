@@ -430,7 +430,7 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, List.copyOf(divisions), SOURCE, Instant.now(), null));
+            null, List.copyOf(divisions), sourceWithUrl(url), Instant.now(), null));
         LOG.info("TopYacht: imported race {} ({} finishers, {} division(s))",
             raceId, totalFinishers, divisions.size());
 
@@ -589,7 +589,8 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, List.of(new Division(handicapSystem, List.copyOf(finishers))), SOURCE, Instant.now(), null));
+            null, List.of(new Division(handicapSystem, List.copyOf(finishers))),
+            sourceWithUrls(sourceUrls), Instant.now(), null));
         LOG.info("TopYacht: imported race {} ({} finishers)",
             raceId, finishers.size());
 
@@ -1133,6 +1134,35 @@ public class TopYachtImporter
         return "IRC".equalsIgnoreCase(system)
             || "ORC".equalsIgnoreCase(system)
             || "AMS".equalsIgnoreCase(system);
+    }
+
+    /**
+     * Builds the {@code source} string for a record imported from a single results
+     * page, e.g. {@code "TopYacht - http://host/results/2025/race12.html"}. Falls back
+     * to the bare {@link #SOURCE} when no URL is available (e.g. in tests).
+     */
+    private static String sourceWithUrl(String url)
+    {
+        return (url == null || url.isBlank()) ? SOURCE : SOURCE + " - " + url;
+    }
+
+    /**
+     * Builds the {@code source} string for a record assembled from several results
+     * pages, joining the non-blank URLs with {@code ", "}. Falls back to the bare
+     * {@link #SOURCE} when no URLs are available (e.g. in tests).
+     */
+    private static String sourceWithUrls(List<String> urls)
+    {
+        StringBuilder joined = new StringBuilder();
+        for (String u : urls)
+        {
+            if (u == null || u.isBlank())
+                continue;
+            if (joined.length() > 0)
+                joined.append(", ");
+            joined.append(u);
+        }
+        return joined.length() == 0 ? SOURCE : SOURCE + " - " + joined;
     }
 
     private static List<String> addSource(List<String> existing, String source)

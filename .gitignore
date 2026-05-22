@@ -1,4 +1,5 @@
 # project
+wiki
 pf-data/*
 !pf-data/config
 .claude/*
