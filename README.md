@@ -1,9 +1,18 @@
 # Australian Yacht Racing Elapsed Time Database
 
-An online database of elapsed times from Australian yacht racing that computes a
-**Performance Factor (PF)** — the back-calculated time correction factor a boat
-would have needed, averaged across its recorded racing history, to have been equal-time with a
-hypothetical 1.000 reference boat. It is a historical performance measure, not a handicap system,
+The Performance Factor (**PF**) project provides an online database of **elapsed times** and
+Time Corrected Factors (**TCF**s) for Australian keelboat racing, with statistical analysis and graphical
+presentation. Fundamentally, this project is about presenting the ultimate source of truth - **Elapsed Times**, in a form that
+can better inform a club handicappers' decisions about handicap allocation. The Performance Factor(**PF**),
+Reference Factor(**RF**), and Performance Profile(**PP**) are just alternate (experimental) ways of
+presenting the relationships between the elapsed times of various boats and designs.
+
+A **PF** is a back-calculated Time Correction Factor (**TCF**) a boat would have needed, averaged across
+all its recorded racing history, to have been near equal corrected time with a hypothetical 1.000 reference
+boat. An **RF** is a similar **TCF** for boat designs. The **PP** is a totally new way of presenting
+a boat's historical performance.
+
+It is a historical performance measure, not a handicap system,
 primarily used to inform initial handicap allocation at the start of a season.
 
 For more information see [`src/main/resources/content/docs.md`](https://github.com/gregw/sailing-pf/blob/main/src/main/resources/content/docs.md).
