@@ -99,6 +99,11 @@ public class DataStore
     private List<Maker> makers;
     private boolean makersDirty;
 
+    // Set by computeStaleBoatViolations() at the end of start(). Empty when the dataset is
+    // clean; non-empty when the startup repair passes left residual stale boats. Read via
+    // findStaleBoatViolations() and surfaced through the /api/health endpoint.
+    private volatile List<String> staleBoatViolations = List.of();
+
     // Mutable exclusion sets -- persisted to config/exclusions.yaml, managed via admin UI.
     // Map values are the operator-supplied (or auto-supplied) reason for exclusion;
     // empty string when no reason was given. LinkedHashMap preserves insertion order
@@ -343,8 +348,52 @@ public class DataStore
         if (aliased != null)
         {
             sourceDesign += ":" + sailNo + " " + name + "=>" + aliased;
-            sailNo = aliased.normSailNumber() != null ? aliased.normSailNumber() : sailNo;
-            name = aliased.normName() != null ? aliased.normName() : name;
+            String canonSail = aliased.normSailNumber() != null ? aliased.normSailNumber() : sailNo;
+            String canonName = aliased.normName() != null ? aliased.normName() : name;
+            // Active stale-record scan: if the alias maps (sailNo, name) to a different
+            // canonical, look for any orphan boat already in the store under the pre-alias
+            // identity and merge / rename it into the canonical now. Without this, an
+            // aliases.yaml edit only heals stale records at the next restart, which leaves
+            // a window where an importer can run beforehand and observe stale duplicates.
+            if (!canonSail.equalsIgnoreCase(sailNo) || !canonName.equalsIgnoreCase(name))
+            {
+                List<Boat> orphans = new ArrayList<>();
+                for (Boat b : boats.values())
+                {
+                    if (sailNo.equalsIgnoreCase(b.sailNumber())
+                        && name.equalsIgnoreCase(IdGenerator.normaliseName(b.name())))
+                        orphans.add(b);
+                }
+                for (Boat orphan : orphans)
+                {
+                    Design d = orphan.designId() != null ? designs.get(orphan.designId()) : null;
+                    String canonDisplay = aliased.canonicalDisplayName() != null
+                        ? aliased.canonicalDisplayName() : orphan.name();
+                    String targetId = IdGenerator.generateBoatId(canonSail, canonDisplay, d);
+                    if (targetId.equals(orphan.id()))
+                        continue;
+                    if (boats.containsKey(targetId))
+                    {
+                        LOG.info("Active stale-boat scan: merging orphan {} into canonical {} during findOrCreateBoat",
+                            orphan.id(), targetId);
+                        mergeBoats(targetId, List.of(orphan.id()));
+                    }
+                    else
+                    {
+                        LOG.info("Active stale-boat scan: renaming orphan {} → {} during findOrCreateBoat",
+                            orphan.id(), targetId);
+                        Boat renamed = new Boat(targetId, canonSail, canonDisplay,
+                            orphan.designId(), orphan.clubIds(), orphan.certificates(),
+                            orphan.sources(), Instant.now(), null);
+                        removeBoat(orphan.id());
+                        putBoat(renamed);
+                        rewriteFinisherBoatId(orphan.id(), targetId);
+                        ClubLoader.remapBoatId(configDir, orphan.id(), targetId);
+                    }
+                }
+            }
+            sailNo = canonSail;
+            name = canonName;
             rawName = aliased.canonicalDisplayName() != null ? aliased.canonicalDisplayName() : rawName;
         }
 
@@ -1690,6 +1739,27 @@ public class DataStore
     }
 
     /**
+     * Returns a list of stale-boat violations detected after the startup repair passes have
+     * run. Each violation is a human-readable string identifying a boat whose stored identity
+     * disagrees with the current configuration (aliases.yaml, design.yaml boatDesignOverrides,
+     * or clubs.yaml noclub). An empty list means the dataset is clean.
+     *
+     * <p>This is the canonical health-check surface for data cleanliness: if any of the four
+     * known violation patterns (alias-stale name, alias-stale sail, design-override drift,
+     * stale noclub assignment) remains after startup, this method reports them so they can
+     * be surfaced via {@code GET /api/health} and as ERROR-level log entries.</p>
+     *
+     * <p>Computed by {@link #computeStaleBoatViolations()} at the end of {@link #start()}
+     * and cached in {@link #staleBoatViolations}. Subsequent edits / merges do not refresh
+     * this list -- it reflects the state right after startup repair finished.</p>
+     */
+    public List<String> findStaleBoatViolations()
+    {
+        requireStarted();
+        return staleBoatViolations;
+    }
+
+    /**
      * Result of a {@link #mergeBoats} operation.
      */
     public record MergeResult(int updatedRaces, int updatedFinishers) {}
@@ -1983,6 +2053,60 @@ public class DataStore
             }
         }
 
+        // Design override correction: boats whose stored designId disagrees with an active
+        // boatDesignOverrides entry in design.yaml are migrated to the override design. This
+        // repairs boats created before the override was added (e.g. MYC12 / San Toy /
+        // radford12 → radford12catrig; 1088 / Corum / farrmumm36 → farr36modified).
+        // Date is passed as null so only undated/currently-active overrides apply; dated
+        // overrides encode "boat changed design between X and Y" and are only consulted at
+        // import time.
+        {
+            List<Map.Entry<String, String>> designOverrideUpdates = new ArrayList<>();
+            for (Boat b : boats.values())
+            {
+                String overrideId = designCatalogue.resolveDesignOverride(
+                    b.sailNumber(), IdGenerator.normaliseName(b.name()), null);
+                if (overrideId == null)
+                    continue;
+                if (overrideId.equals(b.designId()))
+                    continue;
+                if (!designs.containsKey(overrideId))
+                    continue;
+                designOverrideUpdates.add(Map.entry(b.id(), overrideId));
+            }
+            if (!designOverrideUpdates.isEmpty())
+            {
+                LOG.info("Correcting {} boat(s) with stale designId vs design override at startup",
+                    designOverrideUpdates.size());
+                for (Map.Entry<String, String> e : designOverrideUpdates)
+                {
+                    Boat b = boats.get(e.getKey());
+                    if (b == null)
+                        continue;
+                    String canonDesignId = e.getValue();
+                    String canonBoatId = IdGenerator.generateBoatId(
+                        b.sailNumber(), b.name(), designs.get(canonDesignId));
+                    if (boats.containsKey(canonBoatId))
+                    {
+                        LOG.info("Design override correction: merging {} into {} (designId {} → {})",
+                            b.id(), canonBoatId, b.designId(), canonDesignId);
+                        mergeBoats(canonBoatId, List.of(b.id()));
+                    }
+                    else
+                    {
+                        LOG.info("Design override correction: updating designId {} → {} for boat {}",
+                            b.designId(), canonDesignId, b.id());
+                        Boat updated = new Boat(canonBoatId, b.sailNumber(), b.name(), canonDesignId,
+                            b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+                        removeBoat(b.id());
+                        putBoat(updated);
+                        rewriteFinisherBoatId(b.id(), canonBoatId);
+                        ClubLoader.remapBoatId(configDir, b.id(), canonBoatId);
+                    }
+                }
+            }
+        }
+
         // Auto-fix stale boats: if the alias seed maps a boat's name to a different canonical
         // name and the canonical boat already exists, merge the stale boat into it.
         // This repairs boats that were created before the alias entry was added and prevents
@@ -2000,8 +2124,10 @@ public class DataStore
             for (Boat b : new ArrayList<>(boats.values()))
             {
                 String normName = IdGenerator.normaliseName(b.name());
-                String ndk = normName + (b.designId() != null ? "-" + b.designId() : "");
-                var match = aliases.lookupBoat(b.sailNumber(), ndk);
+                // Aliases.lookupBoat expects a pure normalised name; passing the design
+                // suffix concatenated here (a pre-existing bug) made this pass miss every
+                // alias-stale boat that had a designId, defeating the whole safety net.
+                var match = aliases.lookupBoat(b.sailNumber(), normName);
                 if (match.isPresent() && match.get().normName() != null)
                 {
                     String canonNorm = match.get().normName();
@@ -2011,8 +2137,13 @@ public class DataStore
                             ? match.get().normSailNumber() : b.sailNumber();
                         String displayName = match.get().canonicalDisplayName() != null
                             ? match.get().canonicalDisplayName() : b.name();
-                        Design d = b.designId() != null ? designs.get(b.designId()) : null;
-                        String canonId = IdGenerator.generateBoatId(canonSail, displayName, d);
+                        // Use b.designId() (the string) directly instead of looking up the
+                        // Design object: if the catalog doesn't have a matching Design (e.g.
+                        // design file missing on disk, or excluded design after a config
+                        // change) we still want to preserve the design suffix on the renamed
+                        // boatId, otherwise the rename produces an inconsistent record where
+                        // the id has no suffix but the designId field still does.
+                        String canonId = renameBoatId(canonSail, displayName, b.designId());
                         if (boats.containsKey(canonId))
                         {
                             Boat canonical = boats.get(canonId);
@@ -2095,8 +2226,118 @@ public class DataStore
             }
         }
 
+        // Second noclub correction pass: the earlier pass at the top of this method
+        // catches the simple case where a boat already at its final boatId is in noclub.
+        // But the design alias / design override / auto-fix-stale / design upgrade passes
+        // can REGENERATE a boat under a new boatId (the noclub target). Re-run the noclub
+        // correction so the post-migration boats also pick up their noclub assignment.
+        {
+            List<Boat> noclubViolations = boats.values().stream()
+                .filter(b -> !b.clubIds().isEmpty() && isExplicitlyNoClub(b.id()))
+                .toList();
+            if (!noclubViolations.isEmpty())
+            {
+                LOG.warn("Correcting {} post-migration boat(s) with a club that are in noclub",
+                    noclubViolations.size());
+                for (Boat b : noclubViolations)
+                {
+                    LOG.warn("noclub correction (post-migration): clearing clubIds {} from boat {}",
+                        b.clubIds(), b.id());
+                    putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
+                        List.of(), b.certificates(), b.sources(), Instant.now(), null));
+                }
+            }
+        }
+
+        // Post-repair sanity scan: re-check every boat after all repair passes have run
+        // and remember any residual violations. These get logged as ERROR and surfaced via
+        // findStaleBoatViolations() (and ultimately /api/health). An empty list means the
+        // dataset is clean. The four known violation patterns are:
+        //   (1) a boat whose (sail, name) resolves via aliases.lookupBoat to a different
+        //       canonical (alias-stale orphan that no pass managed to merge);
+        //   (2) a boat whose designId disagrees with an undated boatDesignOverrides entry;
+        //   (3) a boat with non-empty clubIds that is listed in noclub;
+        //   (4) a boat whose stored designId is currently in the design-alias map
+        //       (should have been canonicalised by the design alias correction pass).
+        staleBoatViolations = computeStaleBoatViolations();
+        for (String violation : staleBoatViolations)
+        {
+            LOG.error("Stale-boat violation after startup repair: {}", violation);
+        }
+
         makers = new ArrayList<>(loadList(catalogueDir.resolve("makers.json"), Maker.class));
         makersDirty = false;
+    }
+
+    /**
+     * Variant of {@link IdGenerator#generateBoatId} that uses a designId string directly
+     * instead of looking up the Design object. Used by the startup rename paths so that a
+     * stored designId is preserved on the renamed boatId even when the Design object isn't
+     * present in the in-memory designs map (e.g. design file missing on disk, design newly
+     * marked excluded, or test fixtures that don't load design files).
+     */
+    private static String renameBoatId(String rawSail, String rawName, String designId)
+    {
+        String normSail = IdGenerator.normaliseSailNumber(rawSail);
+        if (normSail.isEmpty())
+            normSail = "nosail";
+        String base = normSail + "-" + IdGenerator.normaliseName(rawName);
+        return designId == null || designId.isBlank() ? base : base + "-" + designId;
+    }
+
+    /**
+     * Scans every boat for the four known data-cleanliness violations and returns one
+     * human-readable string per violation. Idempotent and side-effect-free. Called once at
+     * the end of {@link #start()} and cached in {@link #staleBoatViolations}; the cached
+     * value is what {@link #findStaleBoatViolations()} returns.
+     */
+    private List<String> computeStaleBoatViolations()
+    {
+        List<String> violations = new ArrayList<>();
+        for (Boat b : boats.values())
+        {
+            String normName = IdGenerator.normaliseName(b.name());
+            // (1) alias-stale: lookup resolves to a different canonical (sail, name).
+            var match = aliases.lookupBoat(b.sailNumber(), normName).orElse(null);
+            if (match != null && match.normName() != null
+                && (!match.normName().equalsIgnoreCase(normName)
+                || (match.normSailNumber() != null
+                && !match.normSailNumber().equalsIgnoreCase(b.sailNumber()))))
+            {
+                violations.add(String.format(
+                    "alias-stale boat %s (sail=%s name=%s) should resolve to canonical sail=%s name=%s",
+                    b.id(), b.sailNumber(), normName,
+                    match.normSailNumber() != null ? match.normSailNumber() : b.sailNumber(),
+                    match.normName()));
+            }
+            // (2) design-override drift.
+            String overrideId = designCatalogue.resolveDesignOverride(
+                b.sailNumber(), normName, null);
+            if (overrideId != null && !overrideId.equals(b.designId())
+                && designs.containsKey(overrideId))
+            {
+                violations.add(String.format(
+                    "design-override drift on %s: stored designId=%s but override expects %s",
+                    b.id(), b.designId(), overrideId));
+            }
+            // (3) stale noclub assignment.
+            if (!b.clubIds().isEmpty() && isExplicitlyNoClub(b.id()))
+            {
+                violations.add(String.format(
+                    "noclub violation on %s: clubIds=%s but boatId is in noclub list",
+                    b.id(), b.clubIds()));
+            }
+            // (4) design alias drift: stored designId is itself an alias.
+            if (b.designId() != null)
+            {
+                String canonical = aliases.resolveDesignAlias(b.designId());
+                if (!canonical.equals(b.designId()) && designs.containsKey(canonical))
+                    violations.add(String.format(
+                        "design-alias drift on %s: stored designId=%s but canonical is %s",
+                        b.id(), b.designId(), canonical));
+            }
+        }
+        return List.copyOf(violations);
     }
 
     // --- Internal helpers ---

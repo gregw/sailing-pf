@@ -229,6 +229,30 @@ excluded:
 - "seawind1600"
 - "seawind24"
 - "seawind850"
+- "ilca"
+- "ilcadevoti"
+- "psailca"
+- "psalaser"
+- "laserradial"
+- "laserbyte"
+- "laser47"
+- "laser170525"
+- "bic"
+- "nacra15"
+- "nacra16sq"
+- "nacra16squarepinhead"
+- "nacra36"
+- "nacra58"
+- "nacra58naqsqtop"
+- "nacrainfusion"
+- "nacrainfusionmk2"
+- "multi23"
+- "mothscow"
+- "lowriderscowmothsplinter"
+- "biekermothkebab"
+- "windsurferlt"
+- "windsurfer1designlt"
+- "windsurfer1designhv"
 ignored:
 - "adams"
 - "bavaria"
@@ -334,6 +358,8 @@ ignored:
 - "mcconaghy"
 - "bakewellwhite"
 - "aquarius"
+- "carter"
+- "davidson"
 noSpinnaker:
   - "radford12catrig"
 boatDesignOverrides:
@@ -443,5 +469,12 @@ boatDesignOverrides:
   boats:
     - sailNumber: "795"
       name: "PANTHER"
+      from: null
+      until: null
+- designId: "ross830"
+  canonicalName: "Ross 830"
+  boats:
+    - sailNumber: "4822"
+      name: "Stingray"
       from: null
       until: null

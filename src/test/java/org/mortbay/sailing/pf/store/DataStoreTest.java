@@ -115,6 +115,10 @@ class DataStoreTest {
     {
         writeClubsYaml(tempDir,
             "clubs:\n  myc.com.au:\n    shortName: MYC\n    state: NSW\n    fullName: Manly Yacht Club\n");
+        // Defeat classpath aliases.yaml fallback: this test stores boats with names like
+        // "Tensixty" and expects roundtrip identity, but the test-resources aliases.yaml
+        // maps Tensixty → Day Dreaming, which the startup auto-fix-stale pass would apply.
+        writeEmptyAliasesYaml(tempDir);
 
         List<Boat> boats = List.of(
             new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", List.of("myc.com.au"), List.of(), List.of(), null, null),
@@ -196,9 +200,13 @@ class DataStoreTest {
     }
 
     @Test
-    void eachBoatInOwnFile(@TempDir Path tempDir) {
+    void eachBoatInOwnFile(@TempDir Path tempDir) throws IOException
+    {
         Boat boat1 = new Boat("MYC100-shearmagic-adams10", "MYC100", "Shear Magic", "adams10", List.of("myc.com.au"), List.of(), List.of(), null, null);
         Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", List.of("myc.com.au"), List.of(), List.of(), null, null);
+        // Defeat classpath aliases.yaml fallback (test-resources/aliases.yaml maps Tensixty
+        // → Day Dreaming): otherwise the startup auto-fix-stale would rename boat2.
+        writeEmptyAliasesYaml(tempDir);
 
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -294,6 +302,19 @@ class DataStoreTest {
     {
         Files.createDirectories(tempDir.resolve("config"));
         Files.writeString(tempDir.resolve("config/clubs.yaml"), yaml);
+    }
+
+    /**
+     * Writes a stub empty {@code aliases.yaml} into the tempDir's config dir so that
+     * {@link org.mortbay.sailing.pf.store.Aliases#load} does not fall back to the classpath
+     * test-resources aliases (which would auto-rename boats whose names happen to be in
+     * that fixture). Use this in tests that put boats with names like "Tensixty" and
+     * expect them NOT to be auto-renamed by the alias seed.
+     */
+    private static void writeEmptyAliasesYaml(Path tempDir) throws IOException
+    {
+        Files.createDirectories(tempDir.resolve("config"));
+        Files.writeString(tempDir.resolve("config/aliases.yaml"), "boats: {}\ndesigns: {}\n");
     }
 
     // --- YAML as source of truth for Club metadata ---

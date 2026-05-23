@@ -101,6 +101,8 @@ public class AdminApiServlet extends HttpServlet
 
         if ("/stats".equals(path))
             handleStats(resp);
+        else if ("/health".equals(path))
+            handleHealth(resp);
         else if (path.matches("/boats/[^/]+/pf"))
             handleBoatPf(path.replaceAll("^/boats/|/pf$", ""), resp);
         else if (path.matches("/boats/[^/]+/profile"))
@@ -360,6 +362,39 @@ public class AdminApiServlet extends HttpServlet
      * {@code …Excluded} key giving the number of entities of that type that are currently
      * excluded from analysis.
      */
+    /**
+     * GET /api/health — data-cleanliness health check.
+     *
+     * <p>Returns the residual stale-boat violations found by the startup repair passes
+     * (see {@link org.mortbay.sailing.pf.store.DataStore#findStaleBoatViolations}).
+     * An empty list means the dataset is clean; a non-empty list means something the
+     * repair passes could not auto-fix and needs admin attention. Always responds 200
+     * (machine-readable); also sets an {@code X-PF-Health: degraded} header when the
+     * list is non-empty so a polling UI can surface a red badge.</p>
+     *
+     * <p>Response shape:
+     * <pre>{
+     *   "ok": true,
+     *   "staleBoats": []
+     * }</pre>
+     * or when degraded:
+     * <pre>{
+     *   "ok": false,
+     *   "staleBoats": ["alias-stale boat ...", "design-override drift on ...", ...]
+     * }</pre>
+     */
+    private void handleHealth(HttpServletResponse resp) throws IOException
+    {
+        List<String> violations = store.findStaleBoatViolations();
+        boolean ok = violations.isEmpty();
+        if (!ok)
+            resp.setHeader("X-PF-Health", "degraded");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ok", ok);
+        body.put("staleBoats", violations);
+        writeJson(resp, body);
+    }
+
     private void handleStats(HttpServletResponse resp) throws IOException
     {
         // Merge seed + persisted to get total club count

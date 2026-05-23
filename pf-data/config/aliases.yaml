@@ -17,6 +17,8 @@ designs:
     canonicalName: "Beneteau First 40.7"
     aliases:
     - "FIRST 40.7"
+    - "Beneteau 40.7"
+    - "beneteau407"
   beneteaufirst477:
     canonicalName: "Beneteau First 47.7"
     aliases:
@@ -25,10 +27,14 @@ designs:
     canonicalName: "Beneteau First 44.7"
     aliases:
     - "FIRST 44.7"
+    - "Beneteau 47.7"
+    - "beneteau477"
   beneteaufirst347:
     canonicalName: "Beneteau First 34.7"
     aliases:
     - "FIRST 34.7"
+    - "Beneteau 34.7"
+    - "beneteau347"
   beneteaufirst337:
     canonicalName: "Beneteau First 33.7"
     aliases:
@@ -607,6 +613,36 @@ designs:
       - "SYDNEY 32 OD"
       - "sydney32od"
       - "Sydney 32"
+  beneteaufirst277:
+    canonicalName: "Beneteau First 27.7"
+    aliases:
+      - "Beneteau 27.7"
+      - "beneteau277"
+  beneteaufirst317:
+    canonicalName: "Beneteau First 31.7"
+    aliases:
+      - "Beneteau 31.7"
+      - "beneteau317"
+  sydney41:
+    canonicalName: "Sydney 41"
+    aliases:
+      - "SYDNEY (BH) 41"
+      - "sydneybh41"
+  ilca7:
+    canonicalName: "ILCA 7"
+    aliases:
+      - "ILCA 7 ILCA 7"
+      - "ilca7ilca7"
+  laser:
+    canonicalName: "Laser"
+    aliases:
+      - "Laser Laser"
+      - "laserlaser"
+  nacra16sq:
+    canonicalName: "Nacra 16sq"
+    aliases:
+      - "Nacra 16 Square"
+      - "nacra16square"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -1230,3 +1266,22 @@ boats:
         name: "nomercydiv2"
       - sailNumber: "24AUS807D1"
         name: "nomercydiv1"
+  YAUS47-mojo:
+    canonicalName: "Mojo"
+    aliases:
+      - sailNumber: "YAUS58"
+        name: "mojo"
+  AUS828-nostingrays:
+    canonicalName: "No Stingrays"
+    aliases:
+      - sailNumber: "047AUS828"
+        name: "nostingrays"
+      - sailNumber: "47AUS828"
+        name: "nostingrays"
+  "203-frenzy":
+    canonicalName: "Frenzy"
+    aliases:
+      - sailNumber: "AUS203"
+        name: "frenzy"
+      - sailNumber: "11AUS203"
+        name: "frenzy"
