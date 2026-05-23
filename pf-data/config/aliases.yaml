@@ -1005,11 +1005,6 @@ boats:
         name: "okavangodelta"
       - sailNumber: "44364437"
         name: "okavangodelta"
-  "1088-corum":
-    canonicalName: "Corum"
-    aliases:
-      - sailNumber: "1088"
-        name: "nortonwhitecorum"
   HHH-sko:
     canonicalName: "S.K.O"
     aliases:
@@ -1285,3 +1280,10 @@ boats:
         name: "frenzy"
       - sailNumber: "11AUS203"
         name: "frenzy"
+  "581-corum":
+    canonicalName: "Corum"
+    aliases:
+      - sailNumber: "1088"
+        name: "corum"
+      - sailNumber: "1088"
+        name: "nortonwhitecorum"

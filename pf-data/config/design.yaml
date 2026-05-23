@@ -425,6 +425,10 @@ boatDesignOverrides:
     name: "Corum"
     from: null
     until: null
+  - sailNumber: "581"
+    name: "Corum"
+    from: null
+    until: null
 - designId: "radford12catrig"
   canonicalName: "Radford 12 Cat Rig"
   boats:

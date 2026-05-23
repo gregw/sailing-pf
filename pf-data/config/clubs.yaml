@@ -351,7 +351,8 @@ clubs:
       - "RSYSAcademy"
       - "RSYS - Academy"
     topyacht: null
-    boats: null
+    boats:
+      - "581-corum-farr36modified"
   ransa.com.au:
     shortName: "RANSA"
     state: "NSW"
@@ -1092,7 +1093,6 @@ noclub:
   - "1255-melody-swansondart"
   - "1161-wildlife-etchells"
   - "6689-copernicus-radford12"
-  - "1088-corum-farr36modified"
   - "HHH-sko-elliott6"
   - "12844-upup"
   - "46075-savannahgirl-swan46"
