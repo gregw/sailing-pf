@@ -446,8 +446,14 @@ public class AdminApiServlet extends HttpServlet
      * free-text search ({@code q} matches id or name), optional filters by {@code designId} or
      * {@code clubId}, and sort by {@code sailNumber}, {@code name}, {@code designId},
      * {@code clubId}, {@code spinRef}, {@code pf}, {@code finishes}, or {@code profile}.
-     * The {@code dupeSails} flag restricts results to boats sharing a sail number with at least
-     * one other boat. The {@code showExcluded} flag (default false) hides boats that are
+     * The {@code dupeFilter} parameter restricts results to likely-duplicate boats. Values:
+     * {@code sail} (boats sharing a sail number with ≥1 other boat — the legacy duplicate-sail
+     * filter); {@code sailName} (boats matching another on sail # and normalised name but
+     * differing on design); {@code sailDesign} (boats matching another on sail # and design
+     * but with a different normalised name); {@code sailDesignName} (boats matching another
+     * on sail # and design where one's normalised name is a substring of the other's, e.g.
+     * "azzuro" inside "komatsuazzuro"). Omit or send an empty value for no de-dup filter.
+     * The {@code showExcluded} flag (default false) hides boats that are
      * individually excluded or whose design is excluded. The {@code excludeNulls} flag removes
      * rows where the sort column is null.
      * Each row includes the boat's spin RF, PF, finish count, performance profile score, and
@@ -466,24 +472,15 @@ public class AdminApiServlet extends HttpServlet
             String sort = req.getParameter("sort");
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
-            boolean dupeSails = "true".equals(req.getParameter("dupeSails"));
+            String dupeFilter = req.getParameter("dupeFilter");
+            if (dupeFilter == null)
+                dupeFilter = "";
             boolean hideEmpty = "true".equals(req.getParameter("hideEmpty"));
 
-            // Duplicate-sail filter operates on the full dataset, text search is applied on top.
-            Set<String> candidateIds = null;
-            if (dupeSails)
-            {
-                Set<String> dupeSailNums = store.boats().values().stream()
-                    .collect(Collectors.groupingBy(Boat::sailNumber, Collectors.counting()))
-                    .entrySet().stream()
-                    .filter(e -> e.getValue() > 1)
-                    .map(Map.Entry::getKey)
-                    .collect(Collectors.toSet());
-                candidateIds = store.boats().values().stream()
-                    .filter(b -> dupeSailNums.contains(b.sailNumber()))
-                    .map(Boat::id)
-                    .collect(Collectors.toCollection(HashSet::new));
-            }
+            // De-dup filter operates on the full dataset; text search is applied on top.
+            // candidateIds == null means "no filter"; an empty set means "filter, but matched
+            // nothing" — both paths use the same downstream filter() below.
+            Set<String> candidateIds = computeDupeCandidates(dupeFilter);
 
             String filterDesignId = req.getParameter("designId");
             String filterClubId   = req.getParameter("clubId");
@@ -585,6 +582,95 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJsonFull(resp, boat);
         }
+    }
+
+    /**
+     * Resolve the {@code dupeFilter} query parameter to the set of boat IDs that match.
+     * Returns {@code null} when no filter is requested (caller treats null as "all boats").
+     * For the {@code sailDesign*} modes, boats with a null designId are excluded — a missing
+     * design is not a duplicate-design candidate.
+     */
+    private Set<String> computeDupeCandidates(String dupeFilter)
+    {
+        if (dupeFilter == null || dupeFilter.isEmpty())
+            return null;
+        return switch (dupeFilter)
+        {
+            case "sail" ->
+            {
+                Set<String> dupeSailNums = store.boats().values().stream()
+                    .collect(Collectors.groupingBy(Boat::sailNumber, Collectors.counting()))
+                    .entrySet().stream()
+                    .filter(e -> e.getValue() > 1)
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+                yield store.boats().values().stream()
+                    .filter(b -> dupeSailNums.contains(b.sailNumber()))
+                    .map(Boat::id)
+                    .collect(Collectors.toCollection(HashSet::new));
+            }
+            // sailName / sailDesign use normalised name (lowercase, alnum-only) so that
+            // "Raging Bull" matches "ragingbull" etc. — same rule importers use to dedupe.
+            case "sailName" ->
+            {
+                Map<String, List<Boat>> bySailName = store.boats().values().stream()
+                    .collect(Collectors.groupingBy(
+                        b -> b.sailNumber() + "|" + IdGenerator.normaliseName(b.name())));
+                yield bySailName.values().stream()
+                    .filter(grp -> grp.size() > 1)
+                    .filter(grp -> grp.stream().map(Boat::designId).distinct().count() > 1)
+                    .flatMap(List::stream)
+                    .map(Boat::id)
+                    .collect(Collectors.toCollection(HashSet::new));
+            }
+            case "sailDesign" ->
+            {
+                Map<String, List<Boat>> bySailDesign = store.boats().values().stream()
+                    .filter(b -> b.designId() != null)
+                    .collect(Collectors.groupingBy(b -> b.sailNumber() + "|" + b.designId()));
+                yield bySailDesign.values().stream()
+                    .filter(grp -> grp.size() > 1)
+                    .filter(grp -> grp.stream()
+                        .map(b -> IdGenerator.normaliseName(b.name()))
+                        .distinct().count() > 1)
+                    .flatMap(List::stream)
+                    .map(Boat::id)
+                    .collect(Collectors.toCollection(HashSet::new));
+            }
+            case "sailDesignName" ->
+            {
+                // Pairwise substring scan within each (sail, design) bucket. O(n²) per
+                // bucket but buckets are tiny — almost always 2-3 boats.
+                Map<String, List<Boat>> bySailDesign = store.boats().values().stream()
+                    .filter(b -> b.designId() != null)
+                    .collect(Collectors.groupingBy(b -> b.sailNumber() + "|" + b.designId()));
+                Set<String> hits = new HashSet<>();
+                for (List<Boat> grp : bySailDesign.values())
+                {
+                    if (grp.size() < 2)
+                        continue;
+                    for (int i = 0; i < grp.size(); i++)
+                    {
+                        String ni = IdGenerator.normaliseName(grp.get(i).name());
+                        if (ni.isEmpty())
+                            continue;
+                        for (int j = i + 1; j < grp.size(); j++)
+                        {
+                            String nj = IdGenerator.normaliseName(grp.get(j).name());
+                            if (nj.isEmpty())
+                                continue;
+                            if (ni.contains(nj) || nj.contains(ni))
+                            {
+                                hits.add(grp.get(i).id());
+                                hits.add(grp.get(j).id());
+                            }
+                        }
+                    }
+                }
+                yield hits;
+            }
+            default -> null; // unknown value → no filter, same as omitted
+        };
     }
 
     /**

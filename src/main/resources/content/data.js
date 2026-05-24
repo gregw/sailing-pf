@@ -445,7 +445,7 @@ function initEntityPage(entity) {
     persistControl('show-excluded-' + entity, {key: 'show-excluded', onChange: () => doSearch(entity)});
     persistControl('hide-empty-' + entity, {key: 'hide-empty', onChange: () => doSearch(entity)});
     persistControl('exclude-empty-series', {onChange: () => doSearch('series')});
-    persistControl('filter-dupe-sails', {onChange: () => doSearch('boats')});
+    persistControl('filter-dupes', {onChange: () => doSearch('boats')});
     const variantSel = document.getElementById('boat-variant');
     if (variantSel) variantSel.value = boatVariant;  // boatVariant already restored from sessionStorage
 
@@ -487,7 +487,7 @@ function updateFilterBanner(entity) {
 
 function updateFilterControls(entity) {
     const active = !!state.filter[entity];
-    ['exclude-empty-' + entity, 'filter-dupe-sails'].forEach(id => {
+    ['exclude-empty-' + entity, 'filter-dupes'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = active;
@@ -531,7 +531,8 @@ async function loadList(entity, page) {
     const f = state.filter[entity];
     if (f) url += `&${f.param}=${encodeURIComponent(f.value)}`;
     if (entity === 'boats' && !f) {
-        if (document.getElementById('filter-dupe-sails').checked) url += '&dupeSails=true';
+        const dupeSel = document.getElementById('filter-dupes');
+        if (dupeSel && dupeSel.value) url += '&dupeFilter=' + encodeURIComponent(dupeSel.value);
     }
     const showExcludedEl = document.getElementById('show-excluded-' + entity);
     if (showExcludedEl && showExcludedEl.checked) url += '&showExcluded=true';

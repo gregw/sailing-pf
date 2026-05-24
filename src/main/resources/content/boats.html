@@ -19,8 +19,13 @@
         <input type="text" id="q-boats" placeholder="Search by id or name…" oninput="debounceSearch('boats')">
         <button class="search-clear-btn" title="Clear search" onclick="clearSearch('boats')">✕</button>
         <button onclick="doSearch('boats')">Search</button>
-        <label style="margin-left:0.5rem;"><input type="checkbox" id="filter-dupe-sails" onchange="doSearch('boats')"> Duplicate
-            sail numbers</label>
+        <label style="margin-left:0.5rem;">Duplicates: <select id="filter-dupes" onchange="doSearch('boats')">
+            <option value="">(none)</option>
+            <option value="sail">Sail #</option>
+            <option value="sailName">Sail # + name (diff design)</option>
+            <option value="sailDesign">Sail # + design (diff name)</option>
+            <option value="sailDesignName">Sail # + design + similar name</option>
+        </select></label>
         <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-boats" onchange="doSearch('boats')"> Show
             excluded</label>
         <label style="margin-left:0.5rem;">Variant: <select id="boat-variant" onchange="setBoatVariant(this.value)">
