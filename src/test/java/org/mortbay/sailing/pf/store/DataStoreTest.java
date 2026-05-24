@@ -1440,6 +1440,176 @@ class DataStoreTest {
         assertEquals("other-boat", f1.boatId());
     }
 
+    // --- Name-equivalence matching (matchKey + suffix-strip) ---
+
+    @Test
+    void findOrCreateBoatMergesStickyAndStickyII(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Boat first = store.findOrCreateBoat("12345", "Sticky", "J/24");
+        assertEquals("12345-sticky-j24", first.id());
+
+        Boat second = store.findOrCreateBoat("12345", "Sticky II", "J/24");
+        // Phase 1.5 picks the existing boat and renames it to "Sticky II" (longer body).
+        assertEquals("12345-stickyii-j24", second.id());
+        assertEquals("Sticky II", second.name());
+        // Only the merged record remains.
+        assertNull(store.boats().get("12345-sticky-j24"));
+        assertEquals(1, store.boats().values().stream()
+            .filter(b -> "12345".equals(b.sailNumber())).count());
+    }
+
+    @Test
+    void findOrCreateBoatPrefersArabicOverRomanNumerals(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        store.findOrCreateBoat("12345", "Sticky II", "J/24");
+        Boat arabic = store.findOrCreateBoat("12345", "Sticky 2", "J/24");
+        // Body tie → numeral wins; Arabic preferred over Roman → "Sticky 2".
+        assertEquals("12345-sticky2-j24", arabic.id());
+        assertEquals("Sticky 2", arabic.name());
+        assertNull(store.boats().get("12345-stickyii-j24"));
+    }
+
+    @Test
+    void findOrCreateBoatMergesTheGoatAndGoat(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        store.findOrCreateBoat("99", "Goat", "Adams 10");
+        Boat result = store.findOrCreateBoat("99", "The Goat", "Adams 10");
+        // Canonical is the longer "The Goat".
+        assertEquals("99-thegoat-adams10", result.id());
+        assertEquals("The Goat", result.name());
+        assertNull(store.boats().get("99-goat-adams10"));
+    }
+
+    @Test
+    void findOrCreateBoatStripsStandardSuffixOnCreate(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        // Use a sail without the AUS-prefix-stripped form so the test focuses on suffix stripping.
+        Boat boat = store.findOrCreateBoat("MYC55", "Foobar - GM", "TP 52");
+        // Suffix stripped from display AND id.
+        assertEquals("Foobar", boat.name());
+        assertEquals("MYC55-foobar-tp52", boat.id());
+    }
+
+    @Test
+    void findOrCreateBoatStripsTheNewSuffixL(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Boat boat = store.findOrCreateBoat("MYC55", "Foobar - L", "TP 52");
+        assertEquals("Foobar", boat.name());
+        assertEquals("MYC55-foobar-tp52", boat.id());
+    }
+
+    @Test
+    void findOrCreateBoatKeepsBoatsWithDifferentSailNumbersSeparate(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Boat a = store.findOrCreateBoat("100", "Sticky", "J/24");
+        Boat b = store.findOrCreateBoat("200", "Sticky II", "J/24");
+        // Different sail numbers — must remain separate even though names share matchKey.
+        assertEquals("100-sticky-j24", a.id());
+        assertEquals("200-stickyii-j24", b.id());
+        assertEquals(2, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateBoatKeepsBoatsWithDifferentDesignsSeparate(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Boat a = store.findOrCreateBoat("100", "Sticky", "J/24");
+        Boat b = store.findOrCreateBoat("100", "Sticky II", "Adams 10");
+        // Same sail, name-equivalent — but different designs make them different boats.
+        assertEquals("100-sticky-j24", a.id());
+        assertEquals("100-stickyii-adams10", b.id());
+        assertEquals(2, store.boats().size());
+    }
+
+    @Test
+    void startupRepairRenamesStandardSuffixSurvivor(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        // Pre-seed a boat that was persisted before normaliseName started stripping suffixes.
+        DataStore seed = new DataStore(tempDir);
+        seed.start();
+        seed.putBoat(new Boat("AUS5-foobargm-tp52", "AUS5", "Foobar - GM", "tp52",
+            List.of(), List.of(), List.of("Legacy"), null, null));
+        seed.save();
+        seed.stop();
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        // Phase A: suffix-strip renames boat in place.
+        assertNull(store.boats().get("AUS5-foobargm-tp52"));
+        Boat renamed = store.boats().get("AUS5-foobar-tp52");
+        assertNotNull(renamed);
+        assertEquals("Foobar", renamed.name());
+    }
+
+    @Test
+    void startupRepairCollapsesPreExistingDuplicates(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        // Pre-seed two boats sharing sail+design but with name-equivalent variants.
+        DataStore seed = new DataStore(tempDir);
+        seed.start();
+        seed.putBoat(new Boat("99-sticky-j24", "99", "Sticky", "j24",
+            List.of(), List.of(), List.of("Legacy"), null, null));
+        seed.putBoat(new Boat("99-stickyii-j24", "99", "Sticky II", "j24",
+            List.of(), List.of(), List.of("Legacy"), null, null));
+        seed.save();
+        seed.stop();
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        // Phase B: equivalence collapse. Canonical = "Sticky II" (longer body).
+        assertNull(store.boats().get("99-sticky-j24"));
+        Boat kept = store.boats().get("99-stickyii-j24");
+        assertNotNull(kept);
+        assertEquals("Sticky II", kept.name());
+        // Long-term, the original "Sticky" name is stored as an alias so future imports
+        // continue to land here.
+        Aliases.Loaded aliases = Aliases.load(tempDir.resolve("config"));
+        assertTrue(aliases.lookupBoat("99", "sticky").isPresent(),
+            "alias for 'sticky' should resolve to canonical 'Sticky II'");
+    }
+
+    @Test
+    void findBoatUsesNameEquivalenceFallback(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.findOrCreateBoat("12345", "Sticky II", "J/24");
+
+        // Read-only lookup with the equivalent shorter name still finds the boat.
+        assertTrue(store.findBoat("12345", "Sticky").isPresent());
+        assertEquals("12345-stickyii-j24", store.findBoat("12345", "Sticky").get().id());
+    }
+
     private Race buildRace() {
         return new Race(
                 "myc.com.au-2020-09-13-0001",

@@ -268,6 +268,27 @@ public class DataStore
             matches.add(candidate);
         }
 
+        // Name-equivalence fallback: only consulted when the exact-name pass finds nothing,
+        // so we never widen a unique exact hit into ambiguity. Requires sail to be supplied
+        // (matchKey alone is too coarse) and a non-empty matchKey to avoid trivial collisions.
+        if (matches.isEmpty() && haveSail)
+        {
+            String matchKey = IdGenerator.nameMatchKey(rawName);
+            if (!matchKey.isEmpty())
+            {
+                for (Boat candidate : boats.values())
+                {
+                    if (!sailNo.equalsIgnoreCase(candidate.sailNumber()))
+                        continue;
+                    if (haveName && name.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
+                        continue;  // already in the exact pass
+                    if (!matchKey.equals(IdGenerator.nameMatchKey(candidate.name())))
+                        continue;
+                    matches.add(candidate);
+                }
+            }
+        }
+
         if (matches.size() == 1)
             return Optional.of(matches.getFirst());
         if (matches.size() > 1)
@@ -302,6 +323,27 @@ public class DataStore
             if (isDesignIgnored(candidate.designId()))
                 continue;
             matches.add(candidate);
+        }
+        // Name-equivalence fallback: only when exact-name pass found nothing in this club.
+        // Same logic as findBoat -- protects unique exact hits from being widened.
+        if (matches.isEmpty())
+        {
+            String matchKey = IdGenerator.nameMatchKey(rawName);
+            if (!matchKey.isEmpty())
+            {
+                for (Boat candidate : boats.values())
+                {
+                    if (normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
+                        continue;
+                    if (!candidate.hasClub(clubId))
+                        continue;
+                    if (isDesignIgnored(candidate.designId()))
+                        continue;
+                    if (!matchKey.equals(IdGenerator.nameMatchKey(candidate.name())))
+                        continue;
+                    matches.add(candidate);
+                }
+            }
         }
         return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
@@ -340,6 +382,12 @@ public class DataStore
     {
         // Build enriched source entry for traceability
         String sourceDesign = buildSourceEntry(source, rawDesign);
+
+        // Strip decorative suffixes ("- GM", "- U18", etc.) up front so the persisted
+        // display name and any match-key comparisons use the cleaned form. normaliseName
+        // strips the same suffixes internally for IDs; doing it here as well keeps the
+        // visible Boat.name field consistent with the normalised ID.
+        rawName = IdGenerator.stripStandardSuffixes(rawName);
 
         String sailNo = IdGenerator.normaliseSailNumber(rawSailNo);
         String name = IdGenerator.normaliseName(rawName);
@@ -482,6 +530,50 @@ public class DataStore
             }
         }
 
+        // Phase 1.5: name-equivalence fallback. If no exact-name match was found above,
+        // try to find a boat sharing the same sail + design whose name collapses to the
+        // same equivalence class under nameMatchKey (e.g. "Sticky II" ≡ "Sticky 2",
+        // "The Goat" ≡ "Goat"). The match key requires whitespace before any trailing
+        // numeral and an article + space prefix, so embedded letter runs ("Tivoli",
+        // "Thelma") are safe. When a unique candidate is found, possibly rename it to
+        // the longer / Arabic-preferred canonical and persist the equivalence as an
+        // alias so subsequent imports stay sticky.
+        if (matches.isEmpty())
+        {
+            String matchKey = IdGenerator.nameMatchKey(rawName);
+            if (!matchKey.isEmpty())
+            {
+                List<Boat> keyHits = new ArrayList<>();
+                for (Boat candidate : boats.values())
+                {
+                    if (!normSailNo.equalsIgnoreCase(candidate.sailNumber()))
+                        continue;
+                    if (isDesignIgnored(candidate.designId()))
+                        continue;
+                    if (normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
+                        continue;  // exact-name candidates were already considered above
+                    if (!matchKey.equals(IdGenerator.nameMatchKey(candidate.name())))
+                        continue;
+                    // Same design-compatibility rule as Phase 1: same design, or at least
+                    // one side has no design. Conflicting designs → different boats.
+                    if (isNotBlank(designId) && isNotBlank(candidate.designId())
+                        && !Objects.equals(designId, candidate.designId()))
+                        continue;
+                    keyHits.add(candidate);
+                }
+                if (keyHits.size() == 1)
+                    return applyMatchKeyResult(keyHits.getFirst(), rawName, designId, rawDesign, sourceDesign);
+                if (keyHits.size() > 1)
+                {
+                    LOG.warn("Ambiguous name-equivalence match: sailNo={} matchKey={} → {} candidates: {}",
+                        normSailNo, matchKey, keyHits.size(),
+                        keyHits.stream().map(Boat::id).toList());
+                    logAmbiguousMatch(source, normSailNo, normName, designId, keyHits);
+                    return null;
+                }
+            }
+        }
+
         // If we have no matches, then create the new boat
         if (matches.isEmpty())
         {
@@ -591,6 +683,91 @@ public class DataStore
     {
         if (source == null) return ":" + rawDesign;
         return rawDesign != null && !rawDesign.isBlank() ? source + ":" + rawDesign : source;
+    }
+
+    /**
+     * Apply a Phase-1.5 name-equivalence hit: pick the canonical display name from the
+     * incoming raw name and the candidate's stored name (see {@link IdGenerator#preferredDisplayName}),
+     * possibly upgrade the candidate's design when the incoming side carries one and the
+     * candidate didn't, and rename the candidate in place if the canonical name (or the
+     * upgraded design) changes the boat id. The supplanted names are persisted to
+     * {@code aliases.yaml} so subsequent imports of the old variants still resolve here.
+     * <p>
+     * Returns the boat (possibly renamed/upgraded) that the caller should treat as the
+     * found match.
+     */
+    private Boat applyMatchKeyResult(Boat candidate, String incomingRaw,
+                                     String designId, String rawDesign, String sourceDesign)
+    {
+        // Incoming name first so it wins on body-length ties (fresher data preferred when
+        // length is equal -- e.g. case-only variants).
+        String canonicalName = IdGenerator.preferredDisplayName(
+            java.util.Arrays.asList(incomingRaw, candidate.name()));
+
+        // Decide the final design: keep candidate's if present; otherwise adopt incoming.
+        String finalDesignId = candidate.designId();
+        Design finalDesign = null;
+        boolean designUpgraded = false;
+        if (isBlank(finalDesignId) && isNotBlank(designId))
+        {
+            finalDesign = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign)
+                : findOrCreateDesign(designId);
+            finalDesignId = finalDesign != null ? finalDesign.id() : designId;
+            designUpgraded = true;
+        }
+        else if (isNotBlank(finalDesignId))
+        {
+            finalDesign = designs.get(finalDesignId);
+        }
+
+        String newBoatId = IdGenerator.generateBoatId(candidate.sailNumber(), canonicalName, finalDesign);
+        String canonNormName = IdGenerator.normaliseName(canonicalName);
+        String candidateNormName = IdGenerator.normaliseName(candidate.name());
+        String incomingNormName = IdGenerator.normaliseName(incomingRaw);
+
+        List<Aliases.SailNumberName> aliasesToAdd = new ArrayList<>();
+        if (!candidateNormName.equals(canonNormName))
+            aliasesToAdd.add(new Aliases.SailNumberName(candidate.sailNumber(), candidateNormName));
+        if (!incomingNormName.equals(canonNormName) && !incomingNormName.equals(candidateNormName))
+            aliasesToAdd.add(new Aliases.SailNumberName(candidate.sailNumber(), incomingNormName));
+
+        List<String> mergedSources = addSource(candidate.sources(), sourceDesign);
+        boolean displayChanged = !canonicalName.equals(candidate.name());
+        boolean idChanged = !newBoatId.equals(candidate.id());
+
+        Boat result;
+        if (!idChanged && !displayChanged && !designUpgraded && mergedSources.equals(candidate.sources()))
+        {
+            // Nothing to update on the boat record; still persist aliases below if any.
+            result = candidate;
+        }
+        else
+        {
+            Boat updated = new Boat(newBoatId, candidate.sailNumber(), canonicalName, finalDesignId,
+                candidate.clubIds(), candidate.certificates(), mergedSources, Instant.now(), null);
+            if (idChanged)
+            {
+                String oldId = candidate.id();
+                removeBoat(oldId);
+                putBoat(updated);
+                rewriteFinisherBoatId(oldId, newBoatId);
+                ClubLoader.remapBoatId(configDir, oldId, newBoatId);
+                LOG.info("Name-equivalence rename: {} ('{}') → {} ('{}') after incoming '{}'",
+                    oldId, candidate.name(), newBoatId, canonicalName, incomingRaw);
+            }
+            else
+            {
+                putBoat(updated);
+                if (displayChanged)
+                    LOG.info("Name-equivalence display rename: {} '{}' → '{}'",
+                        candidate.id(), candidate.name(), canonicalName);
+            }
+            result = updated;
+        }
+
+        if (!aliasesToAdd.isEmpty())
+            Aliases.addAliases(configDir, candidate.sailNumber(), canonicalName, aliasesToAdd);
+        return result;
     }
 
     /** Finds or creates a design by class name -- used internally by findOrCreateBoat. */
@@ -2245,6 +2422,148 @@ public class DataStore
                     mergeBoats(pair.getKey(), List.of(pair.getValue()));
                 }
             }
+        }
+
+        // Name normalisation pass (Phase A): rename any boat whose stored display name
+        // carries a decorative suffix (now stripped by normaliseName). Before this change,
+        // "Foobar - GM" produced boatId ".../foobargm" and stored name "Foobar - GM";
+        // now the same input would produce ".../foobar". Rename existing records to match
+        // so the IDs are stable across imports. Merge into an existing target if one is
+        // already there at the new id.
+        {
+            boolean aliasesChangedA = false;
+            for (Boat b : new ArrayList<>(boats.values()))
+            {
+                String cleaned = IdGenerator.stripStandardSuffixes(b.name());
+                if (cleaned == null || cleaned.equals(b.name()))
+                    continue;
+                String newId = renameBoatId(b.sailNumber(), cleaned, b.designId());
+                if (newId.equals(b.id()))
+                    continue;
+                if (boats.containsKey(newId))
+                {
+                    LOG.info("Suffix-strip merge: '{}' ({}) → existing '{}'", b.name(), b.id(), newId);
+                    mergeBoats(newId, List.of(b.id()));
+                }
+                else
+                {
+                    LOG.info("Suffix-strip rename: '{}' ({}) → '{}' ({})", b.name(), b.id(), cleaned, newId);
+                    Boat renamed = new Boat(newId, b.sailNumber(), cleaned, b.designId(),
+                        b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+                    String oldId = b.id();
+                    removeBoat(oldId);
+                    putBoat(renamed);
+                    rewriteFinisherBoatId(oldId, newId);
+                    ClubLoader.remapBoatId(configDir, oldId, newId);
+                    // Persist the original suffixed name as an alias so any importer still
+                    // emitting "Foobar - GM" continues to resolve to this boat.
+                    Aliases.addAliases(configDir, b.sailNumber(), cleaned,
+                        List.of(new Aliases.SailNumberName(b.sailNumber(),
+                            IdGenerator.normaliseName(b.name()))));
+                    aliasesChangedA = true;
+                }
+            }
+            if (aliasesChangedA)
+                aliases = Aliases.load(configDir);
+        }
+
+        // Name-equivalence collapse (Phase B): group remaining boats by (sail, designId,
+        // nameMatchKey) and merge each non-trivial group into one canonical boat. Handles
+        // pre-existing duplicates introduced before findOrCreateBoat learned about
+        // nameMatchKey (e.g. "Sticky" and "Sticky II" both already on disk).
+        {
+            record Key(String sail, String designId, String matchKey) {}
+            Map<Key, List<Boat>> groups = new LinkedHashMap<>();
+            for (Boat b : boats.values())
+            {
+                String mk = IdGenerator.nameMatchKey(b.name());
+                if (mk.isEmpty())
+                    continue;
+                Key key = new Key(b.sailNumber(),
+                    b.designId() == null ? "" : b.designId(), mk);
+                groups.computeIfAbsent(key, k -> new ArrayList<>()).add(b);
+            }
+            boolean aliasesChangedB = false;
+            for (Map.Entry<Key, List<Boat>> e : groups.entrySet())
+            {
+                List<Boat> group = e.getValue();
+                if (group.size() < 2)
+                    continue;
+
+                String canonicalName = IdGenerator.preferredDisplayName(
+                    group.stream().map(Boat::name).toList());
+                String canonNorm = IdGenerator.normaliseName(canonicalName);
+
+                // Pick the boat whose normalised name already equals the canonical; if
+                // none, rename the first member to the canonical so we have a stable
+                // target before merging the rest into it.
+                Boat keep = null;
+                for (Boat b : group)
+                {
+                    if (canonNorm.equalsIgnoreCase(IdGenerator.normaliseName(b.name())))
+                    {
+                        keep = b;
+                        break;
+                    }
+                }
+                if (keep == null)
+                {
+                    Boat first = group.getFirst();
+                    String newId = renameBoatId(first.sailNumber(), canonicalName, first.designId());
+                    if (boats.containsKey(newId) && !newId.equals(first.id()))
+                    {
+                        // A separate boat already occupies the canonical id (e.g. created in
+                        // a parallel branch). Use that one as keep and merge "first" into it.
+                        keep = boats.get(newId);
+                    }
+                    else
+                    {
+                        Boat renamed = new Boat(newId, first.sailNumber(), canonicalName,
+                            first.designId(), first.clubIds(), first.certificates(),
+                            first.sources(), Instant.now(), null);
+                        String oldId = first.id();
+                        if (!newId.equals(oldId))
+                        {
+                            removeBoat(oldId);
+                            putBoat(renamed);
+                            rewriteFinisherBoatId(oldId, newId);
+                            ClubLoader.remapBoatId(configDir, oldId, newId);
+                            LOG.info("Name-equivalence canonical rename: {} ('{}') → {} ('{}')",
+                                oldId, first.name(), newId, canonicalName);
+                        }
+                        else
+                        {
+                            putBoat(renamed);
+                        }
+                        keep = renamed;
+                    }
+                }
+
+                List<String> mergeIds = new ArrayList<>();
+                List<Aliases.SailNumberName> aliasEntries = new ArrayList<>();
+                for (Boat b : group)
+                {
+                    if (b.id().equals(keep.id()))
+                        continue;
+                    mergeIds.add(b.id());
+                    String absorbedNorm = IdGenerator.normaliseName(b.name());
+                    if (!absorbedNorm.equalsIgnoreCase(canonNorm))
+                        aliasEntries.add(new Aliases.SailNumberName(b.sailNumber(), absorbedNorm));
+                }
+                if (!mergeIds.isEmpty())
+                {
+                    LOG.info("Name-equivalence collapse: merging {} into {} (canonical='{}')",
+                        mergeIds, keep.id(), canonicalName);
+                    mergeBoats(keep.id(), mergeIds);
+                }
+                if (!aliasEntries.isEmpty())
+                {
+                    Aliases.addAliases(configDir, keep.sailNumber(), canonicalName, aliasEntries);
+                    aliasesChangedB = true;
+                }
+            }
+            if (aliasesChangedB)
+                aliases = Aliases.load(configDir);
         }
 
         // Second noclub correction pass: the earlier pass at the top of this method
