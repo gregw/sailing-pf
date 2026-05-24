@@ -309,6 +309,7 @@ clubs:
       - "MH137-plumcrazy-adamsmiller3012tonner"
       - "YC868-velocity-beneteaufirst317"
       - "MYC12-santoy-radford12catrig"
+      - "1255-melody-swansondart"
   mhyc.com.au:
     shortName: "MHYC"
     state: "NSW"
@@ -1089,8 +1090,10 @@ boatClubOverrides:
   - sailNumber: "9109"
     name: "Vamos"
     clubId: "bbyc.com.au"
+  - sailNumber: "1255"
+    name: "Melody"
+    clubId: "myc.org.au"
 noclub:
-  - "1255-melody-swansondart"
   - "1161-wildlife-etchells"
   - "6689-copernicus-radford12"
   - "HHH-sko-elliott6"
@@ -1115,3 +1118,4 @@ noclub:
   - "1992-itcouldbebunnies-sabre"
   - "M045-biggerdayout-beneteauoceanis45"
   - "AUS828-nostingrays"
+  - "7484-hmasbictory"

@@ -1196,6 +1196,105 @@ class DataStoreTest {
     }
 
     /**
+     * Reproduces the YC757-schoolsout / YC757-schoolsout-bavaria40cruiser pattern: an
+     * orphan boat whose stored designId points at a design that is currently on the
+     * {@code ignored:} list, sitting beside a designful twin with the same sail+name.
+     * setDesignIgnored only cascades on the runtime toggle, so designs born ignored in
+     * design.yaml (d1/d2 etc.) leave these orphans on disk. The startup repair must
+     * close the gap: on the next start the cascade clears the orphan's designId, and
+     * the design-upgrade pass then merges it into the designful twin.
+     */
+    @Test
+    void startupCascadeMergesOrphanWithIgnoredDesignIntoDesignfulTwin(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        // Catalogue: d2 ignored (born so), bavaria40cruiser legitimate.
+        store.putDesign(new Design("d2", "D2", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("bavaria40cruiser", "Bavaria 40 Cruiser",
+            List.of(), List.of(), null, false, null));
+        store.setDesignIgnored("d2", true);
+
+        // Orphan: id already suffix-less, but designId still "d2" (the bug shape on disk).
+        // Created AFTER setDesignIgnored so the immediate cascade doesn't clear it.
+        Boat orphan = new Boat("YC757-schoolsout", "YC757", "School's Out", "d2",
+            List.of(), List.of(), List.of("TopYacht:D2", "TopYacht"), null, null);
+        store.putBoat(orphan);
+        // Designful twin under the proper Bavaria design.
+        Certificate cert = new Certificate("ORC", 2025, 0.95, false, false, false, false, "C1", null);
+        Boat twin = new Boat("YC757-schoolsout-bavaria40cruiser", "YC757", "School's Out",
+            "bavaria40cruiser", List.of("yc.com"), List.of(cert),
+            List.of("SailSys:Bavaria 40 Cruiser", "SailSys"), null, null);
+        store.putBoat(twin);
+
+        // Race with a finisher pointing at the orphan id -- must survive the merge.
+        Race race = new Race("yc.com-2024-01-01-0001", "yc.com", List.of("yc.com/s"),
+            LocalDate.of(2024, 1, 1), 1, null,
+            List.of(new Division("A", List.of(
+                new Finisher("YC757-schoolsout", Duration.ofMinutes(60), false, null),
+                new Finisher("YC757-schoolsout-bavaria40cruiser", Duration.ofMinutes(58), false, "C1")
+            ))), null, null, null);
+        store.putRace(race);
+
+        // Persist and reload -- this is what triggers the startup repair.
+        store.stop();
+        DataStore reloaded = new DataStore(tempDir);
+        reloaded.start();
+
+        // 1. Orphan is gone; only the designful twin remains under that sail+name.
+        assertFalse(reloaded.boats().containsKey("YC757-schoolsout"),
+            "orphan with ignored designId should have been merged away");
+        Boat survivor = reloaded.boats().get("YC757-schoolsout-bavaria40cruiser");
+        assertNotNull(survivor, "designful twin should survive");
+        assertEquals("bavaria40cruiser", survivor.designId());
+
+        // 2. Survivor's sources are the union and include the "Ignored:d2" breadcrumb.
+        assertTrue(survivor.sources().contains("SailSys"));
+        assertTrue(survivor.sources().contains("TopYacht"),
+            "orphan sources should be unioned into the survivor");
+        assertTrue(survivor.sources().contains("Ignored:d2"),
+            "cascade should leave an Ignored:d2 breadcrumb on the merged record");
+
+        // 3. Certificates from the designful twin are preserved.
+        assertEquals(1, survivor.certificates().size());
+
+        // 4. The finisher that pointed at the orphan id is rewritten to the survivor.
+        List<Finisher> finishers = reloaded.races().get("yc.com-2024-01-01-0001")
+            .divisions().getFirst().finishers();
+        assertEquals("YC757-schoolsout-bavaria40cruiser", finishers.get(0).boatId());
+        assertEquals("YC757-schoolsout-bavaria40cruiser", finishers.get(1).boatId());
+
+        reloaded.stop();
+    }
+
+    /**
+     * Stand-alone variant: an orphan boat carries designId="d2" with NO designful twin.
+     * The startup cascade still clears the stale designId and leaves the boat at its
+     * existing (already suffix-less) id with an "Ignored:d2" breadcrumb.
+     */
+    @Test
+    void startupCascadeClearsOrphanDesignIdWhenNoTwinPresent(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putDesign(new Design("d2", "D2", List.of(), List.of(), null, false, null));
+        store.setDesignIgnored("d2", true);
+        Boat orphan = new Boat("YC999-solo", "YC999", "Solo", "d2",
+            List.of(), List.of(), List.of("TopYacht:D2"), null, null);
+        store.putBoat(orphan);
+        store.stop();
+
+        DataStore reloaded = new DataStore(tempDir);
+        reloaded.start();
+
+        Boat after = reloaded.boats().get("YC999-solo");
+        assertNotNull(after);
+        assertNull(after.designId(), "cascade should clear designId pointing at an ignored design");
+        assertTrue(after.sources().contains("Ignored:d2"));
+        reloaded.stop();
+    }
+
+    /**
      * setDesignNoSpinnaker persists the flag in design.yaml, re-stamps the in-memory
      * Design record, and survives a store stop/start cycle.
      */

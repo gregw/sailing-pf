@@ -2194,6 +2194,27 @@ public class DataStore
                 aliases = Aliases.load(configDir);
         }
 
+        // Cascade ignore for every design already in the ignored list. setDesignIgnored
+        // fires cascadeIgnoreDesign only when a user toggles a design ignored at runtime;
+        // designs born on the ignored list in design.yaml (e.g. TopYacht's "D1"/"D2"
+        // division placeholders) leave orphan boats behind on disk: their designId still
+        // holds the now-ignored id even though their boatId already lacks the design
+        // suffix. Re-running the cascade on every start-up clears those designId fields
+        // (and annotates sources with "Ignored:<id>"). This MUST run before the design
+        // upgrade pass below, which keys off designId==null to find merge candidates.
+        {
+            for (String ignoredId : designCatalogue.ignoredDesignIds())
+            {
+                boolean hasAffected = boats.values().stream()
+                    .anyMatch(b -> ignoredId.equals(b.designId()));
+                if (hasAffected)
+                {
+                    LOG.info("Startup cascade: design {} is ignored, sweeping boats with that designId", ignoredId);
+                    cascadeIgnoreDesign(ignoredId);
+                }
+            }
+        }
+
         // Design upgrade: merge design-less boats into a design-bearing boat with the same
         // sail number and name.  These arise when one importer (e.g. TopYacht) creates a boat
         // without design information and another (e.g. SailSys) later creates the same boat

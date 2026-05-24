@@ -117,10 +117,14 @@ designs:
     canonicalName: "J Boats J/122"
     aliases:
     - "J122"
+    - "J Boats /122"
+    - "jboats122"
   jboatsj111:
     canonicalName: "J Boats J/111"
     aliases:
     - "J 111"
+    - "Jboat-J111"
+    - "jboatj111"
   jboatsj80:
     canonicalName: "J Boats J/80"
     aliases:
@@ -146,6 +150,7 @@ designs:
     canonicalName: "J Boats J/112E"
     aliases:
     - "J112e"
+    - "J122e"
   jboatsj130:
     canonicalName: "J Boats J/130"
     aliases:
@@ -158,6 +163,7 @@ designs:
     canonicalName: "J Boats J35"
     aliases:
     - "J35"
+    - "J Boats J35"
   jboatsj88:
     canonicalName: "J Boats J/88"
     aliases:
@@ -643,6 +649,66 @@ designs:
     aliases:
       - "Nacra 16 Square"
       - "nacra16square"
+  flyingdutchman:
+    canonicalName: "Flying Dutchman"
+    aliases:
+      - "Mader Flying Dutchman"
+      - "maderflyingdutchman"
+  jeanneausunodyssey451:
+    canonicalName: "Jeanneau Sun Odyssey 451"
+    aliases:
+      - "SUN ODYSSEY 451"
+      - "sunodyssey451"
+  jeanneausunkiss47:
+    canonicalName: "Jeanneau Sun Kiss 47"
+    aliases:
+      - "Jeannueau Sun Kiss 47"
+      - "jeannueausunkiss47"
+  jeanneausunodyssey34:
+    canonicalName: "Jeanneau Sun Odyssey 34"
+    aliases:
+      - "Jeannueau Sun Odyssey 34"
+      - "jeannueausunodyssey34"
+  jeanneausunodyssey522:
+    canonicalName: "Jeanneau Sun Odyssey 52.2"
+    aliases:
+      - "Sun Odyssey 52.2"
+      - "sunodyssey522"
+  jeanneausunodyssey350:
+    canonicalName: "Jeanneau Sun Odyssey 350"
+    aliases:
+      - "Jeanneau Sun Odyssey 350 (in-mast furling)"
+      - "jeanneausunodyssey350inmastfurling"
+  beneteaufirst36:
+    canonicalName: "Beneteau First 36"
+    aliases:
+      - "FIRST 36"
+      - "first36"
+  beneteaufirst42s7:
+    canonicalName: "Beneteau First 42s7"
+    aliases:
+      - "FIRST 42 S7"
+      - "first42s7"
+  xyachtsimx40:
+    canonicalName: "X-Yachts IMX-40"
+    aliases:
+      - "IMX 40"
+      - "imx40"
+  jboatsj24:
+    canonicalName: "JBoats J 24"
+    aliases:
+      - "J 24"
+      - "j24"
+      - "JBoats J 24"
+  jboats44:
+    canonicalName: "J Boats J/44"
+    aliases:
+      - "J Boats 44"
+  jboatsj44:
+    canonicalName: "J Boats J/44"
+    aliases:
+      - "J Boats J/44"
+      - "jboats44"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -1287,3 +1353,42 @@ boats:
         name: "corum"
       - sailNumber: "1088"
         name: "nortonwhitecorum"
+  "1255-melody":
+    canonicalName: "Melody"
+    aliases:
+      - sailNumber: "1255A"
+        name: "melody"
+  "2650-2fast":
+    canonicalName: "2 FAST"
+    aliases:
+      - sailNumber: "2650"
+        name: "2fastj82"
+  "3300-transcendencerubyproject":
+    canonicalName: "Transcendence Ruby Project"
+    aliases:
+      - sailNumber: "3300"
+        name: "transcendencerudyproject"
+  "99-gizmo":
+    canonicalName: "Gizmo"
+    aliases:
+      - sailNumber: "99"
+        name: "gizmocrewed"
+      - sailNumber: "99"
+        name: "gizmodh"
+  D3300-krakeniii:
+    canonicalName: "Kraken III"
+    aliases:
+      - sailNumber: "D3300"
+        name: "kraken111"
+  "8998-xcalibur":
+    canonicalName: "Xcalibur"
+    aliases:
+      - sailNumber: "8998"
+        name: "xcaliburallwaveaustraliaracing"
+      - sailNumber: "8998"
+        name: "xcaliburallwaveracing"
+  YC380-shineon:
+    canonicalName: "Shine On"
+    aliases:
+      - sailNumber: "YC380"
+        name: "shineonteamcallendina"

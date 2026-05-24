@@ -582,6 +582,47 @@ class TopYachtImporterTest
     }
 
     @Test
+    void processResultsPageUpgradesLegacySourceOnNonRecentDuplicate()
+    {
+        // First import with an old-style importer that stored bare "TopYacht" as the source.
+        // Simulate this by importing then rewriting the race source to the legacy form.
+        String html = resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")
+        ));
+        LocalDate date = LocalDate.of(2020, 8, 9); // well outside the recent-race window
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html, "http://example/r1.htm");
+
+        Race race = store.races().values().iterator().next();
+        store.putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
+            race.number(), race.name(), race.divisions(), "TopYacht", race.lastUpdated(), null));
+        assertEquals("TopYacht", store.races().get(race.id()).source());
+
+        // Second pass should detect the legacy source and upgrade it to the URL-bearing form,
+        // without re-importing the (non-recent) race body.
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html, "http://example/r1.htm");
+
+        assertEquals("TopYacht - http://example/r1.htm", store.races().get(race.id()).source());
+    }
+
+    @Test
+    void processResultsPageLeavesNewStyleSourceUntouched()
+    {
+        // Non-recent duplicate with a new-style source must not be rewritten.
+        String html = resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")
+        ));
+        LocalDate date = LocalDate.of(2020, 8, 9);
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html, "http://example/r1.htm");
+        String originalSource = store.races().values().iterator().next().source();
+        assertEquals("TopYacht - http://example/r1.htm", originalSource);
+
+        // Re-import with a different URL: the existing new-style source must stick.
+        importer.processResultsPage(TEST_CLUB, "Performance Racing", 1, date, html, "http://example/r1-mirror.htm");
+
+        assertEquals(originalSource, store.races().values().iterator().next().source());
+    }
+
+    @Test
     void processResultsPageSetsBoatClubFromFromColumn()
     {
         // Add a second club to the store so it can be resolved

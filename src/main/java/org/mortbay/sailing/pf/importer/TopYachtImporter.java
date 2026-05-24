@@ -408,6 +408,7 @@ public class TopYachtImporter
 
         if (store.races().containsKey(raceId) && !isRecentRace(date))
         {
+            upgradeLegacySource(raceId, sourceWithUrl(url));
             LOG.debug("TopYacht: race {} already imported, updating series membership only", raceId);
             updateClubSeries(club.id(), seriesId, seriesName, raceId);
             return;
@@ -474,6 +475,7 @@ public class TopYachtImporter
 
         if (store.races().containsKey(raceId) && !isRecentRace(date))
         {
+            upgradeLegacySource(raceId, sourceWithUrls(sourceUrls));
             LOG.debug("TopYacht: race {} already imported, updating series membership only", raceId);
             updateClubSeries(club.id(), seriesId, seriesName, raceId);
             return;
@@ -1163,6 +1165,23 @@ public class TopYachtImporter
             joined.append(u);
         }
         return joined.length() == 0 ? SOURCE : SOURCE + " - " + joined;
+    }
+
+    /**
+     * Upgrades a race that still carries the old bare "TopYacht" source string to the
+     * new URL-bearing form, leaving every other field intact. This catches races imported
+     * before the URL was appended to the source; once a race has the new-style source
+     * (or any other source) this is a no-op.
+     */
+    private void upgradeLegacySource(String raceId, String newSource)
+    {
+        Race existing = store.races().get(raceId);
+        if (existing == null || !SOURCE.equals(existing.source()))
+            return;
+        store.putRace(new Race(existing.id(), existing.clubId(), existing.seriesIds(),
+            existing.date(), existing.number(), existing.name(), existing.divisions(),
+            newSource, Instant.now(), null));
+        LOG.info("TopYacht: upgraded legacy source on race {} -> {}", raceId, newSource);
     }
 
     private static List<String> addSource(List<String> existing, String source)

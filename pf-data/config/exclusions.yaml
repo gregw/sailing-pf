@@ -868,13 +868,13 @@ races:
   - id: "unknown-2024-02-11-0014"
     reason: ""
   - id: "unknown-2026-02-14-0002"
-    reason: "series-pattern: name='Race 2' series='2026 Schnapper Point Regatta International\
-    \ 14 & Double Handed OTB Results'"
+    reason: "series-pattern: name='Race 2' series='2026 Schnapper Point Regatta ILCA\
+    \ 7, 6, 4 & Sabre & Optimist Open & Intermediate Results'"
   - id: "rsys.com.au-2021-02-21-0014"
     reason: "series-pattern: name='Race  14' series='RSYS Dinghy Championship 2020-21'"
   - id: "unknown-2026-02-14-0001"
-    reason: "series-pattern: name='Race 1' series='2026 Schnapper Point Regatta International\
-    \ 14 & Double Handed OTB Results'"
+    reason: "series-pattern: name='Race 1' series='2026 Schnapper Point Regatta ILCA\
+    \ 7, 6, 4 & Sabre & Optimist Open & Intermediate Results'"
   - id: "rsys.com.au-2021-02-21-0015"
     reason: "series-pattern: name='Race  15' series='RSYS Dinghy Championship 2020-21'"
   - id: "rsys.com.au-2021-02-21-0016"
@@ -1726,11 +1726,13 @@ races:
   - id: "rsys.com.au-2025-12-07-0028"
     reason: "series-pattern: name='Race  28' series='Summer Dinghy Series 2025/26'"
   - id: "rsys.com.au-2025-06-22-0003"
-    reason: ""
+    reason: "series-pattern: name='Race  3 (WSC)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "rsys.com.au-2025-12-07-0027"
     reason: "series-pattern: name='Race  27' series='Summer Dinghy Series 2025/26'"
   - id: "rsys.com.au-2025-06-22-0001"
-    reason: ""
+    reason: "series-pattern: name='Race  1 (WSC)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "balmainsailingclub.com.au-2021-10-31-0016"
     reason: "series-pattern: name='Race  16' series='(Bay) Annual OTB Pointscore - (2021-2022)'"
   - id: "rqys.com.au-2023-05-20-0001"
@@ -1742,7 +1744,8 @@ races:
   - id: "rsys.com.au-2025-12-07-0029"
     reason: "series-pattern: name='Race  29' series='Summer Dinghy Series 2025/26'"
   - id: "rsys.com.au-2025-06-22-0002"
-    reason: ""
+    reason: "series-pattern: name='Race  2 (WSC)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "ncyc.net.au-2023-12-08-0030"
     reason: "series-pattern: name='Race  30' series='(Newcastle) - Annual OTB Pointscore\
     \ - (2023-2024)'"
@@ -1810,7 +1813,8 @@ races:
   - id: "rsys.com.au-2021-11-28-0006"
     reason: "series-pattern: name='Race  6' series='Dinghy Racing Summer Series 2021-2022'"
   - id: "rsys.com.au-2025-07-06-0005"
-    reason: ""
+    reason: "series-pattern: name='Race  5 (RPAYC)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "darwinsailingclub.com.au-2020-10-10-0003"
     reason: "series-pattern: name='Race  3' series='2020 DSC Championship - OTB boats'"
   - id: "rsys.com.au-2021-11-28-0005"
@@ -1818,13 +1822,15 @@ races:
   - id: "unknown-2025-11-21-0007"
     reason: "series-pattern: name='Race  7' series='25/26 Dinghy Twilights Pre-Xmas(Series)'"
   - id: "rsys.com.au-2025-07-06-0004"
-    reason: ""
+    reason: "series-pattern: name='Race  4 (RPAYC)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "darwinsailingclub.com.au-2020-10-10-0002"
     reason: "series-pattern: name='Race  2' series='2020 DSC Championship - OTB boats'"
   - id: "darwinsailingclub.com.au-2020-10-10-0001"
     reason: "series-pattern: name='Race  1' series='2020 DSC Championship - OTB boats'"
   - id: "rsys.com.au-2025-07-06-0006"
-    reason: ""
+    reason: "series-pattern: name='Race  6 (RPAYC)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "rqys.com.au-2020-11-28-0003"
     reason: "series-pattern: name='Race  3' series='Sail Brisbane - Windfoil State Championship\
     \ & Kite Foil'"
@@ -1986,7 +1992,8 @@ races:
   - id: "rqys.com.au-2023-02-19-0016"
     reason: "series-pattern: name='Race  16' series='138th Sailing Season Foiling '"
   - id: "rsys.com.au-2025-07-27-0009"
-    reason: ""
+    reason: "series-pattern: name='Race  9 (RSYS)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "rsys.com.au-2022-10-23-0005"
     reason: "series-pattern: name='Race  5' series='Summer Dinghy Racing 2022-23'"
   - id: "rqys.com.au-2023-02-19-0017"
@@ -1997,14 +2004,16 @@ races:
     reason: "series-pattern: name='Race  5' series='OTB Frostbite Series 2023 - Southern\
     \ Course'"
   - id: "rsys.com.au-2025-07-27-0007"
-    reason: ""
+    reason: "series-pattern: name='Race  7 (RSYS)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "rsys.com.au-2022-10-23-0007"
     reason: "series-pattern: name='Race  7' series='Summer Dinghy Racing 2022-23'"
   - id: "rqys.com.au-2023-06-17-0006"
     reason: "series-pattern: name='Race  6' series='OTB Frostbite Series 2023 - Southern\
     \ Course'"
   - id: "rsys.com.au-2025-07-27-0008"
-    reason: ""
+    reason: "series-pattern: name='Race  8 (RSYS)' series='NSW Optimist Winter Inter-Club\
+    \ Championship 2025'"
   - id: "rsys.com.au-2024-06-23-0011"
     reason: "series-pattern: name='Race  11' series='Winter Dinghy Series 2024'"
   - id: "rsys.com.au-2024-06-23-0010"
@@ -4053,18 +4062,18 @@ races:
   - id: "rsys.com.au-2022-11-27-0014"
     reason: "series-pattern: name='Race  14' series='Summer Dinghy Racing 2022-23'"
   - id: "unknown-2026-02-15-0004"
-    reason: "series-pattern: name='Race 4' series='2026 Schnapper Point Regatta International\
-    \ 14 & Double Handed OTB Results'"
+    reason: "series-pattern: name='Race 4' series='2026 Schnapper Point Regatta ILCA\
+    \ 7, 6, 4 & Sabre & Optimist Open & Intermediate Results'"
   - id: "unknown-2026-02-15-0005"
-    reason: "series-pattern: name='Race  5' series='2026 Schnapper Point Regatta International\
-    \ 14 & Double Handed OTB Results'"
+    reason: "series-pattern: name='Race  5' series='2026 Schnapper Point Regatta ILCA\
+    \ 7, 6, 4 & Sabre & Optimist Open & Intermediate Results'"
   - id: "rqys.com.au-2023-09-30-0002"
     reason: "series-pattern: name='Race  2' series='18ft Skiff State Titles 2023'"
   - id: "rqys.com.au-2023-09-30-0001"
     reason: "series-pattern: name='Race  1' series='18ft Skiff State Titles 2023'"
   - id: "unknown-2026-02-15-0006"
-    reason: "series-pattern: name='Race 6' series='2026 Schnapper Point Regatta International\
-    \ 14 & Double Handed OTB Results'"
+    reason: "series-pattern: name='Race  6' series='2026 Schnapper Point Regatta ILCA\
+    \ 7, 6, 4 & Sabre & Optimist Open & Intermediate Results'"
   - id: "rsys.com.au-2022-11-27-0013"
     reason: "series-pattern: name='Race  13' series='Summer Dinghy Racing 2022-23'"
   - id: "rqys.com.au-2023-09-30-0008"
@@ -4744,9 +4753,7 @@ races:
   - id: "unknown-2020-05-05-0005"
     reason: "series-pattern: name='Race  5' series='Dynamic HC Test'"
   - id: "unknown-2026-03-07-0001"
-    reason: "sanity-check: huge-time-spread — division 'Division 1': slowest/fastest\
-    \ elapsed-time ratio 4.1x (fastest 2192s, slowest 9070s) — likely merged courses\
-    \ or bad timing data"
+    reason: "series-pattern: name='Race  1' series='Historic Skiffs 2026'"
   - id: "unknown-2021-01-12-0109"
     reason: "sanity-check: same-elapsed-time — division 'One Design': 4 of 4 finishers\
     \ (100%) share elapsed time PT3H44M26S"
@@ -5458,15 +5465,227 @@ races:
     reason: "sanity-check: huge-time-spread -- division 'Combined Division': slowest/fastest\
     \ elapsed-time ratio 191.3x (fastest 384s, slowest 73455s) — likely merged courses\
     \ or bad timing data"
+  - id: "rqys.com.au-2025-08-09-0001"
+    reason: "series-pattern: name='Race  1' series='Saturday Optimist Racing Trial'"
+  - id: "rqys.com.au-2025-08-09-0002"
+    reason: "series-pattern: name='Race  2' series='Saturday Optimist Racing Trial'"
+  - id: "rqys.com.au-2025-08-09-0003"
+    reason: "series-pattern: name='Race  3' series='Saturday Optimist Racing Trial'"
+  - id: "rqys.com.au-2025-08-16-0004"
+    reason: "series-pattern: name='Race  4' series='Saturday Optimist Racing Trial'"
+  - id: "rqys.com.au-2025-08-16-0005"
+    reason: "series-pattern: name='Race  5' series='Saturday Optimist Racing Trial'"
+  - id: "rqys.com.au-2025-08-16-0006"
+    reason: "series-pattern: name='Race  6' series='Saturday Optimist Racing Trial'"
+  - id: "rqys.com.au-2025-10-11-0001"
+    reason: "series-pattern: name='Race  1' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-10-11-0002"
+    reason: "series-pattern: name='Race  2' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-10-18-0003"
+    reason: "series-pattern: name='Race  3' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-10-18-0004"
+    reason: "series-pattern: name='Race  4' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-01-0005"
+    reason: "series-pattern: name='Race  5' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-01-0006"
+    reason: "series-pattern: name='Race  6' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-08-0007"
+    reason: "series-pattern: name='Race  7' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-08-0008"
+    reason: "series-pattern: name='Race  8' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-08-0009"
+    reason: "series-pattern: name='Race  9' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-15-0010"
+    reason: "series-pattern: name='Race  10' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-15-0011"
+    reason: "series-pattern: name='Race  11' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-15-0012"
+    reason: "series-pattern: name='Race  12' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-22-0013"
+    reason: "series-pattern: name='Race  13' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-22-0014"
+    reason: "series-pattern: name='Race  14' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-22-0015"
+    reason: "series-pattern: name='Race  15' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2025-11-29-0016"
+    reason: "series-pattern: name='Race  16' series='Saturday Optimist Racing Term 4\
+    \ 2025'"
+  - id: "rqys.com.au-2026-01-06-0001"
+    reason: "series-pattern: name='Race  1' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-06-0002"
+    reason: "series-pattern: name='Race  2' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-06-0003"
+    reason: "series-pattern: name='Race  3' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-06-0004"
+    reason: "series-pattern: name='Race  4' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-07-0005"
+    reason: "series-pattern: name='Race  5' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-07-0006"
+    reason: "series-pattern: name='Race  6' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-07-0007"
+    reason: "series-pattern: name='Race  7' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-08-0008"
+    reason: "series-pattern: name='Sprint Racing (Overall)' series='WASZP Asia Pacific\
+    \ Championships 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-08-0009"
+    reason: "series-pattern: name='Distance Race' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-09-0010"
+    reason: "series-pattern: name='Race  10' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-09-0011"
+    reason: "series-pattern: name='Race  11' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-09-0012"
+    reason: "series-pattern: name='Race  12' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-09-0013"
+    reason: "series-pattern: name='Race  13' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-10-0014"
+    reason: "series-pattern: name='Race  14' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-10-0015"
+    reason: "series-pattern: name='Race  15' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-10-0016"
+    reason: "series-pattern: name='Race  16' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2026-01-10-0017"
+    reason: "series-pattern: name='Race  17' series='WASZP Asia Pacific Championships\
+    \ 2026 - Championship Series'"
+  - id: "rqys.com.au-2025-12-06-0001"
+    reason: "series-pattern: name='Race  1' series='International Optimist Queensland\
+    \ State Championships 2025'"
+  - id: "rqys.com.au-2025-12-07-0002"
+    reason: "series-pattern: name='Race  2' series='Green Fleet - International Optimist\
+    \ Queensland State Championships 2025'"
+  - id: "rqys.com.au-2025-12-07-0003"
+    reason: "series-pattern: name='Race  3' series='Green Fleet - International Optimist\
+    \ Queensland State Championships 2025'"
+  - id: "rqys.com.au-2025-12-07-0004"
+    reason: "series-pattern: name='Race  4' series='International Optimist Queensland\
+    \ State Championships 2025'"
+  - id: "rqys.com.au-2025-12-07-0005"
+    reason: "series-pattern: name='Race  5' series='International Optimist Queensland\
+    \ State Championships 2025'"
+  - id: "rqys.com.au-2025-12-06-0002"
+    reason: "series-pattern: name='Race  2' series='International Optimist Queensland\
+    \ State Championships 2025'"
+  - id: "rqys.com.au-2025-12-06-0003"
+    reason: "series-pattern: name='Race  3' series='International Optimist Queensland\
+    \ State Championships 2025'"
+  - id: "rqys.com.au-2025-12-07-0006"
+    reason: "series-pattern: name='Race  6' series='International Optimist Queensland\
+    \ State Championships 2025'"
+  - id: "rqys.com.au-2026-01-08-0001"
+    reason: "series-pattern: name='Race  1' series='WASZP Asia Pacific Championships\
+    \ 2026 - Sprint Races'"
+  - id: "rqys.com.au-2026-01-08-0002"
+    reason: "series-pattern: name='Race  2' series='WASZP Asia Pacific Championships\
+    \ 2026 - Sprint Races'"
+  - id: "rqys.com.au-2026-01-08-0003"
+    reason: "series-pattern: name='Race  3' series='WASZP Asia Pacific Championships\
+    \ 2026 - Sprint Races'"
+  - id: "rqys.com.au-2026-01-08-0004"
+    reason: "series-pattern: name='Race  4' series='WASZP Asia Pacific Championships\
+    \ 2026 - Sprint Races'"
+  - id: "rqys.com.au-2026-01-08-0005"
+    reason: "series-pattern: name='Race  5' series='WASZP Asia Pacific Championships\
+    \ 2026 - Sprint Races'"
+  - id: "rqys.com.au-2026-01-08-0006"
+    reason: "series-pattern: name='Race  6' series='WASZP Asia Pacific Championships\
+    \ 2026 - Sprint Races'"
+  - id: "rqys.com.au-2026-02-07-0001"
+    reason: "series-pattern: name='Race  1' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-02-07-0002"
+    reason: "series-pattern: name='Race  2' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-02-07-0003"
+    reason: "series-pattern: name='Race  3' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "unknown-2026-02-14-0004"
+    reason: "series-pattern: name='Race 4' series='2026 Schnapper Point Regatta Optimist\
+    \ Green Fleet Results'"
+  - id: "unknown-2026-02-15-0003"
+    reason: "series-pattern: name='Race 3' series='2026 Schnapper Point Regatta ILCA\
+    \ 7, 6, 4 & Sabre & Optimist Open & Intermediate Results'"
+  - id: "rqys.com.au-2026-02-21-0004"
+    reason: "series-pattern: name='Race  4' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-03-21-0005"
+    reason: "series-pattern: name='Race  5' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-03-21-0006"
+    reason: "series-pattern: name='Race  6' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-03-21-0007"
+    reason: "series-pattern: name='Race  7' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-03-28-0008"
+    reason: "series-pattern: name='Race  8' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-03-28-0009"
+    reason: "series-pattern: name='Race  9' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rqys.com.au-2026-03-28-0010"
+    reason: "series-pattern: name='Race  10' series='Saturday Optimist Racing Term 1\
+    \ 2026'"
+  - id: "rsys.com.au-2026-05-03-0001"
+    reason: "series-pattern: name='Race  1' series='NSW Optimist Winter Inter-Club Championship\
+    \ 2026'"
+  - id: "rsys.com.au-2026-05-03-0002"
+    reason: "series-pattern: name='Race  2' series='NSW Optimist Winter Inter-Club Championship\
+    \ 2026'"
+  - id: "rsys.com.au-2026-05-03-0003"
+    reason: "series-pattern: name='Race  3' series='NSW Optimist Winter Inter-Club Championship\
+    \ 2026'"
+  - id: "rsys.com.au-2026-05-17-0004"
+    reason: "series-pattern: name='Race  4' series='RSYS Winter Dinghy Series 2026'"
+  - id: "rsys.com.au-2026-05-17-0006"
+    reason: "series-pattern: name='Race  6' series='RSYS Winter Dinghy Series 2026'"
+  - id: "rhkyc.org.hk-2026-05-22-0003"
+    reason: "sanity-check: huge-time-spread -- division 'PHS': slowest/fastest elapsed-time\
+    \ ratio 3.4x (fastest 1694s, slowest 5760s) — likely merged courses or bad timing\
+    \ data"
 series:
+  - pattern: "\\boptimist\\b"
+    reason: ""
   - pattern: "\\botb\\b"
     reason: ""
   - pattern: "off the beach"
     reason: ""
   - pattern: "\\bskiff\\b"
     reason: ""
-  - pattern: "foil"
+  - pattern: "\\bskiffs\\b"
     reason: ""
+  - pattern: "waszp"
+    reason: "foiling"
+  - pattern: "foil"
+    reason: "foiling"
   - pattern: "multihull"
     reason: ""
   - pattern: "\\bdinghy"

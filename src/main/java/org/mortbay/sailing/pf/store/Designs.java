@@ -354,6 +354,18 @@ class Designs
             return ignoredIds.contains(normalisedDesignId);
         }
 
+        /**
+         * Returns the normalised design ids currently flagged as ignored. The startup
+         * repair in {@link DataStore} iterates this to cascade-merge orphan boats whose
+         * stored designId is on the ignored list but whose record was created before
+         * the design was ignored (so {@link DataStore#cascadeIgnoreDesign} never fired
+         * for them).
+         */
+        Set<String> ignoredDesignIds()
+        {
+            return ignoredIds;
+        }
+
         boolean isNoSpinnaker(String normalisedDesignId)
         {
             if (normalisedDesignId == null)
