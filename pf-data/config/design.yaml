@@ -254,6 +254,8 @@ excluded:
 - "windsurfer1designlt"
 - "windsurfer1designhv"
 - "waszp82"
+- "element6"
+- "element6evolution"
 ignored:
 - "adams"
 - "bavaria"
@@ -362,6 +364,13 @@ ignored:
 - "carter"
 - "davidson"
 - "xyachtxc"
+- "murrayburnsdovell"
+- "reichelpugh"
+- "swarbrick"
+- "kaufman"
+- "kaufmangoode"
+- "tedkaufmanbobmiller"
+- "radford"
 noSpinnaker:
   - "radford12catrig"
 boatDesignOverrides:

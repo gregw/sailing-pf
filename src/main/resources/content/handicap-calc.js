@@ -287,6 +287,51 @@ const HandicapCalc = (function () {
     const VARIANT_LABELS = {spin: 'Spin', nonSpin: 'NS', twoHanded: '2H'};
     const VARIANT_ORDER = ['spin', 'nonSpin', 'twoHanded'];
 
+    // Build the status string and colour-flag for a fetch/load attempt. Pure helper so
+    // both doFetch and doFile share one message shape, and so the logic is unit-testable.
+    //
+    // `data` is the array of returned rows (each may have handicap=null).
+    // `result` is one of:
+    //   - {matched, matchedBoats}  — from setHandicapsByMatch (match-into-existing path)
+    //   - {matched}                — from an onFetchedRows callback that added boats; here
+    //                                `matched` means "boats added". addedBoats must be true.
+    // `addedBoats` distinguishes the two paths.
+    // `leadVerb` is 'Fetched' or 'Loaded'.
+    //
+    // The wording always shows the three independent counts the user cares about: how many
+    // entries the source returned, how many boats matched (or were added), and how many
+    // handicaps actually landed on inputs. The legacy "Fetched N handicaps, matched 0 boats"
+    // collapsed these and misleadingly read as a matching bug when the real cause was a
+    // source response with no handicap values (e.g. a SailSys race whose handicaps haven't
+    // been allocated yet — that data lives in an authenticated /entrants endpoint).
+    function formatStatus(data, result, addedBoats, leadVerb) {
+        const total = (data && data.length) || 0;
+        const withHcap = (data || []).filter(r => r && r.handicap != null).length;
+        const entries = n => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+        const handicaps = n => `${n} ${n === 1 ? 'handicap' : 'handicaps'}`;
+        const boats = n => `${n} ${n === 1 ? 'boat' : 'boats'}`;
+        if (total === 0)
+            return {msg: `${leadVerb} 0 entries`, ok: false};
+
+        if (addedBoats) {
+            // Boats were added by the onFetchedRows callback; handicaps will be applied
+            // later via the session-storage replay path inside setBoats(). We can't show an
+            // "applied" count yet, so report what's available in the source instead.
+            const added = result.matched;
+            const msg = `${leadVerb} ${entries(total)} — added ${boats(added)}, ${handicaps(withHcap)} in source`;
+            return {msg, ok: added > 0 && withHcap > 0};
+        }
+
+        const matchedBoats = result.matchedBoats ?? result.matched;
+        const applied = result.matched;
+        let msg = `${leadVerb} ${entries(total)} — matched ${boats(matchedBoats)}, applied ${handicaps(applied)}`;
+        if (withHcap === 0)
+            msg += ' (source has no allocated handicaps)';
+        else if (applied < withHcap)
+            msg += ` (${withHcap - applied} of ${withHcap} unmatched)`;
+        return {msg, ok: applied > 0};
+    }
+
     // Decide what to do with one fetched row given the current variant-mode select and the
     // boat's existing variant. Pure helper — also the unit under test.
     //   'skip'     — do not load this handicap (variants disagree under 'filter').
@@ -1311,23 +1356,29 @@ const HandicapCalc = (function () {
         // Match imported rows into a specific set's input column. Same multi-pass logic as
         // before — strongest criteria first so a known name+sailno locks in its boat before
         // a same-sailno-only item can claim it. Each boat is matched at most once per call.
+        // Returns {matched, matchedBoats, variantsChanged}: matchedBoats counts every row
+        // that found a unique boat in the table (even when the row has no handicap to apply);
+        // matched counts the subset that actually wrote a value to an input. The split lets
+        // the fetch status line distinguish "no boats matched" from "no handicaps in source".
         function applyEntriesToSet(setIdx, rows) {
-            let matched = 0;
+            let matched = 0;       // rows that wrote a handicap into an input
+            let matchedBoats = 0;  // rows that resolved to a unique boat (handicap may be null)
             let variantsChanged = false;
             const used = new Set();
-            const items = rows.filter(r => r.handicap != null);
-            const remaining = [...items];
+            const remaining = [...rows];
 
             function applyTo(boat, item) {
                 const mode = cfg.variantModeSelect?.value || 'ignore';
                 const action = decideVariantAction(mode, item.variant, boatVariant(boat));
                 if (action === 'skip') return;
                 used.add(boat.id);
+                matchedBoats++;
                 if (action === 'override') {
                     boatVariants.set(boat.id, item.variant);
                     applyVariantToPf(boat, item.variant);
                     variantsChanged = true;
                 }
+                if (item.handicap == null) return;
                 const inp = section.querySelector(
                     `.pf-calc-input[data-boat-id="${boat.id}"][data-set-idx="${setIdx}"]`);
                 if (inp) {
@@ -1385,15 +1436,16 @@ const HandicapCalc = (function () {
                 return tn !== '' && normaliseDesignName(b.boatName) === tn;
             });
 
-            return {matched, variantsChanged};
+            return {matched, matchedBoats, variantsChanged};
         }
 
-        // Public: load rows into the focused set.
+        // Public: load rows into the focused set. Returns {matched, matchedBoats} for the
+        // status line; the variantsChanged flag is internal and not exposed.
         function setHandicapsByMatch(rows) {
-            const {matched, variantsChanged} = applyEntriesToSet(focusedIdx, rows);
-            if (variantsChanged) render();
+            const result = applyEntriesToSet(focusedIdx, rows);
+            if (result.variantsChanged) render();
             recalc();
-            return matched;
+            return {matched: result.matched, matchedBoats: result.matchedBoats};
         }
 
         // Public: fill every empty input in the focused set with the value currently
@@ -1615,11 +1667,13 @@ const HandicapCalc = (function () {
                 applySourceVariantOverride(data);
                 rememberFetchedRows(data);
                 const cbResult = cfg.onFetchedRows ? await cfg.onFetchedRows(data) : null;
-                const matched = cbResult?.handled ? cbResult.matched : setHandicapsByMatch(data);
+                const result = cbResult?.handled
+                    ? {matched: cbResult.matched}
+                    : setHandicapsByMatch(data);
                 if (status) {
-                    const verb = cbResult?.handled ? 'added' : 'matched';
-                    status.textContent = `Fetched ${data.length} handicaps, ${verb} ${matched} boats`;
-                    status.style.color = matched > 0 ? '#2e7d32' : '#c62828';
+                    const r = formatStatus(data, result, !!cbResult?.handled, 'Fetched');
+                    status.textContent = r.msg;
+                    status.style.color = r.ok ? '#2e7d32' : '#c62828';
                 }
             } catch (err) {
                 if (status) {
@@ -1653,11 +1707,13 @@ const HandicapCalc = (function () {
                 applySourceVariantOverride(data);
                 rememberFetchedRows(data);
                 const cbResult = cfg.onFetchedRows ? await cfg.onFetchedRows(data) : null;
-                const matched = cbResult?.handled ? cbResult.matched : setHandicapsByMatch(data);
+                const result = cbResult?.handled
+                    ? {matched: cbResult.matched}
+                    : setHandicapsByMatch(data);
                 if (status) {
-                    const verb = cbResult?.handled ? 'added' : 'matched';
-                    status.textContent = `Loaded ${data.length} handicaps, ${verb} ${matched} boats`;
-                    status.style.color = matched > 0 ? '#2e7d32' : '#c62828';
+                    const r = formatStatus(data, result, !!cbResult?.handled, 'Loaded');
+                    status.textContent = r.msg;
+                    status.style.color = r.ok ? '#2e7d32' : '#c62828';
                 }
                 fileInput.value = '';
             } catch (err) {
@@ -1731,6 +1787,7 @@ const HandicapCalc = (function () {
         normaliseSailNumber, stripPrefix, normaliseDesignName, sailnoMatch,
         showPentagonPopupAt, hidePentagonPopup,
         decideVariantAction,
+        formatStatus,
     };
 })();
 
