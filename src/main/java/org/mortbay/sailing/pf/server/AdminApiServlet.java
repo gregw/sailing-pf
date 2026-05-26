@@ -3783,6 +3783,21 @@ public class AdminApiServlet extends HttpServlet
      * The handicap definition is selected by {@code ?handicap=N} on the URL when present
      * (matching SailSys' own page), otherwise the race's {@code defaultHandicapId},
      * otherwise the first PHS row, otherwise the first listed system.
+     * <p>
+     * <b>Why not {@code /api/v1/races/{id}/entrants}?</b> That endpoint is what SailSys'
+     * own web UI calls, and it carries the carried-forward PHS value for upcoming races
+     * where this public {@code /resultsentrants/display} endpoint returns empty
+     * {@code currentHandicaps} arrays. But {@code /entrants} requires the caller to send
+     * a {@code sessiontoken} header tied to a SailSys login, which this server doesn't
+     * have, so it always 401s for us — using it would just trade one empty result for
+     * another. Wire SailSys auth before switching.
+     * <p>
+     * <b>Pursuit-race gotcha:</b> SailSys will not publish handicaps via either endpoint
+     * for a pursuit race until the start times have been published. Telling SailSys to
+     * publish handicaps is not enough — if the start-times step is still outstanding,
+     * {@code currentHandicaps} stays empty, the entrant list still loads, and the user
+     * sees "Fetched N entries — source has no allocated handicaps". Publishing start
+     * times in SailSys clears that condition.
      */
     private List<Map<String, Object>> fetchSailSysHandicaps(String url) throws Exception
     {

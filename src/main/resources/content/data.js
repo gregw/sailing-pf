@@ -1577,19 +1577,24 @@ async function loadEditChoices() {
     if (editChoicesLoaded) return;
     editChoicesLoaded = true;
 
+    // showExcluded=true so a boat can be reassigned to an excluded design (e.g. a
+    // catalogue-deprecated class that still has legacy boats). Ignored designs stay out:
+    // the /api/designs response carries an `ignored` flag per row that we filter here.
     const [designsResp, clubsResp] = await Promise.all([
-        fetchJson('/api/designs?size=9999&sort=canonicalName&dir=asc'),
+        fetchJson('/api/designs?size=9999&sort=canonicalName&dir=asc&showExcluded=true'),
         fetchJson('/api/clubs?size=9999&sort=shortName&dir=asc')
     ]);
 
     const designSel = document.getElementById('edit-boat-design');
     if (designsResp && designsResp.items) {
-        const opts = designsResp.items.map(d => {
-            const o = document.createElement('option');
-            o.value = d.id;
-            o.textContent = d.canonicalName || d.id;
-            return o;
-        });
+        const opts = designsResp.items
+            .filter(d => !d.ignored)
+            .map(d => {
+                const o = document.createElement('option');
+                o.value = d.id;
+                o.textContent = d.canonicalName || d.id;
+                return o;
+            });
         // Preserve current selection while replacing options
         const cur = designSel.value;
         designSel.replaceChildren(...opts);
