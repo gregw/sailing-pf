@@ -229,8 +229,7 @@ public class DataStore
     /**
      * Reads -- never creates -- an existing Boat by sail number and/or name, honouring
      * the alias system ({@code aliases.yaml}) and AUS-prefix collapsing. Used by
-     * read-only server paths (e.g. fetch-handicaps) where creating a phantom boat
-     * would be wrong.
+     * read-only server paths where creating a phantom boat would be wrong.
      * <p>
      * Either {@code rawSailNo} or {@code rawName} may be null/blank; the lookup uses
      * whichever key(s) are present and still requires a unique match.

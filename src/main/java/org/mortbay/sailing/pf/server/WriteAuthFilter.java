@@ -16,8 +16,9 @@ import jakarta.servlet.http.HttpSession;
 class WriteAuthFilter implements Filter
 {
     private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
-    /** POST endpoints that are open to unauthenticated users (read-only request logging,
-     *  plus the comparison handicap-fetch endpoint which is rate-limited inside the handler). */
+    /**
+     * POST endpoints that are open to unauthenticated users (read-only request logging).
+     */
     private static final Set<String> OPEN_POST_PATHS = Set.of(
         "/api/boats/merge-request", "/api/designs/merge-request",
         "/api/boats/edit-request", "/api/designs/edit-request", "/api/clubs/edit-request",
@@ -26,8 +27,7 @@ class WriteAuthFilter implements Filter
         "/api/series/exclude-request",
         "/api/designs/ignore-request",
         "/api/boats/dubious-request", "/api/designs/dubious-request",
-        "/api/series/dubious-request", "/api/races/dubious-request",
-        "/api/comparison/fetch-handicaps");
+        "/api/series/dubious-request", "/api/races/dubious-request");
     private final AuthConfig authConfig;
 
     WriteAuthFilter(AuthConfig authConfig)

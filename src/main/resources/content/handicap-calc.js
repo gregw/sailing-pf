@@ -35,8 +35,7 @@
 //   onFetchedRows,                  // optional async (rows) => {handled, matched} | null
 //                                   //   called after fetch/load before setHandicapsByMatch;
 //                                   //   return {handled:true, matched:N} to skip normal matching
-//   // Optional fetch/load/save controls; pass to wire automatic event handlers:
-//   urlInput, fetchBtn, fetchStatus,
+//   // Optional load/save controls; pass to wire automatic event handlers:
 //   fileInput, fileStatus,
 //   downloadBtn, downloadStatus,
 // }
@@ -287,8 +286,8 @@ const HandicapCalc = (function () {
     const VARIANT_LABELS = {spin: 'Spin', nonSpin: 'NS', twoHanded: '2H'};
     const VARIANT_ORDER = ['spin', 'nonSpin', 'twoHanded'];
 
-    // Build the status string and colour-flag for a fetch/load attempt. Pure helper so
-    // both doFetch and doFile share one message shape, and so the logic is unit-testable.
+    // Build the status string and colour-flag for a load attempt. Pure helper so the
+    // file-load path has one message shape, and so the logic is unit-testable.
     //
     // `data` is the array of returned rows (each may have handicap=null).
     // `result` is one of:
@@ -1637,53 +1636,7 @@ const HandicapCalc = (function () {
             });
         }
 
-        // ---- Wire fetch / load / download buttons ----
-
-        async function doFetch() {
-            const url = cfg.urlInput?.value.trim() || '';
-            const status = cfg.fetchStatus;
-            const btn = cfg.fetchBtn;
-            if (!url) {
-                if (status) {
-                    status.textContent = 'Please enter a URL';
-                    status.style.color = '#c62828';
-                }
-                return;
-            }
-            if (status) {
-                status.textContent = 'Fetching...';
-                status.style.color = '#666';
-            }
-            if (btn) btn.disabled = true;
-            try {
-                const resp = await fetch('/api/comparison/fetch-handicaps', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({url})
-                });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-                const data = await resp.json();
-                if (!Array.isArray(data)) throw new Error('Expected array of handicaps');
-                applySourceVariantOverride(data);
-                rememberFetchedRows(data);
-                const cbResult = cfg.onFetchedRows ? await cfg.onFetchedRows(data) : null;
-                const result = cbResult?.handled
-                    ? {matched: cbResult.matched}
-                    : setHandicapsByMatch(data);
-                if (status) {
-                    const r = formatStatus(data, result, !!cbResult?.handled, 'Fetched');
-                    status.textContent = r.msg;
-                    status.style.color = r.ok ? '#2e7d32' : '#c62828';
-                }
-            } catch (err) {
-                if (status) {
-                    status.textContent = `Error: ${err.message}`;
-                    status.style.color = '#c62828';
-                }
-            } finally {
-                if (btn) btn.disabled = false;
-            }
-        }
+        // ---- Wire load / download buttons ----
 
         async function doFile() {
             const fileInput = cfg.fileInput;
@@ -1767,7 +1720,6 @@ const HandicapCalc = (function () {
             }
         }
 
-        if (cfg.fetchBtn) cfg.fetchBtn.addEventListener('click', doFetch);
         if (cfg.fileInput) cfg.fileInput.addEventListener('change', doFile);
         if (cfg.downloadBtn) cfg.downloadBtn.addEventListener('click', doDownload);
 

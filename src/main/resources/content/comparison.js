@@ -554,9 +554,6 @@ function pfCalc() {
         table: document.querySelector('#pf-calc table'),
         showBestFit: false,
         sessionKey: HANDICAP_STORAGE_KEY,
-        urlInput: document.getElementById('handicap-url'),
-        fetchBtn: document.getElementById('fetch-handicaps-btn'),
-        fetchStatus: document.getElementById('fetch-status'),
         fileInput: document.getElementById('handicap-file'),
         fileStatus: document.getElementById('file-status'),
         variantModeSelect: document.getElementById('handicap-variant-mode'),
@@ -595,14 +592,14 @@ function pfCalc() {
 async function addBoatsFromRows(rows) {
     if (selectedItems.length > 0) return null;
 
-    // Matching is done server-side (alias-aware via DataStore.findBoat) and surfaced as
-    // row.boatId. The frontend trusts the boatId; rows with no server match are skipped.
+    // Each loaded row is expected to carry a canonical row.boatId (downloaded handicap
+    // files include it). The frontend trusts the boatId; rows without one are skipped.
     const added = new Set();
     const matched = [];
 
     for (const row of rows) {
         if (!row.boatId) {
-            console.warn('fetch-handicaps: server returned no boatId for row, skipping', row);
+            console.warn('load-handicaps: row has no boatId, skipping', row);
             continue;
         }
         if (added.has(row.boatId)) continue;
