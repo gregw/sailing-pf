@@ -115,7 +115,7 @@
 
         <div id="pf-calc" style="display:none; margin-top:1.25rem;">
             <h3 style="margin:0 0 0.5rem;">Handicap Calculator
-                <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Enter a handicap for any boat — PF and RF columns for all boats are scaled by ratio. Each column uses its own per-boat ratio. Loaded handicaps are remembered across race selections." target="_blank">ⓘ</a>
+                <a href="ui-tips.md#table-hpf-calc" class="info-btn" data-tip="Enter a handicap for any boat — PF and RF columns for all boats are scaled by ratio. Each column uses its own per-boat ratio. Loaded handicaps are remembered across race selections." target="_blank">ⓘ</a>
             </h3>
             <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
                 All boats from all divisions of the selected race. Loaded handicaps persist while you browse other races.
@@ -133,19 +133,22 @@
             <div id="fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
                 <div style="margin-bottom:0.8rem;">
                     <label for="handicap-file">Load handicaps from file:</label>
+                    <a href="ui-tips.md#calc-load-file" class="info-btn" data-tip="Load handicaps from a JSON file — an array of {handicap, and boatId or sail/name, …}. Files saved via 'Download handicaps as JSON' reload as-is. Click for the format." target="_blank">ⓘ</a>
                     <input type="file" id="handicap-file" accept=".json" style="margin-left:0.5rem;">
                     <div id="file-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
                 </div>
                 <div style="border-top:1px solid #ddd;margin:0.8rem 0;"></div>
                 <div style="margin-bottom:0.8rem;">
                     <label for="handicap-variant-mode">On import:</label>
-                    <select id="handicap-variant-mode" style="margin-left:0.5rem;" title="How to handle Spin/NS/2H variant info in fetched handicaps">
+                    <a href="ui-tips.md#calc-import-mode" class="info-btn" data-tip="When a loaded row's Spin/NS/2H variant differs from the boat's current variant: Ignore = apply anyway; Set = switch the boat to the file's variant; Filter = skip that row." target="_blank">ⓘ</a>
+                    <select id="handicap-variant-mode" style="margin-left:0.5rem;" title="How to handle Spin/NS/2H variant info in loaded handicaps">
                         <option value="ignore">Ignore variant</option>
                         <option value="set">Set selectors</option>
                         <option value="filter" selected>Filter by selector</option>
                     </select>
                     <label for="handicap-source-variant" style="margin-left:1rem;">Source variant:</label>
-                    <select id="handicap-source-variant" style="margin-left:0.5rem;" title="Override the variant of the imported handicaps (useful when the source doesn't label spin/NS)">
+                    <a href="ui-tips.md#calc-source-variant" class="info-btn" data-tip="Force every loaded handicap to be treated as this variant (overrides the file). Auto = use each row's own variant." target="_blank">ⓘ</a>
+                    <select id="handicap-source-variant" style="margin-left:0.5rem;" title="Override the variant of the loaded handicaps (useful when the loaded file doesn't label spin/NS)">
                         <option value="auto" selected>Auto-detect</option>
                         <option value="spin">Spin</option>
                         <option value="nonSpin">Non-Spin</option>

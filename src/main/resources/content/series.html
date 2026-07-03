@@ -108,7 +108,7 @@
 
         <div id="series-pf-calc" style="display:none; margin-top:1.25rem;">
             <h3 style="margin:0 0 0.5rem;">Handicap Calculator
-                <a href="ui-tips.md#table-pf-calc" class="info-btn"
+                <a href="ui-tips.md#table-hpf-calc" class="info-btn"
                    data-tip="Enter a handicap for any boat — PF and RF columns are scaled by ratio. Allocated handicaps are persisted in this browser session and shared with the boat-comparison page; each race in the chart above gains a dashed line of its allocated-handicap corrected times."
                    target="_blank">ⓘ</a></h3>
             <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
@@ -127,6 +127,7 @@
             <div id="series-fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
                 <div style="margin-bottom:0.8rem;">
                     <label for="series-handicap-file">Load handicaps from file:</label>
+                    <a href="ui-tips.md#calc-load-file" class="info-btn" data-tip="Load handicaps from a JSON file — an array of {handicap, and boatId or sail/name, …}. Files saved via 'Download handicaps as JSON' reload as-is. Click for the format." target="_blank">ⓘ</a>
                     <input type="file" id="series-handicap-file" accept=".json" style="margin-left:0.5rem;">
                     <div id="series-file-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
                 </div>
