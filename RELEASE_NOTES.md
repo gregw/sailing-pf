@@ -1,5 +1,8 @@
 ### Notice to Handicappers
 
+### June 2026
+
+- removed the fetch handicap feature.
 - a new [video](https://youtu.be/rXwKmlnDd8Y) of using this tool to set the MYC handicaps for the winter series.
 
 ### May 2026
