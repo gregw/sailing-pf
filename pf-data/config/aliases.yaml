@@ -3257,3 +3257,18 @@ boats:
     aliases:
       - sailNumber: "5164"
         name: "platopendragon"
+  "40063-gambler":
+    canonicalName: "Gambler"
+    aliases:
+      - sailNumber: "40063"
+        name: "thegambler"
+  SM420-cadibarra8:
+    canonicalName: "CADIBARRA 8"
+    aliases:
+      - sailNumber: "SM420"
+        name: "cadibarra"
+  "257-charlotte2":
+    canonicalName: "CHARLOTTE 2"
+    aliases:
+      - sailNumber: "257"
+        name: "charlotte"

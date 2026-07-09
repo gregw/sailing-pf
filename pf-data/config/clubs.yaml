@@ -984,7 +984,7 @@ clubs:
     shortName: "SAILSYS"
     state: "NSW"
     fullName: "Sailsys"
-    excluded: null
+    excluded: true
     email: null
     aliases: []
     topyacht: null

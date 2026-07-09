@@ -56,8 +56,8 @@ outlierSigma: null
 recentRaceReimportDays: 30
 
 # --- SailSys importer ---
-sailsysNextRaceId: 35354
-sailsysEndRaceId: 42000
+sailsysNextRaceId: 35357
+sailsysEndRaceId: 41418
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
@@ -113,14 +113,14 @@ adminPort: 8888
 userPort: 8080
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
-  bwps/api: "2026-05-26T16:00:08.169794395Z"
-  analysis/run: "2026-06-30T07:12:57.328106119Z"
-  pf-optimise/run: "2026-06-30T07:12:58.871338663Z"
-  save-database/run: "2026-06-30T07:13:00.773919030Z"
-  topyacht/api: "2026-05-26T16:18:47.369253742Z"
-  build-indexes/run: "2026-06-30T07:12:56.809805795Z"
-  reference-factors/run: "2026-06-30T07:12:58.164472313Z"
-  sailsys-races/run: "2026-05-26T22:13:38.188291082Z"
-  ams/api: "2026-05-26T16:00:05.756639803Z"
-  orc/api: "2026-05-26T16:00:00.003265908Z"
+  bwps/api: "2026-07-07T16:00:17.844794402Z"
+  analysis/run: "2026-07-03T07:18:22.450116086Z"
+  orc/api: "2026-07-07T16:00:00.005531596Z"
+  pf-optimise/run: "2026-07-03T07:18:27.177269469Z"
+  save-database/run: "2026-07-03T07:18:33.162700462Z"
+  topyacht/api: "2026-06-28T16:16:22.327981722Z"
+  build-indexes/run: "2026-07-03T07:18:20.696851090Z"
+  reference-factors/run: "2026-07-03T07:18:25.214047064Z"
+  sailsys-races/run: "2026-07-02T01:36:41.866834308Z"
+  ams/api: "2026-07-07T16:00:16.917795560Z"
 

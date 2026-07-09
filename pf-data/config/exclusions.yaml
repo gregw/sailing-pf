@@ -5681,6 +5681,167 @@ races:
     reason: "Lasers"
   - id: "rqys.com.au-2023-11-18-0002"
     reason: "Lasers"
+  - id: "unknown-2025-09-13-0001"
+    reason: "series-pattern: name='Club Championship Race 1' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-09-13-0002"
+    reason: "series-pattern: name='Club Championship Race 2' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-09-20-0003"
+    reason: "series-pattern: name='Ian Nicholson Trophy Heat 1' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-09-20-0004"
+    reason: "series-pattern: name='Ian Nicholson Trophy Heat 2' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-09-27-0005"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-09-27-0006"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-10-04-0007"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-10-04-0008"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-10-18-0010"
+    reason: "series-pattern: name='Club Championship Race 3' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-10-18-0011"
+    reason: "series-pattern: name='Club Championship Race 4' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-10-25-0012"
+    reason: "series-pattern: name='John McCulloch Trophy Heat 1' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-10-25-0013"
+    reason: "series-pattern: name='John McCulloch Trophy Heat 2' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-11-08-0016"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-11-08-0017"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-11-15-0018"
+    reason: "series-pattern: name='John McCulloch Trophy Heat 3' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-11-15-0019"
+    reason: "series-pattern: name='John McCulloch Trophy Heat 4' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-11-29-0020"
+    reason: "series-pattern: name='Club Championship Race 7' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-12-06-0022"
+    reason: "series-pattern: name='Founders Trophy Heat 1' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-12-06-0023"
+    reason: "series-pattern: name='Founders Trophy Heat 2' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-12-13-0025"
+    reason: "series-pattern: name='Club Championship Race 9' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-12-13-0026"
+    reason: "series-pattern: name='Club Championship Race 10' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-12-20-0027"
+    reason: "series-pattern: name='Sil Rohu Trophy Heat 1' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2025-12-20-0028"
+    reason: "series-pattern: name='Sil Rohu Trophy Heat 2' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-01-10-0029"
+    reason: "series-pattern: name='Ian Nicholson Trophy Heat 3' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-01-10-0030"
+    reason: "series-pattern: name='Ian Nicholson Trophy Heat 4' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-01-24-0033"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-01-24-0034"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-01-31-0035"
+    reason: "series-pattern: name='Ian Nicholson Trophy Heat 5' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-01-31-0036"
+    reason: "series-pattern: name='Ian Nicholson Trophy Heat 6' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-02-07-0037"
+    reason: "series-pattern: name='John McCulloch Trophy Heat 5' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-02-07-0038"
+    reason: "series-pattern: name='John McCulloch Trophy Heat 6' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-02-14-0039"
+    reason: "series-pattern: name='Club Championship Race 13' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-02-14-0040"
+    reason: "series-pattern: name='Club Championship Race 14' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-02-21-0041"
+    reason: "series-pattern: name='Sil Rohu Trophy Heat 3' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-02-21-0042"
+    reason: "series-pattern: name='Sil Rohu Trophy Heat 4' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-02-28-0043"
+    reason: "series-pattern: name='Club Championship 11A + Rob Orr Short Course Champ\
+    \ 1' series='VYC ILCA Laser 2025-26 Racing'"
+  - id: "unknown-2026-02-28-0044"
+    reason: "series-pattern: name='Club Championship 12A + Rob Orr Short Course Champ\
+    \ 1' series='VYC ILCA Laser 2025-26 Racing'"
+  - id: "unknown-2026-03-14-0047"
+    reason: "series-pattern: name='Sil Rohu Trophy Heat 5' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-03-14-0048"
+    reason: "series-pattern: name='Sil Rohu Trophy Heat 6' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "unknown-2026-03-21-0049"
+    reason: "series-pattern: name='Club Championship Race 15' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-03-28-0051"
+    reason: "series-pattern: name='Club Championship Race 17' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2026-03-28-0052"
+    reason: "series-pattern: name='Club Championship Race 18' series='VYC ILCA Laser\
+    \ 2025-26 Racing'"
+  - id: "unknown-2025-10-04-0009"
+    reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2025-26\
+    \ Racing'"
+  - id: "gossail.com.au-2025-10-11-0001"
+    reason: "series-pattern: name='ILCA CC 1' series='2025-26 ILCA Club Championship'"
+  - id: "gossail.com.au-2025-11-08-0002"
+    reason: "series-pattern: name='ILCA CC 2' series='2025-26 ILCA Club Championship'"
+  - id: "gossail.com.au-2026-01-24-0004"
+    reason: "series-pattern: name='ILCA CC 3 - rerun' series='2025-26 ILCA Club Championship'"
+  - id: "gossail.com.au-2026-02-14-0005"
+    reason: "series-pattern: name='ILCA CC  5' series='2025-26 ILCA Club Championship'"
+  - id: "gossail.com.au-2026-03-28-0007"
+    reason: "series-pattern: name='ILCA CC 6 - rerun' series='2025-26 ILCA Club Championship'"
+  - id: "rqys.com.au-2026-06-06-0005"
+    reason: "series-pattern: name='Race  5' series='OTB Frostbite Series 2026 - Southern\
+    \ Course'"
+  - id: "rqys.com.au-2026-06-06-0006"
+    reason: "series-pattern: name='Race  6' series='OTB Frostbite Series 2026 - Southern\
+    \ Course'"
+  - id: "rqys.com.au-2026-06-08-0007"
+    reason: "sanity-check: huge-time-spread -- division 'VX One': slowest/fastest elapsed-time\
+    \ ratio 18.0x (fastest 1s, slowest 18s) — likely merged courses or bad timing\
+    \ data"
+  - id: "unknown-2026-05-31-0001"
+    reason: "series-pattern: name='Race  1' series='25/26 Dinghy Sunday Winter(Series)'"
+  - id: "unknown-2026-06-14-0002"
+    reason: "series-pattern: name='Race  2' series='25/26 Dinghy Sunday Winter(Series)'"
+  - id: "unknown-2026-06-28-0003"
+    reason: "series-pattern: name='Race  3' series='25/26 Dinghy Sunday Winter(Series)'"
+  - id: "rqys.com.au-2026-06-27-0007"
+    reason: "series-pattern: name='Race  7' series='OTB Frostbite Series 2026 - Southern\
+    \ Course'"
+  - id: "rqys.com.au-2026-06-27-0008"
+    reason: "series-pattern: name='Race  8' series='OTB Frostbite Series 2026 - Southern\
+    \ Course'"
 series:
   - pattern: "\\boptimist\\b"
     reason: ""
