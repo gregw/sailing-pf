@@ -170,7 +170,9 @@ public class TaskService
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
         new ImporterEntry("pf-optimise",       "run",  false, false),
-        new ImporterEntry("save-database",      "run",  false, false)
+        new ImporterEntry("save-database", "run", false, false),
+        new ImporterEntry("clear-cache-orc", "run", false, false),
+        new ImporterEntry("clear-cache-sailsys", "run", false, false)
     );
 
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
@@ -774,8 +776,31 @@ public void stop()
                 persistConfig();
                 pruneUserRequestsLog();
             }
+            case "clear-cache-orc" -> clearCacheDir(dataRoot.resolve("cache/orc"));
+            case "clear-cache-sailsys" -> clearCacheDir(dataRoot.resolve("cache/sailsys"));
             default -> throw new IllegalArgumentException("Unknown importer: " + name);
         }
+    }
+
+    /**
+     * Recursively deletes the contents of a cache directory, keeping the directory itself.
+     */
+    private static void clearCacheDir(Path dir) throws IOException
+    {
+        if (!Files.exists(dir))
+        {
+            LOG.info("Cache directory {} absent, nothing to clear", dir);
+            return;
+        }
+        try (var stream = Files.walk(dir))
+        {
+            for (Path p : stream.sorted(Comparator.reverseOrder()).toList())
+            {
+                if (!p.equals(dir))
+                    Files.delete(p);
+            }
+        }
+        LOG.info("Cleared cache directory {}", dir);
     }
 
     private void persistsailsysNextRaceId(String name)

@@ -1,5 +1,10 @@
 ### Notice to Handicappers
 
+### July 2026
+
+- At the request of SailSys, this tool will no longer fetch race data from their system.
+  If affected clubs wish their races to continue to be included, please send a message.
+
 ### June 2026
 
 - removed the fetch handicap feature.

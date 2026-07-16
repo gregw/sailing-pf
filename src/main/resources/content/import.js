@@ -14,8 +14,13 @@ const DISPLAY_NAMES = {
     'reference-factors':'Calculate Reference Factors',
     'build-indexes':    'Build Indexes',
     'pf-optimise':     'PF Optimise',
-    'save-database':    'Save Database'
+    'save-database': 'Save Database',
+    'clear-cache-orc': 'Clear HTTP Cache(ORC)',
+    'clear-cache-sailsys': 'Clear HTTP Cache(Sailsys)'
 };
+
+const SAILSYS_DISABLED_TIP =
+    'At the request of SailSys, this tool will no longer fetch race data from their system.';
 
 let currentEntries = [];
 let statusPoller = null;
@@ -29,6 +34,7 @@ function applyAuthState() {
     document.querySelectorAll(
         '#importers-body button, [onclick="saveSchedule()"], [onclick="stopSchedule()"], [onclick="runScheduleNow()"], [onclick="runStartupNow()"]'
     ).forEach(b => {
+        if (b.classList.contains('perma-disabled')) return;
         b.disabled = !ok;
         b.title = ok ? '' : 'Sign in to use this action';
     });
@@ -97,7 +103,7 @@ function buildTable(entries) {
 
 function taskTip(name) {
     const tips = {
-        'sailsys-races':      'Fetches race results from the SailSys API (or local file cache).',
+        'sailsys-races': 'Disabled. At the request of SailSys, this tool will no longer fetch race data from their system.',
         'orc':                'Downloads ORC certificate data from data.orc.org.',
         'ams':                'Scrapes AMS certificate data from raceyachts.org.',
         'topyacht':           'Scrapes race results from TopYacht club result pages.',
@@ -107,6 +113,8 @@ function taskTip(name) {
         'build-indexes':      'Rebuilds navigation indexes (boat→races, design→boats, etc.).',
         'pf-optimise':       'Runs the PF optimiser to produce Performance Factors.',
         'save-database':      'Flushes the DataStore and rewrites admin.yaml to disk.',
+        'clear-cache-orc': 'Deletes all files in the ORC HTTP cache directory (cache/orc).',
+        'clear-cache-sailsys': 'Deletes all files in the SailSys HTTP cache directory (cache/sailsys).',
     };
     return tips[name] || name;
 }
@@ -123,9 +131,8 @@ function buildRow(entry) {
         ? `<span id="progress-${esc(key)}" style="font-family:monospace;font-size:0.9em;color:#666;margin-left:0.4em;"></span>`
         : '';
     const runStopBtns = isSailSysApi
-        ? `<button id="run-btn-${esc(key)}"
-                   onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
-                   title="Run this task now"
+        ? `<button id="run-btn-${esc(key)}" class="perma-disabled" disabled
+                   title="${esc(SAILSYS_DISABLED_TIP)}"
                    ${isRunning ? 'style="display:none"' : ''}>Run</button>
            <button id="stop-btn-${esc(key)}"
                    onclick="stopImport()"
@@ -151,6 +158,10 @@ function buildRow(entry) {
       <td style="text-align:center"><input type="checkbox" id="start-${esc(key)}-startup"
                title="Run this task automatically when the server starts"
                ${entry.runAtStartup ? 'checked' : ''}></td>`;
+    if (isSailSysApi) {
+        tr.title = SAILSYS_DISABLED_TIP;
+        tr.style.opacity = '0.5';
+    }
     return tr;
 }
 
@@ -286,7 +297,7 @@ function setAllRunButtonsDisabled(disabled) {
         const row = document.getElementById('row-' + key);
         if (row) {
             row.querySelectorAll('button:not([id^="stop-btn"])').forEach(btn => {
-                if (!btn.classList.contains('order-btn'))
+                if (!btn.classList.contains('order-btn') && !btn.classList.contains('perma-disabled'))
                     btn.disabled = disabled;
             });
         }
