@@ -121,7 +121,7 @@ adminPort: 8888
 userPort: 8080
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
-  bwps/api: "2026-07-14T16:00:15.140445401Z"
+  bwps/api: "2026-07-19T16:00:04.790488626Z"
   analysis/run: "2026-07-16T05:19:50.398130874Z"
   pf-optimise/run: "2026-07-16T05:19:52.280545613Z"
   save-database/run: "2026-07-16T05:19:55.052870418Z"
@@ -129,7 +129,7 @@ lastRunTimes:
   build-indexes/run: "2026-07-16T05:19:49.923216748Z"
   reference-factors/run: "2026-07-16T05:19:51.442135288Z"
   sailsys-races/run: "2026-07-02T01:36:41.866834308Z"
-  ams/api: "2026-07-14T16:00:14.050113824Z"
+  ams/api: "2026-07-19T16:00:04.389209567Z"
   clear-cache-sailsys/run: "2026-07-16T05:20:53.385551315Z"
-  orc/api: "2026-07-14T15:59:59.999775136Z"
+  orc/api: "2026-07-19T16:00:00.000286688Z"
 
