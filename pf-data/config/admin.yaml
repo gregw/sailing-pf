@@ -118,7 +118,7 @@ authAllowedDomain: null
 
 # --- Server ports ---
 adminPort: 8888
-userPort: 8080
+userPort: 8081
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
   bwps/api: "2026-07-19T16:00:04.790488626Z"
