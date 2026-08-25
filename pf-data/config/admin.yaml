@@ -51,7 +51,7 @@ importers:
 - name: "clear-cache-sailsys"
   mode: "run"
   includeInSchedule: false
-  runAtStartup: true
+  runAtStartup: false
 schedule:
   days:
   - "MONDAY"
@@ -121,15 +121,14 @@ adminPort: 8888
 userPort: 8081
 natGatewayIp: "10.19.25.1"
 lastRunTimes:
-  bwps/api: "2026-07-19T16:00:04.790488626Z"
-  analysis/run: "2026-07-16T05:19:50.398130874Z"
-  pf-optimise/run: "2026-07-16T05:19:52.280545613Z"
-  save-database/run: "2026-07-16T05:19:55.052870418Z"
-  topyacht/api: "2026-06-28T16:16:22.327981722Z"
-  build-indexes/run: "2026-07-16T05:19:49.923216748Z"
-  reference-factors/run: "2026-07-16T05:19:51.442135288Z"
+  bwps/api: "2026-08-25T16:00:10.746135876Z"
+  analysis/run: "2026-08-21T23:17:16.605812443Z"
+  orc/api: "2026-08-25T15:59:59.999820014Z"
+  pf-optimise/run: "2026-08-21T23:17:21.477058677Z"
+  save-database/run: "2026-08-21T23:17:28.563875209Z"
+  topyacht/api: "2026-08-25T07:34:47.590712301Z"
+  build-indexes/run: "2026-08-21T23:17:14.671813553Z"
+  reference-factors/run: "2026-08-21T23:17:19.414413643Z"
   sailsys-races/run: "2026-07-02T01:36:41.866834308Z"
-  ams/api: "2026-07-19T16:00:04.389209567Z"
-  clear-cache-sailsys/run: "2026-07-16T05:20:53.385551315Z"
-  orc/api: "2026-07-19T16:00:00.000286688Z"
+  ams/api: "2026-08-25T16:00:09.061756403Z"
 

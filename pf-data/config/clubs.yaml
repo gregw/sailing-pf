@@ -912,10 +912,10 @@ clubs:
       - "Townsville Cruising Yacht Club"
       - "TCYC"
     topyacht:
-      - "https://www.topyacht.net.au/results/2022/mirw/index.htm"
-      - "https://www.topyacht.net.au/results/2023/mirw/index.htm"
-      - "https://www.topyacht.net.au/results/2024/mirw/index.htm"
-      - "https://www.topyacht.net.au/results/2025/mirw/index.htm"
+      - "https://tes.topyacht.net.au/results/2022/mirw/index.htm"
+      - "https://tes.topyacht.net.au/results/2023/mirw/index.htm"
+      - "https://tes.topyacht.net.au/results/2024/mirw/index.htm"
+      - "https://tes.topyacht.net.au/results/2025/mirw/index.htm"
     boats: null
   app.sailsys.com/au/club/27/profile:
     shortName: "SHCC"
