@@ -7,6 +7,7 @@ clubs:
     email: "committee@bbsc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   byc.org.au:
     shortName: "BYC"
@@ -16,6 +17,7 @@ clubs:
     email: "sailing@byc.org.au, office@byc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   ballaratyachtclub.com.au:
     shortName: "BYC"
@@ -25,6 +27,7 @@ clubs:
     email: "commodore@ballaratyachtclub.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   cyca.com.au:
     shortName: "CYCA"
@@ -36,6 +39,7 @@ clubs:
       - "CYCA/SDYC"
     topyacht:
       - "https://cyca.com.au/results/2019/bwps_1920/index.htm"
+    sailsys: null
     boats:
       - "1-back2black-reichelpughgp42"
   cycsa.com.au:
@@ -51,6 +55,7 @@ clubs:
       - "https://topyacht.net.au/results/cycsa/2021/club/index.htm"
       - "https://topyacht.net.au/results/cycsa/2022/club/index.htm"
       - "https://topyacht.net.au/results/cycsa/2025/club/index.htm"
+    sailsys: null
     boats: null
   hbyc.org.au:
     shortName: "HBYC"
@@ -60,6 +65,7 @@ clubs:
     email: "racing@hbyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   hastingsyachtclub.org.au:
     shortName: "HYC"
@@ -69,6 +75,7 @@ clubs:
     email: "sailing@hastingsyachtclub.org.au, commodore@hastingsyachtclub.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   mcys.com.au:
     shortName: "MCYS"
@@ -78,6 +85,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   morningtonyc.net.au:
     shortName: "MYC"
@@ -87,6 +95,7 @@ clubs:
     email: "sailing@morningtonyc.net.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   portadelaidesailingclub.com:
     shortName: "PASC"
@@ -96,6 +105,7 @@ clubs:
     email: "sailingchairperson@pasc.com"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   gyc.com.au:
     shortName: "PCSC"
@@ -108,6 +118,7 @@ clubs:
       - "https://www.topyacht.net.au/results/pcsc/2020/club/index.htm"
       - "https://www.topyacht.net.au/results/pcsc/2021/club/index.htm"
       - "https://www.topyacht.net.au/results/pcsc/2022/club/index.htm"
+    sailsys: null
     boats: null
   pdyc.org.au:
     shortName: "PDYC"
@@ -117,6 +128,7 @@ clubs:
     email: "commodore@pdyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   plyc.com.au:
     shortName: "PLYC"
@@ -129,6 +141,7 @@ clubs:
       - "https://topyacht.net.au/results/plyc/lincolnweek/2024/"
       - "https://topyacht.net.au/results/plyc/lincolnweek/2025/"
       - "https://topyacht.net.au/results/plyc/lincolnweek/2026/"
+    sailsys: null
     boats: null
   unknown.domain.14:
     shortName: "RBYC"
@@ -138,6 +151,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rbyc.org.au:
     shortName: "RBYC"
@@ -147,6 +161,7 @@ clubs:
     email: "sailing@rbyc.org.au, boatingmanager@rbyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rfbyc.asn.au:
     shortName: "RFBYC"
@@ -156,6 +171,7 @@ clubs:
     email: "sailadmin@rfbyc.asn.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rgyc.com.au:
     shortName: "RGYC"
@@ -176,6 +192,7 @@ clubs:
       - "https://www.topyacht.net.au/results/2024/fos/index.htm"
       - "https://www.topyacht.net.au/results/2025/fos/index.htm"
       - "https://www.topyacht.net.au/results/2026/fos/index.htm"
+    sailsys: null
     boats: null
   rmys.com.au:
     shortName: "RMYS"
@@ -186,6 +203,7 @@ clubs:
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/rmys/2022/awkr22/index.htm"
+    sailsys: null
     boats: null
   rqys.com.au:
     shortName: "RQYS"
@@ -195,6 +213,7 @@ clubs:
     email: "sailingmanager@rqys.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rsays.com.au:
     shortName: "RSAYS"
@@ -205,6 +224,7 @@ clubs:
     aliases: []
     topyacht:
       - "https://topyacht.net.au/results/rsays/2022/vxonestate/index.htm"
+    sailsys: null
     boats: null
   ryct.org.au:
     shortName: "RYCT"
@@ -229,6 +249,7 @@ clubs:
       - "http://results.ryct.org.au/drgstates21/"
       - "http://results.ryct.org.au/drgstates22/"
       - "http://results.ryct.org.au/drgstates23/"
+    sailsys: null
     boats: null
   unknown.domain.22:
     shortName: "RYCV"
@@ -238,6 +259,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rycv.com.au:
     shortName: "RYCV"
@@ -257,6 +279,7 @@ clubs:
       - "https://www.topyacht.net.au/results/rycv/2024/summer/index-summer.htm"
       - "https://www.topyacht.net.au/results/rycv/2024/winter/index-winter.htm"
       - "https://www.topyacht.net.au/results/rycv/2025/summer/index-summer.htm"
+    sailsys: null
     boats: null
   sbsc.net.au:
     shortName: "SBSC"
@@ -266,6 +289,7 @@ clubs:
     email: "keelboat@sbsc.net.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   unknown.domain.25:
     shortName: "SBYC"
@@ -275,6 +299,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   syc.com.au:
     shortName: "SYC"
@@ -294,6 +319,7 @@ clubs:
       - "https://www.topyacht.net.au/results/2024/sailsandy/index.htm"
       - "https://www.topyacht.net.au/results/2025/sailsandy/index.htm"
       - "https://www.topyacht.net.au/results/2026/sailsandy/index.htm"
+    sailsys: null
     boats: null
   myc.org.au:
     shortName: "MYC"
@@ -303,6 +329,7 @@ clubs:
     email: "sailing@myc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats:
       - "5656-mondo-sydney38"
       - "2407-manlysailingaqualuna-force24"
@@ -322,6 +349,7 @@ clubs:
       - "https://www.mhyc.com.au/files/results/2021/champsregattas/index.htm"
       - "https://www.mhyc.com.au/files/results/2020/club/index.htm"
       - "https://www.mhyc.com.au/files/results/2021/club/index.htm"
+    sailsys: null
     boats: null
   sasc.com.au:
     shortName: "SASC"
@@ -332,6 +360,7 @@ clubs:
     aliases: []
     topyacht:
       - "https://www.topyacht.net.au/results/sasc/2023/club/index.htm"
+    sailsys: null
     boats: null
   rpeyc.com.au:
     shortName: "RPEYC"
@@ -341,6 +370,7 @@ clubs:
     email: "sailing@rpeyc.com.au, secretary@rpeyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rsys.com.au:
     shortName: "RSYS"
@@ -352,6 +382,7 @@ clubs:
       - "RSYSAcademy"
       - "RSYS - Academy"
     topyacht: null
+    sailsys: null
     boats:
       - "581-corum-farr36modified"
   ransa.com.au:
@@ -362,6 +393,7 @@ clubs:
     email: "sailing@ransa.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rpayc.com.au:
     shortName: "RPAYC"
@@ -373,6 +405,7 @@ clubs:
       - "RPAYC-OTB"
     topyacht:
       - "https://rpayc.com.au/results/2022/club/otb/index.htm"
+    sailsys: null
     boats: null
   byra.org.au:
     shortName: "BYRA"
@@ -382,6 +415,7 @@ clubs:
     email: "sailing@byra.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   royalmotor.com.au:
     shortName: "RMYC"
@@ -392,6 +426,7 @@ clubs:
     aliases:
       - "RMYCBB"
     topyacht: null
+    sailsys: null
     boats: null
   avalonsailingclub.com.au:
     shortName: "ASC"
@@ -401,6 +436,7 @@ clubs:
     email: "info@avalonsailingclub.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   bbyc.com.au:
     shortName: "BBYC"
@@ -414,6 +450,7 @@ clubs:
       - "https://www.topyacht.net.au/results/botanybay/2023/club_series/"
       - "https://www.topyacht.net.au/results/botanybay/2024/club_series/"
       - "https://www.topyacht.net.au/results/botanybay/2025/club_series/"
+    sailsys: null
     boats:
       - "BH57-wundurra-endeavour26"
       - "2189-griffin-farr1020"
@@ -435,6 +472,7 @@ clubs:
     email: "sailing@cronullasailingclub.com.au, info@cronullasailingclub.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats:
       - "807-nomercy-melges24"
       - "943-nomercy-etchells"
@@ -447,6 +485,7 @@ clubs:
     email: "admin@rmycph.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   balmainsailingclub.com.au:
     shortName: "BSC"
@@ -464,6 +503,7 @@ clubs:
       - "https://www.topyacht.net.au/results/balmainsc/2024/kb/index.htm"
       - "https://www.topyacht.net.au/results/balmainsc/2025/kb/index.htm"
       - "https://www.topyacht.net.au/results/balmainsc/2026/kb/index.htm"
+    sailsys: null
     boats: null
   prsc.org.au:
     shortName: "PRSC"
@@ -473,6 +513,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   dsc.org.au:
     shortName: "DSC"
@@ -482,6 +523,7 @@ clubs:
     email: "sailing@dsc.org.au, info@dsc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   ncyc.net.au:
     shortName: "NCYC"
@@ -493,6 +535,7 @@ clubs:
     topyacht:
       - "https://www.topyacht.net.au/results/ncyc/2021/sf2021/index.htm"
       - "https://www.topyacht.net.au/results/ncyc/2022/sf2022/index.htm"
+    sailsys: null
     boats: null
   lmyc.com.au:
     shortName: "LMYC"
@@ -507,6 +550,7 @@ clubs:
       - "https://www.lmycraceresults.com.au/results/2023/tyregattas/"
       - "https://www.lmycraceresults.com.au/results/2024/tyregattas/"
       - "https://www.lmycraceresults.com.au/results/2025/tyregattas/"
+    sailsys: null
     boats: null
   gossail.com.au:
     shortName: "GSC"
@@ -516,6 +560,7 @@ clubs:
     email: "sailing@gossail.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   orcv.org.au:
     shortName: "ORCV"
@@ -529,6 +574,7 @@ clubs:
       - "https://www.orcv.org.au/results/2023-24/"
       - "https://www.orcv.org.au/results/2024-25/"
       - "https://www.orcv.org.au/results/2025-26/"
+    sailsys: null
     boats: null
   dbyc.com.au:
     shortName: "DBYC"
@@ -538,6 +584,7 @@ clubs:
     email: "sailing@dbyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   bys.asn.au:
     shortName: "BYS"
@@ -547,6 +594,7 @@ clubs:
     email: "sailing@bys.asn.au, info@bys.asn.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   queenscliffcruisingyachtclub.org:
     shortName: "QCYC"
@@ -556,6 +604,7 @@ clubs:
     email: "admin@qcyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   mccraeyc.com.au:
     shortName: "McCYC"
@@ -566,6 +615,7 @@ clubs:
     aliases:
       - "MYC"
     topyacht: null
+    sailsys: null
     boats: null
   rosebudyachtclub.au:
     shortName: "RYC"
@@ -575,6 +625,7 @@ clubs:
     email: "info.rosebudyachtclub@gmail.com"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   flindersyc.com.au:
     shortName: "FYC"
@@ -584,6 +635,7 @@ clubs:
     email: "sailing@flindersyc.com.au, commodore@flindersyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   mmyc.org.au:
     shortName: "MMYC"
@@ -593,6 +645,7 @@ clubs:
     email: "sailing@mmyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   mordiallocsc.com.au:
     shortName: "MSC"
@@ -602,6 +655,7 @@ clubs:
     email: "sailing@mordiallocsc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats:
       - "BLANKSAILNUMBER-smokin"
   williamstownsailingclub.org.au:
@@ -612,6 +666,7 @@ clubs:
     email: "commodore@williamstownsailingclub.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   dssinc.org.au:
     shortName: "DSS"
@@ -621,6 +676,7 @@ clubs:
     email: "sailing@dssinc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   wmyc.com.au:
     shortName: "WMSC"
@@ -632,6 +688,7 @@ clubs:
       - "MYC"
       - "WMYC"
     topyacht: null
+    sailsys: null
     boats: null
   qcyc.com.au:
     shortName: "QCYC"
@@ -641,6 +698,7 @@ clubs:
     email: "raceentries@qcyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   southportyachtclub.com.au:
     shortName: "SYC"
@@ -655,6 +713,7 @@ clubs:
       - "https://www.topyacht.net.au/results/2022/sailparadise/"
       - "https://www.topyacht.net.au/results/2023/sailparadise/"
       - "https://www.topyacht.net.au/results/2024/sailparadise/"
+    sailsys: null
     boats: null
   mooloolabayachtclub.com.au:
     shortName: "MYC"
@@ -664,6 +723,7 @@ clubs:
     email: "sailing@mooloolabayachtclub.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   nyrc.com.au:
     shortName: "NYRC"
@@ -673,6 +733,7 @@ clubs:
     email: "sailing@nyrc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   whitsundaysailingclub.com.au:
     shortName: "WSC"
@@ -684,6 +745,7 @@ clubs:
     topyacht:
       - "https://www.topyacht.net.au/results/2025/abrw/index.htm"
       - "https://www.topyacht.net.au/results/2024/abrw/index.htm"
+    sailsys: null
     boats: null
   adelaidesailingclub.com.au:
     shortName: "ASC"
@@ -693,6 +755,7 @@ clubs:
     email: "sailing@adelaidesailingclub.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   bsyc.com.au:
     shortName: "BSYC"
@@ -704,6 +767,7 @@ clubs:
     topyacht:
       - "https://www.topyacht.net.au/results/bsyc/2023/club/index.htm"
       - "https://www.topyacht.net.au/results/bsyc/2024/club/index.htm"
+    sailsys: null
     boats: null
   rpyc.com.au:
     shortName: "RPYC"
@@ -713,6 +777,7 @@ clubs:
     email: "club@rpyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   fsc.com.au:
     shortName: "FSC"
@@ -726,6 +791,7 @@ clubs:
       - "https://www.topyacht.net.au/results/fsc/2024/kb24/"
       - "https://www.topyacht.net.au/results/fsc/2025/kb25/"
       - "https://www.topyacht.net.au/results/fsc/2025/kb26/"
+    sailsys: null
     boats: null
   efyc.com.au:
     shortName: "EFYC"
@@ -735,6 +801,7 @@ clubs:
     email: "sailing@efyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   nyc.org.au:
     shortName: "NYC"
@@ -744,6 +811,7 @@ clubs:
     email: "sailing@nyc.org.au, hello@nyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   hillarysyachtclub.com.au:
     shortName: "HYC"
@@ -753,6 +821,7 @@ clubs:
     email: "sailing@hillarysyachtclub.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   sopyc.com.au:
     shortName: "SoPYC"
@@ -762,6 +831,7 @@ clubs:
     email: "sailing@sopyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   pfsyc.com.au:
     shortName: "PFSYC"
@@ -771,6 +841,7 @@ clubs:
     email: "sailing@pfsyc.com.au, general.manager@pfsyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   darwinsailingclub.com.au:
     shortName: "DSC"
@@ -780,6 +851,7 @@ clubs:
     email: "sailing@darwinsailingclub.com.au, admin@dwnsail.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   dbcya.com.au:
     shortName: "DBCYA"
@@ -789,6 +861,7 @@ clubs:
     email: "admin@dbcya.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rycv.com.au/port-phillip-north-yacht-clubs-ppnyc:
     shortName: "PPNYC"
@@ -798,6 +871,7 @@ clubs:
     email: null
     aliases: null
     topyacht: null
+    sailsys: null
     boats: null
   revolutionise.com.au/goolwaryc:
     shortName: "GWYC"
@@ -807,6 +881,7 @@ clubs:
     email: null
     aliases: null
     topyacht: null
+    sailsys: null
     boats: null
   rmyctoronto.com.au:
     shortName: "RMYCT"
@@ -824,6 +899,7 @@ clubs:
       - "https://www.raceresults.rmyctoronto.com.au/results/2023_2024/hcwindex.htm"
       - "https://www.raceresults.rmyctoronto.com.au/results/2024_2025/hcwindex.htm"
       - "https://www.raceresults.rmyctoronto.com.au/results/2025_2026/hcwindex.htm"
+    sailsys: null
     boats: null
   gfs.org.au:
     shortName: "GFS"
@@ -837,6 +913,7 @@ clubs:
       - "https://gfs.org.au/handicapper/results/2021/2021_club_series/index.htm"
       - "https://gfs.org.au/handicapper/results/2022/2022_club_series/index.htm"
       - "https://gfs.org.au/handicapper/results/2023/2023_club_series/index.htm"
+    sailsys: null
     boats: null
   pmyc.asn.au:
     shortName: "PMYC"
@@ -852,6 +929,7 @@ clubs:
       - "https://www.topyacht.net.au/results/pmyc/2023/club/index.htm"
       - "https://www.topyacht.net.au/results/pmyc/2024/club/index.htm"
       - "https://www.topyacht.net.au/results/pmyc/2025/club/index.htm"
+    sailsys: null
     boats: null
   gryc.com.au:
     shortName: "GRYC"
@@ -865,6 +943,7 @@ clubs:
       - "https://www.topyacht.net.au/results/gryc/2021/club/Winter2021/series.htm"
       - "https://www.topyacht.net.au/results/gryc/2022/club/Winter2022/series.htm"
       - "https://www.topyacht.net.au/results/gryc/2025/club/Winter2025/series.htm"
+    sailsys: null
     boats: null
   oceanracingwa.com.au:
     shortName: "ORWA"
@@ -877,6 +956,7 @@ clubs:
       - "https://www.topyacht.net.au/results/orwa/2021/index.htm"
       - "https://www.topyacht.net.au/results/orwa/2022/index.htm"
       - "https://www.topyacht.net.au/results/orwa/2023/index.htm"
+    sailsys: null
     boats: null
   classicyacht.com.au:
     shortName: "CYAA"
@@ -888,6 +968,7 @@ clubs:
     topyacht:
       - "https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm"
       - "https://www.topyacht.net.au/results/cyaa/2022/winter/index.htm"
+    sailsys: null
     boats: null
   hamiltonisland.com.au:
     shortName: "HIYC"
@@ -901,6 +982,7 @@ clubs:
       - "https://www.topyacht.net.au/results/2024/hirw/index.htm"
       - "https://www.topyacht.net.au/results/2023/hirw/index.htm"
       - "https://www.topyacht.net.au/results/2022/hirw/index.htm"
+    sailsys: null
     boats: null
   townsvilleyachtclub.com.au:
     shortName: "TYC"
@@ -935,6 +1017,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   wyc.org.au:
     shortName: "WYC"
@@ -944,6 +1027,7 @@ clubs:
     email: "sailing@wyc.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   pesc.com.au:
     shortName: "PESC"
@@ -953,6 +1037,7 @@ clubs:
     email: "commodore@pesc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   multihullcruising.org.au:
     shortName: "MHYC"
@@ -962,6 +1047,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rhkyc.org.hk:
     shortName: "RHKYC"
@@ -971,6 +1057,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   jbcyc.com.au:
     shortName: "JBCYC"
@@ -980,6 +1067,7 @@ clubs:
     email: "sailing@jbcyc.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   ketteringyachtclub.org.au:
     shortName: "KYC"
@@ -989,6 +1077,7 @@ clubs:
     email: "sailing@ketteringyachtclub.org.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   sailsys.com.au:
     shortName: "SAILSYS"
@@ -998,6 +1087,7 @@ clubs:
     email: null
     aliases: []
     topyacht: null
+    sailsys: null
     boats:
       - "530-thedrivers"
   sailportstephens.com.au:
@@ -1008,6 +1098,7 @@ clubs:
     email: "info@sailportstephens.com.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   opuacruisingclub.co.nz:
     shortName: "OCC"
@@ -1017,6 +1108,7 @@ clubs:
     email: "sailing@opuacruisingclub.co.nz"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   tcbyachtclub.wixsite.com:
     shortName: "TCYC"
@@ -1026,6 +1118,7 @@ clubs:
     email: "tincanbayyachtclub@outlook.com"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   iycsailing.asn.au:
     shortName: "IYC"
@@ -1035,6 +1128,7 @@ clubs:
     email: "sailing@iycsailing.asn.au"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   rpnyc.org.nz:
     shortName: "RPNYC"
@@ -1044,6 +1138,7 @@ clubs:
     email: "sailing@rpnyc.org.nz, office@rpnyc.org.nz"
     aliases: []
     topyacht: null
+    sailsys: null
     boats: null
   yacht.org.nz:
     shortName: "TYPBC"
@@ -1053,6 +1148,7 @@ clubs:
     email: "sailing@yacht.org.nz, office@yacht.org.nz"
     aliases: null
     topyacht: null
+    sailsys: null
     boats: null
 boatClubOverrides:
   - sailNumber: "20"

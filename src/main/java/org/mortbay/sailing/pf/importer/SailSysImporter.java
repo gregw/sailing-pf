@@ -16,8 +16,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.function.BooleanSupplier;
-import java.util.function.IntConsumer;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -364,6 +362,7 @@ public class SailSysImporter
             return;
         }
         String seriesName = response.data.name;
+        warnIfSeriesBelongsElsewhere(club, sailsysSeriesId, seriesName, response.data.club);
         String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
         ImporterLog.info(LOG, "SailSys: club={} series {} '{}' has {} race(s)",
             club.id(), sailsysSeriesId, seriesName, response.data.races.size());
@@ -398,6 +397,31 @@ public class SailSysImporter
             if (raceJson != null && isApiFound(raceJson))
                 processRaceJson(raceJson, club);
         }
+    }
+
+    /**
+     * Warns when a configured series reports a different club than the one it is filed under.
+     * <p>
+     * A series ID identifies its club by itself, so a series event needs no club ID — but a
+     * mistyped one would otherwise import another club's races here silently. The configured
+     * club still wins; this only makes the mismatch visible.
+     */
+    private void warnIfSeriesBelongsElsewhere(Club club, int sailsysSeriesId, String seriesName,
+                                              ClubSummary owner)
+    {
+        if (owner == null || owner.shortName == null
+            || owner.shortName.equalsIgnoreCase(club.shortName()))
+            return;
+        Club resolved = store.findUniqueClubByShortName(owner.shortName, owner.longName,
+            "SailSys series " + sailsysSeriesId);
+        if (resolved != null && !resolved.id().equals(club.id()))
+            ImporterLog.warn(LOG, "SailSys: series {} '{}' belongs to '{}', which is club {} here, "
+                    + "but it is configured under {} -- check the series ID",
+                sailsysSeriesId, seriesName, owner.shortName, resolved.id(), club.id());
+        else
+            ImporterLog.warn(LOG, "SailSys: series {} '{}' reports club '{}' but is configured "
+                    + "under {} ('{}') -- check the series ID",
+                sailsysSeriesId, seriesName, owner.shortName, club.id(), club.shortName());
     }
 
     /**

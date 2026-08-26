@@ -2288,11 +2288,14 @@ function renderClubSailsysEvents(events) {
     const host = document.getElementById('edit-club-sailsys-events');
     if (!host) return;
     host.innerHTML = '';
-    events.forEach(e => host.appendChild(buildClubSailsysRow(e)));
+    events.forEach(e => host.appendChild(
+        buildClubSailsysRow(e.clubId != null ? 'club' : 'series', e)));
 }
 
-function buildClubSailsysRow(event) {
-    const kind = event.clubId != null ? 'club' : 'series';
+// `kind` is passed rather than inferred from the event: a row being added has no ID yet,
+// so inferring from a null clubId would classify every new club row as a series.
+function buildClubSailsysRow(kind, event) {
+    event = event || {};
     const row = document.createElement('div');
     row.className = 'sailsys-event-row';
     row.dataset.kind = kind;
@@ -2336,8 +2339,7 @@ function buildClubSailsysRow(event) {
 function addClubSailsysEvent(kind) {
     const host = document.getElementById('edit-club-sailsys-events');
     if (!host) return;
-    host.appendChild(buildClubSailsysRow(
-        kind === 'club' ? {clubId: null} : {seriesId: null}));
+    host.appendChild(buildClubSailsysRow(kind));
 }
 
 function readClubSailsysEvents() {
