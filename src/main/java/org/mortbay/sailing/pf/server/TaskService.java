@@ -63,7 +63,7 @@ public class TaskService
     private static final Map<String, String> CONFIG_COMMENTS = new LinkedHashMap<>();
     static
     {
-        CONFIG_COMMENTS.put("sailsysNextRaceId:",           "# --- SailSys importer ---");
+        CONFIG_COMMENTS.put("sailsysYoungCacheMaxAgeDays:", "# --- SailSys importer ---");
         CONFIG_COMMENTS.put("bwpsMinYear:",                 "# --- BWPS importer ---");
         CONFIG_COMMENTS.put("orcListMaxAgeDays:",           "# --- ORC importer ---");
         CONFIG_COMMENTS.put("minAnalysisR2:",               "# --- Analysis ---");
@@ -106,7 +106,6 @@ public class TaskService
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     private volatile ImportStatus currentStatus;
-    private volatile int currentSailSysId;
     private volatile boolean scheduledRunActive = false;
 
     public record ImportStatus(String importerName, String mode, Instant startedAt) {}
@@ -119,7 +118,7 @@ public class TaskService
      * added here (plus a case in {@link #runClubScopedImporter}) when they gain the
      * ability to filter by club.
      */
-    private static final List<String> CLUB_SCOPED_IMPORTERS = List.of("topyacht");
+    private static final List<String> CLUB_SCOPED_IMPORTERS = List.of("topyacht", "sailsys");
 
     /**
      * Analysis rebuilt after a club-scoped import, in order.
@@ -253,7 +252,6 @@ public class TaskService
                                Integer targetIrcYear,
                                Double outlierSigma,
                                Integer recentRaceReimportDays,      // null → default 90
-                               Integer sailsysNextRaceId, Integer sailsysEndRaceId,
                                Integer sailsysYoungCacheMaxAgeDays, // null → default 7
                                Integer sailsysOldCacheMaxAgeDays,   // null → default 352
                                Integer sailsysYoungRaceMaxAgeDays,  // null → default 365
@@ -296,7 +294,7 @@ public class TaskService
     {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
-        new ImporterEntry("sailsys-races",      "run",  false, false),
+        new ImporterEntry("sailsys",            "api",  false, false),
         new ImporterEntry("orc",                "api",  false, false),
         new ImporterEntry("ams",                "api",  false, false),
         new ImporterEntry("topyacht",           "api",  false, false),
@@ -313,8 +311,6 @@ public class TaskService
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
     private GlobalSchedule globalSchedule = new GlobalSchedule(List.of(), LocalTime.of(3, 0));
     private ScheduledFuture<?> scheduledFuture;
-    private volatile Integer sailsysNextRaceId = null;    // null = start from 1
-    private volatile Integer sailsysEndRaceId  = null;    // null = use large default
     private volatile Integer targetIrcYear = null;          // null = auto-detect from data
     private volatile Double outlierSigma = null;            // null = use default (2.5)
     private volatile int recentRaceReimportDays = 30;
@@ -383,7 +379,19 @@ public class TaskService
             AdminConfig config = MAPPER.readValue(configFile.toFile(), AdminConfig.class);
             if (config.importers() != null)
             {
-                importerEntries = new ArrayList<>(config.importers());
+                // Drop entries for tasks that no longer exist, so a retired importer (e.g. the
+                // old "sailsys-races" scanner) does not linger in the UI offering a Run button
+                // that can only throw.
+                Set<String> known = DEFAULT_ENTRIES.stream()
+                    .map(ImporterEntry::name).collect(java.util.stream.Collectors.toSet());
+                importerEntries = new ArrayList<>();
+                for (ImporterEntry e : config.importers())
+                {
+                    if (known.contains(e.name()))
+                        importerEntries.add(e);
+                    else
+                        LOG.info("Dropping retired task '{}' from admin.yaml", e.name());
+                }
                 // Append any default entries not present in the saved config
                 for (ImporterEntry def : DEFAULT_ENTRIES)
                 {
@@ -395,10 +403,6 @@ public class TaskService
             }
             if (config.schedule() != null)
                 globalSchedule = config.schedule();
-            if (config.sailsysNextRaceId() != null)
-                sailsysNextRaceId = config.sailsysNextRaceId();
-            if (config.sailsysEndRaceId() != null)
-                sailsysEndRaceId = config.sailsysEndRaceId();
             targetIrcYear = config.targetIrcYear();   // null is valid (auto-detect)
             outlierSigma = config.outlierSigma();    // null is valid (use default 2.5)
             if (config.recentRaceReimportDays() != null) recentRaceReimportDays = config.recentRaceReimportDays();
@@ -475,7 +479,6 @@ public void stop()
             return false;
 
         stopRequested.set(false);
-        currentSailSysId = 0;
 
         try
         {
@@ -486,7 +489,6 @@ public void stop()
                     currentStatus = new ImportStatus(name, mode, Instant.now());
                     LOG.info("Starting importer={} mode={} startId={}", name, mode, startId);
                     runImporter(name, mode, startId);
-                    persistsailsysNextRaceId(name);
                     store.save();
                     LOG.info("Finished importer={}", name);
                 }
@@ -625,6 +627,21 @@ public void stop()
                 run.putCount("topyacht.racesAlreadyPresent", result.racesAlreadyPresent());
                 run.putCount("topyacht.finishers", result.finishers());
             }
+            case "sailsys" ->
+            {
+                SailSysImporter.RunResult result = new SailSysImporter(store, httpClient)
+                    .withCache(dataRoot.resolve("cache/sailsys/races"),
+                        sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
+                        sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs, sailsysRecentRaceDays)
+                    .run(recentRaceReimportDays, clubIds);
+                run.putCount("sailsys.clubs", result.clubs());
+                run.putCount("sailsys.series", result.series());
+                run.putCount("sailsys.racesImported", result.racesImported());
+                run.putCount("sailsys.racesAlreadyPresent", result.racesAlreadyPresent());
+                run.putCount("sailsys.finishers", result.finishers());
+                if (result.seriesCollisions() > 0)
+                    run.putCount("sailsys.seriesCollisions", result.seriesCollisions());
+            }
             default -> throw new IllegalArgumentException("Importer is not club-scoped: " + name);
         }
     }
@@ -635,7 +652,6 @@ public void stop()
     }
 
     public synchronized void setConfig(List<ImporterEntry> entries, GlobalSchedule schedule,
-                                       Integer sailsysStartRaceId, Integer sailsysEndRaceId,
                                        Integer targetIrcYear, Double outlierSigma,
                                        Double pfLambda, Double pfConvergenceThreshold,
                                        Integer pfMaxInnerIterations, Integer pfMaxOuterIterations,
@@ -651,8 +667,6 @@ public void stop()
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
-        if (sailsysStartRaceId != null) sailsysNextRaceId = sailsysStartRaceId;
-        this.sailsysEndRaceId = sailsysEndRaceId;
         this.targetIrcYear = targetIrcYear;
         this.outlierSigma = outlierSigma;
         if (pfLambda != null) this.pfLambda = pfLambda;
@@ -698,11 +712,6 @@ public void stop()
         return currentStatus;
     }
 
-    public int currentSailSysId()
-    {
-        return currentSailSysId;
-    }
-
     public void requestStop()
     {
         stopRequested.set(true);
@@ -711,16 +720,6 @@ public void stop()
     public boolean isScheduledRunActive()
     {
         return scheduledRunActive;
-    }
-
-    public Integer sailsysNextRaceId()
-    {
-        return sailsysNextRaceId;
-    }
-
-    public Integer sailsysEndRaceId()
-    {
-        return sailsysEndRaceId;
     }
 
     public List<ImporterEntry> importerEntries()
@@ -851,14 +850,9 @@ public void stop()
                         LOG.info("Scheduled run stopped by request before {}", entry.name());
                         break;
                     }
-                    currentSailSysId = 0;
-                    currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
+                                currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
                     LOG.info("Scheduled: importer={} mode={}", entry.name(), entry.mode());
-                    int startId = "sailsys-races".equals(entry.name()) && sailsysNextRaceId != null
-                        ? sailsysNextRaceId
-                        : 1;
-                    runImporter(entry.name(), entry.mode(), startId);
-                    persistsailsysNextRaceId(entry.name());
+                    runImporter(entry.name(), entry.mode(), 1);
                     store.save();
                 }
                 LOG.info("Scheduled run complete");
@@ -908,13 +902,9 @@ public void stop()
                         LOG.info("Startup run stopped by request before {}", entry.name());
                         break;
                     }
-                    currentSailSysId = 0;
-                    currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
+                                currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
                     LOG.info("Startup: importer={} mode={}", entry.name(), entry.mode());
-                    int startId = "sailsys-races".equals(entry.name()) && sailsysNextRaceId != null
-                        ? sailsysNextRaceId : 1;
-                    runImporter(entry.name(), entry.mode(), startId);
-                    persistsailsysNextRaceId(entry.name());
+                    runImporter(entry.name(), entry.mode(), 1);
                     store.save();
                 }
                 LOG.info("Startup run complete");
@@ -961,7 +951,7 @@ public void stop()
     }
 
     private static final java.util.Set<String> IMPORTER_NAMES = java.util.Set.of(
-        "sailsys-races", "orc", "ams", "topyacht", "bwps");
+        "sailsys", "orc", "ams", "topyacht", "bwps");
 
     private void runImporter(String name, String mode, int startId) throws Exception
     {
@@ -984,20 +974,6 @@ public void stop()
     {
         switch (name)
         {
-            case "sailsys-races" ->
-            {
-                Path racesDir = dataRoot.resolve("cache/sailsys/races");
-                int endId = sailsysEndRaceId != null ? sailsysEndRaceId : 99999;
-                SailSysImporter.RunResult result = new SailSysImporter(store, httpClient).run(
-                    startId, endId, id -> currentSailSysId = id, stopRequested::get,
-                    racesDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
-                    sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs,
-                    sailsysRecentRaceDays);
-                if (result.minRecentId() > 0)
-                    currentSailSysId = result.minRecentId() - 1;
-                if (result.maxFoundId() > 0)
-                    sailsysEndRaceId = result.maxFoundId() + 100;
-            }
             case "orc" -> new OrcImporter(store, httpClient).run(dataRoot.resolve("cache/orc"), orcListMaxAgeDays);
             case "ams" -> new AmsImporter(store, httpClient).run();
             case "topyacht" -> new TopYachtImporter(store, httpClient).run(recentRaceReimportDays);
@@ -1061,15 +1037,6 @@ public void stop()
             }
         }
         LOG.info("Cleared cache directory {}", dir);
-    }
-
-    private void persistsailsysNextRaceId(String name)
-    {
-        if (currentSailSysId > 0 && "sailsys-races".equals(name))
-        {
-            sailsysNextRaceId = currentSailSysId + 1;
-            persistConfig();
-        }
     }
 
     private PfConfig pfConfig()
@@ -1169,7 +1136,6 @@ public void stop()
                 new AdminConfig(importerEntries, globalSchedule,
                     targetIrcYear, outlierSigma,
                     recentRaceReimportDays,
-                    sailsysNextRaceId, sailsysEndRaceId,
                     sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
                     sailsysHttpDelayMs, sailsysRecentRaceDays, bwpsMinYear,
                     orcListMaxAgeDays,

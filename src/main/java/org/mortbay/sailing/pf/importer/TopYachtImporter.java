@@ -1544,6 +1544,7 @@ public class TopYachtImporter
                 seed.email(),
                 seed.aliases() != null ? seed.aliases() : List.of(),
                 seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
+                seed.sailsysEvents() != null ? seed.sailsysEvents() : List.of(),
                 List.of(), null);
             store.putClub(club);
         }
@@ -1583,7 +1584,8 @@ public class TopYachtImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.email(), club.aliases(), club.topyachtGroups(), List.copyOf(series), null));
+            club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
+            List.copyOf(series), null));
     }
 
     private static Duration parseElapsed(String text)

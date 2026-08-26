@@ -115,7 +115,7 @@ class DataStoreLifecycleTest
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putClub(new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW",
-            false, null, List.of(), List.of(), List.of(), null));
+            false, null, List.of(), List.of(), List.of(), List.of(), null));
         new SailSysImporter(store, null).runFromDirectory(racesDir);
         store.save();
 

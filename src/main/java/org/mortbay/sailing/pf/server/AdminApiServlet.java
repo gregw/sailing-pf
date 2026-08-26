@@ -41,6 +41,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.Series;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
@@ -922,6 +923,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("state", c.state());
                     row.put("email", c.email());
                     row.put("topyachtGroups", topyachtGroupMaps(c.topyachtGroups()));
+                    row.put("sailsysEvents", sailsysEventMaps(c.sailsysEvents()));
                     long seriesCount = c.series() == null ? 0
                         : c.series().stream().filter(s -> !s.isCatchAll()).count();
                     row.put("boats", boatCount > 0 ? boatCount : null);
@@ -964,6 +966,7 @@ public class AdminApiServlet extends HttpServlet
             body.put("email", club.email());
             body.put("aliases", club.aliases());
             body.put("topyachtGroups", topyachtGroupMaps(club.topyachtGroups()));
+            body.put("sailsysEvents", sailsysEventMaps(club.sailsysEvents()));
             body.put("series", club.series());
             writeJson(resp, body);
         }
@@ -1111,6 +1114,11 @@ public class AdminApiServlet extends HttpServlet
             if (topyachtTouched)
                 newTopyachtGroups = readTopyachtGroups(body.get("topyachtGroups"), club.shortName());
 
+            boolean sailsysTouched = body.containsKey("sailsysEvents");
+            List<SailSysEvent> newSailsysEvents = club.sailsysEvents();
+            if (sailsysTouched)
+                newSailsysEvents = readSailsysEvents(body.get("sailsysEvents"));
+
             boolean shortNameChanged = !java.util.Objects.equals(newShortName, club.shortName());
             boolean metaChanged = !java.util.Objects.equals(newLongName, club.longName())
                 || !java.util.Objects.equals(newState, club.state())
@@ -1119,7 +1127,11 @@ public class AdminApiServlet extends HttpServlet
                 && !java.util.Objects.equals(newTopyachtGroups,
                 club.topyachtGroups() == null ? List.of() : club.topyachtGroups());
 
-            if (!shortNameChanged && !metaChanged && !topyachtChanged)
+            boolean sailsysChanged = sailsysTouched
+                && !java.util.Objects.equals(newSailsysEvents,
+                club.sailsysEvents() == null ? List.of() : club.sailsysEvents());
+
+            if (!shortNameChanged && !metaChanged && !topyachtChanged && !sailsysChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true));
                 return;
@@ -1130,6 +1142,8 @@ public class AdminApiServlet extends HttpServlet
                 store.updateClubMeta(clubId, newLongName, newState, newEmail);
             if (topyachtChanged)
                 store.updateClubTopyachtGroups(clubId, newTopyachtGroups);
+            if (sailsysChanged)
+                store.updateClubSailsysEvents(clubId, newSailsysEvents);
 
             // shortName is JSON-owned — rewrite the Club JSON record. Re-fetch first so
             // we pick up any YAML-side updates from the call above.
@@ -1140,7 +1154,8 @@ public class AdminApiServlet extends HttpServlet
                     fresh = store.clubSeed().get(clubId);
                 Club updated = new Club(fresh.id(), newShortName,
                     fresh.longName(), fresh.state(), fresh.excluded(), fresh.email(),
-                    fresh.aliases(), fresh.topyachtGroups(), fresh.series(), null);
+                    fresh.aliases(), fresh.topyachtGroups(), fresh.sailsysEvents(),
+                    fresh.series(), null);
                 store.putClub(updated);
                 store.save();
             }
@@ -1165,6 +1180,67 @@ public class AdminApiServlet extends HttpServlet
     /**
      * Serialises TopYacht groups for the clubs API: {@code [{prefix, name, urls}, …]}.
      */
+    /** Serialises SailSys events for the clubs API: {@code [{key, name, clubId, seriesId}, …]}. */
+    private static List<Map<String, Object>> sailsysEventMaps(List<SailSysEvent> events)
+    {
+        if (events == null)
+            return List.of();
+        List<Map<String, Object>> out = new ArrayList<>(events.size());
+        for (SailSysEvent e : events)
+        {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("key", e.key());
+            m.put("name", e.name());
+            m.put("clubId", e.clubId());
+            m.put("seriesId", e.seriesId());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /**
+     * Reads SailSys events from a request body. Each element carries a {@code clubId} or a
+     * {@code seriesId} (and an optional {@code name}); the stable key is derived from
+     * whichever it is, so the editor never has to invent one.
+     */
+    private static List<SailSysEvent> readSailsysEvents(Object raw)
+    {
+        if (!(raw instanceof List<?> list))
+            return List.of();
+        List<SailSysEvent> events = new ArrayList<>();
+        for (Object element : list)
+        {
+            if (!(element instanceof Map<?, ?> m))
+                continue;
+            Integer clubId = positiveInt(m.get("clubId"));
+            Integer seriesId = positiveInt(m.get("seriesId"));
+            String name = m.get("name") == null ? null : m.get("name").toString().trim();
+            if (clubId != null)
+                events.add(SailSysEvent.ofClub(clubId, name));
+            else if (seriesId != null)
+                events.add(SailSysEvent.ofSeries(seriesId, name));
+        }
+        return org.mortbay.sailing.pf.store.DataStore.cleanSailsysEvents(events);
+    }
+
+    /** A positive integer from a JSON number or numeric string, else null. */
+    private static Integer positiveInt(Object raw)
+    {
+        if (raw instanceof Number n)
+            return n.intValue() > 0 ? n.intValue() : null;
+        if (raw == null)
+            return null;
+        try
+        {
+            int v = Integer.parseInt(raw.toString().trim());
+            return v > 0 ? v : null;
+        }
+        catch (NumberFormatException e)
+        {
+            return null;
+        }
+    }
+
     private static List<Map<String, Object>> topyachtGroupMaps(List<TopYachtGroup> groups)
     {
         if (groups == null)
@@ -3149,7 +3225,6 @@ public class AdminApiServlet extends HttpServlet
     private void handleImporters(HttpServletResponse resp) throws IOException
     {
         TaskService.ImportStatus status = _taskService.currentStatus();
-        Integer sailsysNextRaceId = _taskService.sailsysNextRaceId();
         Map<String, java.time.Instant> lastRunTimes = _taskService.lastRunTimes();
         List<Map<String, Object>> entries = new ArrayList<>();
         for (TaskService.ImporterEntry e : _taskService.importerEntries())
@@ -3165,13 +3240,10 @@ public class AdminApiServlet extends HttpServlet
             row.put("runAtStartup", e.runAtStartup());
             row.put("status", isRunning ? "running" : "idle");
             row.put("lastRun", lastRun != null ? lastRun.toString() : null);
-            row.put("nextStartId", "sailsys-races".equals(e.name()) ? sailsysNextRaceId : null);
             entries.add(row);
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("entries", entries);
-        result.put("sailsysStartId", _taskService.sailsysNextRaceId());
-        result.put("sailsysEndId", _taskService.sailsysEndRaceId());
         result.put("schedule", _taskService.globalSchedule());
         result.put("targetIrcYear", _taskService.targetIrcYear());
         result.put("outlierSigma", _taskService.outlierSigma());
@@ -3221,9 +3293,6 @@ public class AdminApiServlet extends HttpServlet
             m.put("mode", status.mode());
             m.put("startedAt", status.startedAt().toString());
             m.put("scheduledRun", _taskService.isScheduledRunActive());
-            int sailSysId = _taskService.currentSailSysId();
-            if (sailSysId > 0)
-                m.put("currentId", sailSysId);
             writeJson(resp, m);
         }
     }
@@ -3238,9 +3307,7 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
-        // Start ID is now configured in the SailSys config section; use 1 as fallback
-        int startId = _taskService.sailsysNextRaceId() != null ? _taskService.sailsysNextRaceId() : 1;
-        boolean accepted = _taskService.submit(name, mode, startId);
+        boolean accepted = _taskService.submit(name, mode, 1);
         if (accepted)
         {
             resp.setStatus(202);
@@ -3285,13 +3352,6 @@ public class AdminApiServlet extends HttpServlet
                     Boolean.TRUE.equals(m.get("includeInSchedule")),
                     Boolean.TRUE.equals(m.get("runAtStartup"))))
                 .toList();
-
-            Object rawSailsysStart = body.get("sailsysStartId");
-            Integer sailsysStartRaceId = (rawSailsysStart instanceof Number n && n.intValue() > 0)
-                ? n.intValue() : null;
-            Object rawSailsysEnd = body.get("sailsysEndId");
-            Integer sailsysEndRaceId = (rawSailsysEnd instanceof Number n && n.intValue() > 0)
-                ? n.intValue() : null;
 
             Object rawYear = body.get("targetIrcYear");
             Integer targetIrcYear = (rawYear instanceof Number n && n.intValue() > 0)
@@ -3349,7 +3409,6 @@ public class AdminApiServlet extends HttpServlet
                 ? n15.doubleValue() : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
-                sailsysStartRaceId, sailsysEndRaceId,
                 targetIrcYear, outlierSigma,
                 pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
                 pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,

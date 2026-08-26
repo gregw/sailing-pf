@@ -38,7 +38,7 @@ class TopYachtImporterTest
     /** Minimal club with no TopYacht URLs (we call processors directly). */
     private static final Club TEST_CLUB = new Club(
         "bsyc.com.au", "BSYC", "Brighton & Seacliff Yacht Club", "SA", false,
-        null, List.of(), List.of(), List.of(), null);
+        null, List.of(), List.of(), List.of(), List.of(), null);
 
     @BeforeEach
     void setUp()
@@ -909,7 +909,7 @@ class TopYachtImporterTest
     {
         // Add a second club to the store so it can be resolved
         Club dss = new Club("dssinc.org.au", "DSS", "Derwent Sailing Squadron", "TAS", false,
-            null, List.of(), List.of(), List.of(), null);
+            null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(dss);
 
         String html = resultsHtml("PHS results  Start : 12:25", List.of(

@@ -66,7 +66,7 @@ class TopYachtIdMigrationTest
 
     private void writeClubJson(Path root, List<Series> series) throws IOException
     {
-        Club club = new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), series, null);
+        Club club = new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
         Path file = root.resolve("imported/clubs").resolve(CLUB + ".json");
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), club);

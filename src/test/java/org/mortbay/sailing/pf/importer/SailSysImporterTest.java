@@ -83,7 +83,7 @@ class SailSysImporterTest
     @Test
     void phsRaceImportedWithoutCertificateNumber()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         boolean result = importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -108,7 +108,7 @@ class SailSysImporterTest
         // Race claims both PHS (id=5) and ORCc (id=13) in handicappings,
         // but boats only have PHS/Scratch calculations (handicapDefinitionId=5),
         // not ORCc (id=13).  Should import as PHS with all finishers present.
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         String json = """
@@ -146,7 +146,7 @@ class SailSysImporterTest
     {
         // Simulates race 34328 (PHS series, 3 boats) then race 40906 (ORC series, 2 boats
         // overlapping + 1 ORC-only boat not in PHS).  Same club, date, number → same raceId.
-        Club sps = new Club("sailportstephens.com.au", "SPS", "Sail Port Stephens", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club sps = new Club("sailportstephens.com.au", "SPS", "Sail Port Stephens", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(sps);
 
         // First import: PHS series with 3 boats, no measurement data
@@ -228,7 +228,7 @@ class SailSysImporterTest
     @Test
     void ircRaceImportedWithCertificateNumber()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         boolean result = importer.processRaceJson(raceJson(2, 4, "2020-09-13T00:00:00.000",
@@ -259,7 +259,7 @@ class SailSysImporterTest
     @Test
     void ircRaceReusesExistingCertificateBySystemAndValue()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         Certificate existingCert = new Certificate("IRC", 2020, 1.071, false, false, false, false, "CERT-12345", null);
@@ -294,7 +294,7 @@ class SailSysImporterTest
     @Test
     void seriesCreatedOnFirstRace()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -313,7 +313,7 @@ class SailSysImporterTest
     @Test
     void seriesUpdatedOnSubsequentRace()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -335,7 +335,7 @@ class SailSysImporterTest
     @Test
     void dnsFinishersExcluded()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -357,7 +357,7 @@ class SailSysImporterTest
         Path racesDir = tempDir.resolve("races-input");
         Files.createDirectories(racesDir);
 
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         Files.writeString(racesDir.resolve("race-000001.json"),
@@ -376,7 +376,7 @@ class SailSysImporterTest
 
         DataStore testStore = new DataStore(tempDir.resolve("pf-data"));
         testStore.start();
-        Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), null);
+        Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         testStore.putClub(myc2);
         SailSysImporter testImporter = new SailSysImporter(testStore, null);
 
@@ -401,58 +401,52 @@ class SailSysImporterTest
 
     // --- run() ---
 
+
+
+    // --- Explicit club ownership ---
+
+    /**
+     * A club that opted in explicitly owns its races: the short name in the payload no longer
+     * decides, so a name shared by two clubs can no longer misattribute or drop the race.
+     */
     @Test
-    void runReturnsMinRecentIdFromCachedFiles() throws Exception
+    void configuredClubWinsOverTheShortNameLookup()
     {
-        Path racesDir = tempDir.resolve("races-recent");
-        Files.createDirectories(racesDir);
+        Club owner = new Club("owner.example", "ZZZ", "Owner Club", "NSW", false,
+            null, List.of(), List.of(), List.of(), List.of(), null);
+        store.putClub(owner);
 
-        LocalDate recentDate1 = LocalDate.now();
-        LocalDate recentDate2 = LocalDate.now().minusDays(10);
-        LocalDate oldDate     = LocalDate.now().minusDays(60);
+        String json = raceJson(9001, 4, "2025-03-01T00:00:00.000", "2025-03-02T00:00:00.000",
+            1, "MYC", "Manly Yacht Club", "Series A", "PHS", false,
+            List.of(entry("Boat One", "AUS1", "01:00:00", false, null)));
 
-        Files.writeString(racesDir.resolve("race-000001.json"),
-            raceJson(1, 4, recentDate1 + "T00:00:00.000", "2026-01-01T00:00:00.000",
-                1, "MYC", "Manly Yacht Club", "Series A", "PHS", false, List.of()));
-        Files.writeString(racesDir.resolve("race-000002.json"),
-            raceJson(2, 4, recentDate2 + "T00:00:00.000", "2026-01-01T00:00:00.000",
-                2, "MYC", "Manly Yacht Club", "Series A", "PHS", false, List.of()));
-        Files.writeString(racesDir.resolve("race-000003.json"),
-            raceJson(3, 4, oldDate + "T00:00:00.000", "2025-01-01T00:00:00.000",
-                3, "MYC", "Manly Yacht Club", "Series A", "PHS", false, List.of()));
+        assertTrue(importer.processRaceJson(json, owner));
 
-        int[] count = {0};
-        SailSysImporter.RunResult result = importer.run(1, 3, id -> {}, () -> false,
-            racesDir, 7, 352, 365, 0, 30);
-
-        assertEquals(1, result.minRecentId(), "Should return the lowest recent ID");
+        Race race = store.races().values().iterator().next();
+        assertEquals("owner.example", race.clubId(),
+            "the configured club owns the race, not the one named in the payload");
+        assertTrue(race.id().startsWith("owner.example-"), race.id());
     }
 
+    /**
+     * The run tallies must actually count: a silent zero looks identical to "nothing was
+     * configured", which is exactly how a wiring mistake hides.
+     */
     @Test
-    void runReturnsZeroWhenNoRecentRaces() throws Exception
+    void importedRacesAndFinishersAreCounted()
     {
-        Path racesDir = tempDir.resolve("races-old");
-        Files.createDirectories(racesDir);
+        Club owner = new Club("owner.example", "ZZZ", "Owner Club", "NSW", false,
+            null, List.of(), List.of(), List.of(), List.of(), null);
+        store.putClub(owner);
 
-        LocalDate oldDate1 = LocalDate.now().minusDays(60);
-        LocalDate oldDate2 = LocalDate.now().minusDays(90);
-        LocalDate oldDate3 = LocalDate.now().minusDays(120);
+        assertTrue(importer.processRaceJson(raceJson(9101, 4,
+            "2025-03-01T00:00:00.000", "2025-03-02T00:00:00.000", 1,
+            "MYC", "Manly Yacht Club", "Series A", "PHS", false,
+            List.of(entry("Boat One", "AUS1", "01:00:00", false, null),
+                    entry("Boat Two", "AUS2", "01:05:00", false, null))), owner));
 
-        Files.writeString(racesDir.resolve("race-000001.json"),
-            raceJson(1, 4, oldDate1 + "T00:00:00.000", "2025-01-01T00:00:00.000",
-                1, "MYC", "Manly Yacht Club", "Series A", "PHS", false, List.of()));
-        Files.writeString(racesDir.resolve("race-000002.json"),
-            raceJson(2, 4, oldDate2 + "T00:00:00.000", "2025-01-01T00:00:00.000",
-                2, "MYC", "Manly Yacht Club", "Series A", "PHS", false, List.of()));
-        Files.writeString(racesDir.resolve("race-000003.json"),
-            raceJson(3, 4, oldDate3 + "T00:00:00.000", "2025-01-01T00:00:00.000",
-                3, "MYC", "Manly Yacht Club", "Series A", "PHS", false, List.of()));
-
-        int[] count = {0};
-        SailSysImporter.RunResult result = importer.run(1, 3, id -> {}, () -> false,
-            racesDir, 7, 352, 365, 0, 30);
-
-        assertEquals(0, result.minRecentId(), "No recent races: should return 0");
+        assertEquals(1, importer.racesImportedForTest());
+        assertEquals(2, importer.finishersImportedForTest());
     }
 
     // --- Helpers ---

@@ -86,7 +86,20 @@
                 first URL. Changing a prefix after races are imported creates new IDs.
             </div>
             <div id="edit-club-topyacht-groups"></div>
-            <button type="button" onclick="addClubTopyachtGroup()" style="margin-top:0.4rem;">+ Add event</button>
+            <button type="button" onclick="addClubTopyachtGroup()" style="margin-top:0.4rem;">+ Add TopYacht event</button>
+        </div>
+        <div style="margin:0.75rem 0;max-width:900px;">
+            <strong style="font-size:0.95rem;">SailSys events</strong>
+            <div style="font-size:0.85rem;color:#666;margin:0.2rem 0 0.5rem;">
+                Races are only fetched from SailSys for what is listed here. A
+                <em>series</em> imports one specific series, including past seasons. A
+                <em>club</em> imports whatever series that SailSys club currently lists, so
+                new seasons appear on their own — but it never reaches past seasons, which
+                is what series entries are for.
+            </div>
+            <div id="edit-club-sailsys-events"></div>
+            <button type="button" onclick="addClubSailsysEvent('series')" style="margin-top:0.4rem;">+ Add SailSys series</button>
+            <button type="button" onclick="addClubSailsysEvent('club')" style="margin-left:0.4rem;">+ Add SailSys club</button>
         </div>
         <div id="edit-club-email-row" style="display:none; margin-bottom:0.5rem;">
             <label for="edit-request-email-clubs" style="font-size:0.9rem;">Your email (optional): </label>

@@ -216,6 +216,105 @@ class ClubLoaderTopYachtGroupsTest
         assertEquals(List.of("http://a/1", "http://a/2"), cleaned.getFirst().urls());
     }
 
+    // --- SailSys events ---
+
+    @Test
+    void sailsysEventsAreReadFromTheMapForm(@TempDir Path root) throws IOException
+    {
+        writeYaml(root, """
+            clubs:
+              tyc.com.au:
+                shortName: TYC
+                state: QLD
+                sailsys:
+                  club-41:
+                    name: "Townsville Yacht Club"
+                    club: 41
+                  series-3386:
+                    name: "2024 Racing Division"
+                    series: 3386
+            """);
+
+        List<org.mortbay.sailing.pf.data.SailSysEvent> events =
+            ClubLoader.load(root).get("tyc.com.au").sailsysEvents();
+
+        assertEquals(2, events.size());
+        assertTrue(events.get(0).isClub());
+        assertEquals(41, events.get(0).clubId());
+        assertEquals("Townsville Yacht Club", events.get(0).name());
+        assertTrue(events.get(1).isSeries());
+        assertEquals(3386, events.get(1).seriesId());
+    }
+
+    /** An entry naming neither a club nor a series would fetch nothing, so it is dropped. */
+    @Test
+    void sailsysEventNamingNothingIsIgnored(@TempDir Path root) throws IOException
+    {
+        writeYaml(root, """
+            clubs:
+              tyc.com.au:
+                shortName: TYC
+                state: QLD
+                sailsys:
+                  broken:
+                    name: "no ids here"
+            """);
+
+        assertEquals(List.of(), ClubLoader.load(root).get("tyc.com.au").sailsysEvents());
+    }
+
+    @Test
+    void sailsysEventsRoundTripThroughTheWriter(@TempDir Path root) throws IOException
+    {
+        writeYaml(root, "clubs:\n  tyc.com.au:\n    shortName: TYC\n    state: QLD\n");
+
+        assertTrue(ClubLoader.updateClubSailsysEvents(root, "tyc.com.au", "TYC", List.of(
+            org.mortbay.sailing.pf.data.SailSysEvent.ofClub(41, "Townsville Yacht Club"),
+            org.mortbay.sailing.pf.data.SailSysEvent.ofSeries(3386, null))));
+
+        String yaml = Files.readString(root.resolve("clubs.yaml"));
+        assertTrue(yaml.contains("club-41:"), yaml);
+        assertTrue(yaml.contains("series-3386:"), yaml);
+
+        List<org.mortbay.sailing.pf.data.SailSysEvent> events =
+            ClubLoader.load(root).get("tyc.com.au").sailsysEvents();
+        assertEquals(2, events.size());
+        assertEquals(41, events.get(0).clubId());
+        assertEquals(3386, events.get(1).seriesId());
+        assertNull(events.get(1).name());
+
+        // and writing the same thing again changes nothing
+        assertFalse(ClubLoader.updateClubSailsysEvents(root, "tyc.com.au", "TYC", List.of(
+            org.mortbay.sailing.pf.data.SailSysEvent.ofClub(41, "Townsville Yacht Club"),
+            org.mortbay.sailing.pf.data.SailSysEvent.ofSeries(3386, null))));
+    }
+
+    /** TopYacht and SailSys config coexist on one club without disturbing each other. */
+    @Test
+    void topyachtAndSailsysCoexistOnOneClub(@TempDir Path root) throws IOException
+    {
+        writeYaml(root, """
+            clubs:
+              tyc.com.au:
+                shortName: TYC
+                state: QLD
+                topyacht:
+                  mirw:
+                    merge: true
+                    urls:
+                      - "https://tes.topyacht.net.au/results/2025/mirw/index.htm"
+                sailsys:
+                  club-41:
+                    club: 41
+            """);
+
+        Club club = ClubLoader.load(root).get("tyc.com.au");
+        assertEquals(1, club.topyachtGroups().size());
+        assertTrue(club.topyachtGroups().getFirst().mergeDivisions());
+        assertEquals(1, club.sailsysEvents().size());
+        assertEquals(41, club.sailsysEvents().getFirst().clubId());
+    }
+
     @Test
     void everyConfiguredClubYieldsAUsablePrefix()
     {

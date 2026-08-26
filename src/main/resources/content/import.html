@@ -24,7 +24,7 @@
             <th>Last run
                 <a href="ui-tips.md#col-importer-last-run" class="info-btn" data-tip="Local time at which this task last started running." target="_blank">ⓘ</a>
             </th>
-          <th style="text-align:center">Run <a href="ui-tips.md#col-importer-run" class="info-btn" data-tip="Run this task now. For sailsys-races, optionally set the starting race ID." target="_blank">ⓘ</a></th>
+          <th style="text-align:center">Run <a href="ui-tips.md#col-importer-run" class="info-btn" data-tip="Run this task now." target="_blank">ⓘ</a></th>
           <th style="text-align:center" title="Include this task in the automatic scheduled run">In schedule <a href="ui-tips.md#col-importer-in-schedule" class="info-btn" data-tip="Tick to include this task in the automatic scheduled run." target="_blank">ⓘ</a></th>
           <th style="text-align:center" title="Run this task automatically when the server starts">On start <a href="ui-tips.md#col-importer-on-start" class="info-btn" data-tip="Tick to run this task automatically when the server starts." target="_blank">ⓘ</a></th>
         </tr>
@@ -69,19 +69,6 @@
     </div>
   </section>
 
-  <section>
-    <h2>SailSys Configuration</h2>
-    <div style="display:grid;grid-template-columns:auto auto;gap:0.3rem 1rem;max-width:420px;align-items:center">
-      <label for="sailsys-start-id">Start Race ID:</label>
-      <input type="number" id="sailsys-start-id" min="1" style="width:7em"
-             title="SailSys race ID to start importing from (updated automatically after each run)">
-
-      <label for="sailsys-end-id">End Race ID:</label>
-      <input type="number" id="sailsys-end-id" min="1" style="width:7em"
-             title="SailSys race ID to stop importing at (inclusive). Set to the current maximum known SailSys ID.">
-    </div>
-    <button onclick="saveSchedule()" style="margin-top:0.5rem">Save</button>
-  </section>
 
   <section>
     <h2>PF Parameters <a href="ui-tips.md#configuration" class="info-btn" data-tip="Parameters controlling the PF optimisation algorithm." target="_blank">ⓘ</a></h2>

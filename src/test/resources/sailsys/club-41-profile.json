@@ -1,0 +1,136 @@
+{
+ "data": {
+  "id": 41,
+  "email": "admin@townsvilleyachtclub.com.au",
+  "logo": {
+   "large": "https://sailsysprod.blob.core.windows.net/images/85284bf8-c9e6-46c4-9d2f-a0d458376c8e_Large_.jpg",
+   "medium": "https://sailsysprod.blob.core.windows.net/images/85284bf8-c9e6-46c4-9d2f-a0d458376c8e_Medium_.jpg",
+   "small": "https://sailsysprod.blob.core.windows.net/images/85284bf8-c9e6-46c4-9d2f-a0d458376c8e_Small_.jpg"
+  },
+  "shortName": "TYC",
+  "longName": "Townsville Yacht Club",
+  "phone": "(07) 4772 1192",
+  "webSite": "https://www.townsvilleyachtclub.com.au/",
+  "phonePrefix": "+61",
+  "timeZoneId": "E. Australia Standard Time",
+  "nextEvents": [
+   {
+    "parent": "Individual Series",
+    "items": [
+     {
+      "name": "2026 Racing Season",
+      "includes": "Tropical Series, Magnetic Island Series, Fixed Mark Long Series, Fixed Mark Short Series, Buoy Race Series, Autumn Series, Winter Series, Spring Series",
+      "nextRaceName": "18 Magnetic Island Race 5",
+      "nextRaceDate": "2026-09-19T10:00:00.000",
+      "lastRaceName": null,
+      "lastRaceDate": null,
+      "seasonId": null,
+      "seriesId": 5478
+     },
+     {
+      "name": "2026 Novice Helm Series",
+      "includes": "",
+      "nextRaceName": "4 Novice Helm Race 4",
+      "nextRaceDate": "2026-09-26T10:00:00.000",
+      "lastRaceName": null,
+      "lastRaceDate": null,
+      "seasonId": null,
+      "seriesId": 5479
+     },
+     {
+      "name": "2026 Two Handed Series",
+      "includes": "",
+      "nextRaceName": "4 Two Handed Race 4",
+      "nextRaceDate": "2026-10-17T10:00:00.000",
+      "lastRaceName": null,
+      "lastRaceDate": null,
+      "seasonId": null,
+      "seriesId": 5481
+     },
+     {
+      "name": "2026 GaLS Regatta - Boat Registration inc 1 x Skipper/Owner Registration",
+      "includes": "",
+      "nextRaceName": "Race  1",
+      "nextRaceDate": "2026-09-05T10:00:00.000",
+      "lastRaceName": null,
+      "lastRaceDate": null,
+      "seasonId": null,
+      "seriesId": 5483
+     },
+     {
+      "name": "2026 Wednesday Twilight Sailing",
+      "includes": "",
+      "nextRaceName": "Race  33",
+      "nextRaceDate": "2026-08-26T10:00:00.000",
+      "lastRaceName": null,
+      "lastRaceDate": null,
+      "seasonId": null,
+      "seriesId": 5456
+     }
+    ]
+   }
+  ],
+  "eventsWithEntrantsOrResults": [
+   {
+    "parent": "Current Series Entrants & Results",
+    "items": [
+     {
+      "name": "2026 Wednesday Twilight Sailing",
+      "includes": "",
+      "nextRaceName": "Race  33",
+      "nextRaceDate": "2026-08-26T10:00:00.000",
+      "lastRaceName": "Race  33",
+      "lastRaceDate": "2026-08-26T10:00:00.000",
+      "seasonId": null,
+      "seriesId": 5456
+     },
+     {
+      "name": "2026 Racing Season",
+      "includes": "Tropical Series, Magnetic Island Series, Fixed Mark Long Series, Fixed Mark Short Series, Buoy Race Series, Autumn Series, Winter Series, Spring Series",
+      "nextRaceName": "18 Magnetic Island Race 5",
+      "nextRaceDate": "2026-09-19T10:00:00.000",
+      "lastRaceName": "17 Buoy Race 4",
+      "lastRaceDate": "2026-08-01T10:00:00.000",
+      "seasonId": null,
+      "seriesId": 5478
+     },
+     {
+      "name": "2026 Novice Helm Series",
+      "includes": "",
+      "nextRaceName": "4 Novice Helm Race 4",
+      "nextRaceDate": "2026-09-26T10:00:00.000",
+      "lastRaceName": "3 Novice Helm Race 3",
+      "lastRaceDate": "2026-07-25T10:00:00.000",
+      "seasonId": null,
+      "seriesId": 5479
+     },
+     {
+      "name": "2026 Two Handed Series",
+      "includes": "",
+      "nextRaceName": "4 Two Handed Race 4",
+      "nextRaceDate": "2026-10-17T10:00:00.000",
+      "lastRaceName": "3 Two Handed Race 3",
+      "lastRaceDate": "2026-07-26T10:00:00.000",
+      "seasonId": null,
+      "seriesId": 5481
+     },
+     {
+      "name": "2026 Knobel Cup",
+      "includes": "",
+      "nextRaceName": null,
+      "nextRaceDate": null,
+      "lastRaceName": "3 Knobel Cup Race 3",
+      "lastRaceDate": "2026-05-23T10:00:00.000",
+      "seasonId": null,
+      "seriesId": 5480
+     }
+    ]
+   }
+  ]
+ },
+ "errorMessage": null,
+ "result": "success",
+ "log": null,
+ "httpCode": 200,
+ "errorObject": null
+}

@@ -25,6 +25,7 @@ public record Club(
     @JsonIgnore String email,               // sourced from clubs.yaml
     @JsonIgnore List<String> aliases,       // sourced from clubs.yaml
     @JsonIgnore List<TopYachtGroup> topyachtGroups, // sourced from clubs.yaml
+    @JsonIgnore List<SailSysEvent> sailsysEvents,   // sourced from clubs.yaml
     List<Series> series,        // series run by this club
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Club>
@@ -33,7 +34,8 @@ public record Club(
     @Override
     public Club withLoadedAt(Instant t)
     {
-        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups, series, t);
+        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups,
+            sailsysEvents, series, t);
     }
 
     //mode/ loadedAt is loading metadata, not domain data — exclude from equality
@@ -48,13 +50,15 @@ public record Club(
             && Objects.equals(longName, c.longName) && Objects.equals(state, c.state)
             && excluded == c.excluded && Objects.equals(email, c.email)
             && Objects.equals(aliases, c.aliases) && Objects.equals(topyachtGroups, c.topyachtGroups)
+            && Objects.equals(sailsysEvents, c.sailsysEvents)
             && Objects.equals(series, c.series);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, shortName, longName, state, excluded, email, aliases, topyachtGroups, series);
+        return Objects.hash(id, shortName, longName, state, excluded, email, aliases, topyachtGroups,
+            sailsysEvents, series);
     }
 
     @Override
@@ -69,6 +73,7 @@ public record Club(
             ", email='" + email + '\'' +
             ", aliases=" + aliases +
             ", topyachtGroups=" + topyachtGroups +
+            ", sailsysEvents=" + sailsysEvents +
             ", series=" + series +
             '}';
     }

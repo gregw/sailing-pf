@@ -919,6 +919,13 @@ clubs:
           - "https://tes.topyacht.net.au/results/2023/mirw/index.htm"
           - "https://tes.topyacht.net.au/results/2024/mirw/index.htm"
           - "https://tes.topyacht.net.au/results/2025/mirw/index.htm"
+    sailsys:
+      club-41:
+        name: "Townsville Yacht Club"
+        club: 41
+      series-3386:
+        name: "2024 Racing Division"
+        series: 3386
     boats: null
   app.sailsys.com/au/club/27/profile:
     shortName: "SHCC"

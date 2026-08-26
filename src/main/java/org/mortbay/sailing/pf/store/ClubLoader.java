@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import org.mortbay.sailing.pf.data.Club;
+import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
 import org.mortbay.sailing.pf.importer.TopYachtPrefix;
@@ -65,7 +66,7 @@ class ClubLoader
                 Club stub = new Club(domain, entry.shortName, entry.fullName, entry.state,
                     Boolean.TRUE.equals(entry.excluded), entry.email,
                     entry.aliases != null ? entry.aliases : List.of(),
-                    entry.topyachtGroups(), List.of(), null);
+                    entry.topyachtGroups(), entry.sailsysEvents(), List.of(), null);
                 result.put(domain, stub);
             }
             LOG.info("Loaded {} club seed entries from {}", result.size(), FILENAME);
@@ -469,6 +470,60 @@ class ClubLoader
      * within a group, drops groups with no prefix or no URLs, and merges groups that share
      * a prefix (first name wins).
      */
+    /**
+     * Replaces the {@code sailsys} events for a club in clubs.yaml. A null or empty
+     * {@code events} clears the field. Returns true if the file was changed.
+     */
+    static boolean updateClubSailsysEvents(Path configDir, String clubId, String shortNameIfNew,
+                                           List<SailSysEvent> events)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return false;
+        if (seedFile.clubs == null)
+            seedFile.clubs = new LinkedHashMap<>();
+
+        SeedEntry entry = seedFile.clubs.get(clubId);
+        boolean created = false;
+        if (entry == null)
+        {
+            entry = new SeedEntry();
+            entry.shortName = shortNameIfNew;
+            seedFile.clubs.put(clubId, entry);
+            created = true;
+        }
+
+        List<SailSysEvent> cleaned = cleanSailsysEvents(events);
+        if (!created && Objects.equals(entry.sailsysEvents(), cleaned))
+            return false;
+
+        entry.setSailsysEvents(cleaned);
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: club {} sailsys events updated ({} entries)", clubId, cleaned.size());
+        return true;
+    }
+
+    /**
+     * Normalises incoming SailSys events: derives a missing key from the club or series ID,
+     * drops entries naming neither, and keeps the first entry when two share a key.
+     */
+    static List<SailSysEvent> cleanSailsysEvents(List<SailSysEvent> events)
+    {
+        if (events == null)
+            return List.of();
+        Map<String, SailSysEvent> byKey = new LinkedHashMap<>();
+        for (SailSysEvent e : events)
+        {
+            if (e == null || !e.isValid())
+                continue;
+            String key = TopYachtPrefix.slug(e.key());
+            if (key.isEmpty())
+                key = e.isClub() ? "club-" + e.clubId() : "series-" + e.seriesId();
+            byKey.putIfAbsent(key, new SailSysEvent(key, e.name(), e.clubId(), e.seriesId()));
+        }
+        return List.copyOf(byKey.values());
+    }
+
     static List<TopYachtGroup> cleanGroups(List<TopYachtGroup> groups)
     {
         if (groups == null)
@@ -585,6 +640,8 @@ class ClubLoader
          * written only in the map form by {@link #setTopyachtGroups}.
          */
         public Object topyacht;
+        /** Map of key -> {name?, club?|series?}. Read via {@link #sailsysEvents()}. */
+        public Object sailsys;
         public List<String> boats;
 
         /**
@@ -656,6 +713,83 @@ class ClubLoader
         /**
          * Replaces the {@code topyacht} field with the map form, or null when empty.
          */
+        /**
+         * Normalises the {@code sailsys} field to events. Only the map form is accepted:
+         * key -> {name?, club?, series?}. Entries naming neither a club nor a series are
+         * dropped, since there would be nothing to fetch.
+         */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        List<SailSysEvent> sailsysEvents()
+        {
+            if (!(sailsys instanceof Map<?, ?> map))
+            {
+                if (sailsys != null)
+                    LOG.warn("Unrecognised sailsys entry shape for club seed: {}", sailsys.getClass());
+                return List.of();
+            }
+            List<SailSysEvent> events = new ArrayList<>();
+            for (Map.Entry<?, ?> e : map.entrySet())
+            {
+                if (e.getKey() == null)
+                    continue;
+                String key = TopYachtPrefix.slug(e.getKey().toString());
+                if (key.isEmpty() || !(e.getValue() instanceof Map<?, ?> body))
+                    continue;
+                Object rawName = body.get("name");
+                String name = rawName == null || rawName.toString().isBlank()
+                    ? null : rawName.toString();
+                SailSysEvent event = new SailSysEvent(key, name,
+                    asInteger(body.get("club")), asInteger(body.get("series")));
+                if (event.isValid())
+                    events.add(event);
+                else
+                    LOG.warn("SailSys event '{}' names neither a club nor a series; ignoring", key);
+            }
+            return List.copyOf(events);
+        }
+
+        /** Replaces the {@code sailsys} field with the map form, or null when empty. */
+        void setSailsysEvents(List<SailSysEvent> events)
+        {
+            if (events == null || events.isEmpty())
+            {
+                sailsys = null;
+                return;
+            }
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (SailSysEvent e : events)
+            {
+                if (e.key() == null || e.key().isBlank() || !e.isValid())
+                    continue;
+                Map<String, Object> body = new LinkedHashMap<>();
+                if (e.name() != null)
+                    body.put("name", e.name());
+                if (e.clubId() != null)
+                    body.put("club", e.clubId());
+                if (e.seriesId() != null)
+                    body.put("series", e.seriesId());
+                out.put(e.key(), body);
+            }
+            sailsys = out.isEmpty() ? null : out;
+        }
+
+        /** Tolerates a YAML scalar arriving as Integer, Long or String. */
+        private static Integer asInteger(Object raw)
+        {
+            if (raw instanceof Number n)
+                return n.intValue();
+            if (raw == null)
+                return null;
+            try
+            {
+                return Integer.valueOf(raw.toString().trim());
+            }
+            catch (NumberFormatException e)
+            {
+                return null;
+            }
+        }
+
         void setTopyachtGroups(List<TopYachtGroup> groups)
         {
             if (groups == null || groups.isEmpty())

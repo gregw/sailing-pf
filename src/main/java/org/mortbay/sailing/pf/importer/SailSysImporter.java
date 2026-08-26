@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 
@@ -28,6 +30,7 @@ import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.Series;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
@@ -76,6 +79,12 @@ public class SailSysImporter
 
     private static final String API_BASE   = "https://api.sailsys.com.au/api/v1/races/";
     private static final String API_SUFFIX = "/resultsentrants/display";
+    /** Lists a club's current series; past seasons are not returned. */
+    private static final String API_CLUB_PROFILE_BASE   = "https://api.sailsys.com.au/api/v1/clubs/";
+    private static final String API_CLUB_PROFILE_SUFFIX = "/profile";
+    /** Lists a series' races -- metadata only, no elapsed times. */
+    private static final String API_SERIES_BASE   = "https://api.sailsys.com.au/api/v1/series/";
+    private static final String API_SERIES_SUFFIX = "/display/races";
     private static final int SAVE_INTERVAL  = 500;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -91,6 +100,16 @@ public class SailSysImporter
     private int recentRaceDays       = 14;
     /** SailSys integer ID of the race currently being processed (for source tagging). */
     private int currentSailSysRaceId = 0;
+    private Path racesCacheDir;
+    private int recentRaceReimportDays = 30;
+
+    // Per-run tallies, reset by run(); reported back through RunResult.
+    private int clubsVisited;
+    private int seriesVisited;
+    private int racesImported;
+    private int racesAlreadyPresent;
+    private int finishersImported;
+    private int seriesCollisions;
 
     public SailSysImporter(DataStore store, HttpClient client)
     {
@@ -106,36 +125,17 @@ public class SailSysImporter
         DataStore dataStore = new DataStore(dataRoot);
         dataStore.start();
 
-        String mode = args.length > 1 ? args[1] : "--local";
-        Path defaultRacesDir = dataRoot.resolve("cache/sailsys/races");
-
-        if ("--api".equals(mode))
+        // Local replay only. Fetching from SailSys is opt-in per club and runs through the
+        // server's club-scoped import, never as an unbounded scan from the command line.
+        Path racesDir = args.length > 1 ? Path.of(args[1])
+            : dataRoot.resolve("cache/sailsys/races");
+        try
         {
-            int startId = args.length > 2 ? Integer.parseInt(args[2]) : 1;
-            HttpClient client = new HttpClient();
-            client.start();
-            try
-            {
-                new SailSysImporter(dataStore, client)
-                    .runFromApi(startId, id -> {}, () -> false, defaultRacesDir);
-            }
-            finally
-            {
-                dataStore.stop();
-                client.stop();
-            }
+            new SailSysImporter(dataStore, null).runFromDirectory(racesDir);
         }
-        else
+        finally
         {
-            Path racesDir = args.length > 2 ? Path.of(args[2]) : defaultRacesDir;
-            try
-            {
-                new SailSysImporter(dataStore, null).runFromDirectory(racesDir);
-            }
-            finally
-            {
-                dataStore.stop();
-            }
+            dataStore.stop();
         }
     }
 
@@ -180,207 +180,323 @@ public class SailSysImporter
     }
 
     /**
-     * Fetches races sequentially from the SailSys API starting at {@code startId},
-     * caching each response as {@code race-{id}.json} under {@code cacheDir}.
-     * Stops after 200 consecutive not-found responses or when {@code stop} returns true.
+     * Tallies for one club-scoped run, matching the contract the per-club import expects.
+     *
+     * @param clubs               clubs whose SailSys events were visited
+     * @param series              SailSys series fetched across those clubs
+     * @param racesImported       races written to the store
+     * @param racesAlreadyPresent races already held for this series and not recent, so never fetched
+     * @param finishers           finisher records written
+     * @param seriesCollisions    races whose ID was already taken by a *different* series, so
+     *                            their divisions were merged into it rather than stored apart
      */
-    public void runFromApi(int startId, IntConsumer onId, BooleanSupplier stop, Path cacheDir)
-        throws Exception
-    {
-        LOG.info("Fetching races from SailSys API starting at id={}", startId);
-        int id = startId;
-        int consecutiveNotFound = 0;
-        int processed = 0;
+    public record RunResult(int clubs, int series, int racesImported, int racesAlreadyPresent,
+                            int finishers, int seriesCollisions) {}
 
-        while (consecutiveNotFound < 200)
+    /**
+     * Configures the on-disk response cache and rate limiting. Returns {@code this} so it can
+     * be chained onto the constructor.
+     */
+    public SailSysImporter withCache(Path racesDir, int youngCacheMaxAgeDays, int oldCacheMaxAgeDays,
+                                     int youngRaceMaxAgeDays, int httpDelayMs, int recentRaceDays)
+    {
+        this.racesCacheDir        = racesDir;
+        this.youngCacheMaxAgeDays = youngCacheMaxAgeDays;
+        this.oldCacheMaxAgeDays   = oldCacheMaxAgeDays;
+        this.youngRaceMaxAgeDays  = youngRaceMaxAgeDays;
+        this.httpDelayMs          = httpDelayMs;
+        this.recentRaceDays       = recentRaceDays;
+        return this;
+    }
+
+    /**
+     * Imports the SailSys events configured on each club.
+     * <p>
+     * Races used to be found by walking global race IDs from 1 upwards, fetching the whole
+     * platform to reach the few clubs we care about. Clubs now opt in: each carries
+     * {@link SailSysEvent}s naming either a SailSys club (whose current series are discovered
+     * each run) or one specific series. Only those are fetched.
+     *
+     * @param recentRaceReimportDays races at least this recent are re-fetched even when held
+     * @param clubIds when non-null and non-empty, restricts the run to those club ids
+     */
+    public RunResult run(int recentRaceReimportDays, Set<String> clubIds) throws Exception
+    {
+        this.recentRaceReimportDays = recentRaceReimportDays;
+        clubsVisited = 0;
+        seriesVisited = 0;
+        racesImported = 0;
+        racesAlreadyPresent = 0;
+        finishersImported = 0;
+        seriesCollisions = 0;
+        boolean restricted = clubIds != null && !clubIds.isEmpty();
+
+        // Merge seed + persisted so a club configured but never imported is still visited
+        List<Club> allClubs = Stream.concat(
+            store.clubs().values().stream(),
+            store.clubSeed().values().stream().filter(c -> !store.clubs().containsKey(c.id()))
+        ).filter(c -> !restricted || clubIds.contains(c.id())).toList();
+
+        if (restricted)
         {
-            LOG.info("Fetching race id={}", id);
-            String url = API_BASE + id + API_SUFFIX;
-            String json;
-            Path cachedFile = cacheDir != null
-                ? cacheDir.resolve(String.format("race-%06d.json", id)) : null;
-            try
+            Set<String> found = allClubs.stream().map(Club::id).collect(Collectors.toSet());
+            for (String requested : clubIds)
             {
-                if (cachedFile != null && Files.exists(cachedFile))
-                    json = Files.readString(cachedFile);
-                else
+                if (!found.contains(requested))
+                    ImporterLog.warn(LOG, "SailSys: club={} is not a known club; skipping", requested);
+            }
+        }
+
+        for (Club club : allClubs)
+        {
+            List<SailSysEvent> events = club.sailsysEvents();
+            if (events == null || events.isEmpty())
+            {
+                if (restricted)
+                    ImporterLog.warn(LOG, "SailSys: club={} has no SailSys events configured; "
+                        + "nothing to import", club.id());
+                continue;
+            }
+            clubsVisited++;
+            for (SailSysEvent event : events)
+            {
+                for (int seriesId : resolveSeriesIds(club, event))
                 {
-                    Thread.sleep(httpDelayMs);
-                    ContentResponse response = client.GET(url);
-                    json = response.getContentAsString();
-                    if (cachedFile != null)
+                    seriesVisited++;
+                    try
                     {
-                        Files.createDirectories(cacheDir);
-                        Files.writeString(cachedFile, json);
+                        importSeries(club, event, seriesId);
+                    }
+                    catch (Exception e)
+                    {
+                        ImporterLog.error(LOG, "SailSys: failed to import series {} for club={}: {}",
+                            seriesId, club.id(), e.getMessage());
                     }
                 }
             }
-            catch (Exception e)
-            {
-                ImporterLog.warn(LOG,"HTTP error fetching race id={}: {}", id, e.getMessage());
-                id++;
-                continue;
-            }
-
-            onId.accept(id);
-            boolean found = processRaceJson(json);
-            if (found) consecutiveNotFound = 0;
-            else consecutiveNotFound++;
-
-            processed++;
-            if (processed % SAVE_INTERVAL == 0)
-            {
-                LOG.info("Fetched {} races (id={}) -- saving", processed, id);
-                store.save();
-            }
-
-            if (stop.getAsBoolean())
-            {
-                LOG.info("Stop requested -- stopping after race id={}", id);
-                break;
-            }
-            id++;
         }
 
         store.save();
-        LOG.info("Done. Last id={}, processed={}.", id, processed);
+        ImporterLog.info(LOG, "SailSys: run complete -- {} club(s), {} series, {} race(s) imported, "
+                + "{} already present, {} finishers",
+            clubsVisited, seriesVisited, racesImported, racesAlreadyPresent, finishersImported);
+        if (seriesCollisions > 0)
+            ImporterLog.warn(LOG, "SailSys: {} race(s) shared an ID with a race from a different "
+                + "series and were merged into it", seriesCollisions);
+        return new RunResult(clubsVisited, seriesVisited, racesImported, racesAlreadyPresent,
+            finishersImported, seriesCollisions);
     }
 
-    /** Result of a SailSys import run. */
-    public record RunResult(int minRecentId, int maxFoundId) {}
+    /** Run tallies, for tests to assert the counters are actually wired. */
+    int racesImportedForTest()
+    {
+        return racesImported;
+    }
+
+    int finishersImportedForTest()
+    {
+        return finishersImported;
+    }
 
     /**
-     * Unified run method: reads from local cache when fresh; fetches from network when
-     * absent or stale; always re-fetches recent successful races so results are picked up promptly.
-     * Iterates race IDs from {@code startId} to {@code endId} (inclusive).
-     *
-     * <p>Cache staleness rules:
+     * The SailSys series IDs an event contributes: the one it names, or -- for a club event --
+     * whatever the club profile currently lists. That endpoint returns only current-season
+     * series, so a club event never reaches past seasons; those need their own series events.
+     */
+    private List<Integer> resolveSeriesIds(Club club, SailSysEvent event) throws Exception
+    {
+        if (event.isSeries())
+            return List.of(event.seriesId());
+        if (!event.isClub())
+            return List.of();
+        String json = fetch(API_CLUB_PROFILE_BASE + event.clubId() + API_CLUB_PROFILE_SUFFIX);
+        List<Integer> ids = parseClubSeriesIds(json);
+        ImporterLog.info(LOG, "SailSys: club={} event='{}' -- SailSys club {} lists {} current series {}",
+            club.id(), event.displayName(), event.clubId(), ids.size(), ids);
+        if (ids.isEmpty())
+            ImporterLog.warn(LOG, "SailSys: SailSys club {} lists no current series (club={}); "
+                + "add explicit series events for past seasons", event.clubId(), club.id());
+        return ids;
+    }
+
+    /**
+     * Series IDs from a {@code clubs/{id}/profile} response, taking the union of the upcoming
+     * and the with-results lists, de-duplicated and in first-seen order.
+     */
+    List<Integer> parseClubSeriesIds(String json) throws IOException
+    {
+        ClubProfileResponse response = MAPPER.readValue(json, ClubProfileResponse.class);
+        if (response == null || response.data == null)
+            return List.of();
+        List<Integer> ids = new ArrayList<>();
+        for (List<EventGroup> groups : List.of(
+            response.data.nextEvents == null ? List.<EventGroup>of() : response.data.nextEvents,
+            response.data.eventsWithEntrantsOrResults == null
+                ? List.<EventGroup>of() : response.data.eventsWithEntrantsOrResults))
+        {
+            for (EventGroup group : groups)
+            {
+                if (group == null || group.items == null)
+                    continue;
+                for (EventItem item : group.items)
+                {
+                    if (item != null && item.seriesId != null && !ids.contains(item.seriesId))
+                        ids.add(item.seriesId);
+                }
+            }
+        }
+        return List.copyOf(ids);
+    }
+
+    /**
+     * Imports one SailSys series: lists its races, then fetches the results of the ones we do
+     * not already hold. The race list carries the date and number, which is the whole race ID,
+     * so an already-held race costs no request at all.
+     */
+    private void importSeries(Club club, SailSysEvent event, int sailsysSeriesId) throws Exception
+    {
+        String json = fetch(API_SERIES_BASE + sailsysSeriesId + API_SERIES_SUFFIX);
+        SeriesRacesResponse response = MAPPER.readValue(json, SeriesRacesResponse.class);
+        if (response == null || response.data == null || response.data.races == null)
+        {
+            ImporterLog.warn(LOG, "SailSys: series {} returned no race list (club={})",
+                sailsysSeriesId, club.id());
+            return;
+        }
+        String seriesName = response.data.name;
+        String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
+        ImporterLog.info(LOG, "SailSys: club={} series {} '{}' has {} race(s)",
+            club.id(), sailsysSeriesId, seriesName, response.data.races.size());
+
+        for (SeriesRace race : response.data.races)
+        {
+            if (race == null || race.id == null || race.dateTime == null)
+                continue;
+            LocalDate date = peekDate(race.dateTime);
+            if (date == null)
+                continue;
+            int number = race.number != null ? race.number : 0;
+            String raceId = IdGenerator.generateRaceId(club.id(), date, number);
+
+            // Already held for this series and not recent -- no request needed at all
+            Race existing = store.races().get(raceId);
+            if (existing != null && !isRecentRace(date)
+                && existing.seriesIds() != null && existing.seriesIds().contains(seriesId))
+            {
+                racesAlreadyPresent++;
+                continue;
+            }
+            if (existing != null && (existing.seriesIds() == null
+                || !existing.seriesIds().contains(seriesId)))
+            {
+                seriesCollisions++;
+                ImporterLog.warn(LOG, "SailSys: race {} already exists under {} but series '{}' "
+                        + "also claims it; merging", raceId, existing.seriesIds(), seriesName);
+            }
+
+            String raceJson = fetchRaceJson(race.id);
+            if (raceJson != null && isApiFound(raceJson))
+                processRaceJson(raceJson, club);
+        }
+    }
+
+    /**
+     * Fetches one race's results, honouring the on-disk cache.
+     * <p>
+     * Cache staleness rules, unchanged from the scanning importer:
      * <ul>
      *   <li>Successful responses: re-fetch if recent (within {@code recentRaceDays}); otherwise
      *       use file last-modified vs {@code youngCacheMaxAgeDays} (young race) or
      *       {@code oldCacheMaxAgeDays} (old race).</li>
-     *   <li>Error responses (series locked / not yet published): refetch while the cached
-     *       error is younger than {@code youngCacheMaxAgeDays} (the race may have since been
-     *       published); once older, treat the error as settled and reuse the cache.</li>
+     *   <li>Error responses (series locked / not yet published): refetch while the cached error
+     *       is younger than {@code youngCacheMaxAgeDays}; once older, treat it as settled.</li>
      * </ul>
-     *
-     * @return a {@link RunResult} containing the minimum recent race ID and the highest
-     *         race ID that returned a valid (non-error) API response.
      */
-    public RunResult run(int startId, int endId, IntConsumer onId, BooleanSupplier stop,
-                   Path racesDir,
-                   int youngCacheMaxAgeDays, int oldCacheMaxAgeDays,
-                   int youngRaceMaxAgeDays, int httpDelayMs,
-                   int recentRaceDays)
-        throws Exception
+    private String fetchRaceJson(int id) throws Exception
     {
-        this.youngCacheMaxAgeDays  = youngCacheMaxAgeDays;
-        this.oldCacheMaxAgeDays    = oldCacheMaxAgeDays;
-        this.youngRaceMaxAgeDays   = youngRaceMaxAgeDays;
-        this.httpDelayMs           = httpDelayMs;
-        this.recentRaceDays        = recentRaceDays;
+        currentSailSysRaceId = id;
+        Path cachedFile = racesCacheDir != null
+            ? racesCacheDir.resolve(String.format("race-%06d.json", id)) : null;
 
-        LOG.info("Importing SailSys races id={} to id={}", startId, endId);
-        int processed = 0;
-        int minRecentId = Integer.MAX_VALUE;
-        int maxFoundId = 0;
+        String cachedJson = null;
+        if (cachedFile != null && Files.exists(cachedFile))
+            cachedJson = Files.readString(cachedFile);
 
-        for (int id = startId; id <= endId; id++)
+        boolean useCache = false;
+        if (cachedJson != null)
         {
-            if (stop.getAsBoolean())
+            if (isApiFound(cachedJson))
             {
-                LOG.info("Stop requested after id={}", id - 1);
-                break;
-            }
-
-            LOG.debug("Fetching race id={}", id);
-            Path cachedFile = racesDir != null
-                ? racesDir.resolve(String.format("race-%06d.json", id)) : null;
-
-            String cachedJson = null;
-            if (cachedFile != null && Files.exists(cachedFile))
-                cachedJson = Files.readString(cachedFile);
-
-            boolean useCache = false;
-            if (cachedJson != null)
-            {
-                if (isApiFound(cachedJson))
+                LocalDate raceDate = peekRaceDate(cachedJson);
+                if (!isRecent(raceDate))
                 {
-                    // Successful cached response: re-fetch if recent, otherwise check file age
-                    LocalDate raceDate = peekRaceDate(cachedJson);
-                    if (!isRecent(raceDate))
-                    {
-                        int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
-                        useCache = !isStale(cachedFile, maxAge);
-                    }
-                    // recent success → always refetch so live results are picked up
+                    int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
+                    useCache = !isStale(cachedFile, maxAge);
                 }
-                else
-                {
-                    // Error response (series locked / not yet published / not found):
-                    // the race may still become available -- refetch while the cached error
-                    // is within the young window, then settle on the cached error afterwards.
-                    useCache = isStale(cachedFile, youngCacheMaxAgeDays);
-                }
-            }
-
-            String json;
-            if (useCache)
-            {
-                json = cachedJson;
+                // recent success -> always refetch so live results are picked up
             }
             else
             {
-                try
-                {
-                    Thread.sleep(httpDelayMs);
-                    ContentResponse response = client.GET(API_BASE + id + API_SUFFIX);
-                    json = response.getContentAsString();
-                    if (cachedFile != null)
-                    {
-                        Files.createDirectories(racesDir);
-                        Files.writeString(cachedFile, json);
-                    }
-                }
-                catch (Exception e)
-                {
-                    if (cachedJson != null)
-                    {
-                        LOG.debug("Network refresh failed for id={}, using cached: {}", id, e.getMessage());
-                        json = cachedJson;
-                    }
-                    else
-                    {
-                        ImporterLog.warn(LOG, "Error fetching race id={}: {}", id, e.getMessage());
-                        continue;
-                    }
-                }
-            }
-
-            LocalDate raceDate = peekRaceDate(json);
-            if (isRecent(raceDate))
-                minRecentId = Math.min(minRecentId, id);
-
-            onId.accept(id);
-            if (isApiFound(json))
-            {
-                processRaceJson(json);
-                maxFoundId = id;
-            }
-
-            processed++;
-            if (processed % SAVE_INTERVAL == 0)
-            {
-                LOG.info("Fetched {} races (id={}) -- saving", processed, id);
-                store.save();
+                useCache = isStale(cachedFile, youngCacheMaxAgeDays);
             }
         }
+        if (useCache)
+            return cachedJson;
 
-        store.save();
-        LOG.info("Done. Last id={}, processed={}, maxFoundId={}.", endId, processed, maxFoundId);
-        int recentId = (minRecentId == Integer.MAX_VALUE) ? 0 : minRecentId;
-        return new RunResult(recentId, maxFoundId);
+        try
+        {
+            String json = fetch(API_BASE + id + API_SUFFIX);
+            if (cachedFile != null)
+            {
+                Files.createDirectories(racesCacheDir);
+                Files.writeString(cachedFile, json);
+            }
+            return json;
+        }
+        catch (Exception e)
+        {
+            if (cachedJson != null)
+            {
+                LOG.debug("Network refresh failed for id={}, using cached: {}", id, e.getMessage());
+                return cachedJson;
+            }
+            ImporterLog.warn(LOG, "SailSys: error fetching race id={}: {}", id, e.getMessage());
+            return null;
+        }
     }
+
+    /** A throttled GET returning the body; the delay is the politeness the scanner lacked. */
+    private String fetch(String url) throws Exception
+    {
+        if (httpDelayMs > 0)
+            Thread.sleep(httpDelayMs);
+        ContentResponse response = client.GET(url);
+        if (response.getStatus() != 200)
+            throw new IOException("HTTP " + response.getStatus() + " for " + url);
+        return response.getContentAsString();
+    }
+
+    /** True if the race is recent enough to be re-imported even when already held. */
+    private boolean isRecentRace(LocalDate date)
+    {
+        return date != null && !date.isBefore(LocalDate.now().minusDays(recentRaceReimportDays));
+    }
+
+    /** Parses the leading {@code yyyy-MM-dd} of a SailSys ISO date-time. */
+    static LocalDate peekDate(String dateTime)
+    {
+        if (dateTime == null || dateTime.length() < 10)
+            return null;
+        try
+        {
+            return LocalDate.parse(dateTime.substring(0, 10));
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
+    }
+
 
     // --- Parse / import layer (package-private for testing) ---
 
@@ -405,6 +521,15 @@ public class SailSysImporter
     }
 
     boolean processRaceJson(String json)
+    {
+        return processRaceJson(json, null);
+    }
+
+    /**
+     * @param owningClub the club whose configuration led us to this race, or null when the
+     *                   race was replayed from a cache directory with no club context
+     */
+    boolean processRaceJson(String json, Club owningClub)
     {
         RaceResponse response;
         try
@@ -435,11 +560,11 @@ public class SailSysImporter
             return false;
         }
 
-        processRace(data);
+        processRace(data, owningClub);
         return true;
     }
 
-    private void processRace(RaceData data)
+    private void processRace(RaceData data, Club owningClub)
     {
         currentSailSysRaceId = data.id != null ? data.id : 0;
 
@@ -455,16 +580,30 @@ public class SailSysImporter
         // Organising club -- required for race ID and series registration.
         // Excluded clubs are filtered out by findUniqueClubByShortName; if the club name
         // resolves only to excluded clubs, skip the race entirely.
-        Club organizingClub = null;
+        Club organizingClub = owningClub;
         if (data.club != null && data.club.shortName != null)
         {
             String context = "SailSys race id=" + data.id + " series=" + (data.series != null ? data.series.name : "?");
-            organizingClub = store.findUniqueClubByShortName(data.club.shortName, data.club.longName, context);
-            if (organizingClub == null && store.isClubNameExcluded(data.club.shortName))
+            Club byName = store.findUniqueClubByShortName(data.club.shortName, data.club.longName, context);
+            if (owningClub == null)
             {
-                LOG.debug("SailSys: skipping race id={} -- organising club '{}' is excluded",
-                    data.id, data.club.shortName);
-                return;
+                // No club context (cache replay): fall back to the name lookup, and skip the
+                // race when the name resolves only to excluded clubs.
+                organizingClub = byName;
+                if (byName == null && store.isClubNameExcluded(data.club.shortName))
+                {
+                    LOG.debug("SailSys: skipping race id={} -- organising club '{}' is excluded",
+                        data.id, data.club.shortName);
+                    return;
+                }
+            }
+            else if (byName != null && !byName.id().equals(owningClub.id()))
+            {
+                // The club opted in explicitly, so its own ID wins — but a disagreement means
+                // either a mis-entered SailSys ID or two clubs sharing a short name.
+                ImporterLog.warn(LOG, "SailSys: race id={} is configured under club={} but its "
+                        + "short name '{}' resolves to {}; keeping the configured club",
+                    data.id, owningClub.id(), data.club.shortName, byName.id());
             }
         }
 
@@ -522,6 +661,9 @@ public class SailSysImporter
                 divisions, source, Instant.now(), null));
             storedDivisions = divisions;
         }
+        racesImported++;
+        for (Division d : divisions)
+            finishersImported += d.finishers().size();
 
         if (autoExclude)
         {
@@ -1002,7 +1144,8 @@ public class SailSysImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(),
-            club.excluded(), club.email(), club.aliases(), club.topyachtGroups(), List.copyOf(series), null));
+            club.excluded(), club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
+            List.copyOf(series), null));
     }
 
     // --- Utilities ---
@@ -1082,6 +1225,67 @@ public class SailSysImporter
     }
 
     // --- Jackson DTOs ---
+
+    // --- Discovery DTOs (club profile, series race list) ---
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class ClubProfileResponse
+    {
+        public ClubProfileData data;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class ClubProfileData
+    {
+        public String shortName;
+        public String longName;
+        /** Upcoming series. */
+        public List<EventGroup> nextEvents;
+        /** Series that already have entrants or results. Overlaps nextEvents. */
+        public List<EventGroup> eventsWithEntrantsOrResults;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class EventGroup
+    {
+        public String parent;
+        public List<EventItem> items;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class EventItem
+    {
+        public String name;
+        public Integer seriesId;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class SeriesRacesResponse
+    {
+        public SeriesRacesData data;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class SeriesRacesData
+    {
+        public Integer id;
+        public String name;
+        public ClubSummary club;
+        public List<SeriesRace> races;
+    }
+
+    /**
+     * One race in a series listing: metadata only. Elapsed times live behind
+     * {@code races/{id}/resultsentrants/display}.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class SeriesRace
+    {
+        public Integer id;
+        public String dateTime;
+        public Integer number;
+        public String name;
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class RaceResponse

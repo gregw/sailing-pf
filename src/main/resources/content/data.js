@@ -2023,6 +2023,7 @@ function showEditClubPanel() {
     document.getElementById('edit-club-state').value = item.state || '';
     document.getElementById('edit-club-email').value = item.email || '';
     renderClubTopyachtGroups(Array.isArray(item.topyachtGroups) ? item.topyachtGroups : []);
+    renderClubSailsysEvents(Array.isArray(item.sailsysEvents) ? item.sailsysEvents : []);
     document.getElementById('edit-status-clubs').textContent = '';
     document.getElementById('edit-panel-clubs').style.display = '';
     const w = isWriteAllowed();
@@ -2051,11 +2052,21 @@ function showImportClubPanel() {
         + ids.map(id => {
             const item = state.selectedData.clubs.get(id) || {};
             const groups = Array.isArray(item.topyachtGroups) ? item.topyachtGroups : [];
-            const urlCount = groups.reduce((n, g) => n + (g.urls || []).length, 0);
-            const note = urlCount
-                ? esc(groups.map(g => g.name || g.prefix).join(', ')
-                    + ' — ' + urlCount + ' URL' + (urlCount !== 1 ? 's' : ''))
-                : '<span style="color:#a00;">no TopYacht URLs configured</span>';
+            const sailsys = Array.isArray(item.sailsysEvents) ? item.sailsysEvents : [];
+            const parts = [];
+            if (groups.length) {
+                const urlCount = groups.reduce((n, g) => n + (g.urls || []).length, 0);
+                parts.push('TopYacht: ' + groups.map(g => g.name || g.prefix).join(', ')
+                    + ' (' + urlCount + ' URL' + (urlCount !== 1 ? 's' : '') + ')');
+            }
+            if (sailsys.length) {
+                parts.push('SailSys: ' + sailsys.map(e =>
+                    e.name || (e.clubId != null ? 'club ' + e.clubId : 'series ' + e.seriesId))
+                    .join(', '));
+            }
+            const note = parts.length
+                ? esc(parts.join(' · '))
+                : '<span style="color:#a00;">nothing configured to import</span>';
             return '<li>' + esc(id) + ' — ' + esc(item.shortName || item.longName || '') + ' (' + note + ')</li>';
         }).join('')
         + '</ul>';
@@ -2271,6 +2282,77 @@ function readClubTopyachtGroups() {
     })).filter(g => g.urls.length > 0);
 }
 
+// ---- SailSys event editor (one row per opted-in club or series) ----
+
+function renderClubSailsysEvents(events) {
+    const host = document.getElementById('edit-club-sailsys-events');
+    if (!host) return;
+    host.innerHTML = '';
+    events.forEach(e => host.appendChild(buildClubSailsysRow(e)));
+}
+
+function buildClubSailsysRow(event) {
+    const kind = event.clubId != null ? 'club' : 'series';
+    const row = document.createElement('div');
+    row.className = 'sailsys-event-row';
+    row.dataset.kind = kind;
+    row.style.cssText = 'display:grid;grid-template-columns:auto auto 2fr auto;gap:0.4rem;'
+        + 'align-items:center;margin-bottom:0.4rem;padding:0.4rem 0.5rem;border:1px solid #ddd;'
+        + 'border-radius:4px;background:#fff;';
+
+    const label = document.createElement('span');
+    label.textContent = kind === 'club' ? 'SailSys club' : 'SailSys series';
+    label.style.cssText = 'font-size:0.85rem;color:#555;white-space:nowrap;';
+    label.title = kind === 'club'
+        ? 'Imports whatever series this SailSys club currently lists. New seasons appear '
+          + 'automatically; past seasons need their own series entry.'
+        : 'Imports this one SailSys series, including a past season.';
+
+    const id = document.createElement('input');
+    id.type = 'number';
+    id.min = '1';
+    id.className = 'ss-id';
+    id.placeholder = kind === 'club' ? 'club ID' : 'series ID';
+    id.value = (kind === 'club' ? event.clubId : event.seriesId) ?? '';
+    id.style.cssText = 'padding:3px 6px;width:8em;font-family:monospace;';
+
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'ss-name';
+    name.placeholder = 'label (optional)';
+    name.value = event.name || '';
+    name.style.cssText = 'padding:3px 6px;';
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '✕';
+    remove.title = 'Remove this SailSys event';
+    remove.onclick = () => row.remove();
+
+    row.append(label, id, name, remove);
+    return row;
+}
+
+function addClubSailsysEvent(kind) {
+    const host = document.getElementById('edit-club-sailsys-events');
+    if (!host) return;
+    host.appendChild(buildClubSailsysRow(
+        kind === 'club' ? {clubId: null} : {seriesId: null}));
+}
+
+function readClubSailsysEvents() {
+    const host = document.getElementById('edit-club-sailsys-events');
+    if (!host) return [];
+    return Array.from(host.querySelectorAll('.sailsys-event-row')).map(row => {
+        const value = parseInt(row.querySelector('.ss-id').value, 10);
+        if (!Number.isFinite(value) || value <= 0) return null;
+        const name = row.querySelector('.ss-name').value.trim();
+        return row.dataset.kind === 'club'
+            ? {clubId: value, name}
+            : {seriesId: value, name};
+    }).filter(e => e !== null);
+}
+
 function buildClubEditBody() {
     return {
         clubId: editingClubId,
@@ -2278,7 +2360,8 @@ function buildClubEditBody() {
         longName: document.getElementById('edit-club-long-name').value.trim(),
         state: document.getElementById('edit-club-state').value.trim(),
         email: document.getElementById('edit-club-email').value.trim(),
-        topyachtGroups: readClubTopyachtGroups()
+        topyachtGroups: readClubTopyachtGroups(),
+        sailsysEvents: readClubSailsysEvents()
     };
 }
 

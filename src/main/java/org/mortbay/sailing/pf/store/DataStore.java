@@ -32,6 +32,7 @@ import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Loadable;
+import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.Maker;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
@@ -1328,6 +1329,33 @@ public class DataStore
         return ClubLoader.cleanGroups(groups);
     }
 
+    /** Normalises SailSys events exactly as persisting them to clubs.yaml would. */
+    public static List<SailSysEvent> cleanSailsysEvents(List<SailSysEvent> events)
+    {
+        return ClubLoader.cleanSailsysEvents(events);
+    }
+
+    /**
+     * Updates the YAML-owned {@code sailsys} events for a club. A null or empty list clears
+     * the field. Auto-creates the YAML entry if missing.
+     */
+    public void updateClubSailsysEvents(String clubId, List<SailSysEvent> sailsysEvents)
+    {
+        requireStarted();
+        Club existing = clubs.get(clubId);
+        Club seed = clubSeed.get(clubId);
+        if (existing == null && seed == null)
+            throw new IllegalArgumentException("Unknown club: " + clubId);
+
+        String shortNameIfNew = existing != null ? existing.shortName() : seed.shortName();
+        if (!ClubLoader.updateClubSailsysEvents(configDir, clubId, shortNameIfNew, sailsysEvents))
+            return;
+
+        clubSeed = ClubLoader.load(configDir);
+        if (existing != null)
+            clubs.put(clubId, enrichWithSeed(existing));
+    }
+
     /**
      * Updates the YAML-owned {@code topyacht} groups for a club. A null or empty
      * list clears the field. Auto-creates the YAML entry if missing.
@@ -1365,12 +1393,12 @@ public class DataStore
             LOG.warn("Club {} loaded from JSON has no entry in clubs.yaml -- YAML-owned fields will be empty",
                 json.id());
             return new Club(json.id(), json.shortName(),
-                null, null, false, null, List.of(), List.of(),
+                null, null, false, null, List.of(), List.of(), List.of(),
                 json.series(), json.loadedAt());
         }
         return new Club(json.id(), json.shortName(),
             seed.longName(), seed.state(), seed.excluded(), seed.email(),
-            seed.aliases(), seed.topyachtGroups(),
+            seed.aliases(), seed.topyachtGroups(), seed.sailsysEvents(),
             json.series(), json.loadedAt());
     }
 
@@ -2468,7 +2496,7 @@ public class DataStore
             }
             clubs.put(clubId, new Club(updated.id(), updated.shortName(), updated.longName(),
                 updated.state(), updated.excluded(), updated.email(), updated.aliases(),
-                updated.topyachtGroups(), List.copyOf(renamed), null));
+                updated.topyachtGroups(), updated.sailsysEvents(), List.copyOf(renamed), null));
         }
 
         save();
@@ -2627,7 +2655,7 @@ public class DataStore
                 rebuilt.add(new Series(newSeriesId, name, false, List.copyOf(e.getValue())));
             }
             clubs.put(clubId, new Club(club.id(), club.shortName(), club.longName(), club.state(),
-                club.excluded(), club.email(), club.aliases(), club.topyachtGroups(),
+                club.excluded(), club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
                 List.copyOf(rebuilt), null));
         }
     }

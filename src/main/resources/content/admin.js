@@ -7,7 +7,7 @@ const state = {
 };
 
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
-const IMPORTER_NAMES = ['sailsys-boats', 'sailsys-races', 'orc', 'ams'];
+const IMPORTER_NAMES = ['sailsys', 'topyacht', 'orc', 'ams'];
 
 // --- Stats ---
 

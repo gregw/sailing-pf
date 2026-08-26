@@ -37,7 +37,7 @@ class TaskServiceClubImportTest
     private static Club club(String id, String shortName)
     {
         return new Club(id, shortName, shortName + " Yacht Club", "NSW", false,
-            null, List.of(), List.of(), List.of(), null);
+            null, List.of(), List.of(), List.of(), List.of(), null);
     }
 
     @BeforeEach
@@ -141,6 +141,27 @@ class TaskServiceClubImportTest
         assertEquals("done", run.phase(), "phase settles once the run finishes");
     }
 
+    /** Both sources are club-scoped, so one run covers whatever a club has configured. */
+    @Test
+    void clubImportRunsBothClubScopedImporters() throws Exception
+    {
+        TaskService.ClubImportRun run = runFor(List.of("alpha.com.au"));
+
+        assertEquals(List.of("topyacht", "sailsys"), run.importers());
+        assertEquals(0, run.counts().get("sailsys.racesImported"));
+        assertEquals(0, run.counts().get("sailsys.clubs"),
+            "a club with no SailSys events is not visited");
+    }
+
+    @Test
+    void clubImportWarnsAboutSelectedClubWithNothingConfigured() throws Exception
+    {
+        TaskService.ClubImportRun run = runFor(List.of("alpha.com.au"));
+
+        assertTrue(run.log().contains("alpha.com.au has no SailSys events configured"),
+            () -> "expected a no-events warning, log was:\n" + run.log());
+    }
+
     @Test
     void clubImportReportsCountsAndCompletes() throws Exception
     {
@@ -149,7 +170,7 @@ class TaskServiceClubImportTest
         assertEquals("done", run.state());
         assertNull(run.error());
         assertNotNull(run.finishedAt());
-        assertEquals(List.of("topyacht"), run.importers());
+        assertEquals(List.of("topyacht", "sailsys"), run.importers());
         assertEquals(0, run.counts().get("topyacht.racesImported"));
         // No TopYacht URLs configured, so the club is not visited at all.
         assertEquals(0, run.counts().get("topyacht.clubs"));
@@ -160,7 +181,8 @@ class TaskServiceClubImportTest
     {
         TaskService.ClubImportRun run = runFor(List.of("alpha.com.au"));
 
-        assertEquals(1, run.warnings());
+        // one per club-scoped importer: nothing configured for either source
+        assertEquals(2, run.warnings());
         assertEquals(0, run.errors());
         assertTrue(run.log().contains("alpha.com.au has no TopYacht URLs configured"),
             () -> "expected a no-URLs warning, log was:\n" + run.log());

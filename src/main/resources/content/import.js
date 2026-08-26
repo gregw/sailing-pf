@@ -4,7 +4,7 @@ const DAY_LABELS = {
     FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun'
 };
 const DISPLAY_NAMES = {
-    'sailsys-races':    'Import SailSys Races',
+    'sailsys':          'Import SailSys Races',
     'orc':              'Import ORC Certificates',
     'ams':              'Import AMS Certificates',
     'topyacht':         'Import TopYacht Races',
@@ -18,9 +18,6 @@ const DISPLAY_NAMES = {
     'clear-cache-orc': 'Clear HTTP Cache(ORC)',
     'clear-cache-sailsys': 'Clear HTTP Cache(Sailsys)'
 };
-
-const SAILSYS_DISABLED_TIP =
-    'At the request of SailSys, this tool will no longer fetch race data from their system.';
 
 let currentEntries = [];
 let statusPoller = null;
@@ -68,11 +65,6 @@ async function loadImporters() {
     const yearInput = document.getElementById('target-irc-year');
     yearInput.value = data.targetIrcYear != null ? data.targetIrcYear : '';
 
-    if (data.sailsysStartId != null)
-        document.getElementById('sailsys-start-id').value = data.sailsysStartId;
-    if (data.sailsysEndId != null)
-        document.getElementById('sailsys-end-id').value = data.sailsysEndId;
-
     if (data.pfConfig) {
         document.getElementById('pf-lambda').value = data.pfConfig.lambda;
         document.getElementById('pf-convergence').value = data.pfConfig.convergenceThreshold;
@@ -103,10 +95,10 @@ function buildTable(entries) {
 
 function taskTip(name) {
     const tips = {
-        'sailsys-races': 'Disabled. At the request of SailSys, this tool will no longer fetch race data from their system.',
+        'sailsys':            'Imports the SailSys events configured on each club (clubs page → Edit → SailSys events).',
         'orc':                'Downloads ORC certificate data from data.orc.org.',
         'ams':                'Scrapes AMS certificate data from raceyachts.org.',
-        'topyacht':           'Scrapes race results from TopYacht club result pages.',
+        'topyacht':           'Scrapes race results from the TopYacht events configured on each club.',
         'bwps':               'Imports BWPS (BlueSail) race results from the CYCA.',
         'analysis':           'Builds the ConversionGraph from paired handicap observations.',
         'reference-factors':  'Computes IRC-equivalent reference factors for all boats.',
@@ -125,20 +117,9 @@ function buildRow(entry) {
     tr.dataset.name = entry.name;
     tr.dataset.mode = entry.mode;
     const isRunning = entry.status === 'running';
-    const isSailSysApi = entry.name === 'sailsys-races';
     const key = entry.name + '-' + entry.mode;
-    const progressField = isSailSysApi
-        ? `<span id="progress-${esc(key)}" style="font-family:monospace;font-size:0.9em;color:#666;margin-left:0.4em;"></span>`
-        : '';
-    const runStopBtns = isSailSysApi
-        ? `<button id="run-btn-${esc(key)}" class="perma-disabled" disabled
-                   title="${esc(SAILSYS_DISABLED_TIP)}"
-                   ${isRunning ? 'style="display:none"' : ''}>Run</button>
-           <button id="stop-btn-${esc(key)}"
-                   onclick="stopImport()"
-                   title="Request the running task to stop"
-                   ${isRunning ? '' : 'style="display:none"'}>Stop</button>`
-        : `<button onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
+    const progressField = '';
+    const runStopBtns = `<button onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
                title="Run this task now">Run</button>`;
     tr.innerHTML = `
       <td class="order-col">
@@ -158,10 +139,6 @@ function buildRow(entry) {
       <td style="text-align:center"><input type="checkbox" id="start-${esc(key)}-startup"
                title="Run this task automatically when the server starts"
                ${entry.runAtStartup ? 'checked' : ''}></td>`;
-    if (isSailSysApi) {
-        tr.title = SAILSYS_DISABLED_TIP;
-        tr.style.opacity = '0.5';
-    }
     return tr;
 }
 
@@ -257,10 +234,6 @@ async function saveSchedule() {
             runAtStartup: document.getElementById('start-' + name + '-' + mode + '-startup').checked
         };
     });
-    const sailsysStartVal = parseInt(document.getElementById('sailsys-start-id').value, 10);
-    const sailsysStartId = sailsysStartVal > 0 ? sailsysStartVal : null;
-    const sailsysEndVal = parseInt(document.getElementById('sailsys-end-id').value, 10);
-    const sailsysEndId = sailsysEndVal > 0 ? sailsysEndVal : null;
     const yearVal = parseInt(document.getElementById('target-irc-year').value, 10);
     const targetIrcYear = yearVal > 0 ? yearVal : null;
     const pfLambda = parseFloat(document.getElementById('pf-lambda').value) || null;
@@ -278,7 +251,7 @@ async function saveSchedule() {
     const resp = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days, time, importers, sailsysStartId, sailsysEndId, targetIrcYear,
+        body: JSON.stringify({ days, time, importers, targetIrcYear,
             pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
