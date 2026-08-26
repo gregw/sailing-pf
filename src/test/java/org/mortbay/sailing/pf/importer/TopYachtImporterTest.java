@@ -13,9 +13,11 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Club;
+import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.TopYachtImporter.ParsedDivision;
 import org.mortbay.sailing.pf.importer.TopYachtImporter.ParsedRace;
 import org.mortbay.sailing.pf.importer.TopYachtImporter.ParsedRow;
@@ -532,7 +534,7 @@ class TopYachtImporterTest
 
         assertEquals(1, store.races().size());
         Race race = store.races().values().iterator().next();
-        assertEquals("bsyc.com.au-2024-08-15-0007", race.id());
+        assertEquals("bsyc.com.au-performance-racing-2024-08-15-0007", race.id());
         assertEquals(LocalDate.of(2024, 8, 15), race.date());
         assertEquals(7, race.number());
 
@@ -565,6 +567,286 @@ class TopYachtImporterTest
         Series s = updated.series().get(0);
         assertEquals("bsyc.com.au/performance-racing", s.id());
         assertEquals(2, s.raceIds().size());
+    }
+
+    /**
+     * The MIRW bug: a regatta publishes each division as its own series, and every division
+     * holds a "Race 1" on the same day. Under the old {@code clubId-date-number} scheme all
+     * of them collapsed onto one race ID, so only the first division survived and every
+     * sibling series claimed it. Scoping the ID by the series keeps them distinct.
+     */
+    @Test
+    void divisionsOfOneRegattaOnTheSameDayDoNotCollide()
+    {
+        LocalDate date = LocalDate.of(2025, 8, 29);
+        TopYachtGroup mirw = new TopYachtGroup("mirw", "Magnetic Island Race Week",
+            List.of("https://tes.topyacht.net.au/results/2025/mirw/index.htm"));
+
+        importer.processResultsPage(TEST_CLUB, mirw, "Spinnaker Division 1", 1, date,
+            resultsHtml("PHS results  Start : 12:25", List.of(
+                resultRow("1", "BOATONE", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00"))),
+            "https://tes.topyacht.net.au/results/2025/mirw/spin1/01RGrp1.htm");
+        importer.processResultsPage(TEST_CLUB, mirw, "Spinnaker Division 2", 1, date,
+            resultsHtml("PHS results  Start : 12:35", List.of(
+                resultRow("1", "BOATTWO", "AUS2", "Skip", "DSS", "14:30:00", "01:55:00"))),
+            "https://tes.topyacht.net.au/results/2025/mirw/spin2/01RGrp1.htm");
+
+        assertEquals(2, store.races().size(), () -> "both divisions must import: " + store.races().keySet());
+        assertNotNull(store.races().get("bsyc.com.au-mirw-spinnaker-division-1-2025-08-29-0001"));
+        assertNotNull(store.races().get("bsyc.com.au-mirw-spinnaker-division-2-2025-08-29-0001"));
+
+        // Each series holds only its own race — no cross-claiming
+        Club club = store.clubs().get(TEST_CLUB.id());
+        assertEquals(2, club.series().size());
+        for (Series s : club.series())
+        {
+            assertEquals(1, s.raceIds().size(), () -> "series " + s.id() + " claimed " + s.raceIds());
+            assertTrue(s.raceIds().getFirst().startsWith(
+                    "bsyc.com.au-" + IdGenerator.seriesSlug(s.id()) + "-"),
+                () -> "series " + s.id() + " should hold only its own race, got " + s.raceIds());
+        }
+    }
+
+    /**
+     * An event with a long name leads the series name, so a division reads as part of its
+     * regatta wherever a series name is shown.
+     */
+    @Test
+    void seriesNameCarriesTheEventLongName()
+    {
+        TopYachtGroup mirw = new TopYachtGroup("mirw", "Magnetic Island Race Week",
+            List.of("http://x/results/2025/mirw/index.htm"));
+        String html = resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")));
+
+        importer.processResultsPage(TEST_CLUB, mirw, "SeaLink Spinnaker Division 1", 1,
+            LocalDate.of(2025, 8, 29), html, "http://x/results/2025/mirw/spin1/r1.htm");
+
+        Series s = store.clubs().get(TEST_CLUB.id()).series().getFirst();
+        assertEquals("Magnetic Island Race Week - SeaLink Spinnaker Division 1", s.name());
+        // The ID keeps the short prefix — only the display name carries the long form
+        assertEquals("bsyc.com.au/mirw-sealink-spinnaker-division-1", s.id());
+    }
+
+    /**
+     * An event with no long name leaves the raw TopYacht series name alone.
+     */
+    @Test
+    void seriesNameIsUnchangedWhenTheEventHasNoLongName()
+    {
+        TopYachtGroup mirw = new TopYachtGroup("mirw", null,
+            List.of("http://x/results/2025/mirw/index.htm"));
+        String html = resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")));
+
+        importer.processResultsPage(TEST_CLUB, mirw, "SeaLink Spinnaker Division 1", 1,
+            LocalDate.of(2025, 8, 29), html, "http://x/results/2025/mirw/spin1/r1.htm");
+
+        assertEquals("SeaLink Spinnaker Division 1",
+            store.clubs().get(TEST_CLUB.id()).series().getFirst().name());
+    }
+
+    /**
+     * Setting a long name after races were imported must rename the existing series on the
+     * next run — and running again must not stack the prefix up a second time.
+     */
+    @Test
+    void reimportAdoptsANewEventLongNameWithoutDoublePrefixing()
+    {
+        String html = resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")));
+        LocalDate date = LocalDate.of(2025, 8, 29);
+        String url = "http://x/results/2025/mirw/spin1/r1.htm";
+
+        importer.processResultsPage(TEST_CLUB,
+            new TopYachtGroup("mirw", null, List.of("http://x/results/2025/mirw/index.htm")),
+            "SeaLink Spinnaker Division 1", 1, date, html, url);
+        assertEquals("SeaLink Spinnaker Division 1",
+            store.clubs().get(TEST_CLUB.id()).series().getFirst().name());
+
+        TopYachtGroup named = new TopYachtGroup("mirw", "Magnetic Island Race Week",
+            List.of("http://x/results/2025/mirw/index.htm"));
+        importer.processResultsPage(TEST_CLUB, named, "SeaLink Spinnaker Division 1", 1, date, html, url);
+        assertEquals("Magnetic Island Race Week - SeaLink Spinnaker Division 1",
+            store.clubs().get(TEST_CLUB.id()).series().getFirst().name());
+
+        importer.processResultsPage(TEST_CLUB, named, "SeaLink Spinnaker Division 1", 1, date, html, url);
+        assertEquals("Magnetic Island Race Week - SeaLink Spinnaker Division 1",
+            store.clubs().get(TEST_CLUB.id()).series().getFirst().name());
+
+        assertEquals(1, store.clubs().get(TEST_CLUB.id()).series().size());
+        assertEquals(1, store.clubs().get(TEST_CLUB.id()).series().getFirst().raceIds().size());
+    }
+
+    // --- Division merging (regatta publishing each division as its own series) ---
+
+    private static final TopYachtGroup MERGED_MIRW = new TopYachtGroup("mirw",
+        "Magnetic Island Race Week", List.of("http://x/results/2025/mirw/index.htm"), true);
+
+    private String oneBoatHtml(String boat, String sail, String elapsed)
+    {
+        return resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", boat, sail, "Skip", "DSS", "14:00:00", elapsed)));
+    }
+
+    /**
+     * The point of merging: divisions of one regatta day land in ONE race as separate
+     * divisions, under a single event series.
+     */
+    @Test
+    void mergedEventCollapsesDivisionsIntoOneRace()
+    {
+        LocalDate date = LocalDate.of(2025, 8, 29);
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "SeaLink Spinnaker Division 1", 1,
+            date, oneBoatHtml("BOATONE", "AUS1", "02:00:00"), "http://x/mirw/spin1/r1.htm");
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "SeaLink Spinnaker Division 2", 1,
+            date, oneBoatHtml("BOATTWO", "AUS2", "02:05:00"), "http://x/mirw/spin2/r1.htm");
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Non-Spinnaker", 1,
+            date, oneBoatHtml("BOATTHREE", "AUS3", "02:10:00"), "http://x/mirw/nonspin/r1.htm");
+
+        assertEquals(1, store.races().size(), () -> "one merged race expected: " + store.races().keySet());
+        Race race = store.races().get("bsyc.com.au-mirw-2025-08-29-0001");
+        assertNotNull(race, () -> "got " + store.races().keySet());
+        assertEquals(3, race.divisions().size());
+        assertEquals(List.of("SeaLink Spinnaker Division 1", "SeaLink Spinnaker Division 2",
+            "Non-Spinnaker"), race.divisions().stream().map(Division::name).toList());
+        assertEquals(List.of("bsyc.com.au/mirw-2025"), race.seriesIds());
+
+        Club club = store.clubs().get(TEST_CLUB.id());
+        assertEquals(1, club.series().size());
+        assertEquals("Magnetic Island Race Week 2025", club.series().getFirst().name());
+    }
+
+    /**
+     * Division identity is its name almost everywhere downstream, so a merged race must
+     * never carry two divisions with the same name — or a null one.
+     */
+    @Test
+    void mergedRaceDivisionNamesAreDistinctAndNonNull()
+    {
+        LocalDate date = LocalDate.of(2025, 8, 29);
+        for (String div : List.of("Division 1", "Division 2", "Division 3", "Multihulls X"))
+        {
+            importer.processResultsPage(TEST_CLUB, MERGED_MIRW, div, 1, date,
+                oneBoatHtml("BOAT" + div.charAt(div.length() - 1), "AUS" + div.charAt(div.length() - 1),
+                    "02:00:00"), "http://x/mirw/r1.htm");
+        }
+
+        Race race = store.races().values().iterator().next();
+        List<String> names = race.divisions().stream().map(Division::name).toList();
+        assertEquals(4, names.size());
+        assertEquals(names.size(), new java.util.HashSet<>(names).size(), () -> "duplicate names: " + names);
+        assertFalse(names.contains(null), () -> "null division name in " + names);
+    }
+
+    /**
+     * Re-importing a division refreshes it in place rather than appending a duplicate.
+     */
+    @Test
+    void reimportingAMergedDivisionReplacesItInPlace()
+    {
+        LocalDate date = LocalDate.of(2025, 8, 29);
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 1", 1, date,
+            oneBoatHtml("BOATONE", "AUS1", "02:00:00"), "http://x/mirw/d1/r1.htm");
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 2", 1, date,
+            oneBoatHtml("BOATTWO", "AUS2", "02:05:00"), "http://x/mirw/d2/r1.htm");
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 1", 1, date,
+            oneBoatHtml("BOATONE", "AUS1", "02:00:00"), "http://x/mirw/d1/r1.htm");
+
+        Race race = store.races().values().iterator().next();
+        assertEquals(1, store.races().size());
+        assertEquals(2, race.divisions().size(), () -> "divisions: "
+            + race.divisions().stream().map(Division::name).toList());
+    }
+
+    /**
+     * An excluded series is held out of the merge: folding it into a non-excluded event race
+     * would silently re-admit boats an admin had excluded, since series exclusions match on
+     * the series name.
+     */
+    @Test
+    void excludedSeriesIsHeldOutOfTheMerge()
+    {
+        store.setSeriesExcluded("Multihulls", true, "multihull");
+        LocalDate date = LocalDate.of(2025, 8, 29);
+
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 1", 1, date,
+            oneBoatHtml("BOATONE", "AUS1", "02:00:00"), "http://x/mirw/d1/r1.htm");
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Multihulls", 1, date,
+            oneBoatHtml("CATONE", "AUS9", "01:30:00"), "http://x/mirw/multi/r1.htm");
+
+        assertEquals(2, store.races().size(), () -> store.races().keySet().toString());
+        assertNotNull(store.races().get("bsyc.com.au-mirw-2025-08-29-0001"),
+            "the merged event race");
+        assertNotNull(store.races().get("bsyc.com.au-mirw-multihulls-2025-08-29-0001"),
+            () -> "the excluded series keeps its own per-division race: " + store.races().keySet());
+    }
+
+    /**
+     * Next year's running of a merged regatta must start its own series — races more than six
+     * months apart are separate events, not one series spanning years.
+     */
+    @Test
+    void successiveEditionsOfAMergedEventGetSeparateSeries()
+    {
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 1", 1,
+            LocalDate.of(2024, 8, 29), oneBoatHtml("BOATONE", "AUS1", "02:00:00"),
+            "http://x/mirw/2024/d1/r1.htm");
+        importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 1", 1,
+            LocalDate.of(2025, 8, 29), oneBoatHtml("BOATONE", "AUS1", "02:00:00"),
+            "http://x/mirw/2025/d1/r1.htm");
+
+        Club club = store.clubs().get(TEST_CLUB.id());
+        List<String> ids = club.series().stream().map(Series::id).sorted().toList();
+        assertEquals(List.of("bsyc.com.au/mirw-2024", "bsyc.com.au/mirw-2025"), ids);
+        assertEquals(List.of("Magnetic Island Race Week 2024", "Magnetic Island Race Week 2025"),
+            club.series().stream().map(Series::name).sorted().toList());
+        // Race IDs stay keyed on the event prefix, not the edition
+        assertNotNull(store.races().get("bsyc.com.au-mirw-2025-08-29-0001"),
+            () -> store.races().keySet().toString());
+    }
+
+    /**
+     * A regatta week still merges into one edition even when it crosses a month boundary.
+     */
+    @Test
+    void oneRegattaWeekStaysASingleEdition()
+    {
+        for (LocalDate d : List.of(LocalDate.of(2025, 8, 29), LocalDate.of(2025, 8, 30),
+            LocalDate.of(2025, 9, 1), LocalDate.of(2025, 9, 3)))
+        {
+            importer.processResultsPage(TEST_CLUB, MERGED_MIRW, "Division 1", 1, d,
+                oneBoatHtml("BOATONE", "AUS1", "02:00:00"), "http://x/mirw/d1/r.htm");
+        }
+
+        Club club = store.clubs().get(TEST_CLUB.id());
+        assertEquals(1, club.series().size(),
+            () -> club.series().stream().map(Series::id).toList().toString());
+        assertEquals("bsyc.com.au/mirw-2025", club.series().getFirst().id());
+        assertEquals(4, club.series().getFirst().raceIds().size());
+    }
+
+    /**
+     * Two events at one club can each hold a race 1 on the same date.
+     */
+    @Test
+    void separateEventsOnTheSameDayDoNotCollide()
+    {
+        LocalDate date = LocalDate.of(2025, 8, 29);
+        String html = resultsHtml("PHS results  Start : 12:25", List.of(
+            resultRow("1", "BOAT", "AUS1", "Skip", "DSS", "14:00:00", "02:00:00")));
+
+        // Same series name, different events — the prefix is what keeps them apart
+        importer.processResultsPage(TEST_CLUB,
+            new TopYachtGroup("mirw", null, List.of("http://x/results/2025/mirw/index.htm")),
+            "Division 1", 1, date, html, "http://x/results/2025/mirw/d1/r1.htm");
+        importer.processResultsPage(TEST_CLUB,
+            new TopYachtGroup("fos", null, List.of("http://x/results/2025/fos/index.htm")),
+            "Division 1", 1, date, html, "http://x/results/2025/fos/d1/r1.htm");
+
+        assertEquals(2, store.races().size(), () -> "events must not collide: " + store.races().keySet());
+        assertNotNull(store.races().get("bsyc.com.au-mirw-division-1-2025-08-29-0001"));
+        assertNotNull(store.races().get("bsyc.com.au-fos-division-1-2025-08-29-0001"));
     }
 
     @Test

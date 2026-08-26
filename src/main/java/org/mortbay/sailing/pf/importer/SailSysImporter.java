@@ -1002,7 +1002,7 @@ public class SailSysImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(),
-            club.excluded(), club.email(), club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+            club.excluded(), club.email(), club.aliases(), club.topyachtGroups(), List.copyOf(series), null));
     }
 
     // --- Utilities ---

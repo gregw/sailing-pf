@@ -1273,7 +1273,7 @@ public class BwpsImporter
             club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
                 seed.email(),
                 seed.aliases() != null ? seed.aliases() : List.of(),
-                seed.topyachtUrls() != null ? seed.topyachtUrls() : List.of(),
+                seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
                 List.of(), null);
             store.putClub(club);
         }
@@ -1306,7 +1306,7 @@ public class BwpsImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.email(), club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+            club.email(), club.aliases(), club.topyachtGroups(), List.copyOf(series), null));
     }
 
     private boolean isRecentRace(LocalDate date)

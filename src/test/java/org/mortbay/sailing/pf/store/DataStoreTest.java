@@ -18,6 +18,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.TopYachtGroup;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -328,7 +329,9 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putClub(new Club("c.example", "CYC", "Foo", "NSW", false, "a@b",
-            List.of("alias1"), List.of("http://x"), List.of(), null));
+            List.of("alias1"),
+            List.of(new TopYachtGroup("evt", null, List.of("http://x/results/2024/evt/index.htm"))),
+            List.of(), null));
         store.save();
 
         String json = Files.readString(tempDir.resolve("imported/clubs/c.example.json"));
@@ -337,7 +340,7 @@ class DataStoreTest {
         assertFalse(json.contains("\"excluded\""), "excluded should not be in JSON");
         assertFalse(json.contains("\"email\""), "email should not be in JSON");
         assertFalse(json.contains("\"aliases\""), "aliases should not be in JSON");
-        assertFalse(json.contains("\"topyachtUrls\""), "topyachtUrls should not be in JSON");
+        assertFalse(json.contains("\"topyachtGroups\""), "topyachtGroups should not be in JSON");
         assertTrue(json.contains("\"shortName\""));
         assertTrue(json.contains("\"id\""));
     }

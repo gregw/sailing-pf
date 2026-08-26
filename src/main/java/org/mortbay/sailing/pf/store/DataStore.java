@@ -34,7 +34,10 @@ import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Loadable;
 import org.mortbay.sailing.pf.data.Maker;
 import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
+import org.mortbay.sailing.pf.importer.TopYachtEditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1315,10 +1318,21 @@ public class DataStore
     }
 
     /**
-     * Updates the YAML-owned {@code topyacht} URL list for a club. A null or empty
+     * Normalises TopYacht groups exactly as persisting them to clubs.yaml would: prefixes
+     * slugged, blank names dropped, URLs de-duplicated within a group, groups sharing a
+     * prefix merged, and groups with no prefix or no URLs discarded. Exposed so the admin
+     * API can validate an incoming edit against what would actually be stored.
+     */
+    public static List<TopYachtGroup> cleanTopyachtGroups(List<TopYachtGroup> groups)
+    {
+        return ClubLoader.cleanGroups(groups);
+    }
+
+    /**
+     * Updates the YAML-owned {@code topyacht} groups for a club. A null or empty
      * list clears the field. Auto-creates the YAML entry if missing.
      */
-    public void updateClubTopyachtUrls(String clubId, List<String> topyachtUrls)
+    public void updateClubTopyachtGroups(String clubId, List<TopYachtGroup> topyachtGroups)
     {
         requireStarted();
         Club existing = clubs.get(clubId);
@@ -1328,8 +1342,8 @@ public class DataStore
 
         String shortNameIfNew = existing != null ? existing.shortName()
             : seed.shortName();
-        boolean changed = ClubLoader.updateClubTopyachtUrls(configDir, clubId,
-            shortNameIfNew, topyachtUrls);
+        boolean changed = ClubLoader.updateClubTopyachtGroups(configDir, clubId,
+            shortNameIfNew, topyachtGroups);
         if (!changed)
             return;
 
@@ -1356,7 +1370,7 @@ public class DataStore
         }
         return new Club(json.id(), json.shortName(),
             seed.longName(), seed.state(), seed.excluded(), seed.email(),
-            seed.aliases(), seed.topyachtUrls(),
+            seed.aliases(), seed.topyachtGroups(),
             json.series(), json.loadedAt());
     }
 
@@ -2099,6 +2113,595 @@ public class DataStore
     }
 
     /**
+     * One-off, idempotent migration of TopYacht series and race IDs to the event-scoped form.
+     * <p>
+     * Race IDs used to be {@code clubId-date-number}, which assumed (club, date, number) was
+     * unique. TopYacht regattas break that: each division is published as its own series, all
+     * with a "Race 1" on the same day, so every division after the first was silently dropped
+     * as "already imported" and the survivors were claimed by every sibling series. IDs are
+     * now scoped by the series slug, itself scoped by the club's TopYacht event prefix.
+     * <p>
+     * Each TopYacht race's event prefix is resolved, in order, from:
+     * <ol>
+     *   <li>its own {@code source} URL, matched by path against the club's configured index URLs;</li>
+     *   <li>a sibling race in the same old series that did resolve (covers races whose source
+     *       predates URL-bearing source strings);</li>
+     *   <li>the club's only configured group, when it has exactly one.</li>
+     * </ol>
+     * Races that resolve to none of these are left untouched and logged.
+     * <p>
+     * Series records of affected clubs are rebuilt from the migrated races rather than renamed,
+     * because one polluted old series can split into several correct ones.
+     */
+    private void migrateTopYachtIds()
+    {
+        // clubId → (path base → prefix), longest base first so nested groups match precisely
+        Map<String, List<Map.Entry<String, String>>> basesByClub = new LinkedHashMap<>();
+        Map<String, List<TopYachtGroup>> groupsByClub = new LinkedHashMap<>();
+        for (Club club : clubSeed.values())
+        {
+            List<TopYachtGroup> groups = club.topyachtGroups();
+            if (groups == null || groups.isEmpty())
+                continue;
+            groupsByClub.put(club.id(), groups);
+            List<Map.Entry<String, String>> bases = new ArrayList<>();
+            for (TopYachtGroup g : groups)
+            {
+                for (String url : g.urls())
+                {
+                    String base = urlPathBase(url);
+                    if (!base.isEmpty())
+                        bases.add(Map.entry(base, g.prefix()));
+                }
+            }
+            bases.sort((a, b) -> Integer.compare(b.getKey().length(), a.getKey().length()));
+            basesByClub.put(club.id(), bases);
+        }
+
+        // Pass 1: resolve a prefix per race, and remember what each old series resolved to
+        Map<String, String> prefixByRaceId = new LinkedHashMap<>();
+        Map<String, String> prefixByOldSeriesId = new LinkedHashMap<>();
+        List<Race> candidates = new ArrayList<>();
+        for (Race race : races.values())
+        {
+            if (race.source() == null || !race.source().startsWith(TOPYACHT_SOURCE))
+                continue;
+            candidates.add(race);
+            String prefix = resolvePrefixFromSource(race, basesByClub.get(race.clubId()));
+            if (prefix != null)
+            {
+                prefixByRaceId.put(race.id(), prefix);
+                String oldSeries = firstSeriesId(race);
+                if (oldSeries != null)
+                    prefixByOldSeriesId.putIfAbsent(oldSeries, prefix);
+            }
+        }
+        if (candidates.isEmpty())
+            return;
+
+        // Pass 2: fall back to a sibling in the same old series, then to a club's sole group
+        List<Race> unresolved = new ArrayList<>();
+        for (Race race : candidates)
+        {
+            if (prefixByRaceId.containsKey(race.id()))
+                continue;
+            String oldSeries = firstSeriesId(race);
+            String prefix = oldSeries != null ? prefixByOldSeriesId.get(oldSeries) : null;
+            if (prefix == null)
+            {
+                List<TopYachtGroup> groups = groupsByClub.get(race.clubId());
+                if (groups != null && groups.size() == 1)
+                    prefix = groups.getFirst().prefix();
+            }
+            if (prefix != null)
+                prefixByRaceId.put(race.id(), prefix);
+            else
+                unresolved.add(race);
+        }
+
+        // Pass 3: apply. Collect renames first so the races map is not mutated while iterating.
+        record Rename(Race race, String newId, String oldSeriesId, String newSeriesId) {}
+        List<Rename> renames = new ArrayList<>();
+        for (Race race : candidates)
+        {
+            String prefix = prefixByRaceId.get(race.id());
+            if (prefix == null)
+                continue;
+            String oldSeriesId = firstSeriesId(race);
+            if (oldSeriesId == null)
+                continue;
+            String oldSlug = IdGenerator.seriesSlug(oldSeriesId);
+            // Already migrated (or a series genuinely named after the prefix) — leave alone,
+            // so a second start() is a no-op rather than double-prefixing.
+            if (oldSlug.isEmpty() || oldSlug.equals(prefix) || oldSlug.startsWith(prefix + "-"))
+                continue;
+            String newSeriesId = IdGenerator.sanitizeIdForFilesystem(race.clubId())
+                + "/" + prefix + "-" + oldSlug;
+            String newId = IdGenerator.generateRaceId(race.clubId(), newSeriesId,
+                race.date(), race.number());
+            if (newId.equals(race.id()))
+                continue;
+            if (races.containsKey(newId))
+            {
+                LOG.warn("TopYacht ID migration: target {} already exists, leaving {} unchanged",
+                    newId, race.id());
+                continue;
+            }
+            renames.add(new Rename(race, newId, oldSeriesId, newSeriesId));
+        }
+
+        if (renames.isEmpty())
+        {
+            if (!unresolved.isEmpty())
+                LOG.warn("TopYacht ID migration: {} race(s) could not be attributed to an event "
+                    + "prefix and were left unchanged", unresolved.size());
+            return;
+        }
+
+        Set<String> touchedClubs = new java.util.LinkedHashSet<>();
+        Map<String, String> newSeriesIdByRaceId = new LinkedHashMap<>();
+        Set<String> retiredSeriesIds = new java.util.LinkedHashSet<>();
+        Set<String> migratedOldRaceIds = new java.util.LinkedHashSet<>();
+        for (Rename r : renames)
+        {
+            Path oldFile = raceFilePath(r.race());
+            races.remove(r.race().id());
+            migratedOldRaceIds.add(r.race().id());
+            retiredSeriesIds.add(r.oldSeriesId());
+            Race moved = new Race(r.newId(), r.race().clubId(), List.of(r.newSeriesId()),
+                r.race().date(), r.race().number(), r.race().name(), r.race().divisions(),
+                r.race().source(), Instant.now(), null);
+            races.put(moved.id(), moved);
+            newSeriesIdByRaceId.put(moved.id(), r.newSeriesId());
+            touchedClubs.add(r.race().clubId());
+            // Exclusions are keyed by race ID; carry any across so an admin decision survives.
+            String reason = excludedRaces.remove(r.race().id());
+            if (reason != null)
+                excludedRaces.put(moved.id(), reason);
+            try
+            {
+                Files.deleteIfExists(oldFile);
+            }
+            catch (IOException e)
+            {
+                LOG.warn("TopYacht ID migration: could not delete stale race file {}: {}",
+                    oldFile, e.getMessage());
+            }
+        }
+
+        rebuildClubSeriesAfterMigration(touchedClubs, retiredSeriesIds, migratedOldRaceIds,
+            newSeriesIdByRaceId);
+
+        save();
+        saveExclusions();
+        LOG.info("TopYacht ID migration: rewrote {} race ID(s) across {} club(s){}",
+            renames.size(), touchedClubs.size(),
+            unresolved.isEmpty() ? ""
+                : " (" + unresolved.size() + " race(s) left unchanged — no event prefix could be resolved)");
+        for (Race race : unresolved)
+        {
+            LOG.warn("TopYacht ID migration: no event prefix for race {} (source={})",
+                race.id(), race.source());
+        }
+    }
+
+    /**
+     * One-off, idempotent migration that folds a merged event's per-division races into one
+     * race per sailing slot, carrying one division per contributing series.
+     * <p>
+     * Runs only for {@link TopYachtGroup}s flagged {@code merge}. Races are keyed by
+     * {@code (date, ordinal-within-day)} rather than by TopYacht's race number: a division
+     * that sails twice on one day runs a number ahead of its siblings for the rest of the
+     * regatta, so the numbers stop lining up while "first race of the day" still does.
+     * <p>
+     * A contributing series that is itself excluded is left alone — see
+     * {@code TopYachtImporter.mergingSeries} for why folding an excluded series into a
+     * non-excluded event race would silently re-admit boats an admin had excluded.
+     */
+    private void migrateTopYachtDivisionMerge()
+    {
+        for (Club seed : clubSeed.values())
+        {
+            if (seed.topyachtGroups() == null)
+                continue;
+            for (TopYachtGroup group : seed.topyachtGroups())
+            {
+                if (group.mergeDivisions())
+                    mergeEventDivisions(seed.id(), group);
+            }
+        }
+    }
+
+    /**
+     * Merges one event's per-division races at one club.
+     */
+    private void mergeEventDivisions(String clubId, TopYachtGroup group)
+    {
+        Club club = clubs.get(clubId);
+        if (club == null)
+            return;
+        String targetSeriesId = IdGenerator.generateEventSeriesId(clubId, group.prefix());
+        String perDivisionPrefix = targetSeriesId + "-";
+
+        Map<String, String> nameBySeriesId = new LinkedHashMap<>();
+        for (Series s : club.series())
+        {
+            nameBySeriesId.put(s.id(), s.name());
+        }
+
+        // Gather this event's still-unmerged races, grouped by their contributing series
+        Map<String, List<Race>> byContributingSeries = new LinkedHashMap<>();
+        for (Race race : races.values())
+        {
+            if (!clubId.equals(race.clubId()))
+                continue;
+            String seriesId = firstSeriesId(race);
+            if (seriesId == null || !seriesId.startsWith(perDivisionPrefix))
+                continue;
+            // An edition series (mirw-2025) is a merge result, not a division to merge
+            if (TopYachtEditions.isEditionSeriesId(seriesId, clubId, group.prefix()))
+                continue;
+            String seriesName = nameBySeriesId.getOrDefault(seriesId,
+                IdGenerator.seriesSlug(seriesId));
+            if (isSeriesExcluded(seriesName))
+                continue;                       // held out of the merge, keeps its own series
+            byContributingSeries.computeIfAbsent(seriesId, k -> new ArrayList<>()).add(race);
+        }
+        if (byContributingSeries.isEmpty())
+            return;
+
+        // (date, ordinal-within-day) -> the per-division races that share that slot
+        Map<String, List<Race>> slots = new LinkedHashMap<>();
+        Map<String, Integer> ordinalOf = new LinkedHashMap<>();
+        Map<String, LocalDate> dateOf = new LinkedHashMap<>();
+        for (List<Race> seriesRaces : byContributingSeries.values())
+        {
+            Map<LocalDate, Integer> seenPerDate = new LinkedHashMap<>();
+            List<Race> ordered = new ArrayList<>(seriesRaces);
+            ordered.sort(java.util.Comparator.comparingInt(Race::number));
+            for (Race race : ordered)
+            {
+                int ordinal = seenPerDate.merge(race.date(), 1, Integer::sum);
+                String slot = race.date() + "#" + ordinal;
+                slots.computeIfAbsent(slot, k -> new ArrayList<>()).add(race);
+                ordinalOf.put(slot, ordinal);
+                dateOf.put(slot, race.date());
+            }
+        }
+
+        int mergedCount = 0;
+        int consumed = 0;
+        Set<String> supersededRaceIds = new java.util.LinkedHashSet<>();
+        Map<String, String> newSeriesIdByRaceId = new LinkedHashMap<>();
+        // A merged event is normally an annual regatta whose index URLs span years; splitting
+        // its races into editions keeps 2022, 2023 and 2025 racing in separate series instead
+        // of one series spanning years.
+        Map<LocalDate, String> editionByDate = editionSeriesIdsByDate(clubId, group.prefix(),
+            dateOf.values());
+
+        for (Map.Entry<String, List<Race>> slot : slots.entrySet())
+        {
+            LocalDate date = dateOf.get(slot.getKey());
+            int ordinal = ordinalOf.get(slot.getKey());
+            String editionSeriesId = editionByDate.get(date);
+            String newId = IdGenerator.generateRaceId(clubId, targetSeriesId, date, ordinal);
+
+            List<Division> divisions = new ArrayList<>();
+            List<String> sourceUrls = new ArrayList<>();
+            String raceName = null;
+            boolean anyExcluded = false;
+            for (Race race : slot.getValue())
+            {
+                String seriesName = nameBySeriesId.getOrDefault(firstSeriesId(race),
+                    IdGenerator.seriesSlug(firstSeriesId(race)));
+                String divisionBase = stripEventPrefix(seriesName, group.name());
+                List<Division> old = race.divisions() == null ? List.of() : race.divisions();
+                for (int i = 0; i < old.size(); i++)
+                {
+                    // Division identity is its name downstream, so names must stay distinct
+                    // within the merged race; a multi-division source page is qualified.
+                    String name = old.size() <= 1 ? divisionBase
+                        : divisionBase + " - " + (old.get(i).name() != null && !old.get(i).name().isBlank()
+                        ? old.get(i).name() : String.valueOf(i + 1));
+                    divisions.add(new Division(name, old.get(i).finishers()));
+                }
+                String url = sourceUrl(race.source());
+                if (url != null && !sourceUrls.contains(url))
+                    sourceUrls.add(url);
+                if (raceName == null)
+                    raceName = race.name();
+                if (excludedRaces.containsKey(race.id()))
+                    anyExcluded = true;
+                supersededRaceIds.add(race.id());
+                consumed++;
+            }
+
+            Race existing = races.get(newId);
+            if (existing != null && !supersededRaceIds.contains(newId))
+            {
+                LOG.warn("TopYacht division merge: target {} already exists, skipping slot", newId);
+                continue;
+            }
+
+            Race merged = new Race(newId, clubId, List.of(editionSeriesId), date, ordinal,
+                raceName, List.copyOf(divisions),
+                sourceUrls.isEmpty() ? "TopYacht" : "TopYacht - " + String.join(", ", sourceUrls),
+                Instant.now(), null);
+            for (Race race : slot.getValue())
+            {
+                if (!race.id().equals(newId))
+                    deleteRaceFile(race);
+            }
+            slot.getValue().forEach(r -> races.remove(r.id()));
+            races.put(newId, merged);
+            newSeriesIdByRaceId.put(newId, editionSeriesId);
+            if (anyExcluded)
+            {
+                excludedRaces.put(newId, "carried over from a merged per-division race");
+                LOG.warn("TopYacht division merge: merged race {} inherits an exclusion from a "
+                    + "contributing race", newId);
+            }
+            mergedCount++;
+        }
+
+        if (mergedCount == 0)
+            return;
+
+        for (String oldId : supersededRaceIds)
+        {
+            excludedRaces.remove(oldId);
+        }
+
+        rebuildClubSeriesAfterMigration(Set.of(clubId), byContributingSeries.keySet(),
+            supersededRaceIds, newSeriesIdByRaceId);
+
+        // The merged series is named for the event, not for any one division
+        Club updated = clubs.get(clubId);
+        if (updated != null)
+        {
+            List<Series> renamed = new ArrayList<>();
+            for (Series s : updated.series())
+            {
+                renamed.add(TopYachtEditions.isEditionSeriesId(s.id(), clubId, group.prefix())
+                    ? new Series(s.id(), TopYachtEditions.editionName(group.displayName(), s.id()), s.isCatchAll(), s.raceIds())
+                    : s);
+            }
+            clubs.put(clubId, new Club(updated.id(), updated.shortName(), updated.longName(),
+                updated.state(), updated.excluded(), updated.email(), updated.aliases(),
+                updated.topyachtGroups(), List.copyOf(renamed), null));
+        }
+
+        save();
+        saveExclusions();
+        LOG.info("TopYacht division merge: club {} event '{}' — {} per-division race(s) merged "
+            + "into {} race(s)", clubId, group.displayName(), consumed, mergedCount);
+    }
+
+    /**
+     * Maps each race date of a merged event onto its edition's series ID. Dates are clustered
+     * by {@link TopYachtEditions}; an edition already recorded at the club claims a cluster
+     * whose races fall within the gap of one of its own, so labels stay stable across runs.
+     */
+    private Map<LocalDate, String> editionSeriesIdsByDate(String clubId, String prefix,
+                                                          java.util.Collection<LocalDate> dates)
+    {
+        Map<LocalDate, String> out = new LinkedHashMap<>();
+        Club club = clubs.get(clubId);
+        for (List<LocalDate> edition : TopYachtEditions.cluster(dates))
+        {
+            if (edition.isEmpty())
+                continue;
+            String seriesId = existingEditionSeriesId(club, clubId, prefix, edition);
+            if (seriesId == null)
+                seriesId = TopYachtEditions.editionSeriesId(clubId, prefix,
+                    TopYachtEditions.label(edition.getFirst()));
+            for (LocalDate d : edition)
+            {
+                out.put(d, seriesId);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * An edition series already at this club whose races fall inside {@code edition}, or null.
+     */
+    private String existingEditionSeriesId(Club club, String clubId, String prefix,
+                                           List<LocalDate> edition)
+    {
+        if (club == null || club.series() == null)
+            return null;
+        for (Series s : club.series())
+        {
+            if (!TopYachtEditions.isEditionSeriesId(s.id(), clubId, prefix))
+                continue;
+            for (String raceId : s.raceIds())
+            {
+                Race race = races.get(raceId);
+                if (race == null)
+                    continue;
+                for (LocalDate d : edition)
+                {
+                    if (TopYachtEditions.sameEdition(race.date(), d))
+                        return s.id();
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Drops a leading {@code "<event name> - "} from a series name, so a division inside a
+     * merged race reads "SeaLink Spinnaker Division 1" rather than repeating the event name
+     * its race already carries.
+     */
+    private static String stripEventPrefix(String seriesName, String eventName)
+    {
+        if (seriesName == null || eventName == null || eventName.isBlank())
+            return seriesName;
+        String lead = eventName + " - ";
+        return seriesName.startsWith(lead) ? seriesName.substring(lead.length()) : seriesName;
+    }
+
+    /**
+     * The URL part of a {@code "TopYacht - <url>"} source string, or null if there is none.
+     */
+    private static String sourceUrl(String source)
+    {
+        if (source == null)
+            return null;
+        int dash = source.indexOf(" - ");
+        return dash < 0 ? null : source.substring(dash + 3);
+    }
+
+    private void deleteRaceFile(Race race)
+    {
+        try
+        {
+            Files.deleteIfExists(raceFilePath(race));
+        }
+        catch (IOException e)
+        {
+            LOG.warn("TopYacht division merge: could not delete stale race file for {}: {}",
+                race.id(), e.getMessage());
+        }
+    }
+
+    /**
+     * Rebuilds the series list of every club touched by the ID migration. Series that the
+     * migration retired — either because a migrated race named them, or because they listed a
+     * migrated race — are dropped and replaced by series built from where the races actually
+     * landed; their display names are carried over. Series untouched by the migration (e.g.
+     * every SailSys series at the same club) are left exactly as they were.
+     */
+    private void rebuildClubSeriesAfterMigration(Set<String> touchedClubs,
+                                                 Set<String> retiredSeriesIds,
+                                                 Set<String> migratedOldRaceIds,
+                                                 Map<String, String> newSeriesIdByRaceId)
+    {
+        for (String clubId : touchedClubs)
+        {
+            Club club = clubs.get(clubId);
+            if (club == null)
+                continue;
+            Map<String, String> nameByOldSeriesId = new LinkedHashMap<>();
+            List<Series> kept = new ArrayList<>();
+            for (Series s : club.series())
+            {
+                nameByOldSeriesId.put(s.id(), s.name());
+                boolean retired = retiredSeriesIds.contains(s.id())
+                    || s.raceIds().stream().anyMatch(migratedOldRaceIds::contains);
+                if (!retired)
+                    kept.add(s);
+            }
+
+            // Group the club's migrated races by their new series ID, preserving race order
+            Map<String, List<String>> raceIdsByNewSeries = new LinkedHashMap<>();
+            for (Map.Entry<String, String> e : newSeriesIdByRaceId.entrySet())
+            {
+                Race race = races.get(e.getKey());
+                if (race == null || !clubId.equals(race.clubId()))
+                    continue;
+                raceIdsByNewSeries.computeIfAbsent(e.getValue(), k -> new ArrayList<>())
+                    .add(e.getKey());
+            }
+
+            List<Series> rebuilt = new ArrayList<>(kept);
+            for (Map.Entry<String, List<String>> e : raceIdsByNewSeries.entrySet())
+            {
+                String newSeriesId = e.getKey();
+                // The old series ID is the new one minus the event prefix; recover the display
+                // name from whichever old series carried it.
+                String name = null;
+                for (Map.Entry<String, String> old : nameByOldSeriesId.entrySet())
+                {
+                    String oldSlug = IdGenerator.seriesSlug(old.getKey());
+                    if (!oldSlug.isEmpty() && IdGenerator.seriesSlug(newSeriesId).endsWith("-" + oldSlug))
+                    {
+                        name = old.getValue();
+                        break;
+                    }
+                }
+                if (name == null)
+                    name = IdGenerator.seriesSlug(newSeriesId);
+                rebuilt.add(new Series(newSeriesId, name, false, List.copyOf(e.getValue())));
+            }
+            clubs.put(clubId, new Club(club.id(), club.shortName(), club.longName(), club.state(),
+                club.excluded(), club.email(), club.aliases(), club.topyachtGroups(),
+                List.copyOf(rebuilt), null));
+        }
+    }
+
+    /**
+     * Source-string marker for races imported from TopYacht (bare, or "TopYacht - <url>").
+     */
+    private static final String TOPYACHT_SOURCE = "TopYacht";
+
+    /**
+     * The race's first series ID, or null when it has none.
+     */
+    private static String firstSeriesId(Race race)
+    {
+        return (race.seriesIds() == null || race.seriesIds().isEmpty())
+            ? null : race.seriesIds().getFirst();
+    }
+
+    /**
+     * Matches a race's {@code source} URL against a club's configured TopYacht index URLs and
+     * returns the matching group's prefix, or null. Comparison is on the URL path only: the
+     * same results tree is served from several hosts (www./tes./club domains), and a race's
+     * stored source may name a different one than the current config.
+     */
+    private static String resolvePrefixFromSource(Race race, List<Map.Entry<String, String>> bases)
+    {
+        if (bases == null || bases.isEmpty())
+            return null;
+        String source = race.source();
+        int dash = source.indexOf(" - ");
+        if (dash < 0)
+            return null;                        // bare "TopYacht" — no URL to match
+        for (String url : source.substring(dash + 3).split(",\\s*"))
+        {
+            String path = urlPath(url);
+            if (path.isEmpty())
+                continue;
+            for (Map.Entry<String, String> base : bases)
+            {
+                if (path.startsWith(base.getKey()))
+                    return base.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Path portion of a URL (no scheme, no host, no query), always starting with '/'.
+     */
+    private static String urlPath(String url)
+    {
+        if (url == null)
+            return "";
+        String p = url.trim().replaceFirst("^[a-zA-Z][a-zA-Z0-9+.-]*://", "");
+        int query = p.indexOf('?');
+        if (query >= 0)
+            p = p.substring(0, query);
+        int slash = p.indexOf('/');
+        return slash < 0 ? "" : p.substring(slash);
+    }
+
+    /**
+     * Directory portion of a URL's path, e.g. ".../mirw/index.htm" → "/results/2025/mirw/".
+     */
+    private static String urlPathBase(String url)
+    {
+        String path = urlPath(url);
+        if (path.isEmpty())
+            return "";
+        int lastSlash = path.lastIndexOf('/');
+        return lastSlash < 0 ? "" : path.substring(0, lastSlash + 1);
+    }
+
+    /**
      * Write all dirty entities to disk (dirty-check via loadedAt). Keeps maps loaded.
      */
     public void save()
@@ -2161,11 +2764,14 @@ public class DataStore
         loadExclusions();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
-        // YAML is the source of truth for longName/state/excluded/email/aliases/topyachtUrls;
+        // YAML is the source of truth for longName/state/excluded/email/aliases/topyacht;
         // populate those fields on the in-memory Club records from clubSeed.
         clubs.replaceAll((id, c) -> enrichWithSeed(c));
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
+
+        migrateTopYachtIds();
+        migrateTopYachtDivisionMerge();
 
         // noclub correction: boats that have a persisted clubId but are listed in the noclub
         // config get their clubs cleared. This fixes boats that were assigned a club before the

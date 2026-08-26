@@ -36,6 +36,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,8 +46,12 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Walks: club index page → series pages → results pages → Race + Finisher records.
  * <p>
- * Entry points for each club are the {@code topyachtUrls} list on the {@link Club} record,
- * populated from {@code pf-data/config/clubs.yaml}.
+ * Entry points for each club are the {@link TopYachtGroup} list on the {@link Club} record,
+ * populated from {@code pf-data/config/clubs.yaml}. Each group is one event (a regatta, or
+ * the club's own season) with a stable prefix; that prefix scopes the generated series IDs,
+ * and the series slug in turn scopes the race IDs. Without that scoping a regatta's divisions
+ * — each published as its own series, all with a "Race 1" on the same day — would collapse
+ * onto one race ID and all but the first would be dropped as already imported.
  * <p>
  * Per CLAUDE.md:
  * - AHC, corrected time and PHS handicap values are NOT stored
@@ -115,6 +120,13 @@ public class TopYachtImporter
     private Path errorFile;
     private int recentRaceReimportDays = 30;
 
+    // Per-run tallies, reset by run(); reported back through RunResult.
+    private int clubsVisited;
+    private int seriesVisited;
+    private int racesImported;
+    private int racesAlreadyPresent;
+    private int finishersImported;
+
     public TopYachtImporter(DataStore store, HttpClient httpClient)
     {
         this.store = store;
@@ -142,49 +154,120 @@ public class TopYachtImporter
 
     // --- Entry point ---
 
-    public void run() throws Exception { run(30); }
+    /**
+     * Tallies for one {@link #run} invocation, so a caller (e.g. the on-demand per-club
+     * import in the admin UI) can report what the run actually did.
+     *
+     * @param clubs clubs whose TopYacht index pages were visited
+     * @param series series pages visited across all those clubs
+     * @param racesImported races written to the store (new, or re-imported because recent)
+     * @param racesAlreadyPresent races skipped because they were already imported and are not recent
+     * @param finishers finisher records written across all imported races
+     */
+    public record RunResult(int clubs, int series, int racesImported,
+                            int racesAlreadyPresent, int finishers) {}
 
-    public void run(int recentRaceReimportDays) throws Exception
+    public RunResult run() throws Exception
+    {
+        return run(30);
+    }
+
+    public RunResult run(int recentRaceReimportDays) throws Exception
+    {
+        return run(recentRaceReimportDays, null);
+    }
+
+    /**
+     * Imports TopYacht results.
+     *
+     * @param clubIds when non-null and non-empty, restricts the run to those club ids;
+     * null (or empty) imports every club with configured TopYacht URLs.
+     * A club-restricted run warns about selected clubs that have no
+     * TopYacht URLs, and leaves the shared {@code topyacht-errors.txt}
+     * in place rather than truncating a full run's findings.
+     */
+    public RunResult run(int recentRaceReimportDays, Set<String> clubIds) throws Exception
     {
         this.recentRaceReimportDays = recentRaceReimportDays;
+        clubsVisited = 0;
+        seriesVisited = 0;
+        racesImported = 0;
+        racesAlreadyPresent = 0;
+        finishersImported = 0;
+        boolean restricted = clubIds != null && !clubIds.isEmpty();
+
         Path logDir = store.dataRoot().resolve("log");
         Files.createDirectories(logDir);
         errorFile = logDir.resolve("topyacht-errors.txt");
-        Files.deleteIfExists(errorFile);
-        // topyachtUrls are configured in the seed (clubs.yaml); merge seed + persisted
+        if (!restricted)
+            Files.deleteIfExists(errorFile);
+        // topyacht groups are configured in the seed (clubs.yaml); merge seed + persisted
         // so we don't miss clubs that haven't been imported yet.
         List<Club> allClubs = Stream.concat(
             store.clubs().values().stream(),
             store.clubSeed().values().stream().filter(c -> !store.clubs().containsKey(c.id()))
-        ).toList();
+        ).filter(c -> !restricted || clubIds.contains(c.id())).toList();
+
+        if (restricted)
+        {
+            Set<String> found = allClubs.stream().map(Club::id).collect(java.util.stream.Collectors.toSet());
+            for (String requested : clubIds)
+            {
+                if (!found.contains(requested))
+                    ImporterLog.warn(LOG, "TopYacht: club={} is not a known club; skipping", requested);
+            }
+        }
 
         for (Club club : allClubs)
         {
-            for (String indexUrl : club.topyachtUrls())
+            List<TopYachtGroup> groups = club.topyachtGroups();
+            if (groups == null || groups.isEmpty())
             {
-                LOG.info("TopYacht: fetching index for club={} url={}", club.id(), indexUrl);
-                try
+                if (restricted)
+                    ImporterLog.warn(LOG, "TopYacht: club={} has no TopYacht URLs configured; nothing to import",
+                        club.id());
+                continue;
+            }
+            clubsVisited++;
+            for (TopYachtGroup group : groups)
+            {
+                for (String indexUrl : group.urls())
                 {
-                    String html = fetch(indexUrl);
-                    processIndexPage(club, indexUrl, html);
-                }
-                catch (Exception e)
-                {
-                    ImporterLog.error(LOG,"Failed to fetch index for club={} url={}: {}", club.id(), indexUrl, e.getMessage());
+                    ImporterLog.info(LOG, "TopYacht: fetching index for club={} event={} url={}",
+                        club.id(), group.displayName(), indexUrl);
+                    try
+                    {
+                        String html = fetch(indexUrl);
+                        processIndexPage(club, group, indexUrl, html);
+                    }
+                    catch (Exception e)
+                    {
+                        ImporterLog.error(LOG, "Failed to fetch index for club={} url={}: {}", club.id(), indexUrl, e.getMessage());
+                    }
                 }
             }
         }
+        ImporterLog.info(LOG, "TopYacht: run complete — {} club(s), {} series, {} race(s) imported, "
+                + "{} already present, {} finishers",
+            clubsVisited, seriesVisited, racesImported, racesAlreadyPresent, finishersImported);
+        return new RunResult(clubsVisited, seriesVisited, racesImported, racesAlreadyPresent,
+            finishersImported);
     }
 
     // --- Page processors (package-private for testing) ---
 
-    void processIndexPage(Club club, String indexUrl, String html)
+    void processIndexPage(Club club, TopYachtGroup group, String indexUrl, String html)
     {
         List<SeriesLink> series = parseIndexPage(html, indexUrl);
-        LOG.info("TopYacht: club={} found {} series on index page", club.id(), series.size());
+        ImporterLog.info(LOG, "TopYacht: club={} found {} series on index page {}",
+            club.id(), series.size(), indexUrl);
+        if (series.isEmpty())
+            ImporterLog.warn(LOG, "TopYacht: club={} index page {} has no series links "
+                + "(no href ending in series.htm)", club.id(), indexUrl);
 
         for (SeriesLink sl : series)
         {
+            seriesVisited++;
             // TODO: log a warning if series name contains two-handed hints
             String lower = sl.name().toLowerCase();
             if (lower.contains("two") || lower.contains("2h") || lower.contains("2-handed"))
@@ -194,7 +277,7 @@ public class TopYachtImporter
             try
             {
                 String html2 = fetch(sl.url());
-                processSeriesPage(club, sl.name(), sl.url(), html2);
+                processSeriesPage(club, group, sl.name(), sl.url(), html2);
             }
             catch (Exception e)
             {
@@ -203,12 +286,27 @@ public class TopYachtImporter
         }
     }
 
-    void processSeriesPage(Club club, String seriesName, String seriesUrl, String html)
+    void processSeriesPage(Club club, TopYachtGroup group, String seriesName, String seriesUrl, String html)
     {
         List<RaceRow> races = parseSeriesPage(html, seriesUrl);
-        LOG.info("TopYacht: club={} series='{}' found {} races", club.id(), seriesName, races.size());
+        ImporterLog.info(LOG, "TopYacht: club={} series='{}' found {} races on {}",
+            club.id(), seriesName, races.size(), seriesUrl);
+        if (races.isEmpty())
+            ImporterLog.warn(LOG, "TopYacht: club={} series='{}' has no race rows with results links "
+                + "(url={})", club.id(), seriesName, seriesUrl);
 
-        for (RaceRow row : races)
+        // When this series folds into a merged event, its races are keyed by their ordinal
+        // within the day rather than by TopYacht's race number: a division that sails twice
+        // on one day runs a number ahead of its siblings for the rest of the regatta, so the
+        // numbers stop lining up while "first race of the day" still does. Ascending number
+        // order makes the Nth appearance of a date the Nth race of that day.
+        boolean merge = mergingSeries(group, seriesName);
+        List<RaceRow> ordered = merge
+            ? races.stream().sorted(java.util.Comparator.comparingInt(RaceRow::number)).toList()
+            : races;
+        Map<LocalDate, Integer> racesSeenPerDate = new LinkedHashMap<>();
+
+        for (RaceRow row : ordered)
         {
             if (row.resultsUrls().size() == 1)
             {
@@ -220,7 +318,9 @@ public class TopYachtImporter
                     LocalDate date = resolveRaceDate(row, html2, url, seriesUrl);
                     if (date == null)
                         continue;
-                    processResultsPage(club, seriesName, row.number(), date, html2, url);
+                    int number = merge
+                        ? racesSeenPerDate.merge(date, 1, Integer::sum) : row.number();
+                    processResultsPage(club, group, seriesName, number, date, html2, url);
                 }
                 catch (Exception e)
                 {
@@ -259,7 +359,9 @@ public class TopYachtImporter
                 LocalDate date = resolveRaceDate(row, firstHtml, firstUrl, seriesUrl);
                 if (date == null)
                     continue;
-                processResultsPagesWithUrls(club, seriesName, row.number(), date, parsedList);
+                int number = merge
+                    ? racesSeenPerDate.merge(date, 1, Integer::sum) : row.number();
+                processResultsPagesWithUrls(club, group, seriesName, number, date, parsedList);
             }
         }
     }
@@ -393,8 +495,8 @@ public class TopYachtImporter
      * contains multiple {@code centre_results_table} tables (e.g. CYCSA division pages).
      * Package-private for testing with inline HTML (pass {@code null} for url in tests).
      */
-    void processResultsPage(Club club, String seriesName, int raceNumber, LocalDate date,
-                             String html, String url)
+    void processResultsPage(Club club, TopYachtGroup group, String seriesName, int raceNumber,
+                            LocalDate date, String html, String url)
     {
         ParsedRace parsed = parseResultsPage(html, url);
         if (parsed == null)
@@ -403,14 +505,25 @@ public class TopYachtImporter
             return;
         }
 
-        String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
-        String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
+        boolean merge = mergingSeries(group, seriesName);
+        String seriesId = seriesIdFor(club, group, seriesName, merge, date);
+        String raceId = merge
+            ? mergedRaceId(club, group, date, raceNumber)
+            : IdGenerator.generateRaceId(club.id(), seriesId, date, raceNumber);
+        String seriesLabel = merge
+            ? TopYachtEditions.editionName(group.displayName(), seriesId)
+            : seriesDisplayName(group, seriesName);
 
-        if (store.races().containsKey(raceId) && !isRecentRace(date))
+        Race existing = store.races().get(raceId);
+        // A merged race is only complete once every contributing series has added its
+        // division, so "already imported" has to mean "already carries *this* division".
+        if (existing != null && !isRecentRace(date)
+            && (!merge || hasDivisionNamed(existing, seriesName)))
         {
+            racesAlreadyPresent++;
             upgradeLegacySource(raceId, sourceWithUrl(url));
             LOG.debug("TopYacht: race {} already imported, updating series membership only", raceId);
-            updateClubSeries(club.id(), seriesId, seriesName, raceId);
+            updateClubSeries(club.id(), seriesId, seriesLabel, raceId);
             return;
         }
 
@@ -418,7 +531,6 @@ public class TopYachtImporter
 
         List<Division> divisions = new ArrayList<>();
         int totalFinishers = 0;
-        String handicapSystem = parsed.divisions().get(0).handicapSystem();
 
         for (ParsedDivision parsedDiv : parsed.divisions())
         {
@@ -426,16 +538,27 @@ public class TopYachtImporter
             List<Finisher> finishers = buildFinishers(parsedDiv.rows(), parsedDiv.handicapSystem(),
                 date.getYear(), divNS, parsedDiv.twoHanded(), parsedDiv.windwardLeeward(),
                 url, raceId, club.id(), date);
-            divisions.add(new Division(parsedDiv.name(), List.copyOf(finishers)));
+            String divName = merge
+                ? mergedDivisionName(seriesName, parsedDiv, parsed.divisions().size())
+                : parsedDiv.name();
+            divisions.add(new Division(divName, List.copyOf(finishers)));
             totalFinishers += finishers.size();
         }
 
-        store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, List.copyOf(divisions), sourceWithUrl(url), Instant.now(), null));
-        LOG.info("TopYacht: imported race {} ({} finishers, {} division(s))",
-            raceId, totalFinishers, divisions.size());
+        List<Division> allDivisions = merge
+            ? mergeDivisions(existing, divisions) : List.copyOf(divisions);
 
-        updateClubSeries(club.id(), seriesId, seriesName, raceId);
+        store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
+            existing != null ? existing.name() : null, allDivisions,
+            sourceWithUrl(url), Instant.now(), null));
+        if (existing == null)
+            racesImported++;
+        finishersImported += totalFinishers;
+        ImporterLog.info(LOG, "TopYacht: {} race {} ({} finishers, {} division(s)) from {}",
+            existing == null ? "imported" : "merged into", raceId, totalFinishers,
+            allDivisions.size(), url);
+
+        updateClubSeries(club.id(), seriesId, seriesLabel, raceId);
     }
 
     /**
@@ -443,7 +566,7 @@ public class TopYachtImporter
      * URLs as unknown -- log lines emitted by this path will show {@code urls=[]}.
      * Production code uses {@link #processResultsPagesWithUrls} so URLs are retained.
      */
-    void processResultsPages(Club club, String seriesName, int raceNumber,
+    void processResultsPages(Club club, TopYachtGroup group, String seriesName, int raceNumber,
                              LocalDate date, List<ParsedRace> parsedList)
     {
         List<UrlAndRace> withNullUrls = new ArrayList<>(parsedList.size());
@@ -451,7 +574,7 @@ public class TopYachtImporter
         {
             withNullUrls.add(new UrlAndRace(null, pr));
         }
-        processResultsPagesWithUrls(club, seriesName, raceNumber, date, withNullUrls);
+        processResultsPagesWithUrls(club, group, seriesName, raceNumber, date, withNullUrls);
     }
 
     /**
@@ -460,11 +583,17 @@ public class TopYachtImporter
      * by sail number. Infers certificates from AHC column values for non-PHS systems.
      * The source URLs are retained per page for log context.
      */
-    void processResultsPagesWithUrls(Club club, String seriesName, int raceNumber,
+    void processResultsPagesWithUrls(Club club, TopYachtGroup group, String seriesName, int raceNumber,
                                      LocalDate date, List<UrlAndRace> parsedList)
     {
-        String seriesId = IdGenerator.generateSeriesId(club.id(), seriesName);
-        String raceId = IdGenerator.generateRaceId(club.id(), date, raceNumber);
+        boolean merge = mergingSeries(group, seriesName);
+        String seriesId = seriesIdFor(club, group, seriesName, merge, date);
+        String raceId = merge
+            ? mergedRaceId(club, group, date, raceNumber)
+            : IdGenerator.generateRaceId(club.id(), seriesId, date, raceNumber);
+        String seriesLabel = merge
+            ? TopYachtEditions.editionName(group.displayName(), seriesId)
+            : seriesDisplayName(group, seriesName);
 
         // List of source urls (may contain nulls in tests) -- included in log messages
         List<String> sourceUrls = new ArrayList<>(parsedList.size());
@@ -473,11 +602,14 @@ public class TopYachtImporter
             sourceUrls.add(ur.url());
         }
 
-        if (store.races().containsKey(raceId) && !isRecentRace(date))
+        Race existingRace = store.races().get(raceId);
+        if (existingRace != null && !isRecentRace(date)
+            && (!merge || hasDivisionNamed(existingRace, seriesName)))
         {
+            racesAlreadyPresent++;
             upgradeLegacySource(raceId, sourceWithUrls(sourceUrls));
             LOG.debug("TopYacht: race {} already imported, updating series membership only", raceId);
-            updateClubSeries(club.id(), seriesId, seriesName, raceId);
+            updateClubSeries(club.id(), seriesId, seriesLabel, raceId);
             return;
         }
 
@@ -590,13 +722,23 @@ public class TopYachtImporter
             finishers.add(new Finisher(boat.id(), me.elapsed, divNS, certNumber));
         }
 
-        store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, List.of(new Division(handicapSystem, List.copyOf(finishers))),
-            sourceWithUrls(sourceUrls), Instant.now(), null));
-        LOG.info("TopYacht: imported race {} ({} finishers)",
-            raceId, finishers.size());
+        // Merged events name the division for its contributing series; standalone series
+        // keep the historical behaviour of naming it after the handicap system(s).
+        Division division = new Division(merge ? seriesName : handicapSystem,
+            List.copyOf(finishers));
+        List<Division> allDivisions = merge
+            ? mergeDivisions(existingRace, List.of(division)) : List.of(division);
 
-        updateClubSeries(club.id(), seriesId, seriesName, raceId);
+        store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
+            existingRace != null ? existingRace.name() : null, allDivisions,
+            sourceWithUrls(sourceUrls), Instant.now(), null));
+        if (existingRace == null)
+            racesImported++;
+        finishersImported += finishers.size();
+        ImporterLog.info(LOG, "TopYacht: {} race {} ({} finishers) from {}",
+            existingRace == null ? "imported" : "merged into", raceId, finishers.size(), sourceUrls);
+
+        updateClubSeries(club.id(), seriesId, seriesLabel, raceId);
     }
 
     // --- Parsers (package-private for testing) ---
@@ -1193,9 +1335,200 @@ public class TopYachtImporter
         return List.copyOf(updated);
     }
 
+    /**
+     * The event prefix that scopes this group's series (and therefore race) IDs. Null-safe
+     * so the test-only processing entry points can pass no group; race IDs are still scoped
+     * by the series slug in that case, only the event scoping is absent.
+     */
+    private static String prefixOf(TopYachtGroup group)
+    {
+        return group == null ? null : group.prefix();
+    }
+
+    /**
+     * The name stored on the Series record. When the event carries a long name, it leads —
+     * "Magnetic Island Race Week - SeaLink Spinnaker Division 1" — so a division series reads
+     * as part of its regatta everywhere a series name is shown (the series list, and the
+     * series column of the races list). Without a long name the raw TopYacht name is kept,
+     * which is what every club's own season already looks like.
+     */
+    private static String seriesDisplayName(TopYachtGroup group, String seriesName)
+    {
+        if (group == null || group.name() == null || group.name().isBlank())
+            return seriesName;
+        if (seriesName == null || seriesName.isBlank())
+            return group.name();
+        // Guard against re-prefixing a name that already leads with the event
+        if (seriesName.startsWith(group.name()))
+            return seriesName;
+        return group.name() + " - " + seriesName;
+    }
+
+    // --- Division merging (regattas that publish each division as its own series) ---
+
+    /**
+     * True when this contributing series should fold into its event's single merged series.
+     * <p>
+     * A series that is itself excluded is deliberately left out of the merge: series
+     * exclusions are matched on the series <em>name</em>, so folding e.g. "Multihulls" into a
+     * race whose only series is "Magnetic Island Race Week" would silently re-admit boats an
+     * admin had excluded. Held-out series keep their own series and their own per-division
+     * races, exactly as they behave today.
+     */
+    private boolean mergingSeries(TopYachtGroup group, String seriesName)
+    {
+        return group != null && group.mergeDivisions() && !store.isSeriesExcluded(seriesName);
+    }
+
+    /**
+     * The series a race belongs to: one series per edition of the event when merging (so all
+     * of that occasion's divisions land together, but next year's running does not), otherwise
+     * one per TopYacht series scoped by the event prefix.
+     */
+    private String seriesIdFor(Club club, TopYachtGroup group, String seriesName,
+                               boolean merge, LocalDate date)
+    {
+        return merge
+            ? editionSeriesId(club, group.prefix(), date)
+            : IdGenerator.generateSeriesId(club.id(), prefixOf(group), seriesName);
+    }
+
+    /**
+     * Resolves which edition of a merged event a race on {@code date} belongs to.
+     * <p>
+     * An edition already recorded at this club claims the race when any of its races is within
+     * {@link TopYachtEditions#MAX_GAP_MONTHS} of it — reusing the stored ID verbatim, so a
+     * label never churns once minted. Otherwise the race starts a new edition labelled by its
+     * own year.
+     */
+    private String editionSeriesId(Club club, String prefix, LocalDate date)
+    {
+        Club current = store.clubs().get(club.id());
+        if (current != null && current.series() != null)
+        {
+            for (Series s : current.series())
+            {
+                if (!TopYachtEditions.isEditionSeriesId(s.id(), club.id(), prefix))
+                    continue;
+                for (String raceId : s.raceIds())
+                {
+                    Race race = store.races().get(raceId);
+                    if (race != null && TopYachtEditions.sameEdition(race.date(), date))
+                        return s.id();
+                }
+            }
+        }
+        return TopYachtEditions.editionSeriesId(club.id(), prefix, TopYachtEditions.label(date));
+    }
+
+    /**
+     * The ID of a merged race. Keyed on the event prefix and the date rather than on the
+     * edition series, so a race keeps its ID even if an edition boundary shifts as more races
+     * arrive.
+     */
+    private static String mergedRaceId(Club club, TopYachtGroup group, LocalDate date, int number)
+    {
+        return IdGenerator.generateRaceId(club.id(),
+            IdGenerator.generateEventSeriesId(club.id(), group.prefix()), date, number);
+    }
+
+    /**
+     * Names a division inside a merged race after the series that contributed it. Division
+     * identity is its name almost everywhere downstream — the API looks one up with
+     * {@code findFirst}, the UI de-duplicates the selector by name, and the analysis keys
+     * per-division maps by name — so names must be distinct and non-null within a race. When
+     * one results page yields several divisions, the parsed name (or handicap system)
+     * disambiguates them under the series name.
+     */
+    private static String mergedDivisionName(String seriesName, ParsedDivision parsedDiv, int pageDivisions)
+    {
+        if (pageDivisions <= 1)
+            return seriesName;
+        String qualifier = parsedDiv.name() != null && !parsedDiv.name().isBlank()
+            ? parsedDiv.name() : parsedDiv.handicapSystem();
+        return seriesName + " - " + qualifier;
+    }
+
+    /**
+     * True if the race already carries a division named {@code divisionName}.
+     */
+    private static boolean hasDivisionNamed(Race race, String divisionName)
+    {
+        if (race == null || race.divisions() == null)
+            return false;
+        for (Division d : race.divisions())
+        {
+            if (java.util.Objects.equals(d.name(), divisionName))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Folds freshly parsed divisions into the ones a merged race already carries: a division
+     * of the same name is replaced in place (so a re-import refreshes rather than duplicates),
+     * and anything new is appended. Existing order is preserved so division order stays stable
+     * across runs.
+     */
+    private static List<Division> mergeDivisions(Race existing, List<Division> incoming)
+    {
+        List<Division> out = new ArrayList<>(
+            existing != null && existing.divisions() != null ? existing.divisions() : List.of());
+        for (Division div : incoming)
+        {
+            int idx = -1;
+            for (int i = 0; i < out.size(); i++)
+            {
+                if (java.util.Objects.equals(out.get(i).name(), div.name()))
+                {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx >= 0)
+                out.set(idx, div);
+            else
+                out.add(div);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Test-friendly overload — no event group, so series IDs take their unscoped form.
+     */
+    void processResultsPage(Club club, String seriesName, int raceNumber, LocalDate date,
+                            String html, String url)
+    {
+        processResultsPage(club, null, seriesName, raceNumber, date, html, url);
+    }
+
+    /**
+     * Test-friendly overload — no event group, so series IDs take their unscoped form.
+     */
+    void processResultsPages(Club club, String seriesName, int raceNumber,
+                             LocalDate date, List<ParsedRace> parsedList)
+    {
+        processResultsPages(club, null, seriesName, raceNumber, date, parsedList);
+    }
+
+    /**
+     * Test-friendly overload — no event group, so series IDs take their unscoped form.
+     */
+    void processSeriesPage(Club club, String seriesName, String seriesUrl, String html)
+    {
+        processSeriesPage(club, null, seriesName, seriesUrl, html);
+    }
+
     private boolean isRecentRace(LocalDate date)
     {
         return date != null && !date.isBefore(LocalDate.now().minusDays(recentRaceReimportDays));
+    }
+
+    private static List<String> appended(List<String> existing, String value)
+    {
+        List<String> out = new ArrayList<>(existing);
+        out.add(value);
+        return out;
     }
 
     private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)
@@ -1210,7 +1543,7 @@ public class TopYachtImporter
             club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
                 seed.email(),
                 seed.aliases() != null ? seed.aliases() : List.of(),
-                seed.topyachtUrls() != null ? seed.topyachtUrls() : List.of(),
+                seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
                 List.of(), null);
             store.putClub(club);
         }
@@ -1229,12 +1562,19 @@ public class TopYachtImporter
         if (idx >= 0)
         {
             Series existing = series.get(idx);
-            if (!existing.raceIds().contains(raceId))
+            List<String> newRaceIds = existing.raceIds().contains(raceId)
+                ? existing.raceIds()
+                : appended(existing.raceIds(), raceId);
+            // Adopt the incoming name so an event's long name (or a rename on the TopYacht
+            // page) reaches series imported before it was set, without a separate migration.
+            boolean renamed = seriesName != null && !seriesName.equals(existing.name());
+            if (renamed || newRaceIds != existing.raceIds())
             {
-                List<String> newRaceIds = new ArrayList<>(existing.raceIds());
-                newRaceIds.add(raceId);
-                series.set(idx, new Series(existing.id(), existing.name(), existing.isCatchAll(),
-                    List.copyOf(newRaceIds)));
+                if (renamed)
+                    LOG.info("TopYacht: renaming series {} '{}' -> '{}'",
+                        existing.id(), existing.name(), seriesName);
+                series.set(idx, new Series(existing.id(), renamed ? seriesName : existing.name(),
+                    existing.isCatchAll(), List.copyOf(newRaceIds)));
             }
         }
         else
@@ -1243,7 +1583,7 @@ public class TopYachtImporter
         }
 
         store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.email(), club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
+            club.email(), club.aliases(), club.topyachtGroups(), List.copyOf(series), null));
     }
 
     private static Duration parseElapsed(String text)

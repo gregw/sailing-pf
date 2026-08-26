@@ -3272,3 +3272,8 @@ boats:
     aliases:
       - sailNumber: "257"
         name: "charlotte"
+  W385-shiraziv:
+    canonicalName: "Shiraz IV"
+    aliases:
+      - sailNumber: "W385"
+        name: "shiraz"

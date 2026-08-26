@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -111,6 +112,140 @@ public class TaskService
     public record ImportStatus(String importerName, String mode, Instant startedAt) {}
 
     public record ImporterEntry(String name, String mode, boolean includeInSchedule, boolean runAtStartup) {}
+
+    /**
+     * Importers that can be restricted to a subset of clubs, in the order a club-scoped
+     * run executes them. Only TopYacht is club-scoped today; SailSys and others can be
+     * added here (plus a case in {@link #runClubScopedImporter}) when they gain the
+     * ability to filter by club.
+     */
+    private static final List<String> CLUB_SCOPED_IMPORTERS = List.of("topyacht");
+
+    /**
+     * Analysis rebuilt after a club-scoped import, in order.
+     * <p>
+     * Writing a race or boat <em>deletes</em> its derived data from {@link AnalysisCache}
+     * (see its {@code onRaceChanged}/{@code onBoatChanged}) rather than recomputing it, so an
+     * import leaves holes wherever it touched — and the race detail page renders nothing for
+     * a race with no {@code RaceDerived}. The scheduled run never shows this because it always
+     * follows its importers with the same chain; an on-demand club import has to do the same
+     * or it leaves the UI looking broken.
+     */
+    private static final List<String> POST_IMPORT_ANALYSIS = List.of(
+        "build-indexes", "analysis", "reference-factors", "pf-optimise");
+
+    /**
+     * One on-demand, club-restricted import run, as triggered by the "Import races"
+     * button on the clubs page. Holds live state while the run is in progress and the
+     * full captured log afterwards so the UI can offer it as a download.
+     */
+    public static final class ClubImportRun
+    {
+        private final String id;
+        private final List<String> clubIds;
+        private final List<String> importers;
+        private final Instant startedAt;
+        private volatile Instant finishedAt;
+        private volatile String state = "running";   // running | done | failed
+        private volatile String phase = "importing"; // importing | <analysis task> | done
+        private volatile String error;
+        private final Map<String, Object> counts = new LinkedHashMap<>();
+        private volatile ImporterLog.Capture capture;
+
+        ClubImportRun(String id, List<String> clubIds, List<String> importers)
+        {
+            this.id = id;
+            this.clubIds = List.copyOf(clubIds);
+            this.importers = List.copyOf(importers);
+            this.startedAt = Instant.now();
+        }
+
+        public String id()
+        {
+            return id;
+        }
+
+        public List<String> clubIds()
+        {
+            return clubIds;
+        }
+
+        public List<String> importers()
+        {
+            return importers;
+        }
+
+        public Instant startedAt()
+        {
+            return startedAt;
+        }
+
+        public Instant finishedAt()
+        {
+            return finishedAt;
+        }
+
+        public String state()
+        {
+            return state;
+        }
+
+        public String phase()
+        {
+            return phase;
+        }
+
+        public String error()
+        {
+            return error;
+        }
+
+        public boolean running()
+        {
+            return "running".equals(state);
+        }
+
+        public synchronized Map<String, Object> counts()
+        {
+            return new LinkedHashMap<>(counts);
+        }
+
+        synchronized void putCount(String key, Object value)
+        {
+            counts.put(key, value);
+        }
+
+        public int warnings()
+        {
+            return capture != null ? capture.warnings() : 0;
+        }
+
+        public int errors()
+        {
+            return capture != null ? capture.errors() : 0;
+        }
+
+        public String log()
+        {
+            return capture != null ? capture.text() : "";
+        }
+    }
+
+    /**
+     * Most recent club-scoped import runs, newest last, capped at {@link #MAX_CLUB_RUNS}.
+     */
+    private static final int MAX_CLUB_RUNS = 10;
+    private final java.util.concurrent.atomic.AtomicInteger clubRunSequence =
+        new java.util.concurrent.atomic.AtomicInteger();
+    private final Map<String, ClubImportRun> clubImportRuns =
+        java.util.Collections.synchronizedMap(new LinkedHashMap<>()
+        {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, ClubImportRun> eldest)
+            {
+                return size() > MAX_CLUB_RUNS;
+            }
+        });
 
     public record GlobalSchedule(List<DayOfWeek> days, LocalTime time) {}
 
@@ -372,6 +507,131 @@ public void stop()
             running.set(false);
             return false;
         }
+    }
+
+    /**
+     * Submits an on-demand import restricted to the given clubs, running every
+     * {@link #CLUB_SCOPED_IMPORTERS} importer in turn. Returns the new run (whose state
+     * is {@code running}), or null if another import is already in progress — the caller
+     * should then send 409.
+     */
+    public ClubImportRun submitClubImport(List<String> clubIds)
+    {
+        if (clubIds == null || clubIds.isEmpty())
+            throw new IllegalArgumentException("clubIds must not be empty");
+        if (!running.compareAndSet(false, true))
+            return null;
+
+        ClubImportRun run = new ClubImportRun(
+            Long.toString(System.currentTimeMillis(), 36) + "-" + clubRunSequence.incrementAndGet(),
+            clubIds, CLUB_SCOPED_IMPORTERS);
+        clubImportRuns.put(run.id(), run);
+        stopRequested.set(false);
+
+        try
+        {
+            importExecutor.submit(() ->
+            {
+                run.capture = ImporterLog.openCapture();
+                String finalState = "done";
+                try
+                {
+                    Set<String> ids = new java.util.LinkedHashSet<>(clubIds);
+                    ImporterLog.info(LOG, "Club import started for {} club(s): {}", ids.size(), ids);
+                    for (String name : CLUB_SCOPED_IMPORTERS)
+                    {
+                        if (stopRequested.get())
+                        {
+                            ImporterLog.warn(LOG, "Club import stopped by request before {}", name);
+                            break;
+                        }
+                        currentStatus = new ImportStatus(name, "club", Instant.now());
+                        lastRunTimes.put(name + "/club", Instant.now());
+                        ImporterLog.open(dataRoot.resolve("log"), name);
+                        try
+                        {
+                            runClubScopedImporter(name, ids, run);
+                        }
+                        finally
+                        {
+                            ImporterLog.close();
+                        }
+                    }
+                    store.save();
+
+                    // Rebuild what the import invalidated, or the UI is left with holes
+                    for (String task : POST_IMPORT_ANALYSIS)
+                    {
+                        if (stopRequested.get())
+                        {
+                            ImporterLog.warn(LOG, "Club import stopped by request before {}", task);
+                            break;
+                        }
+                        run.phase = task;
+                        currentStatus = new ImportStatus(task, "club", Instant.now());
+                        ImporterLog.info(LOG, "Club import: {}", task);
+                        runImporterSwitch(task, "run", 1);
+                    }
+                    store.save();
+                    ImporterLog.info(LOG, "Club import complete: {}", run.counts());
+                }
+                catch (Exception e)
+                {
+                    finalState = "failed";
+                    run.error = e.toString();
+                    ImporterLog.error(LOG, "Club import failed: {}", e.toString());
+                    LOG.error("Club import failed", e);
+                }
+                finally
+                {
+                    run.finishedAt = Instant.now();
+                    ImporterLog.closeCapture();
+                    currentStatus = null;
+                    persistConfig();
+                    running.set(false);
+                    run.phase = "done";
+                    // Published last: a poller (or test) that sees the run finished can
+                    // rely on the import slot already having been released.
+                    run.state = finalState;
+                }
+            });
+            return run;
+        }
+        catch (Exception e)
+        {
+            run.state = "failed";
+            run.error = e.toString();
+            run.finishedAt = Instant.now();
+            running.set(false);
+            return run;
+        }
+    }
+
+    /**
+     * Runs one club-scoped importer, recording its tallies on the run.
+     */
+    private void runClubScopedImporter(String name, Set<String> clubIds, ClubImportRun run)
+        throws Exception
+    {
+        switch (name)
+        {
+            case "topyacht" ->
+            {
+                TopYachtImporter.RunResult result =
+                    new TopYachtImporter(store, httpClient).run(recentRaceReimportDays, clubIds);
+                run.putCount("topyacht.clubs", result.clubs());
+                run.putCount("topyacht.series", result.series());
+                run.putCount("topyacht.racesImported", result.racesImported());
+                run.putCount("topyacht.racesAlreadyPresent", result.racesAlreadyPresent());
+                run.putCount("topyacht.finishers", result.finishers());
+            }
+            default -> throw new IllegalArgumentException("Importer is not club-scoped: " + name);
+        }
+    }
+
+    public ClubImportRun clubImportRun(String id)
+    {
+        return clubImportRuns.get(id);
     }
 
     public synchronized void setConfig(List<ImporterEntry> entries, GlobalSchedule schedule,

@@ -42,7 +42,9 @@ import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
+import org.mortbay.sailing.pf.importer.TopYachtPrefix;
 import org.mortbay.sailing.pf.store.Aliases;
 import org.mortbay.sailing.pf.store.DataStore;
 
@@ -103,6 +105,10 @@ public class AdminApiServlet extends HttpServlet
             handleBoats(path.substring("/boats".length()), req, resp);
         else if (path.startsWith("/designs"))
             handleDesigns(path.substring("/designs".length()), req, resp);
+        else if (path.matches("/clubs/import/[^/]+/log"))
+            handleClubImportLog(path.replaceAll("^/clubs/import/|/log$", ""), req, resp);
+        else if (path.startsWith("/clubs/import/"))
+            handleClubImportStatus(path.substring("/clubs/import/".length()), resp);
         else if (path.startsWith("/clubs"))
             handleClubs(path.substring("/clubs".length()), req, resp);
         else if (path.startsWith("/races"))
@@ -224,6 +230,10 @@ public class AdminApiServlet extends HttpServlet
         else if ("/clubs/edit".equals(path))
         {
             handleEditClub(req, resp);
+        }
+        else if ("/clubs/import".equals(path))
+        {
+            handleClubImport(req, resp);
         }
         else if ("/boats/merge-request".equals(path) || "/designs/merge-request".equals(path)
             || "/boats/edit-request".equals(path) || "/designs/edit-request".equals(path)
@@ -911,7 +921,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("longName", c.longName());
                     row.put("state", c.state());
                     row.put("email", c.email());
-                    row.put("topyachtUrls", c.topyachtUrls() == null ? List.of() : c.topyachtUrls());
+                    row.put("topyachtGroups", topyachtGroupMaps(c.topyachtGroups()));
                     long seriesCount = c.series() == null ? 0
                         : c.series().stream().filter(s -> !s.isCatchAll()).count();
                     row.put("boats", boatCount > 0 ? boatCount : null);
@@ -942,7 +952,7 @@ public class AdminApiServlet extends HttpServlet
                 resp.sendError(404);
                 return;
             }
-            // Manually build the response: longName/state/excluded/email/aliases/topyachtUrls
+            // Manually build the response: longName/state/excluded/email/aliases/topyachtGroups
             // are @JsonIgnore on Club (YAML-owned, not persisted to JSON), so direct Jackson
             // serialization would strip them from the API response.
             Map<String, Object> body = new LinkedHashMap<>();
@@ -953,7 +963,7 @@ public class AdminApiServlet extends HttpServlet
             body.put("excluded", club.excluded());
             body.put("email", club.email());
             body.put("aliases", club.aliases());
-            body.put("topyachtUrls", club.topyachtUrls());
+            body.put("topyachtGroups", topyachtGroupMaps(club.topyachtGroups()));
             body.put("series", club.series());
             writeJson(resp, body);
         }
@@ -1056,8 +1066,9 @@ public class AdminApiServlet extends HttpServlet
      * topyacht URLs.
      * <p>
      * Accepts JSON with {@code clubId} (current id), and any of {@code shortName},
-     * {@code longName}, {@code state}, {@code email}, {@code topyachtUrls} (array of
-     * strings). Responds 404 if the club is unknown, 400 for validation errors.
+     * {@code longName}, {@code state}, {@code email}, {@code topyachtGroups} (array of
+     * {@code {prefix, name, mergeDivisions, urls}} objects — a blank prefix is derived from
+     * the group's first URL). Responds 404 if the club is unknown, 400 for validation errors.
      */
     @SuppressWarnings("unchecked")
     private void handleEditClub(HttpServletRequest req, HttpServletResponse resp) throws IOException
@@ -1095,33 +1106,18 @@ public class AdminApiServlet extends HttpServlet
             String newEmail = body.containsKey("email")
                 ? nullIfBlank((String)body.get("email")) : club.email();
 
-            boolean topyachtTouched = body.containsKey("topyachtUrls");
-            List<String> newTopyachtUrls = club.topyachtUrls();
+            boolean topyachtTouched = body.containsKey("topyachtGroups");
+            List<TopYachtGroup> newTopyachtGroups = club.topyachtGroups();
             if (topyachtTouched)
-            {
-                Object raw = body.get("topyachtUrls");
-                List<String> tmp = new ArrayList<>();
-                if (raw instanceof List<?> list)
-                {
-                    for (Object o : list)
-                    {
-                        if (o == null)
-                            continue;
-                        String s = o.toString().trim();
-                        if (!s.isEmpty() && !tmp.contains(s))
-                            tmp.add(s);
-                    }
-                }
-                newTopyachtUrls = List.copyOf(tmp);
-            }
+                newTopyachtGroups = readTopyachtGroups(body.get("topyachtGroups"), club.shortName());
 
             boolean shortNameChanged = !java.util.Objects.equals(newShortName, club.shortName());
             boolean metaChanged = !java.util.Objects.equals(newLongName, club.longName())
                 || !java.util.Objects.equals(newState, club.state())
                 || !java.util.Objects.equals(newEmail, club.email());
             boolean topyachtChanged = topyachtTouched
-                && !java.util.Objects.equals(newTopyachtUrls,
-                club.topyachtUrls() == null ? List.of() : club.topyachtUrls());
+                && !java.util.Objects.equals(newTopyachtGroups,
+                club.topyachtGroups() == null ? List.of() : club.topyachtGroups());
 
             if (!shortNameChanged && !metaChanged && !topyachtChanged)
             {
@@ -1129,11 +1125,11 @@ public class AdminApiServlet extends HttpServlet
                 return;
             }
 
-            // longName, state, email, topyachtUrls are YAML-owned — write to clubs.yaml.
+            // longName, state, email, topyacht groups are YAML-owned — write to clubs.yaml.
             if (metaChanged)
                 store.updateClubMeta(clubId, newLongName, newState, newEmail);
             if (topyachtChanged)
-                store.updateClubTopyachtUrls(clubId, newTopyachtUrls);
+                store.updateClubTopyachtGroups(clubId, newTopyachtGroups);
 
             // shortName is JSON-owned — rewrite the Club JSON record. Re-fetch first so
             // we pick up any YAML-side updates from the call above.
@@ -1144,7 +1140,7 @@ public class AdminApiServlet extends HttpServlet
                     fresh = store.clubSeed().get(clubId);
                 Club updated = new Club(fresh.id(), newShortName,
                     fresh.longName(), fresh.state(), fresh.excluded(), fresh.email(),
-                    fresh.aliases(), fresh.topyachtUrls(), fresh.series(), null);
+                    fresh.aliases(), fresh.topyachtGroups(), fresh.series(), null);
                 store.putClub(updated);
                 store.save();
             }
@@ -1164,6 +1160,187 @@ public class AdminApiServlet extends HttpServlet
     private static String nullIfBlank(String s)
     {
         return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
+    /**
+     * Serialises TopYacht groups for the clubs API: {@code [{prefix, name, urls}, …]}.
+     */
+    private static List<Map<String, Object>> topyachtGroupMaps(List<TopYachtGroup> groups)
+    {
+        if (groups == null)
+            return List.of();
+        List<Map<String, Object>> out = new ArrayList<>(groups.size());
+        for (TopYachtGroup g : groups)
+        {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("prefix", g.prefix());
+            m.put("name", g.name());
+            m.put("mergeDivisions", g.mergeDivisions());
+            m.put("urls", g.urls());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /**
+     * Reads TopYacht groups from a request body. Each element is {@code {prefix, name, urls}};
+     * {@code urls} may be an array or a newline-separated string. A blank prefix is derived
+     * from the group's first URL so the editor can leave it empty for a new group. Groups with
+     * no URLs are dropped.
+     */
+    private static List<TopYachtGroup> readTopyachtGroups(Object raw, String clubShortName)
+    {
+        List<TopYachtGroup> groups = new ArrayList<>();
+        if (!(raw instanceof List<?> list))
+            return List.of();
+        for (Object element : list)
+        {
+            if (!(element instanceof Map<?, ?> m))
+                continue;
+            List<String> urls = new ArrayList<>();
+            Object rawUrls = m.get("urls");
+            if (rawUrls instanceof List<?> urlList)
+            {
+                for (Object u : urlList)
+                {
+                    if (u != null && !u.toString().isBlank())
+                        urls.add(u.toString().trim());
+                }
+            }
+            else if (rawUrls instanceof String urlText)
+            {
+                for (String u : urlText.split("\\R"))
+                {
+                    if (!u.isBlank())
+                        urls.add(u.trim());
+                }
+            }
+            if (urls.isEmpty())
+                continue;
+            String prefix = TopYachtPrefix.slug(
+                m.get("prefix") == null ? "" : m.get("prefix").toString());
+            if (prefix.isEmpty())
+                prefix = TopYachtPrefix.derive(urls.getFirst(), clubShortName);
+            String name = m.get("name") == null ? null : m.get("name").toString().trim();
+            boolean merge = Boolean.TRUE.equals(m.get("mergeDivisions"))
+                || "true".equalsIgnoreCase(String.valueOf(m.get("mergeDivisions")));
+            groups.add(new TopYachtGroup(prefix, name, urls, merge));
+        }
+        return org.mortbay.sailing.pf.store.DataStore.cleanTopyachtGroups(groups);
+    }
+
+    /**
+     * POST /api/clubs/import — runs the club-scoped importers (currently TopYacht only)
+     * for the selected clubs.
+     * <p>
+     * Body: {@code {id}} or {@code {ids: [...]}}. Returns 202 with the new run's id and
+     * status, or 409 if another import is already running. Authentication is enforced by
+     * {@link WriteAuthFilter}. Progress and results are polled from
+     * {@code GET /api/clubs/import/{runId}}, and the run's log downloaded from
+     * {@code GET /api/clubs/import/{runId}/log}.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleClubImport(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            List<String> ids = readIds(body, "id", "ids");
+            if (ids.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "id or ids is required"));
+                return;
+            }
+            TaskService.ClubImportRun run = _taskService.submitClubImport(ids);
+            if (run == null)
+            {
+                resp.setStatus(409);
+                writeJson(resp, Map.of("error", "An import is already running"));
+                return;
+            }
+            resp.setStatus(202);
+            writeJson(resp, clubImportRunMap(run));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/clubs/import/{runId} — progress and result of a club-scoped import run.
+     * Returns 404 once the run has aged out of the retained history.
+     */
+    private void handleClubImportStatus(String runId, HttpServletResponse resp) throws IOException
+    {
+        TaskService.ClubImportRun run = _taskService.clubImportRun(runId);
+        if (run == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        writeJson(resp, clubImportRunMap(run));
+    }
+
+    /**
+     * GET /api/clubs/import/{runId}/log — the run's captured log as a downloadable
+     * text file. Requires authentication (the run log carries source URLs and internal
+     * diagnostics). Returns 404 once the run has aged out of the retained history.
+     */
+    private void handleClubImportLog(String runId, HttpServletRequest req, HttpServletResponse resp)
+        throws IOException
+    {
+        if (!isAuthenticated(req))
+        {
+            resp.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+        TaskService.ClubImportRun run = _taskService.clubImportRun(runId);
+        if (run == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        StringBuilder text = new StringBuilder();
+        text.append("Club import run ").append(run.id()).append('\n')
+            .append("Clubs: ").append(String.join(", ", run.clubIds())).append('\n')
+            .append("Importers: ").append(String.join(", ", run.importers())).append('\n')
+            .append("Started: ").append(run.startedAt()).append('\n')
+            .append("Finished: ").append(run.finishedAt() != null ? run.finishedAt() : "(running)").append('\n')
+            .append("State: ").append(run.state()).append('\n');
+        if (run.error() != null)
+            text.append("Error: ").append(run.error()).append('\n');
+        for (Map.Entry<String, Object> e : run.counts().entrySet())
+        {
+            text.append(e.getKey()).append(": ").append(e.getValue()).append('\n');
+        }
+        text.append('\n').append(run.log());
+
+        resp.setContentType("text/plain; charset=UTF-8");
+        resp.setHeader("Content-Disposition",
+            "attachment; filename=\"club-import-" + run.id() + ".log\"");
+        resp.getWriter().write(text.toString());
+    }
+
+    private static Map<String, Object> clubImportRunMap(TaskService.ClubImportRun run)
+    {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("runId", run.id());
+        m.put("state", run.state());
+        m.put("phase", run.phase());
+        m.put("running", run.running());
+        m.put("clubIds", run.clubIds());
+        m.put("importers", run.importers());
+        m.put("startedAt", run.startedAt().toString());
+        m.put("finishedAt", run.finishedAt() != null ? run.finishedAt().toString() : null);
+        m.put("counts", run.counts());
+        m.put("warnings", run.warnings());
+        m.put("errors", run.errors());
+        m.put("error", run.error());
+        m.put("logUrl", "/api/clubs/import/" + run.id() + "/log");
+        return m;
     }
 
     /**
@@ -2730,8 +2907,13 @@ public class AdminApiServlet extends HttpServlet
             for (var s : club.series())
             {
                 if (s.isCatchAll()) continue;
-                if (filterId != null && !filterId.equals(s.id())) continue;
+                if (filterId != null && !filterId.equals(s.id()))
+                    continue;
+                // Matching the ID matters as well as the name: linking to a series
+                // (series.html?id=…) seeds the search box with the full series ID, so
+                // without this a direct link finds nothing.
                 if (lower != null
+                    && !s.id().toLowerCase().contains(lower)
                     && !s.name().toLowerCase().contains(lower)
                     && !clubShort.toLowerCase().contains(lower)
                     && !club.id().toLowerCase().contains(lower)) continue;

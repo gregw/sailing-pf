@@ -277,12 +277,72 @@ public class IdGenerator
     }
 
     /**
+     * Generate a series ID scoped to a TopYacht event prefix, so two events at the same club
+     * that publish a like-named series stay distinct.
+     * "townsvilleyachtclub.com.au", "mirw", "Spinnaker Division 1"
+     * → "townsvilleyachtclub.com.au/mirw-spinnaker-division-1"
+     * <p>
+     * A null or blank prefix falls back to {@link #generateSeriesId(String, String)}.
+     */
+    public static String generateSeriesId(String clubId, String prefix, String seriesName)
+    {
+        if (prefix == null || prefix.isBlank())
+            return generateSeriesId(clubId, seriesName);
+        return sanitizeIdForFilesystem(clubId) + "/" + prefix + "-" + normaliseSeriesName(seriesName);
+    }
+
+    /**
+     * Generate the series ID for a whole TopYacht event, used when the event's divisions are
+     * merged into one series.
+     * "townsvilleyachtclub.com.au", "mirw" → "townsvilleyachtclub.com.au/mirw"
+     */
+    public static String generateEventSeriesId(String clubId, String prefix)
+    {
+        return sanitizeIdForFilesystem(clubId) + "/" + prefix;
+    }
+
+    /**
      * Generate a race ID from the club ID, date, and race number.
      * "myc.com.au", 2020-09-13, 1 → "myc.com.au-2020-09-13-0001"
+     * <p>
+     * Only safe where (club, date, number) is genuinely unique — true for sources that
+     * publish one result set per race. TopYacht regattas publish each division as its own
+     * series with its own "Race 1" on the same day, so they must use
+     * {@link #generateRaceId(String, String, LocalDate, int)} instead.
      */
     public static String generateRaceId(String clubId, LocalDate date, int number)
     {
         return sanitizeIdForFilesystem(clubId) + "-" + date + String.format("-%04d", number);
+    }
+
+    /**
+     * Generate a race ID scoped to a series, for sources where several series share a date
+     * and race number.
+     * "townsvilleyachtclub.com.au", "townsvilleyachtclub.com.au/mirw-spinnaker-division-1",
+     * 2025-08-29, 1 → "townsvilleyachtclub.com.au-mirw-spinnaker-division-1-2025-08-29-0001"
+     * <p>
+     * {@code seriesId} is the full series ID; only its slug (the part after the club) is
+     * used, since the club already prefixes the result. A null or blank series slug falls
+     * back to {@link #generateRaceId(String, LocalDate, int)}.
+     */
+    public static String generateRaceId(String clubId, String seriesId, LocalDate date, int number)
+    {
+        String slug = seriesSlug(seriesId);
+        if (slug.isEmpty())
+            return generateRaceId(clubId, date, number);
+        return sanitizeIdForFilesystem(clubId) + "-" + slug + "-" + date + String.format("-%04d", number);
+    }
+
+    /**
+     * The portion of a series ID after the {@code clubId/} prefix, or "" if there is none.
+     * "myc.com.au/main-series" → "main-series"
+     */
+    public static String seriesSlug(String seriesId)
+    {
+        if (seriesId == null)
+            return "";
+        int slash = seriesId.indexOf('/');
+        return slash >= 0 ? seriesId.substring(slash + 1) : "";
     }
 
     private IdGenerator()

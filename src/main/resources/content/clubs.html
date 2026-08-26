@@ -49,7 +49,20 @@
         <button id="include-btn-clubs" onclick="showExcludePanel('clubs', false)" style="margin-left:0.5rem;display:none;">
             Include…
         </button>
+        <button id="import-btn-clubs" onclick="showImportClubPanel()" style="margin-left:0.5rem;display:none;"
+                title="Run the club-scoped importers (TopYacht) for the selected clubs">
+            Import races…
+        </button>
         <button onclick="clearSelection('clubs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="import-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong>Import races</strong>
+        <div id="import-list-clubs" style="margin:0.6rem 0;"></div>
+        <button id="import-run-btn-clubs" onclick="performClubImport()">Run import</button>
+        <button onclick="hideImportClubPanel()" style="margin-left:0.5rem;">Close</button>
+        <div id="import-status-clubs" style="margin-top:0.5rem; color:#555;"></div>
+        <div id="import-result-clubs" style="margin-top:0.5rem;"></div>
     </div>
 
     <div id="edit-panel-clubs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
@@ -63,8 +76,17 @@
             <input type="text" id="edit-club-state" style="padding:3px 6px; max-width:80px;">
             <label for="edit-club-email">Email:</label>
             <input type="email" id="edit-club-email" style="padding:3px 6px;">
-            <label for="edit-club-topyacht" style="align-self:start;padding-top:4px;">TopYacht URLs:</label>
-            <textarea id="edit-club-topyacht" rows="3" style="font-family:monospace;padding:3px 6px;width:100%;" placeholder="One URL per line"></textarea>
+        </div>
+        <div style="margin:0.75rem 0;max-width:900px;">
+            <strong style="font-size:0.95rem;">TopYacht events</strong>
+            <div style="font-size:0.85rem;color:#666;margin:0.2rem 0 0.5rem;">
+                One entry per event (a regatta, or the club's own season). The prefix scopes
+                the series and race IDs, so two events at this club can each hold a "Race 1"
+                on the same date without colliding — leave it blank to derive one from the
+                first URL. Changing a prefix after races are imported creates new IDs.
+            </div>
+            <div id="edit-club-topyacht-groups"></div>
+            <button type="button" onclick="addClubTopyachtGroup()" style="margin-top:0.4rem;">+ Add event</button>
         </div>
         <div id="edit-club-email-row" style="display:none; margin-bottom:0.5rem;">
             <label for="edit-request-email-clubs" style="font-size:0.9rem;">Your email (optional): </label>

@@ -18,7 +18,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import org.mortbay.sailing.pf.data.Club;
+import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
+import org.mortbay.sailing.pf.importer.TopYachtPrefix;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,8 +65,7 @@ class ClubLoader
                 Club stub = new Club(domain, entry.shortName, entry.fullName, entry.state,
                     Boolean.TRUE.equals(entry.excluded), entry.email,
                     entry.aliases != null ? entry.aliases : List.of(),
-                    entry.topyacht != null ? entry.topyacht : List.of(),
-                    List.of(), null);
+                    entry.topyachtGroups(), List.of(), null);
                 result.put(domain, stub);
             }
             LOG.info("Loaded {} club seed entries from {}", result.size(), FILENAME);
@@ -427,36 +428,20 @@ class ClubLoader
     }
 
     /**
-     * Replaces the {@code topyacht} URL list for a club in clubs.yaml. Each value is written
-     * verbatim. A null or empty {@code topyachtUrls} clears the field. If the club has no
-     * entry yet, one is auto-created using {@code shortNameIfNew}. Returns true if the file
-     * was changed.
+     * Replaces the {@code topyacht} groups for a club in clubs.yaml, always writing the map
+     * form (prefix → {name, urls}). Blank prefixes and duplicate URLs within a group are
+     * dropped; groups left with no URLs are discarded. A null or empty {@code groups} clears
+     * the field. If the club has no entry yet, one is auto-created using
+     * {@code shortNameIfNew}. Returns true if the file was changed.
      */
-    static boolean updateClubTopyachtUrls(Path configDir, String clubId, String shortNameIfNew,
-                                          List<String> topyachtUrls)
+    static boolean updateClubTopyachtGroups(Path configDir, String clubId, String shortNameIfNew,
+                                            List<TopYachtGroup> groups)
     {
         SeedFile seedFile = readOrNew(configDir);
         if (seedFile == null)
             return false;
         if (seedFile.clubs == null)
             seedFile.clubs = new LinkedHashMap<>();
-
-        List<String> cleaned;
-        if (topyachtUrls == null || topyachtUrls.isEmpty())
-            cleaned = null;
-        else
-        {
-            List<String> tmp = new ArrayList<>();
-            for (String u : topyachtUrls)
-            {
-                if (u == null)
-                    continue;
-                String t = u.trim();
-                if (!t.isEmpty() && !tmp.contains(t))
-                    tmp.add(t);
-            }
-            cleaned = tmp.isEmpty() ? null : tmp;
-        }
 
         SeedEntry entry = seedFile.clubs.get(clubId);
         boolean created = false;
@@ -468,14 +453,55 @@ class ClubLoader
             created = true;
         }
 
-        if (!created && Objects.equals(entry.topyacht, cleaned))
+        List<TopYachtGroup> cleaned = cleanGroups(groups);
+        if (!created && Objects.equals(entry.topyachtGroups(), cleaned))
             return false;
 
-        entry.topyacht = cleaned;
+        entry.setTopyachtGroups(cleaned);
         writeOrLog(configDir, seedFile);
-        LOG.info("clubs.yaml: club {} topyacht URLs updated ({} entries)",
-            clubId, cleaned == null ? 0 : cleaned.size());
+        LOG.info("clubs.yaml: club {} topyacht groups updated ({} group(s), {} url(s))",
+            clubId, cleaned.size(), cleaned.stream().mapToInt(g -> g.urls().size()).sum());
         return true;
+    }
+
+    /**
+     * Normalises incoming groups: slugs the prefix, drops blank names, de-duplicates URLs
+     * within a group, drops groups with no prefix or no URLs, and merges groups that share
+     * a prefix (first name wins).
+     */
+    static List<TopYachtGroup> cleanGroups(List<TopYachtGroup> groups)
+    {
+        if (groups == null)
+            return List.of();
+        Map<String, TopYachtGroup> byPrefix = new LinkedHashMap<>();
+        for (TopYachtGroup g : groups)
+        {
+            if (g == null)
+                continue;
+            String prefix = TopYachtPrefix.slug(g.prefix());
+            if (prefix.isEmpty())
+                continue;
+            TopYachtGroup existing = byPrefix.get(prefix);
+            List<String> urls = new ArrayList<>(existing != null ? existing.urls() : List.of());
+            for (String u : g.urls())
+            {
+                if (u == null)
+                    continue;
+                String t = u.trim();
+                if (!t.isEmpty() && !urls.contains(t))
+                    urls.add(t);
+            }
+            String name = existing != null && existing.name() != null ? existing.name() : g.name();
+            boolean merge = (existing != null && existing.mergeDivisions()) || g.mergeDivisions();
+            byPrefix.put(prefix, new TopYachtGroup(prefix, name, urls, merge));
+        }
+        List<TopYachtGroup> out = new ArrayList<>();
+        for (TopYachtGroup g : byPrefix.values())
+        {
+            if (!g.urls().isEmpty())
+                out.add(g);
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -553,8 +579,105 @@ class ClubLoader
         public Boolean excluded;
         public String email;
         public List<String> aliases;
-        public List<String> topyacht;
+        /**
+         * Either the legacy plain list of URLs, or a map of prefix → {name, urls}.
+         * Read through {@link #topyachtGroups()}, which normalises both to groups;
+         * written only in the map form by {@link #setTopyachtGroups}.
+         */
+        public Object topyacht;
         public List<String> boats;
+
+        /**
+         * Normalises the {@code topyacht} field to groups. A plain list is grouped by
+         * derived prefix ({@link TopYachtPrefix#group}); a map is read as-is, with the key
+         * as the prefix. Unrecognised shapes yield no groups.
+         */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        List<TopYachtGroup> topyachtGroups()
+        {
+            if (topyacht == null)
+                return List.of();
+            if (topyacht instanceof List<?> list)
+            {
+                List<String> urls = new ArrayList<>();
+                for (Object o : list)
+                {
+                    if (o != null)
+                        urls.add(o.toString());
+                }
+                return TopYachtPrefix.group(urls, shortName);
+            }
+            if (topyacht instanceof Map<?, ?> map)
+            {
+                List<TopYachtGroup> groups = new ArrayList<>();
+                for (Map.Entry<?, ?> e : map.entrySet())
+                {
+                    if (e.getKey() == null)
+                        continue;
+                    String prefix = TopYachtPrefix.slug(e.getKey().toString());
+                    if (prefix.isEmpty())
+                        continue;
+                    String name = null;
+                    boolean merge = false;
+                    List<String> urls = new ArrayList<>();
+                    if (e.getValue() instanceof Map<?, ?> body)
+                    {
+                        Object rawName = body.get("name");
+                        if (rawName != null && !rawName.toString().isBlank())
+                            name = rawName.toString();
+                        merge = Boolean.TRUE.equals(body.get("merge"))
+                            || "true".equalsIgnoreCase(String.valueOf(body.get("merge")));
+                        if (body.get("urls") instanceof List<?> rawUrls)
+                        {
+                            for (Object u : rawUrls)
+                            {
+                                if (u != null && !u.toString().isBlank())
+                                    urls.add(u.toString().trim());
+                            }
+                        }
+                    }
+                    else if (e.getValue() instanceof List<?> rawUrls)
+                    {
+                        // Tolerate the shorthand "prefix: [urls…]" with no name
+                        for (Object u : rawUrls)
+                        {
+                            if (u != null && !u.toString().isBlank())
+                                urls.add(u.toString().trim());
+                        }
+                    }
+                    groups.add(new TopYachtGroup(prefix, name, urls, merge));
+                }
+                return List.copyOf(groups);
+            }
+            LOG.warn("Unrecognised topyacht entry shape for club seed: {}", topyacht.getClass());
+            return List.of();
+        }
+
+        /**
+         * Replaces the {@code topyacht} field with the map form, or null when empty.
+         */
+        void setTopyachtGroups(List<TopYachtGroup> groups)
+        {
+            if (groups == null || groups.isEmpty())
+            {
+                topyacht = null;
+                return;
+            }
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (TopYachtGroup g : groups)
+            {
+                if (g.prefix() == null || g.prefix().isBlank() || g.urls().isEmpty())
+                    continue;
+                Map<String, Object> body = new LinkedHashMap<>();
+                if (g.name() != null)
+                    body.put("name", g.name());
+                if (g.mergeDivisions())
+                    body.put("merge", true);
+                body.put("urls", List.copyOf(g.urls()));
+                out.put(g.prefix(), body);
+            }
+            topyacht = out.isEmpty() ? null : out;
+        }
     }
 
     static class ClubOverride

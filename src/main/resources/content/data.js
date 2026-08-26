@@ -1041,6 +1041,9 @@ function updateMergeBar(entity) {
         const editReq = document.getElementById('edit-request-btn-clubs');
         if (editBtn) editBtn.style.display = (n === 1 && w) ? '' : 'none';
         if (editReq) editReq.style.display = (n === 1 && !w) ? '' : 'none';
+        // Import races — authenticated users only; there is no request-form equivalent.
+        const importBtn = document.getElementById('import-btn-clubs');
+        if (importBtn) importBtn.style.display = (n >= 1 && w) ? '' : 'none';
     }
 
     // Ignore / Do Not Ignore (designs only) — mirrors Exclude/Include on the ignored flag.
@@ -1093,6 +1096,7 @@ function clearSelection(entity) {
     if (entity === 'designs') { hideIgnorePanel(); hideEditDesignPanel(); }
     if (entity === 'clubs') {
         hideEditClubPanel();
+        hideImportClubPanel();
     }
     const panel = document.getElementById('detail-' + entity);
     if (panel) panel.classList.remove('visible');
@@ -2018,10 +2022,7 @@ function showEditClubPanel() {
     document.getElementById('edit-club-long-name').value = item.longName || '';
     document.getElementById('edit-club-state').value = item.state || '';
     document.getElementById('edit-club-email').value = item.email || '';
-    const topyachtEl = document.getElementById('edit-club-topyacht');
-    if (topyachtEl) topyachtEl.value = Array.isArray(item.topyachtUrls)
-        ? item.topyachtUrls.join('\n')
-        : '';
+    renderClubTopyachtGroups(Array.isArray(item.topyachtGroups) ? item.topyachtGroups : []);
     document.getElementById('edit-status-clubs').textContent = '';
     document.getElementById('edit-panel-clubs').style.display = '';
     const w = isWriteAllowed();
@@ -2036,6 +2037,122 @@ function hideEditClubPanel() {
     const panel = document.getElementById('edit-panel-clubs');
     if (panel) panel.style.display = 'none';
     editingClubId = null;
+}
+
+// ---- Per-club import (TopYacht today; more importers as they become club-scoped) ----
+
+let clubImportPoller = null;
+
+function showImportClubPanel() {
+    const ids = Array.from(state.selected.clubs);
+    if (ids.length === 0 || !isWriteAllowed()) return;
+    const list = document.getElementById('import-list-clubs');
+    list.innerHTML = 'Import races for ' + ids.length + ' club' + (ids.length !== 1 ? 's' : '') + ':<ul>'
+        + ids.map(id => {
+            const item = state.selectedData.clubs.get(id) || {};
+            const groups = Array.isArray(item.topyachtGroups) ? item.topyachtGroups : [];
+            const urlCount = groups.reduce((n, g) => n + (g.urls || []).length, 0);
+            const note = urlCount
+                ? esc(groups.map(g => g.name || g.prefix).join(', ')
+                    + ' — ' + urlCount + ' URL' + (urlCount !== 1 ? 's' : ''))
+                : '<span style="color:#a00;">no TopYacht URLs configured</span>';
+            return '<li>' + esc(id) + ' — ' + esc(item.shortName || item.longName || '') + ' (' + note + ')</li>';
+        }).join('')
+        + '</ul>';
+    document.getElementById('import-status-clubs').textContent = '';
+    document.getElementById('import-result-clubs').innerHTML = '';
+    document.getElementById('import-run-btn-clubs').disabled = false;
+    document.getElementById('import-panel-clubs').style.display = '';
+}
+
+function hideImportClubPanel() {
+    const panel = document.getElementById('import-panel-clubs');
+    if (panel) panel.style.display = 'none';
+    if (clubImportPoller) {
+        clearInterval(clubImportPoller);
+        clubImportPoller = null;
+    }
+}
+
+async function performClubImport() {
+    const ids = Array.from(state.selected.clubs);
+    if (ids.length === 0 || !isWriteAllowed()) return;
+    const statusEl = document.getElementById('import-status-clubs');
+    const runBtn = document.getElementById('import-run-btn-clubs');
+    runBtn.disabled = true;
+    statusEl.textContent = 'Starting import…';
+    document.getElementById('import-result-clubs').innerHTML = '';
+    const run = await fetchJson('/api/clubs/import', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ids})
+    });
+    if (!run || !run.runId) {
+        statusEl.textContent = 'Import failed to start: ' + ((run && run.error) || 'see console');
+        runBtn.disabled = false;
+        return;
+    }
+    renderClubImportRun(run);
+    if (clubImportPoller) clearInterval(clubImportPoller);
+    clubImportPoller = setInterval(async () => {
+        const latest = await fetchJson('/api/clubs/import/' + encodeURIComponent(run.runId));
+        if (!latest) return;
+        renderClubImportRun(latest);
+        if (!latest.running) {
+            clearInterval(clubImportPoller);
+            clubImportPoller = null;
+            runBtn.disabled = false;
+            // Refresh the club rows so the race counts reflect what was just imported.
+            loadList('clubs', 0);
+        }
+    }, 2000);
+}
+
+const CLUB_IMPORT_COUNT_LABELS = {
+    'topyacht.clubs': 'TopYacht: clubs visited',
+    'topyacht.series': 'TopYacht: series pages',
+    'topyacht.racesImported': 'TopYacht: races imported',
+    'topyacht.racesAlreadyPresent': 'TopYacht: races already present',
+    'topyacht.finishers': 'TopYacht: finishers imported'
+};
+
+// Labels for the phases a club import passes through. The analysis phases matter to the
+// user: an import strips derived data from every race and boat it touched, so the site
+// looks broken until they finish.
+const CLUB_IMPORT_PHASES = {
+    'importing': 'Fetching results',
+    'build-indexes': 'Rebuilding indexes',
+    'analysis': 'Analysing certificates',
+    'reference-factors': 'Computing reference factors',
+    'pf-optimise': 'Running the PF optimiser'
+};
+
+function renderClubImportRun(run) {
+    const statusEl = document.getElementById('import-status-clubs');
+    if (run.running) {
+        const phase = CLUB_IMPORT_PHASES[run.phase] || run.phase || 'Working';
+        statusEl.textContent = phase + '… (don\u2019t reload until this finishes)';
+    } else if (run.state === 'failed') {
+        statusEl.textContent = 'Import failed: ' + (run.error || 'see log');
+    } else {
+        statusEl.textContent = 'Import complete.';
+    }
+    // width:auto keeps the value column beside its label instead of letting the table
+    // stretch to the panel and strand the numbers at the far right.
+    const counts = run.counts || {};
+    const rows = Object.keys(counts).map(k =>
+        '<tr><td style="padding:1px 0.6rem 1px 0;white-space:nowrap;">'
+        + esc(CLUB_IMPORT_COUNT_LABELS[k] || k)
+        + '</td><td style="padding:1px 0;text-align:right;font-variant-numeric:tabular-nums;">'
+        + esc(counts[k]) + '</td></tr>').join('');
+    let html = rows ? '<table style="width:auto;">' + rows + '</table>' : '';
+    if (!run.running) {
+        html += '<div style="margin-top:0.4rem;">'
+            + esc(run.warnings) + ' warning' + (run.warnings !== 1 ? 's' : '') + ', '
+            + esc(run.errors) + ' error' + (run.errors !== 1 ? 's' : '')
+            + ' &nbsp; <a href="' + esc(run.logUrl) + '" download>Download log</a></div>';
+    }
+    document.getElementById('import-result-clubs').innerHTML = html;
 }
 
 async function copyClubEmails() {
@@ -2071,18 +2188,97 @@ async function copyClubEmails() {
     }
 }
 
+// ---- TopYacht event editor (prefix / name / URLs per event) ----
+
+// Renders one editable row per event group. Rows are plain DOM rather than a re-rendered
+// template so typing in one field never disturbs the others; readClubTopyachtGroups()
+// scrapes the current values back out at save time.
+function renderClubTopyachtGroups(groups) {
+    const host = document.getElementById('edit-club-topyacht-groups');
+    if (!host) return;
+    host.innerHTML = '';
+    (groups.length ? groups : [{prefix: '', name: '', urls: []}])
+        .forEach(g => host.appendChild(buildClubTopyachtRow(g)));
+}
+
+function buildClubTopyachtRow(group) {
+    const row = document.createElement('div');
+    row.className = 'topyacht-group-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 2fr auto;gap:0.4rem;'
+        + 'align-items:start;margin-bottom:0.5rem;padding:0.5rem;border:1px solid #ddd;'
+        + 'border-radius:4px;background:#fff;';
+
+    const prefix = document.createElement('input');
+    prefix.type = 'text';
+    prefix.className = 'ty-prefix';
+    prefix.placeholder = 'prefix (e.g. mirw)';
+    prefix.title = 'Stable short ID for this event — becomes part of every series and race ID';
+    prefix.value = group.prefix || '';
+    prefix.style.cssText = 'padding:3px 6px;font-family:monospace;';
+
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'ty-name';
+    name.placeholder = 'long name (optional, e.g. Magnetic Island Race Week)';
+    name.value = group.name || '';
+    name.style.cssText = 'padding:3px 6px;';
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '✕';
+    remove.title = 'Remove this event';
+    remove.onclick = () => row.remove();
+
+    // Regattas publish each division as its own TopYacht series; ticking this collapses
+    // them into one series whose races carry a division per contributing series. Wrong for
+    // a club's own season, where Saturday/Twilight/Passage really are separate series.
+    const mergeLabel = document.createElement('label');
+    mergeLabel.style.cssText = 'grid-column:1 / -1;font-size:0.85rem;color:#555;';
+    mergeLabel.title = 'Tick for a regatta whose series are divisions of one event '
+        + '(Spinnaker Div 1, Div 2, Non-Spinnaker...). Leave clear for a club season.';
+    const merge = document.createElement('input');
+    merge.type = 'checkbox';
+    merge.className = 'ty-merge';
+    merge.checked = !!group.mergeDivisions;
+    mergeLabel.append(merge, document.createTextNode(' Series are divisions of one event'));
+
+    const urls = document.createElement('textarea');
+    urls.className = 'ty-urls';
+    urls.rows = Math.max(2, (group.urls || []).length);
+    urls.placeholder = 'One index URL per line (usually one per season)';
+    urls.value = (group.urls || []).join('\n');
+    urls.style.cssText = 'grid-column:1 / -1;font-family:monospace;font-size:0.85rem;'
+        + 'padding:3px 6px;width:100%;';
+
+    row.append(prefix, name, remove, mergeLabel, urls);
+    return row;
+}
+
+function addClubTopyachtGroup() {
+    const host = document.getElementById('edit-club-topyacht-groups');
+    if (host) host.appendChild(buildClubTopyachtRow({prefix: '', name: '', urls: []}));
+}
+
+function readClubTopyachtGroups() {
+    const host = document.getElementById('edit-club-topyacht-groups');
+    if (!host) return [];
+    return Array.from(host.querySelectorAll('.topyacht-group-row')).map(row => ({
+        prefix: row.querySelector('.ty-prefix').value.trim(),
+        name: row.querySelector('.ty-name').value.trim(),
+        mergeDivisions: row.querySelector('.ty-merge').checked,
+        urls: row.querySelector('.ty-urls').value.split(/\r?\n/)
+            .map(s => s.trim()).filter(s => s.length > 0)
+    })).filter(g => g.urls.length > 0);
+}
+
 function buildClubEditBody() {
-    const topyachtEl = document.getElementById('edit-club-topyacht');
-    const topyachtUrls = topyachtEl
-        ? topyachtEl.value.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0)
-        : [];
     return {
         clubId: editingClubId,
         shortName: document.getElementById('edit-club-short-name').value.trim(),
         longName: document.getElementById('edit-club-long-name').value.trim(),
         state: document.getElementById('edit-club-state').value.trim(),
         email: document.getElementById('edit-club-email').value.trim(),
-        topyachtUrls
+        topyachtGroups: readClubTopyachtGroups()
     };
 }
 
