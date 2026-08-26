@@ -78,12 +78,27 @@ public class StaticResourceServlet extends HttpServlet
         }
     }
 
+    /**
+     * Requires the browser to revalidate before reusing anything served from here.
+     * <p>
+     * Without an explicit freshness header a browser may cache a response heuristically
+     * (RFC 9111 §4.2.2), which meant a redeployed page or script could keep serving the old
+     * copy — a UI fix would look like it had simply not worked. These files are small and
+     * change with every deploy, so correctness is worth more than the saved bytes.
+     */
+    private static void noCache(HttpServletResponse resp)
+    {
+        resp.setHeader("Cache-Control", "no-cache, must-revalidate");
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String path = req.getPathInfo();
         if (path == null || "/".equals(path))
             path = "/index.html";
+
+        noCache(resp);
 
         String wikiPage = WIKI_PAGES.get(path);
         if (wikiPage != null)

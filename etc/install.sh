@@ -6,7 +6,12 @@ set -euo pipefail
 SERVICE_USER=sailing-pf
 INSTALL_DIR=/opt/sailing-pf
 DATA_DIR=/var/lib/sailing-pf
-SERVICE_FILE=/etc/systemd/system/sailing-pf.service
+SERVICE_NAME=sailing-pf.service
+SERVICE_FILE=/etc/systemd/system/$SERVICE_NAME
+
+# Set once we have stopped a running service, so the EXIT trap and the final step
+# know it is ours to start again.
+WAS_ACTIVE=false
 
 # ---- Verify prerequisites ----
 for cmd in java mvn; do
@@ -15,6 +20,27 @@ for cmd in java mvn; do
         exit 1
     fi
 done
+
+# Leave the machine as we found it if we bail out part-way through: an install that
+# fails after the stop should not leave the service down. Idempotent, so the normal
+# success path (where we have already started it) is a no-op.
+restore_service() {
+    if [ "$WAS_ACTIVE" = true ] && ! systemctl is-active --quiet "$SERVICE_NAME"; then
+        echo "==> Install did not complete — restarting the service that was running…"
+        systemctl start "$SERVICE_NAME" || true
+    fi
+}
+trap restore_service EXIT
+
+# ---- Stop a running service before replacing the tree it runs from ----
+# rsync --delete rewrites $INSTALL_DIR underneath the running JVM, so an upgrade over
+# a live install stops first and starts again at the end. A service that was not
+# running (or not yet installed) is left stopped.
+if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+    WAS_ACTIVE=true
+    echo "==> Service is running — stopping it for the upgrade…"
+    systemctl stop "$SERVICE_NAME"
+fi
 
 echo "==> Creating system user '$SERVICE_USER' (if not already present)…"
 if ! id "$SERVICE_USER" &>/dev/null; then
@@ -44,10 +70,21 @@ install -m 644 "$(dirname "$0")/sailing-pf.service" "$SERVICE_FILE"
 
 echo "==> Reloading systemd and enabling service…"
 systemctl daemon-reload
-systemctl enable sailing-pf.service
+systemctl enable "$SERVICE_NAME"
+
+if [ "$WAS_ACTIVE" = true ]; then
+    echo "==> Restarting the service…"
+    systemctl start "$SERVICE_NAME"
+    systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
+fi
 
 echo ""
 echo "Installation complete."
+if [ "$WAS_ACTIVE" = true ]; then
+    echo "The service was running and has been restarted on the new build."
+else
+    echo "The service is installed but not running — start it with the command below."
+fi
 echo ""
 echo "  Start:   sudo systemctl start sailing-pf"
 echo "  Stop:    sudo systemctl stop sailing-pf"

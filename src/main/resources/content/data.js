@@ -2204,15 +2204,18 @@ async function copyClubEmails() {
 // Renders one editable row per event group. Rows are plain DOM rather than a re-rendered
 // template so typing in one field never disturbs the others; readClubTopyachtGroups()
 // scrapes the current values back out at save time.
+// Only what is actually configured is rendered — a club with no TopYacht events shows
+// none, and an empty row is added deliberately with the + button. Seeding a blank row
+// made every club look half-configured and invited an accidental empty save.
 function renderClubTopyachtGroups(groups) {
     const host = document.getElementById('edit-club-topyacht-groups');
     if (!host) return;
     host.innerHTML = '';
-    (groups.length ? groups : [{prefix: '', name: '', urls: []}])
-        .forEach(g => host.appendChild(buildClubTopyachtRow(g)));
+    groups.forEach(g => host.appendChild(buildClubTopyachtRow(g)));
 }
 
 function buildClubTopyachtRow(group) {
+    group = group || {};
     const row = document.createElement('div');
     row.className = 'topyacht-group-row';
     row.style.cssText = 'display:grid;grid-template-columns:1fr 2fr auto;gap:0.4rem;'
@@ -2267,7 +2270,7 @@ function buildClubTopyachtRow(group) {
 
 function addClubTopyachtGroup() {
     const host = document.getElementById('edit-club-topyacht-groups');
-    if (host) host.appendChild(buildClubTopyachtRow({prefix: '', name: '', urls: []}));
+    if (host) host.appendChild(buildClubTopyachtRow());
 }
 
 function readClubTopyachtGroups() {
