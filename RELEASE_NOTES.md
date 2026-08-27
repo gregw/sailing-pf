@@ -1,5 +1,10 @@
 ### Notice to Handicappers
 
+### August 2026
+
+- Opt-in per club/series SailSys import restored.
+- Per event Topyacht imports added
+
 ### July 2026
 
 - At the request of SailSys, this tool will no longer fetch race data from their system.
