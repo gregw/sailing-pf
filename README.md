@@ -15,7 +15,7 @@ a boat's historical performance.
 It is a historical performance measure, not a handicap system,
 primarily used to inform initial handicap allocation at the start of a season.
 
-For more information see [`src/main/resources/content/docs.md`](https://github.com/gregw/sailing-pf/blob/main/src/main/resources/content/docs.md).
+For more information see the [project wiki](https://github.com/gregw/sailing-pf/wiki).
 
 Source code: Apache License 2.0. Contributions and issue reports welcome via
 [GitHub Issues](https://github.com/gregw/sailing-pf/issues).
