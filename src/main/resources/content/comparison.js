@@ -532,14 +532,12 @@ function renderBcfChart(data) {
         showlegend: !hideLegend,
         legend: {orientation: 'v', xanchor: 'left', x: 0},
         margin: { t: 20, b: 60, l: 60, r: 20 },
-        hovermode: 'closest',
-        // Plotly keeps the user's zoom/pan across redraws while uirevision is unchanged,
-        // so editing the handicap calculator does not zoom back out. It changes — and the
-        // view resets — when the axes mean something different: another divisor, Y-from-0,
-        // time window, common-races filter or set of boats.
-        uirevision: [divisor ? divisor.label : 'BCF', yFromZero, recentMonths, showCommonRacesOnly,
-            data.boats.map(b => b.id).join(',')].join('|')
+        hovermode: 'closest'
     };
+    // Keep the user's zoom across calculator edits; reset it when the axes mean something
+    // different: another divisor, Y-from-0, time window, common-races filter or set of boats.
+    keepZoom('comparison-chart', layout, [divisor ? divisor.label : 'BCF', yFromZero, recentMonths,
+        showCommonRacesOnly, data.boats.map(b => b.id).join(',')].join('|'));
 
     const chartDiv = document.getElementById('comparison-chart');
     Plotly.react('comparison-chart', traces, layout, { responsive: true });
@@ -563,6 +561,24 @@ function renderBcfChart(data) {
         highlightBoatDots(chartDiv, meta && meta.role === 'trend' ? meta.boatId : null);
     });
     chartDiv.on('plotly_unhover', () => highlightBoatDots(chartDiv, null));
+}
+
+// Carries the user's zoom/pan over to a chart's next redraw: if the chart's previous draw
+// had the same key and an axis was zoomed (autorange off), that axis's range is copied into
+// the new layout. A different key — the axes now mean something else — redraws unzoomed.
+// Done by hand rather than with Plotly's uirevision, which stopped data updates showing.
+function keepZoom(divId, layout, key) {
+    const gd = document.getElementById(divId);
+    if (!gd) return;
+    const prev = gd.layout;
+    if (prev && gd._zoomKey === key) {
+        ['xaxis', 'yaxis'].forEach(ax => {
+            const p = prev[ax];
+            if (p && p.autorange === false && Array.isArray(p.range))
+                layout[ax] = Object.assign({}, layout[ax], {range: p.range.slice(), autorange: false});
+        });
+    }
+    gd._zoomKey = key;
 }
 
 // Straight line through t's two end points, resampled to n evenly spaced dates.
@@ -1039,10 +1055,11 @@ function renderInlineDivisionChart() {
         legend: {orientation: 'h', y: -0.18},
         margin: {t: 80, b: 80, l: 60, r: 20},
         hovermode: 'closest',
-        annotations,
-        // Keep zoom across calculator edits; reset for another race/division, X-axis or Y-from-0.
-        uirevision: [inlineDivisionRaceId, inlineDivisionName, inlineDivXFactor, yFromZero].join('|')
+        annotations
     };
+    // Keep zoom across calculator edits; reset for another race/division, X-axis or Y-from-0.
+    keepZoom('bcfc-race-division-chart', layout,
+        [inlineDivisionRaceId, inlineDivisionName, inlineDivXFactor, yFromZero].join('|'));
 
     Plotly.react('bcfc-race-division-chart', traces, layout, {responsive: true});
 }
@@ -1278,11 +1295,11 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         showlegend: !hideLegend,
         legend: { orientation: 'h', y: -0.2 },
         margin: { t: 20, b: hideLegend ? 70 : 100, l: 80, r: 20 },
-        hovermode: 'closest',
-        // Keep zoom across calculator edits; reset for other variants, from-0 or time window.
-        // (Another pair of boats gets a new chart element, which starts unzoomed anyway.)
-        uirevision: [variantA, variantB, fromZero, recentMonths].join('|')
+        hovermode: 'closest'
     };
+    // Keep zoom across calculator edits; reset for other variants, from-0 or time window.
+    // (Another pair of boats gets a new chart element, which starts unzoomed anyway.)
+    keepZoom(divId, layout, [variantA, variantB, fromZero, recentMonths].join('|'));
 
     Plotly.react(divId, traces, layout, { responsive: true });
 

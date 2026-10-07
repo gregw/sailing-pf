@@ -173,7 +173,7 @@
             <div id="series-fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
                 <div style="margin-bottom:0.8rem;">
                     <label for="series-handicap-file">Load handicaps from file:</label>
-                    <a href="ui-tips.md#calc-load-file" class="info-btn" data-tip="Load handicaps from a JSON file — an array of {handicap, and boatId or sail/name, …}. Files saved via 'Download handicaps as JSON' reload as-is. Click for the format." target="_blank">ⓘ</a>
+                    <a href="ui-tips.md#calc-load-file" class="info-btn" data-tip="Load handicaps from a JSON file: an array with one object per boat, e.g. [{&quot;boatId&quot;:&quot;AUS1234-windfall-sydney38&quot;, &quot;sailno&quot;:&quot;AUS1234&quot;, &quot;name&quot;:&quot;Windfall&quot;, &quot;handicap&quot;:1.083, &quot;variant&quot;:&quot;spin&quot;}]. Identify each boat by boatId (best), or sailno and/or name. handicap is a TCF and is optional (omit it or use null to match the boat without setting a value). variant is optional: spin, nonSpin or twoHanded. Files saved via 'Download handicaps as JSON' reload as-is. Click for the full format." target="_blank">ⓘ</a>
                     <input type="file" id="series-handicap-file" accept=".json" style="margin-left:0.5rem;">
                     <div id="series-file-status" style="margin-top:0.5rem;color:#666;font-size:0.9rem;"></div>
                 </div>
