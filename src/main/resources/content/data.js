@@ -265,6 +265,17 @@ const COLUMNS = {
     series: [
         clubColumn('col-series-club', 'club'),
         { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.', cls: 'id-col' },
+        { label: 'Type',      sortKey: 'seriesType', anchor: 'col-series-type',
+          tip: 'Spin, NS (non-spinnaker), Mixed or unknown. Spin and NS set every finisher in the series; ' +
+              'Mixed and unknown keep each entry\'s own flag. Italic = derived from the series name, not set. ' +
+              'When filtering for Unknown, the bracket shows what the entries actually are.',
+          render: item => {
+              let label = esc(SERIES_TYPE_LABELS[item.seriesType] || item.seriesType || '');
+              if (item.seriesType === 'unknown' && item.entriesType)
+                  label = 'unknown(' + esc(SERIES_TYPE_LABELS[item.entriesType]) + ')';
+              return item.seriesTypeSet ? label : `<i>${label}</i>`;
+          }
+        },
         {
             label: 'First',
             key: 'firstDate',
@@ -278,14 +289,6 @@ const COLUMNS = {
             anchor: 'col-series-last',
             tip: 'Date of the last race in this series.',
             cls: 'date-col'
-        },
-        { label: 'Type',      sortKey: 'seriesType', anchor: 'col-series-type',
-          tip: 'Spin, NS (non-spinnaker), Mixed or unknown. Spin and NS set every finisher in the series; ' +
-              'Mixed and unknown keep each entry\'s own flag. Italic = derived from the series name, not set.',
-          render: item => {
-              const label = esc(SERIES_TYPE_LABELS[item.seriesType] || item.seriesType || '');
-              return item.seriesTypeSet ? label : `<i>${label}</i>`;
-          }
         },
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-series-races',
           tip: 'Number of races in this series; click to show these races in the races table.',
@@ -453,6 +456,7 @@ function initEntityPage(entity) {
     persistControl('show-excluded-' + entity, {key: 'show-excluded', onChange: () => doSearch(entity)});
     persistControl('hide-empty-' + entity, {key: 'hide-empty', onChange: () => doSearch(entity)});
     persistControl('exclude-empty-series', {onChange: () => doSearch('series')});
+    persistControl('series-type-filter', {onChange: () => doSearch('series')});
     persistControl('filter-dupes', {onChange: () => doSearch('boats')});
     const variantSel = document.getElementById('boat-variant');
     if (variantSel) variantSel.value = boatVariant;  // boatVariant already restored from sessionStorage
@@ -548,6 +552,8 @@ async function loadList(entity, page) {
     if (hideEmptyEl && hideEmptyEl.checked) url += '&hideEmpty=true';
     const excludeEmptyEl = document.getElementById('exclude-empty-' + entity);
     if (!f && excludeEmptyEl && excludeEmptyEl.checked) url += '&excludeEmpty=true';
+    const seriesTypeEl = entity === 'series' ? document.getElementById('series-type-filter') : null;
+    if (!f && seriesTypeEl && seriesTypeEl.value) url += '&type=' + encodeURIComponent(seriesTypeEl.value);
     const data = await fetchJson(url);
     state.loading[entity] = false;
     if (!data) return;

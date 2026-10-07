@@ -23,6 +23,14 @@
             excluded</label>
         <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-empty-series" checked onchange="doSearch('series')">
             Exclude empty</label>
+        <label style="margin-left:0.5rem;" title="Show only series of this type">Type:
+            <select id="series-type-filter">
+                <option value="">All</option>
+                <option value="spin">Spin</option>
+                <option value="ns">NS</option>
+                <option value="mixed">Mixed</option>
+                <option value="unknown">Unknown</option>
+            </select></label>
     </div>
     <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;">
         <table>

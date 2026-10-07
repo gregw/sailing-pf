@@ -3014,6 +3014,7 @@ public class AdminApiServlet extends HttpServlet
         String filterId = req.getParameter("id");
         boolean excludeEmpty = "true".equals(req.getParameter("excludeEmpty"));
         boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+        SeriesType filterType = SeriesType.parse(req.getParameter("type"));
 
         // Index races by seriesId for fast lookup
         Map<String, List<Race>> racesBySeries = new java.util.HashMap<>();
@@ -3056,6 +3057,8 @@ public class AdminApiServlet extends HttpServlet
                 boolean excluded = store.isSeriesExcluded(s.name());
                 boolean clubExcluded = store.isClubExcluded(club.id());
                 if (!showExcluded && (excluded || clubExcluded)) continue;
+                SeriesType seriesType = store.seriesType(s.id());
+                if (filterType != null && seriesType != filterType) continue;
 
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id",         s.id());
@@ -3070,8 +3073,11 @@ public class AdminApiServlet extends HttpServlet
                 row.put("excluded",   excluded);
                 row.put("exclusionReason", store.seriesExclusionReason(s.name()));
                 row.put("clubExcluded", clubExcluded);
-                row.put("seriesType", store.seriesType(s.id()).code());
+                row.put("seriesType", seriesType.code());
                 row.put("seriesTypeSet", store.isSeriesTypeSet(s.id()));
+                // Only worked out when filtering for Unknown series, where it is shown.
+                if (filterType == SeriesType.UNKNOWN)
+                    row.put("entriesType", entriesType(seriesRaces));
                 rows.add(row);
             }
         }
@@ -3080,6 +3086,33 @@ public class AdminApiServlet extends HttpServlet
             rows.sort(mapComparator(sort, asc));
 
         writeJson(resp, paginate(rows, page, size));
+    }
+
+    /**
+     * What a series' finishers actually sailed, from their stored spinnaker flags: "spin",
+     * "ns", "mixed", or null when there are no finishers.
+     */
+    private static String entriesType(List<Race> races)
+    {
+        boolean spin = false;
+        boolean ns = false;
+        for (Race r : races)
+        {
+            if (r.divisions() == null) continue;
+            for (var d : r.divisions())
+            {
+                if (d.finishers() == null) continue;
+                for (var f : d.finishers())
+                {
+                    if (f.nonSpinnaker()) ns = true;
+                    else spin = true;
+                }
+            }
+        }
+        if (spin && ns) return SeriesType.MIXED.code();
+        if (ns) return SeriesType.NON_SPIN.code();
+        if (spin) return SeriesType.SPIN.code();
+        return null;
     }
 
     private static boolean raceContainsBoat(Race r, String boatId)
