@@ -56,6 +56,13 @@
                 <option value="60">Last 60 months</option>
             </select>
       </label>
+        <label title="Divide each back-calculated factor by the boat's PF or RF (so a boat sailing to that factor plots near 1.000), or plot the raw BCF">
+            <select id="bcfc-divisor">
+                <option value="none" selected>BCF</option>
+                <option value="pf">BCF / PF</option>
+                <option value="rf">BCF / RF</option>
+            </select>
+      </label>
       <label title="Only plot races in which all selected boats competed">
         <input type="checkbox" id="common-races-only"> Common races only
       </label>
