@@ -7,8 +7,8 @@
 
 ### July 2026
 
-- At the request of SailSys, this tool will no longer fetch race data from their system.
-  If affected clubs wish their races to continue to be included, please send a message.
+- This site has switched to an opt-in model for the collection of race data from SailSys.
+  Please send a message if you wish your sailsys data to be included in this analysis.
 
 ### June 2026
 
