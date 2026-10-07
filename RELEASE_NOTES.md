@@ -2,13 +2,13 @@
 
 ### August 2026
 
-- Opt-in per club/series SailSys import restored.
+- This site has switched to an opt-in model for the collection of race data from SailSys.
+  Please send a message if you wish your sailsys data to be included in this analysis.
 - Per event Topyacht imports added
 
 ### July 2026
 
-- This site has switched to an opt-in model for the collection of race data from SailSys.
-  Please send a message if you wish your sailsys data to be included in this analysis.
+- Automatic collection of race data from sailsys has been suspended.
 
 ### June 2026
 
