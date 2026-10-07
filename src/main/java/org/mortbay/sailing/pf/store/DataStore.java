@@ -1477,6 +1477,13 @@ public class DataStore
      * any "spin entry" in the source data does not actually imply a spinnaker was flown.
      * Toggled via {@link #setDesignNoSpinnaker(String, boolean)}.
      */
+    /** True if the boat's design is flagged no-spinnaker (see {@link #isDesignNoSpinnaker}). */
+    public boolean isBoatNoSpinnakerDesign(String boatId)
+    {
+        Boat boat = boatId == null ? null : boats.get(boatId);
+        return boat != null && isDesignNoSpinnaker(boat.designId());
+    }
+
     public boolean isDesignNoSpinnaker(String designId)
     {
         if (designId == null || designId.isBlank())
@@ -1988,42 +1995,58 @@ public class DataStore
     }
 
     /**
-     * Returns the race with each finisher's spinnaker flag forced by the type of the series
-     * the race belongs to: all non-spinnaker if any of its series is {@link SeriesType#NON_SPIN},
-     * otherwise all spinnaker if any is {@link SeriesType#SPIN}; otherwise the race unchanged.
-     * Applied on every {@link #putRace} and at load, so a re-import cannot revert it.
+     * The combined type of the series a race belongs to, for deciding its finishers' variants
+     * ({@link org.mortbay.sailing.pf.data.EntryVariant#of}): {@link SeriesType#NON_SPIN} if
+     * any series is NS, else {@link SeriesType#TWO_HANDED} if any is 2H, else
+     * {@link SeriesType#SPIN} if any is spin; null when all are mixed or unknown.
      */
-    private Race applySeriesType(Race race)
+    public SeriesType raceSeriesType(Race race)
     {
-        if (race.seriesIds() == null || race.divisions() == null)
-            return race;
-        Boolean nonSpin = null;
+        requireStarted();
+        if (race.seriesIds() == null)
+            return null;
+        boolean twoHanded = false;
+        boolean spin = false;
         for (String seriesId : race.seriesIds())
         {
             SeriesType type = seriesType(seriesId, race.clubId());
             if (type == SeriesType.NON_SPIN)
-            {
-                nonSpin = true;
-                break;
-            }
-            if (type == SeriesType.SPIN)
-                nonSpin = false;
+                return SeriesType.NON_SPIN;
+            twoHanded |= type == SeriesType.TWO_HANDED;
+            spin |= type == SeriesType.SPIN;
         }
-        if (nonSpin == null)
+        return twoHanded ? SeriesType.TWO_HANDED : spin ? SeriesType.SPIN : null;
+    }
+
+    /**
+     * Returns the race with each finisher's spinnaker flag forced by the type of the series
+     * the race belongs to ({@link #raceSeriesType}): all non-spinnaker in an NS race, all
+     * spinnaker in a spin race, except boats of a no-spinnaker design, which keep their own
+     * flag; otherwise the race unchanged. Two-handed is a spinnaker
+     * variant decided per entry by {@link org.mortbay.sailing.pf.data.EntryVariant#of}, so a
+     * 2H race's flags are left alone. Applied on every {@link #putRace} and at load, so a
+     * re-import cannot revert it.
+     */
+    private Race applySeriesType(Race race)
+    {
+        if (race.divisions() == null)
             return race;
-        boolean ns = nonSpin;
+        SeriesType type = raceSeriesType(race);
+        if (type != SeriesType.NON_SPIN && type != SeriesType.SPIN)
+            return race;
+        boolean ns = type == SeriesType.NON_SPIN;
         boolean changed = false;
         List<Division> divisions = new ArrayList<>(race.divisions().size());
         for (Division d : race.divisions())
         {
-            if (d.finishers() == null || d.finishers().stream().allMatch(f -> f.nonSpinnaker() == ns))
+            if (d.finishers() == null || d.finishers().stream().allMatch(f -> keepsFlag(f, ns)))
             {
                 divisions.add(d);
                 continue;
             }
             changed = true;
             divisions.add(new Division(d.name(), d.finishers().stream()
-                .map(f -> f.nonSpinnaker() == ns ? f
+                .map(f -> keepsFlag(f, ns) ? f
                     : new Finisher(f.boatId(), f.elapsedTime(), ns, f.certificateNumber()))
                 .toList()));
         }
@@ -2033,6 +2056,16 @@ public class DataStore
             ns ? "non-spinnaker" : "spinnaker", ns ? "non-spinnaker" : "spinnaker");
         return new Race(race.id(), race.clubId(), race.seriesIds(), race.date(), race.number(),
             race.name(), divisions, race.source(), race.lastUpdated(), race.loadedAt());
+    }
+
+    /**
+     * True if forcing the finisher's spinnaker flag to {@code ns} leaves it unchanged: it
+     * already has that flag, or it would be upgraded to spinnaker but its boat's design has
+     * no spinnaker.
+     */
+    private boolean keepsFlag(Finisher f, boolean ns)
+    {
+        return f.nonSpinnaker() == ns || (!ns && isBoatNoSpinnakerDesign(f.boatId()));
     }
 
     /**

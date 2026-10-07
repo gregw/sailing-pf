@@ -1747,6 +1747,39 @@ class DataStoreTest {
         store2.stop();
     }
 
+    @Test
+    void twoHandedSeriesLeavesStoredFlags(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir,
+            "clubs:\n  myc.com.au:\n    shortName: MYC\n    seriesTypes:\n      myc.com.au/club-championship: 2h\n");
+        Race race = buildRace();
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        assertEquals(race, store.races().get(race.id()), "2H is decided per entry, not stored");
+        assertEquals(SeriesType.TWO_HANDED, store.raceSeriesType(race));
+        store.stop();
+    }
+
+    @Test
+    void spinSeriesKeepsNoSpinnakerDesignsNonSpin(@TempDir Path tempDir) throws IOException
+    {
+        writeEmptyAliasesYaml(tempDir);
+        writeClubsYaml(tempDir,
+            "clubs:\n  myc.com.au:\n    shortName: MYC\n    seriesTypes:\n      myc.com.au/club-championship: spin\n");
+        Race race = buildRace();
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("MYC12-santoy", "MYC12", "San Toy", "radford12catrig",
+            List.of("myc.com.au"), List.of(), List.of(), null, null));
+        store.setDesignNoSpinnaker("radford12catrig", true);
+        store.putRace(race);
+        Race stored = store.races().get(race.id());
+        for (Finisher f : stored.divisions().stream().flatMap(d -> d.finishers().stream()).toList())
+            assertEquals("MYC12-santoy".equals(f.boatId()), f.nonSpinnaker(), f.boatId());
+        store.stop();
+    }
+
     private Race buildRace() {
         return new Race(
                 "myc.com.au-2020-09-13-0001",

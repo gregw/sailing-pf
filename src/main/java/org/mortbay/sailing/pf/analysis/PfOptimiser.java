@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.EntryVariant;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
@@ -164,11 +165,9 @@ public class PfOptimiser
             if (store.isClubExcluded(race.clubId())) continue;
             if (race.divisions() == null) continue;
 
-            // In a non-spinnaker series all finishers are non-spin regardless of the per-entry
-            // SailSys flag (which reflects certificate type, not race rules). The store already
-            // applies this to the finishers it holds; checked again here for safety.
-            boolean raceForceNonSpin = race.seriesIds() != null && race.seriesIds().stream()
-                .anyMatch(sid -> store.seriesType(sid) == SeriesType.NON_SPIN);
+            // The series type overrides per-entry flags (SailSys takes them from the boat's
+            // certificate, not the race rules) — see EntryVariant.of.
+            SeriesType raceType = store.raceSeriesType(race);
 
             for (int di = 0; di < race.divisions().size(); di++)
             {
@@ -187,7 +186,8 @@ public class PfOptimiser
                     if (bd == null || bd.referenceFactors() == null) continue;
 
                     ReferenceFactors rf = bd.referenceFactors();
-                    int variant = determineVariant(f, div, raceForceNonSpin);
+                    int variant = determineVariant(f, div, raceType,
+                        store.isBoatNoSpinnakerDesign(f.boatId()));
                     Factor rfFactor = variantFactor(rf, variant);
                     // Allow rfFactor.weight() == 0: the Step-B formula degenerates cleanly to a
                     // pure race-derived PF (no regularisation toward RF) when rfW = 0, so these
@@ -533,26 +533,15 @@ public class PfOptimiser
             store, boatDerivedMap, varConv);
     }
 
-    private int determineVariant(Finisher f, Division div, boolean raceForceNonSpin)
+    private static int determineVariant(Finisher f, Division div, SeriesType raceType,
+                                        boolean noSpinDesign)
     {
-        // Check division name for two-handed indicators first (strongest signal)
-        String divName = div.name() != null ? div.name().toLowerCase() : "";
-        if (divName.contains("2hd") || divName.contains("two-handed") || divName.contains("two handed")
-            || divName.contains("double-handed") || divName.contains("double handed")
-            || divName.contains("shorthanded") || divName.contains("short-handed")
-            || divName.contains("2 handed"))
-            return TWO_HANDED;
-
-        // Division name non-spin keywords override per-entry SailSys flag
-        if (SeriesType.containsNonSpinKeyword(divName))
-            return NON_SPIN;
-
-        // Series-level non-spin override: SailSys sets nonSpinnaker based on certificate type,
-        // not race rules — a boat with a spinnaker cert racing in a NS series gets nonSpinnaker=false
-        if (raceForceNonSpin)
-            return NON_SPIN;
-
-        return f.nonSpinnaker() ? NON_SPIN : SPIN;
+        return switch (EntryVariant.of(raceType, div, f, noSpinDesign))
+        {
+            case SPIN -> SPIN;
+            case NON_SPIN -> NON_SPIN;
+            case TWO_HANDED -> TWO_HANDED;
+        };
     }
 
     private static Factor variantFactor(ReferenceFactors rf, int variant)

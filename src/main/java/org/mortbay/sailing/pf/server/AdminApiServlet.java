@@ -38,6 +38,7 @@ import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.EntryVariant;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
@@ -1178,7 +1179,7 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * POST /api/series/edit — body {@code {seriesIds: [...], seriesType: "spin"|"ns"|"mixed"|"unknown"}}.
+     * POST /api/series/edit — body {@code {seriesIds: [...], seriesType: "spin"|"ns"|"2h"|"mixed"|"unknown"}}.
      * Writes each series' type to clubs.yaml and re-applies it to the races held. Authentication
      * is enforced by {@link WriteAuthFilter}.
      */
@@ -1191,7 +1192,7 @@ public class AdminApiServlet extends HttpServlet
             if (type == null)
             {
                 resp.setStatus(400);
-                writeJson(resp, Map.of("error", "seriesType must be one of spin, ns, mixed, unknown"));
+                writeJson(resp, Map.of("error", "seriesType must be one of spin, ns, 2h, mixed, unknown"));
                 return;
             }
             List<String> seriesIds = new ArrayList<>();
@@ -2474,7 +2475,7 @@ public class AdminApiServlet extends HttpServlet
                 ReferenceFactors rf = bd.referenceFactors();
                 BoatPf pf = bd.pf();
 
-                String fVariant = finisherVariant(div, f);
+                String fVariant = finisherVariant(race, div, f);
                 variantsUsed.add(fVariant);
 
                 Factor pfFactor = selectVariantFactor(pf, rf, fVariant, true);
@@ -2567,7 +2568,7 @@ public class AdminApiServlet extends HttpServlet
                     if (bd == null)
                         continue;
 
-                    String fVariant = finisherVariant(div, f);
+                    String fVariant = finisherVariant(race, div, f);
                     ReferenceFactors rf = bd.referenceFactors();
                     BoatPf pf = bd.pf();
                     Factor pfFactor = selectVariantFactor(pf, rf, fVariant, true);
@@ -2606,24 +2607,13 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * Determines the handicap variant for a finisher: "twoHanded", "nonSpin", or "spin".
-     * Checks the division name for two-handed and non-spin keywords (mirroring PfOptimiser),
-     * then falls back to the finisher's {@code nonSpinnaker} flag.
+     * Determines the handicap variant for a finisher: "twoHanded", "nonSpin", or "spin" —
+     * decided by {@link EntryVariant#of}, as in PfOptimiser.
      */
-    private static String finisherVariant(Division div, Finisher f)
+    private String finisherVariant(Race race, Division div, Finisher f)
     {
-        String divName = div.name() == null ? "" : div.name().toLowerCase();
-        if (divName.contains("two-handed") || divName.contains("two handed")
-            || divName.contains("twohanded") || divName.contains("2-handed")
-            || divName.contains("double-handed") || divName.contains("double handed")
-            || divName.contains("shorthanded") || divName.contains("short-handed")
-            || divName.contains("2 handed"))
-            return "twoHanded";
-        if (divName.contains("non-spinnaker") || divName.contains("non spinnaker")
-            || divName.contains("nonspinnaker") || divName.contains("non-spin")
-            || divName.contains("non spin"))
-            return "nonSpin";
-        return f.nonSpinnaker() ? "nonSpin" : "spin";
+        return EntryVariant.of(store.raceSeriesType(race), div, f,
+            store.isBoatNoSpinnakerDesign(f.boatId())).code();
     }
 
     private static Factor selectVariantFactor(BoatPf pf, ReferenceFactors rf, String variant, boolean usePf)
@@ -2925,7 +2915,7 @@ public class AdminApiServlet extends HttpServlet
 
                     BoatPf pf = bd.pf();
                     ReferenceFactors rf = bd.referenceFactors();
-                    String variant = finisherVariant(div, f);
+                    String variant = finisherVariant(race, div, f);
                     Factor pfFactor = selectVariantFactor(pf, rf, variant, true);
                     Factor rfFactor = selectVariantFactor(pf, rf, variant, false);
 
@@ -3076,8 +3066,12 @@ public class AdminApiServlet extends HttpServlet
                 row.put("seriesType", seriesType.code());
                 row.put("seriesTypeSet", store.isSeriesTypeSet(s.id()));
                 // Only worked out when filtering for Unknown series, where it is shown.
+                String entriesType = filterType == SeriesType.UNKNOWN ? entriesType(seriesRaces) : null;
                 if (filterType == SeriesType.UNKNOWN)
-                    row.put("entriesType", entriesType(seriesRaces));
+                    row.put("entriesType", entriesType);
+                // Sort key matching the Type column's text, e.g. "unknown(mixed)".
+                row.put("seriesTypeSort", entriesType == null ? seriesType.code()
+                    : seriesType.code() + "(" + entriesType + ")");
                 rows.add(row);
             }
         }
@@ -3089,30 +3083,31 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * What a series' finishers actually sailed, from their stored spinnaker flags: "spin",
-     * "ns", "mixed", or null when there are no finishers.
+     * What a series' finishers actually sailed, by {@link EntryVariant#of}: "spin", "ns",
+     * "2h", "mixed" when more than one, or null when there are no finishers.
      */
-    private static String entriesType(List<Race> races)
+    private String entriesType(List<Race> races)
     {
-        boolean spin = false;
-        boolean ns = false;
+        java.util.EnumSet<EntryVariant> seen = java.util.EnumSet.noneOf(EntryVariant.class);
         for (Race r : races)
         {
             if (r.divisions() == null) continue;
+            SeriesType raceType = store.raceSeriesType(r);
             for (var d : r.divisions())
             {
                 if (d.finishers() == null) continue;
                 for (var f : d.finishers())
-                {
-                    if (f.nonSpinnaker()) ns = true;
-                    else spin = true;
-                }
+                    seen.add(EntryVariant.of(raceType, d, f, store.isBoatNoSpinnakerDesign(f.boatId())));
             }
         }
-        if (spin && ns) return SeriesType.MIXED.code();
-        if (ns) return SeriesType.NON_SPIN.code();
-        if (spin) return SeriesType.SPIN.code();
-        return null;
+        if (seen.isEmpty()) return null;
+        if (seen.size() > 1) return SeriesType.MIXED.code();
+        return switch (seen.iterator().next())
+        {
+            case SPIN -> SeriesType.SPIN.code();
+            case NON_SPIN -> SeriesType.NON_SPIN.code();
+            case TWO_HANDED -> SeriesType.TWO_HANDED.code();
+        };
     }
 
     private static boolean raceContainsBoat(Race r, String boatId)

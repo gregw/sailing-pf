@@ -155,6 +155,8 @@ class SeriesApiTest
 
         Map<String, Object> filtered = listSeries("&type=unknown").get(CLUB + "/twilight");
         assertEquals("mixed", filtered.get("entriesType"), "source flags left alone");
+        assertEquals("unknown(mixed)", filtered.get("seriesTypeSort"), "sorts on the displayed text");
+        assertEquals("unknown", unknown.get("seriesTypeSort"));
     }
 
     @Test
@@ -165,6 +167,14 @@ class SeriesApiTest
         assertEquals(List.of(CLUB + "/twilight"), List.copyOf(listSeries("&type=unknown").keySet()));
         assertTrue(listSeries("&type=mixed").isEmpty());
         assertEquals(3, listSeries("").size());
+    }
+
+    @Test
+    void typeFilterCombinesWithClubFilter() throws Exception
+    {
+        assertEquals(List.of(CLUB + "/twilight"),
+            List.copyOf(listSeries("&clubId=" + CLUB + "&type=unknown").keySet()));
+        assertTrue(listSeries("&clubId=other.club.au&type=unknown").isEmpty());
     }
 
     @Test

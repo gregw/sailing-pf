@@ -28,6 +28,7 @@
                 <option value="">All</option>
                 <option value="spin">Spin</option>
                 <option value="ns">NS</option>
+                <option value="2h">2H</option>
                 <option value="mixed">Mixed</option>
                 <option value="unknown">Unknown</option>
             </select></label>
@@ -68,12 +69,15 @@
             <select id="edit-series-type" style="padding:3px 6px;">
                 <option value="spin">Spin</option>
                 <option value="ns">NS (non-spinnaker)</option>
+                <option value="2h">2H (two-handed)</option>
                 <option value="mixed">Mixed</option>
                 <option value="unknown">Unknown</option>
             </select>
             <div style="font-size:0.85rem;color:#666;margin-top:0.3rem;max-width:600px;">
-                Spin or NS sets every finisher in every race of the series, overriding the
-                per-entry flag from the source (which SailSys takes from the boat's certificate).
+                NS makes every finisher non-spinnaker, overriding the per-entry flag from the
+                source (which SailSys takes from the boat's certificate). Spin makes every
+                finisher spinnaker, except two-handed divisions (2H is a spinnaker handicap).
+                2H makes spinnaker entries two-handed; non-spinnaker entries stay NS.
                 Mixed and Unknown keep each entry's own flag.
             </div>
         </div>

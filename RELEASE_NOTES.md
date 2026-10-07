@@ -2,7 +2,7 @@
 
 ### October 2026
 
-- **Series type**: Each series now have a forced type — Spin, NS (non-spinnaker), Mixed or Unknown, that can override any 
+- **Series type**: Each series now has a forced type — Spin, NS (non-spinnaker), 2H (two-handed), Mixed or Unknown, that can override any 
   (not infrequently) incorrect data from the source data.
 
 ### August 2026

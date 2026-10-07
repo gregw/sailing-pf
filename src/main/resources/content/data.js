@@ -265,8 +265,9 @@ const COLUMNS = {
     series: [
         clubColumn('col-series-club', 'club'),
         { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.', cls: 'id-col' },
-        { label: 'Type',      sortKey: 'seriesType', anchor: 'col-series-type',
-          tip: 'Spin, NS (non-spinnaker), Mixed or unknown. Spin and NS set every finisher in the series; ' +
+        { label: 'Type',      sortKey: 'seriesTypeSort', anchor: 'col-series-type',
+          tip: 'Spin, NS (non-spinnaker), 2H (two-handed), Mixed or unknown. NS makes every finisher NS; ' +
+              'Spin makes every finisher spin except two-handed divisions; 2H makes spin entries 2H. ' +
               'Mixed and unknown keep each entry\'s own flag. Italic = derived from the series name, not set. ' +
               'When filtering for Unknown, the bracket shows what the entries actually are.',
           render: item => {
@@ -553,7 +554,8 @@ async function loadList(entity, page) {
     const excludeEmptyEl = document.getElementById('exclude-empty-' + entity);
     if (!f && excludeEmptyEl && excludeEmptyEl.checked) url += '&excludeEmpty=true';
     const seriesTypeEl = entity === 'series' ? document.getElementById('series-type-filter') : null;
-    if (!f && seriesTypeEl && seriesTypeEl.value) url += '&type=' + encodeURIComponent(seriesTypeEl.value);
+    // Applies alongside a club (or other) filter — the server combines them.
+    if (seriesTypeEl && seriesTypeEl.value) url += '&type=' + encodeURIComponent(seriesTypeEl.value);
     const data = await fetchJson(url);
     state.loading[entity] = false;
     if (!data) return;
@@ -2064,7 +2066,7 @@ function hideEditClubPanel() {
 
 // ---- Edit series (type) ----
 
-const SERIES_TYPE_LABELS = {spin: 'Spin', ns: 'NS', mixed: 'Mixed', unknown: 'Unknown'};
+const SERIES_TYPE_LABELS = {spin: 'Spin', ns: 'NS', '2h': '2H', mixed: 'Mixed', unknown: 'Unknown'};
 let editingSeriesIds = [];
 
 function showEditSeriesPanel() {
