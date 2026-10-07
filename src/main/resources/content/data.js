@@ -3382,6 +3382,10 @@ function renderSeriesChartForDivision(divName, opts) {
     const visibleAllocSets = allocSets.filter(s => s.show !== false);
     const showPfLine = seriesPfCalc().getShowPf();
     const showRfLine = seriesPfCalc().getShowRf();
+    // With no calc column ticked there is nothing corrected to plot — fall back to the
+    // uncorrected (elapsed) times so the chart is never empty.
+    const plotElapsed = showSeriesElapsed
+        || (!showPfLine && !showRfLine && visibleAllocSets.length === 0);
     let anyRfData = false;
 
     // X-factor selector: collect available factors across all currently-shown finishers,
@@ -3537,8 +3541,9 @@ function renderSeriesChartForDivision(divName, opts) {
             // Optional Elapsed line per (race, division). In default mode plotted at
             // x=1/BCF so it is a straight line (elapsed = T₀ × 1/BCF); in common mode
             // plotted at xOf using the chosen factor. Skipped when the series-tab Elapsed
-            // tickbox is off, or finishers don't carry BCF (older cached payloads).
-            if (showSeriesElapsed) {
+            // tickbox is off while some calc column is ticked, or finishers don't carry BCF
+            // (older cached payloads).
+            if (plotElapsed) {
                 const elapsedRows = finishers
                     .filter(f => f.bcf != null && f.bcf > 0 && f.elapsed != null && f.elapsed > 0 && xOf(f, 'BCF') != null)
                     .slice()
