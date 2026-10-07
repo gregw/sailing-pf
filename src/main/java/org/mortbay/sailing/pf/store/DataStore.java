@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -36,6 +37,7 @@ import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.Maker;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
 import org.mortbay.sailing.pf.importer.TopYachtEditions;
@@ -976,6 +978,13 @@ public class DataStore
     {
         requireStarted();
         clubs.put(club.id(), club);
+        // Races are often put before the series naming them, so a name-derived series type
+        // can only be applied once the series is here.
+        if (races != null && club.series() != null)
+            applySeriesTypes(club.series().stream()
+                .filter(sr -> sr.raceIds() != null)
+                .flatMap(sr -> sr.raceIds().stream())
+                .distinct().toList());
         InvalidationListener l = invalidationListener;
         if (l != null) l.onClubChanged(club.id());
     }
@@ -992,9 +1001,10 @@ public class DataStore
             l.onDesignChanged(stamped.id());
     }
 
-    public void putRace(Race race)
+    public void putRace(Race imported)
     {
         requireStarted();
+        Race race = applySeriesType(imported);
         boolean isNew = !races.containsKey(race.id());
         races.put(race.id(), race);
         if (autoSanityCheck && isNew && !excludedRaces.containsKey(race.id()))
@@ -1894,6 +1904,164 @@ public class DataStore
     {
         requireStarted();
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
+        applySeriesTypesToAllRaces();
+    }
+
+    /**
+     * The type of a series: as set in clubs.yaml {@code seriesTypes}, otherwise derived from
+     * the series name ({@link SeriesType#fromName}). {@link SeriesType#UNKNOWN} if the series
+     * is not held.
+     */
+    public SeriesType seriesType(String seriesId)
+    {
+        requireStarted();
+        return seriesType(seriesId, null);
+    }
+
+    /** As {@link #seriesType(String)}, looking in {@code clubIdHint}'s series first. */
+    private SeriesType seriesType(String seriesId, String clubIdHint)
+    {
+        SeriesType explicit = clubCatalogue.seriesType(seriesId);
+        if (explicit != null)
+            return explicit;
+        Series series = findSeries(seriesId, clubIdHint);
+        return series == null ? SeriesType.UNKNOWN : SeriesType.fromName(series.name());
+    }
+
+    /** True if the series type comes from clubs.yaml rather than the series name. */
+    public boolean isSeriesTypeSet(String seriesId)
+    {
+        requireStarted();
+        return clubCatalogue.seriesType(seriesId) != null;
+    }
+
+    private Series findSeries(String seriesId, String clubIdHint)
+    {
+        if (seriesId == null)
+            return null;
+        Club hinted = clubIdHint == null ? null : clubs.get(clubIdHint);
+        Series found = findSeriesIn(hinted, seriesId);
+        if (found != null)
+            return found;
+        for (Club club : clubs.values())
+        {
+            if (club != hinted && (found = findSeriesIn(club, seriesId)) != null)
+                return found;
+        }
+        return null;
+    }
+
+    private static Series findSeriesIn(Club club, String seriesId)
+    {
+        if (club == null || club.series() == null)
+            return null;
+        for (Series s : club.series())
+        {
+            if (seriesId.equals(s.id()))
+                return s;
+        }
+        return null;
+    }
+
+    /**
+     * Sets a series' type in clubs.yaml ({@code null} removes it, reverting to the name-derived
+     * default), then re-applies series types to every held race and writes the races changed.
+     * Returns the IDs of the races changed.
+     */
+    public List<String> setSeriesType(String seriesId, SeriesType type)
+    {
+        requireStarted();
+        Series series = findSeries(seriesId, null);
+        if (series == null)
+            throw new IllegalArgumentException("Unknown series: " + seriesId);
+        String clubId = clubs.values().stream()
+            .filter(c -> c.series() != null && c.series().contains(series))
+            .map(Club::id).findFirst().orElseThrow();
+        Club seed = clubSeed.get(clubId);
+        String shortNameIfNew = seed != null ? seed.shortName() : clubs.get(clubId).shortName();
+        if (!ClubLoader.setSeriesType(configDir, clubId, shortNameIfNew, seriesId, type))
+            return List.of();
+        clubCatalogue = ClubLoader.loadCatalogue(configDir);
+        List<String> changed = applySeriesTypesToAllRaces();
+        changed.forEach(id -> write(raceFilePath(races.get(id)), races.get(id)));
+        return changed;
+    }
+
+    /**
+     * Returns the race with each finisher's spinnaker flag forced by the type of the series
+     * the race belongs to: all non-spinnaker if any of its series is {@link SeriesType#NON_SPIN},
+     * otherwise all spinnaker if any is {@link SeriesType#SPIN}; otherwise the race unchanged.
+     * Applied on every {@link #putRace} and at load, so a re-import cannot revert it.
+     */
+    private Race applySeriesType(Race race)
+    {
+        if (race.seriesIds() == null || race.divisions() == null)
+            return race;
+        Boolean nonSpin = null;
+        for (String seriesId : race.seriesIds())
+        {
+            SeriesType type = seriesType(seriesId, race.clubId());
+            if (type == SeriesType.NON_SPIN)
+            {
+                nonSpin = true;
+                break;
+            }
+            if (type == SeriesType.SPIN)
+                nonSpin = false;
+        }
+        if (nonSpin == null)
+            return race;
+        boolean ns = nonSpin;
+        boolean changed = false;
+        List<Division> divisions = new ArrayList<>(race.divisions().size());
+        for (Division d : race.divisions())
+        {
+            if (d.finishers() == null || d.finishers().stream().allMatch(f -> f.nonSpinnaker() == ns))
+            {
+                divisions.add(d);
+                continue;
+            }
+            changed = true;
+            divisions.add(new Division(d.name(), d.finishers().stream()
+                .map(f -> f.nonSpinnaker() == ns ? f
+                    : new Finisher(f.boatId(), f.elapsedTime(), ns, f.certificateNumber()))
+                .toList()));
+        }
+        if (!changed)
+            return race;
+        LOG.info("Race {} is in a {} series -- marking all finishers {}", race.id(),
+            ns ? "non-spinnaker" : "spinnaker", ns ? "non-spinnaker" : "spinnaker");
+        return new Race(race.id(), race.clubId(), race.seriesIds(), race.date(), race.number(),
+            race.name(), divisions, race.source(), race.lastUpdated(), race.loadedAt());
+    }
+
+    /**
+     * Re-applies {@link #applySeriesType} to the given races (all held races when null),
+     * notifying the invalidation listener for each race changed. Returns the IDs changed.
+     */
+    private List<String> applySeriesTypes(Collection<String> raceIds)
+    {
+        InvalidationListener l = invalidationListener;
+        List<String> changed = new ArrayList<>();
+        for (String id : raceIds == null ? List.copyOf(races.keySet()) : raceIds)
+        {
+            Race r = races.get(id);
+            if (r == null)
+                continue;
+            Race fixed = applySeriesType(r);
+            if (fixed == r)
+                continue;
+            races.put(id, fixed);
+            changed.add(id);
+            if (l != null)
+                l.onRaceChanged(id);
+        }
+        return changed;
+    }
+
+    private List<String> applySeriesTypesToAllRaces()
+    {
+        return applySeriesTypes(null);
     }
 
     /**
@@ -2797,6 +2965,7 @@ public class DataStore
         clubs.replaceAll((id, c) -> enrichWithSeed(c));
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
+        applySeriesTypesToAllRaces();
 
         migrateTopYachtIds();
         migrateTopYachtDivisionMerge();

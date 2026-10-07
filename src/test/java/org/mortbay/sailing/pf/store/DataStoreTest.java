@@ -18,6 +18,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1611,6 +1612,139 @@ class DataStoreTest {
         // Read-only lookup with the equivalent shorter name still finds the boat.
         assertTrue(store.findBoat("12345", "Sticky").isPresent());
         assertEquals("12345-stickyii-j24", store.findBoat("12345", "Sticky").get().id());
+    }
+
+    // --- seriesTypes in clubs.yaml ---
+
+    private static final String NS_CLUBS_YAML =
+        "clubs:\n  myc.com.au:\n    shortName: MYC\n    seriesTypes:\n      myc.com.au/club-championship: ns\n";
+
+    private static boolean allNonSpin(Race race)
+    {
+        return race.divisions().stream()
+            .flatMap(d -> d.finishers().stream())
+            .allMatch(Finisher::nonSpinnaker);
+    }
+
+    private static boolean noneNonSpin(Race race)
+    {
+        return race.divisions().stream()
+            .flatMap(d -> d.finishers().stream())
+            .noneMatch(Finisher::nonSpinnaker);
+    }
+
+    private static Club clubWithSeries(String seriesName, Race race)
+    {
+        return new Club("myc.com.au", "MYC", null, null, false, null, List.of(), List.of(), List.of(),
+            List.of(new Series(race.seriesIds().get(0), seriesName, false, List.of(race.id()))), null);
+    }
+
+    @Test
+    void putRaceInNsSeriesMarksAllFinishersNonSpin(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir, NS_CLUBS_YAML);
+        Race race = buildRace();
+        assertFalse(allNonSpin(race));
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        assertTrue(allNonSpin(store.races().get(race.id())));
+        store.stop();
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertTrue(allNonSpin(store2.races().get(race.id())), "type survives save/reload");
+        store2.stop();
+    }
+
+    @Test
+    void seriesTypeAppliedToRacesAlreadyStored(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir, "clubs:\n  myc.com.au:\n    shortName: MYC\n");
+        Race race = buildRace();
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        assertEquals(race, store.races().get(race.id()), "no type set -- race unchanged");
+        store.stop();
+
+        writeClubsYaml(tempDir, NS_CLUBS_YAML);
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertTrue(allNonSpin(store2.races().get(race.id())));
+        store2.stop();
+    }
+
+    @Test
+    void seriesTypeLeavesOtherSeriesAlone(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir,
+            "clubs:\n  myc.com.au:\n    shortName: MYC\n    seriesTypes:\n      myc.com.au/twilight: ns\n");
+        Race race = buildRace();
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        assertEquals(race, store.races().get(race.id()));
+        store.stop();
+    }
+
+    @Test
+    void spinSeriesMarksAllFinishersSpin(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir,
+            "clubs:\n  myc.com.au:\n    shortName: MYC\n    seriesTypes:\n      myc.com.au/club-championship: spin\n");
+        Race race = buildRace();
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        assertTrue(noneNonSpin(store.races().get(race.id())));
+        store.stop();
+    }
+
+    @Test
+    void seriesTypeDefaultsFromName(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir, "clubs:\n  myc.com.au:\n    shortName: MYC\n");
+        Race race = buildRace();
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        assertFalse(allNonSpin(store.races().get(race.id())));
+        // The series arrives after its race, as importers do; its name makes it NS.
+        store.putClub(clubWithSeries("Wednesday Non-Spinnaker 2025-26", race));
+        String seriesId = race.seriesIds().get(0);
+        assertEquals(SeriesType.NON_SPIN, store.seriesType(seriesId));
+        assertFalse(store.isSeriesTypeSet(seriesId));
+        assertTrue(allNonSpin(store.races().get(race.id())));
+        store.stop();
+    }
+
+    @Test
+    void setSeriesTypeWritesYamlAndOverridesName(@TempDir Path tempDir) throws IOException
+    {
+        writeClubsYaml(tempDir, "clubs:\n  myc.com.au:\n    shortName: MYC\n");
+        Race race = buildRace();
+        String seriesId = race.seriesIds().get(0);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putClub(clubWithSeries("Club Championship", race));
+        store.putRace(race);
+        assertEquals(SeriesType.UNKNOWN, store.seriesType(seriesId));
+
+        List<String> changed = store.setSeriesType(seriesId, SeriesType.NON_SPIN);
+        assertEquals(List.of(race.id()), changed);
+        assertTrue(allNonSpin(store.races().get(race.id())));
+        assertTrue(store.isSeriesTypeSet(seriesId));
+        String yaml = Files.readString(tempDir.resolve("config/clubs.yaml"));
+        assertTrue(yaml.contains("myc.com.au/club-championship: \"ns\""), yaml);
+        store.stop();
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(SeriesType.NON_SPIN, store2.seriesType(seriesId));
+        assertTrue(allNonSpin(store2.races().get(race.id())));
+        store2.stop();
     }
 
     private Race buildRace() {

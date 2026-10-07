@@ -1,5 +1,10 @@
 ### Notice to Handicappers
 
+### October 2026
+
+- **Series type**: Each series now have a forced type — Spin, NS (non-spinnaker), Mixed or Unknown, that can override any 
+  (not infrequently) incorrect data from the source data.
+
 ### August 2026
 
 - This site has switched to an opt-in model for the collection of race data from SailSys.

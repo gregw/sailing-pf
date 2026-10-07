@@ -337,6 +337,8 @@ clubs:
       - "YC868-velocity-beneteaufirst317"
       - "MYC12-santoy-radford12catrig"
       - "1255-melody-swansondart"
+    seriesTypes:
+      myc.org.au/2025-2026-twilight-series: "ns"
   mhyc.com.au:
     shortName: "MHYC"
     state: "NSW"

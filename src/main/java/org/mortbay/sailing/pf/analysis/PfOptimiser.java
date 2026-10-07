@@ -14,6 +14,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -163,21 +164,11 @@ public class PfOptimiser
             if (store.isClubExcluded(race.clubId())) continue;
             if (race.divisions() == null) continue;
 
-            // If the race's series name contains NS keywords, all finishers are non-spin
-            // regardless of the per-entry SailSys flag (which reflects certificate type, not race rules)
-            boolean raceForceNonSpin = false;
-            if (race.seriesIds() != null)
-            {
-                outer:
-                for (String sid : race.seriesIds())
-                {
-                    var club = store.clubs().get(race.clubId());
-                    if (club != null && club.series() != null)
-                        for (var s : club.series())
-                            if (sid.equals(s.id()) && containsNonSpinKeyword(s.name()))
-                            { raceForceNonSpin = true; break outer; }
-                }
-            }
+            // In a non-spinnaker series all finishers are non-spin regardless of the per-entry
+            // SailSys flag (which reflects certificate type, not race rules). The store already
+            // applies this to the finishers it holds; checked again here for safety.
+            boolean raceForceNonSpin = race.seriesIds() != null && race.seriesIds().stream()
+                .anyMatch(sid -> store.seriesType(sid) == SeriesType.NON_SPIN);
 
             for (int di = 0; di < race.divisions().size(); di++)
             {
@@ -553,7 +544,7 @@ public class PfOptimiser
             return TWO_HANDED;
 
         // Division name non-spin keywords override per-entry SailSys flag
-        if (containsNonSpinKeyword(divName))
+        if (SeriesType.containsNonSpinKeyword(divName))
             return NON_SPIN;
 
         // Series-level non-spin override: SailSys sets nonSpinnaker based on certificate type,
@@ -562,14 +553,6 @@ public class PfOptimiser
             return NON_SPIN;
 
         return f.nonSpinnaker() ? NON_SPIN : SPIN;
-    }
-
-    private static boolean containsNonSpinKeyword(String text)
-    {
-        if (text == null) return false;
-        String t = text.toLowerCase();
-        return t.contains("non-spinnaker") || t.contains("non spinnaker")
-            || t.contains("nonspinnaker") || t.contains("non-spin") || t.contains("non spin");
     }
 
     private static Factor variantFactor(ReferenceFactors rf, int variant)

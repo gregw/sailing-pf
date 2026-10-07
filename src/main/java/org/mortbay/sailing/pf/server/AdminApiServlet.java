@@ -42,6 +42,7 @@ import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.SailSysEvent;
+import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.data.Series;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
@@ -232,13 +233,17 @@ public class AdminApiServlet extends HttpServlet
         {
             handleEditClub(req, resp);
         }
+        else if ("/series/edit".equals(path))
+        {
+            handleEditSeries(req, resp);
+        }
         else if ("/clubs/import".equals(path))
         {
             handleClubImport(req, resp);
         }
         else if ("/boats/merge-request".equals(path) || "/designs/merge-request".equals(path)
             || "/boats/edit-request".equals(path) || "/designs/edit-request".equals(path)
-            || "/clubs/edit-request".equals(path)
+            || "/clubs/edit-request".equals(path) || "/series/edit-request".equals(path)
             || "/boats/exclude-request".equals(path) || "/designs/exclude-request".equals(path)
             || "/clubs/exclude-request".equals(path) || "/races/exclude-request".equals(path)
             || "/series/exclude-request".equals(path)
@@ -1164,6 +1169,51 @@ public class AdminApiServlet extends HttpServlet
                 cache.refreshIndexes();
 
             writeJson(resp, Map.of("ok", true, "noop", false));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/series/edit — body {@code {seriesIds: [...], seriesType: "spin"|"ns"|"mixed"|"unknown"}}.
+     * Writes each series' type to clubs.yaml and re-applies it to the races held. Authentication
+     * is enforced by {@link WriteAuthFilter}.
+     */
+    private void handleEditSeries(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            SeriesType type = SeriesType.parse((String)body.get("seriesType"));
+            if (type == null)
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "seriesType must be one of spin, ns, mixed, unknown"));
+                return;
+            }
+            List<String> seriesIds = new ArrayList<>();
+            if (body.get("seriesIds") instanceof List<?> ids)
+                ids.forEach(id -> { if (id != null) seriesIds.add(id.toString()); });
+            if (seriesIds.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "seriesIds is required"));
+                return;
+            }
+            int racesChanged = 0;
+            for (String seriesId : seriesIds)
+                racesChanged += store.setSeriesType(seriesId, type).size();
+            if (cache != null)
+                cache.refreshIndexes();
+            writeJson(resp, Map.of("ok", true, "racesChanged", racesChanged));
+        }
+        catch (IllegalArgumentException e)
+        {
+            resp.setStatus(404);
+            writeJson(resp, Map.of("error", e.getMessage()));
         }
         catch (Exception e)
         {
@@ -3020,6 +3070,8 @@ public class AdminApiServlet extends HttpServlet
                 row.put("excluded",   excluded);
                 row.put("exclusionReason", store.seriesExclusionReason(s.name()));
                 row.put("clubExcluded", clubExcluded);
+                row.put("seriesType", store.seriesType(s.id()).code());
+                row.put("seriesTypeSet", store.isSeriesTypeSet(s.id()));
                 rows.add(row);
             }
         }

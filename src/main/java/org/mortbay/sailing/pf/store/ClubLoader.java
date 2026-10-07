@@ -13,12 +13,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.SailSysEvent;
+import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
 import org.mortbay.sailing.pf.importer.TopYachtPrefix;
@@ -504,6 +506,51 @@ class ClubLoader
     }
 
     /**
+     * Sets the type of a series under its club's {@code seriesTypes} in clubs.yaml, or
+     * removes the entry when {@code type} is null (the series then takes its type from its
+     * name). Auto-creates the club entry if missing. Returns true if the file was changed.
+     */
+    static boolean setSeriesType(Path configDir, String clubId, String shortNameIfNew,
+                                 String seriesId, SeriesType type)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return false;
+        if (seedFile.clubs == null)
+            seedFile.clubs = new LinkedHashMap<>();
+
+        SeedEntry entry = seedFile.clubs.get(clubId);
+        if (entry == null)
+        {
+            if (type == null)
+                return false;
+            entry = new SeedEntry();
+            entry.shortName = shortNameIfNew;
+            seedFile.clubs.put(clubId, entry);
+        }
+
+        String code = type == null ? null : type.code();
+        String current = entry.seriesTypes == null ? null : entry.seriesTypes.get(seriesId);
+        if (Objects.equals(current, code))
+            return false;
+
+        if (entry.seriesTypes == null)
+            entry.seriesTypes = new TreeMap<>();
+        else
+            entry.seriesTypes = new TreeMap<>(entry.seriesTypes);
+        if (code == null)
+            entry.seriesTypes.remove(seriesId);
+        else
+            entry.seriesTypes.put(seriesId, code);
+        if (entry.seriesTypes.isEmpty())
+            entry.seriesTypes = null;
+
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: series {} type set to {}", seriesId, code);
+        return true;
+    }
+
+    /**
      * Normalises incoming SailSys events: derives a missing key from the club or series ID,
      * drops entries naming neither, and keeps the first entry when two share a key.
      */
@@ -643,6 +690,11 @@ class ClubLoader
         /** Map of key -> {name?, club?|series?}. Read via {@link #sailsysEvents()}. */
         public Object sailsys;
         public List<String> boats;
+        /**
+         * Series ID (e.g. {@code myc.org.au/2025-2026-twilight-series}) → {@link SeriesType}
+         * code. Series not listed take their type from their name.
+         */
+        public Map<String, String> seriesTypes;
 
         /**
          * Normalises the {@code topyacht} field to groups. A plain list is grouped by
@@ -839,6 +891,10 @@ class ClubLoader
          * boatIds explicitly set to have no club
          */
         private final Set<String> noclubBoatIds;
+        /**
+         * seriesId → type set explicitly under any club's {@code seriesTypes}
+         */
+        private final Map<String, SeriesType> seriesTypes;
 
         private ClubCatalogue(SeedFile file)
         {
@@ -847,6 +903,7 @@ class ClubLoader
                 overridesByKey = Map.of();
                 boatIdToClubIds = Map.of();
                 noclubBoatIds = Set.of();
+                seriesTypes = Map.of();
                 return;
             }
 
@@ -896,6 +953,27 @@ class ClubLoader
                 }
             noclubBoatIds = Collections.unmodifiableSet(noclub);
 
+            Map<String, SeriesType> types = new HashMap<>();
+            if (file.clubs != null)
+            {
+                for (SeedEntry entry : file.clubs.values())
+                {
+                    if (entry.seriesTypes == null)
+                        continue;
+                    entry.seriesTypes.forEach((seriesId, code) ->
+                    {
+                        SeriesType type = SeriesType.parse(code);
+                        if (seriesId == null || seriesId.isBlank() || type == null)
+                            LOG.warn("Ignoring clubs.yaml series type {}: {}", seriesId, code);
+                        else
+                            types.put(seriesId.trim(), type);
+                    });
+                }
+            }
+            seriesTypes = Collections.unmodifiableMap(types);
+            if (!types.isEmpty())
+                LOG.info("Loaded club catalogue: {} series type(s)", types.size());
+
             if (!byKey.isEmpty())
                 LOG.info("Loaded club catalogue: {} sail+name override(s)", byKey.size());
             if (!boatIdToClubIds.isEmpty() || !noclub.isEmpty())
@@ -916,6 +994,14 @@ class ClubLoader
             if (noclubBoatIds.contains(boatId))
                 return List.of();
             return boatIdToClubIds.get(boatId);
+        }
+
+        /**
+         * Returns the type set for the series in clubs.yaml, or null if none is set.
+         */
+        SeriesType seriesType(String seriesId)
+        {
+            return seriesId == null ? null : seriesTypes.get(seriesId);
         }
 
         /**

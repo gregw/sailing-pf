@@ -22,6 +22,7 @@ class WriteAuthFilter implements Filter
     private static final Set<String> OPEN_POST_PATHS = Set.of(
         "/api/boats/merge-request", "/api/designs/merge-request",
         "/api/boats/edit-request", "/api/designs/edit-request", "/api/clubs/edit-request",
+        "/api/series/edit-request",
         "/api/boats/exclude-request", "/api/designs/exclude-request",
         "/api/clubs/exclude-request", "/api/races/exclude-request",
         "/api/series/exclude-request",

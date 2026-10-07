@@ -37,6 +37,10 @@
 
     <div id="merge-bar-series" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
         <span id="merge-bar-count-series"></span>
+        <button id="edit-btn-series" onclick="showEditSeriesPanel()" style="margin-left:0.5rem;display:none;">Edit…</button>
+        <button id="edit-request-btn-series" onclick="showEditSeriesPanel()" style="margin-left:0.5rem;display:none;">Request
+            edit…
+        </button>
         <button id="exclude-btn-series" onclick="showExcludePanel('series', true)" style="margin-left:0.5rem;display:none;">
             Exclude…
         </button>
@@ -47,6 +51,36 @@
             dubious…
         </button>
         <button onclick="clearSelection('series')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="edit-panel-series" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong id="edit-panel-title-series">Edit Series</strong>
+        <div style="margin:0.5rem 0;">
+            <label for="edit-series-type">Type:</label>
+            <select id="edit-series-type" style="padding:3px 6px;">
+                <option value="spin">Spin</option>
+                <option value="ns">NS (non-spinnaker)</option>
+                <option value="mixed">Mixed</option>
+                <option value="unknown">Unknown</option>
+            </select>
+            <div style="font-size:0.85rem;color:#666;margin-top:0.3rem;max-width:600px;">
+                Spin or NS sets every finisher in every race of the series, overriding the
+                per-entry flag from the source (which SailSys takes from the boat's certificate).
+                Mixed and Unknown keep each entry's own flag.
+            </div>
+        </div>
+        <div id="edit-series-email-row" style="display:none; margin-bottom:0.5rem;">
+            <label for="edit-request-email-series" style="font-size:0.9rem;">Your email (optional): </label>
+            <input type="email" id="edit-request-email-series" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <div id="edit-series-message-row" style="display:none; margin-bottom:0.5rem;">
+            <label for="edit-series-message" style="font-size:0.9rem;">Message (optional):</label><br>
+            <textarea id="edit-series-message" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
+        </div>
+        <button id="edit-series-save-btn" onclick="saveSeriesEdit()">Save</button>
+        <button id="edit-series-request-btn" onclick="requestSeriesEdit()" style="display:none;">Request</button>
+        <button onclick="hideEditSeriesPanel()" style="margin-left:0.5rem;">Cancel</button>
+        <div id="edit-status-series" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="dubious-panel-series" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">

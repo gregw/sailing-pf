@@ -279,6 +279,14 @@ const COLUMNS = {
             tip: 'Date of the last race in this series.',
             cls: 'date-col'
         },
+        { label: 'Type',      sortKey: 'seriesType', anchor: 'col-series-type',
+          tip: 'Spin, NS (non-spinnaker), Mixed or unknown. Spin and NS set every finisher in the series; ' +
+              'Mixed and unknown keep each entry\'s own flag. Italic = derived from the series name, not set.',
+          render: item => {
+              const label = esc(SERIES_TYPE_LABELS[item.seriesType] || item.seriesType || '');
+              return item.seriesTypeSet ? label : `<i>${label}</i>`;
+          }
+        },
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-series-races',
           tip: 'Number of races in this series; click to show these races in the races table.',
           render: item => item.races != null ? String(item.races) : '',
@@ -1044,6 +1052,14 @@ function updateMergeBar(entity) {
         // Import races — authenticated users only; there is no request-form equivalent.
         const importBtn = document.getElementById('import-btn-clubs');
         if (importBtn) importBtn.style.display = (n >= 1 && w) ? '' : 'none';
+    }
+
+    // Edit series (one or more) — Edit when authed, Request edit otherwise.
+    if (entity === 'series') {
+        const editBtn = document.getElementById('edit-btn-series');
+        const editReq = document.getElementById('edit-request-btn-series');
+        if (editBtn) editBtn.style.display = (n >= 1 && w) ? '' : 'none';
+        if (editReq) editReq.style.display = (n >= 1 && !w) ? '' : 'none';
     }
 
     // Ignore / Do Not Ignore (designs only) — mirrors Exclude/Include on the ignored flag.
@@ -2038,6 +2054,85 @@ function hideEditClubPanel() {
     const panel = document.getElementById('edit-panel-clubs');
     if (panel) panel.style.display = 'none';
     editingClubId = null;
+}
+
+// ---- Edit series (type) ----
+
+const SERIES_TYPE_LABELS = {spin: 'Spin', ns: 'NS', mixed: 'Mixed', unknown: 'Unknown'};
+let editingSeriesIds = [];
+
+function showEditSeriesPanel() {
+    const items = Array.from(state.selected.series)
+        .map(id => state.selectedData.series.get(id)).filter(Boolean);
+    if (items.length === 0) return;
+    editingSeriesIds = items.map(it => it.id);
+    const w = isWriteAllowed();
+    const what = items.length === 1 ? ('Series ' + items[0].name) : (items.length + ' series');
+    document.getElementById('edit-panel-title-series').textContent =
+        (w ? 'Edit ' : 'Request edit for ') + what;
+    // Pre-select the common type when all selected series agree.
+    const types = new Set(items.map(it => it.seriesType || 'unknown'));
+    document.getElementById('edit-series-type').value = types.size === 1 ? [...types][0] : 'unknown';
+    document.getElementById('edit-status-series').textContent = '';
+    document.getElementById('edit-series-save-btn').style.display = w ? '' : 'none';
+    document.getElementById('edit-series-request-btn').style.display = w ? 'none' : '';
+    document.getElementById('edit-series-email-row').style.display = w ? 'none' : '';
+    document.getElementById('edit-series-message-row').style.display = w ? 'none' : '';
+    if (!w) document.getElementById('edit-request-email-series').value = requestEmail;
+    document.getElementById('edit-panel-series').style.display = '';
+}
+
+function hideEditSeriesPanel() {
+    const panel = document.getElementById('edit-panel-series');
+    if (panel) panel.style.display = 'none';
+    editingSeriesIds = [];
+}
+
+function buildSeriesEditBody() {
+    return {
+        seriesIds: editingSeriesIds,
+        seriesType: document.getElementById('edit-series-type').value
+    };
+}
+
+async function saveSeriesEdit() {
+    if (!isWriteAllowed() || editingSeriesIds.length === 0) return;
+    const statusEl = document.getElementById('edit-status-series');
+    statusEl.textContent = 'Saving…';
+    const result = await fetchJson('/api/series/edit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(buildSeriesEditBody())
+    });
+    if (!result || !result.ok) {
+        statusEl.textContent = 'Save failed: ' + ((result && result.error) || 'see console');
+        return;
+    }
+    statusEl.textContent = `Saved — ${result.racesChanged} race(s) updated.`;
+    clearSelection('series');
+    loadList('series', 0);
+}
+
+async function requestSeriesEdit() {
+    if (editingSeriesIds.length === 0) return;
+    const statusEl = document.getElementById('edit-status-series');
+    const email = document.getElementById('edit-request-email-series')?.value.trim() || '';
+    const message = document.getElementById('edit-series-message')?.value.trim() || '';
+    const body = buildSeriesEditBody();
+    if (email) body.email_from = email;
+    if (message) body.message = message;
+    statusEl.textContent = 'Submitting request…';
+    const result = await fetchJson('/api/series/edit-request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    if (result && result.ok) {
+        statusEl.textContent = 'Request recorded.';
+        clearSelection('series');
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
 }
 
 // ---- Per-club import (TopYacht today; more importers as they become club-scoped) ----
