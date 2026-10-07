@@ -372,7 +372,7 @@ ignored:
 - "tedkaufmanbobmiller"
 - "radford"
 noSpinnaker:
-  - "radford12catrig"
+- "radford12catrig"
 boatDesignOverrides:
 - designId: "sydney36mkii"
   canonicalName: "Sydney 36 MkII"
@@ -443,53 +443,53 @@ boatDesignOverrides:
 - designId: "radford12catrig"
   canonicalName: "Radford 12 Cat Rig"
   boats:
-    - sailNumber: "MYC12"
-      name: "San Toy"
-      from: null
-      until: null
+  - sailNumber: "MYC12"
+    name: "San Toy"
+    from: null
+    until: null
 - designId: "endeavour26"
   canonicalName: "Endeavour 26"
   boats:
-    - sailNumber: "BH57"
-      name: "Wundurra"
-      from: null
-      until: null
-    - sailNumber: "6191"
-      name: "Tic Tacs"
-      from: null
-      until: null
+  - sailNumber: "BH57"
+    name: "Wundurra"
+    from: null
+    until: null
+  - sailNumber: "6191"
+    name: "Tic Tacs"
+    from: null
+    until: null
 - designId: "farr1020"
   canonicalName: "FARR 1020"
   boats:
-    - sailNumber: "2189"
-      name: "Griffin"
-      from: null
-      until: null
+  - sailNumber: "2189"
+    name: "Griffin"
+    from: null
+    until: null
 - designId: "sydney32"
   canonicalName: "Sydney 32"
   boats:
-    - sailNumber: "6329"
-      name: "Kalevala"
-      from: null
-      until: null
+  - sailNumber: "6329"
+    name: "Kalevala"
+    from: null
+    until: null
 - designId: "jboatsj109"
   canonicalName: "J Boats J/109"
   boats:
-    - sailNumber: "9109"
-      name: "Vamos"
-      from: null
-      until: null
+  - sailNumber: "9109"
+    name: "Vamos"
+    from: null
+    until: null
 - designId: "melges24"
   canonicalName: "MELGES 24"
   boats:
-    - sailNumber: "795"
-      name: "PANTHER"
-      from: null
-      until: null
+  - sailNumber: "795"
+    name: "PANTHER"
+    from: null
+    until: null
 - designId: "ross830"
   canonicalName: "Ross 830"
   boats:
-    - sailNumber: "4822"
-      name: "Stingray"
-      from: null
-      until: null
+  - sailNumber: "4822"
+    name: "Stingray"
+    from: null
+    until: null
