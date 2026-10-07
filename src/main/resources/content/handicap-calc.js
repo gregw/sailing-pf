@@ -366,11 +366,14 @@ const HandicapCalc = (function () {
         // Sets — one column per set, focused set drives load/clear/typing/scaled-preview.
         // `show` per set (default true) drives whether consumers (charts) plot that set's
         // allocated-corrected dataset; same idea for showPf / showRf at the controller level.
-        let sets = [{name: 'Allocated', show: true}];
+        // With singleSelectShow the tickboxes pick a single consumer option (e.g. the BCF
+        // chart divisor), so nothing is ticked until the user chooses.
+        const defaultShow = !cfg.singleSelectShow;
+        let sets = [{name: 'Allocated', show: defaultShow}];
         let focusedIdx = 0;
         let nextSetN = 2;
-        let showPf = !isDesign;   // designs have no PF column — keep showPf permanently false
-        let showRf = true;
+        let showPf = !isDesign && defaultShow;   // designs have no PF column — keep showPf permanently false
+        let showRf = defaultShow;
 
         // When cfg.singleSelectShow is true, the PF, RF, and per-set "show" tickboxes act as
         // a radio group — at most one may be true. enforceSingleShow keeps that invariant.
@@ -418,7 +421,7 @@ const HandicapCalc = (function () {
         }
 
         function addSet() {
-            sets.push({name: `Set ${nextSetN++}`, show: true});
+            sets.push({name: `Set ${nextSetN++}`, show: defaultShow});
             focusedIdx = sets.length - 1;
             render();
             saveToSession();
@@ -1270,7 +1273,7 @@ const HandicapCalc = (function () {
 
             // Reshape `sets` and focus to match what's persisted.
             sets = data.sets.map(s => ({name: s.name || 'Allocated', show: s.show !== false}));
-            if (sets.length === 0) sets = [{name: 'Allocated', show: true}];
+            if (sets.length === 0) sets = [{name: 'Allocated', show: defaultShow}];
             focusedIdx = Math.max(0, Math.min(sets.length - 1, data.focused | 0));
             // Designs have no PF column — never restore a persisted showPf for them.
             if (!isDesign && typeof data.showPf === 'boolean') showPf = data.showPf;

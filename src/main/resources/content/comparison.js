@@ -331,35 +331,41 @@ function rfVariantFor(boat, variant) {
         : variant === 'twoHanded' ? null : boat.rfSpin;
 }
 
-// Active divisor for the BCF chart, chosen by the #bcfc-divisor selector ('pf', 'rf'
-// or 'none'). Returns null when no divisor is active. perBoat values mirror
-// Factor.applyInverse — the chart plots y' = e.backCalcFactor / value and intensity
-// weight w' = e.weight × weight.
+// Active divisor for the BCF chart, when one of the calc's PF / RF / set "show"
+// tickboxes is on (singleSelectShow ensures at most one). Returns null when no
+// divisor is active. perBoat values mirror Factor.applyInverse — the chart plots
+// y' = e.backCalcFactor / value and intensity weight w' = e.weight × weight.
 //
 // PF / RF are looked up using the calc's per-boat variant (not the global selector)
 // so the PF divisor matches an allocated set built via "Use PF" — which copies each
 // boat's per-boat-variant PF.
 function computeBcfDivisor(data) {
-    const mode = document.getElementById('bcfc-divisor')?.value || 'none';
-    if (mode === 'none') return null;
-    const lookup = mode === 'rf' ? rfVariantFor : pfVariantFor;
-    const perBoat = new Map();
-    data.boats.forEach(b => {
-        const f = lookup(b, boatVariantFor(b.id));
-        if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
-    });
-    return {label: mode.toUpperCase(), perBoat};
-}
-
-// PF / RF line tickboxes only apply to the raw BCF chart — disable them while a
-// divisor is selected.
-function syncBcfLineControls() {
-    const raw = document.getElementById('bcfc-divisor').value === 'none';
-    ['show-rf-line', 'show-pf-line'].forEach(id => {
-        const cb = document.getElementById(id);
-        cb.disabled = !raw;
-        cb.parentElement.style.opacity = raw ? '' : '0.5';
-    });
+    const calc = pfCalcController;
+    if (!calc) return null;
+    if (calc.getShowPf()) {
+        const perBoat = new Map();
+        data.boats.forEach(b => {
+            const f = pfVariantFor(b, calc.getBoatVariant(b.id));
+            if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
+        });
+        return {label: 'PF', perBoat};
+    }
+    if (calc.getShowRf()) {
+        const perBoat = new Map();
+        data.boats.forEach(b => {
+            const f = rfVariantFor(b, calc.getBoatVariant(b.id));
+            if (f) perBoat.set(b.id, {value: f.value, weight: f.weight});
+        });
+        return {label: 'RF', perBoat};
+    }
+    const activeSet = calc.getAllSets().find(s => s.show);
+    if (activeSet && activeSet.values.size > 0) {
+        const perBoat = new Map();
+        // Allocated entries are user-typed — treat as full confidence.
+        activeSet.values.forEach((v, boatId) => perBoat.set(boatId, {value: v, weight: 1}));
+        return {label: activeSet.name, perBoat};
+    }
+    return null;
 }
 
 function renderChart(data) {
@@ -415,7 +421,7 @@ function renderBcfChart(data) {
         const pfFactor = pfVariantFor(boat, variant);
 
         // PF / RF horizontal lines are about the unscaled domain — hide them while a
-        // divisor is active (their tickboxes are disabled by syncBcfLineControls).
+        // divisor is active (they would just collapse near 1.0 or be misleading).
         if (showRfLine && rfFactor && !divisor) {
             traces.push({
                 x: lineX, y: [rfFactor.value, rfFactor.value],
@@ -493,10 +499,10 @@ function renderBcfChart(data) {
                     hovertemplate: `${esc(name)} linear trend: %{y:.4f}<extra></extra>`
                 });
             }
-            // The seed (PF) is scaled by the same divisor as the entries so the early
-            // window stays in the plotted domain.
-            if (showTrendSliding) {
-                const pfSeed = pfFactor ? pfFactor.value / (div ? div.value : 1) : null;
+            // Sliding average is hidden in divisor mode — its seed value (PF) lives in
+            // the unscaled domain and would skew the early window.
+            if (showTrendSliding && !divisor) {
+                const pfSeed = pfFactor ? pfFactor.value : null;
                 const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, pfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
                 const avgLabel = slidingAverageDrops > 0
@@ -556,10 +562,12 @@ function pfCalc() {
         downloadStatus: document.getElementById('download-status'),
         compareSelect: true,
         compareMax: 2,
+        // Compare boats page repurposes the PF / RF / per-set "show" tickboxes as a
+        // single divisor selector for the BCF chart, so at most one may be ticked.
         singleSelectShow: true,
         onCompareSelectionChange: () => loadElapsedCharts(),
         onChange: () => {
-            // Re-render the BCF chart so per-boat variant changes are reflected.
+            // Re-render the BCF chart so a divisor toggle (or its clearing) is reflected.
             // Calls the BCF-only renderer — calling renderChart here would re-enter
             // renderHandicapCalc → setBoats → recalc → onChange (infinite recursion).
             if (lastChartData) renderBcfChart(lastChartData);
@@ -1268,7 +1276,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     persistControl('recent-months');
     persistControl('common-races-only');
     persistControl('bcfc-y-from-zero');
-    persistControl('bcfc-divisor');
     persistControl('elapsed-from-zero');
     persistControl('boat-search');
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
@@ -1284,11 +1291,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadElapsedCharts();
     });
     document.getElementById('common-races-only') .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    syncBcfLineControls();
-    document.getElementById('bcfc-divisor').addEventListener('change', () => {
-        syncBcfLineControls();
-        if (lastChartData) renderBcfChart(lastChartData);
-    });
     document.getElementById('bcfc-y-from-zero').addEventListener('change', () => {
         if (lastChartData) renderChart(lastChartData);
         if (inlineDivisionData) renderInlineDivisionChart();
