@@ -484,6 +484,7 @@ function renderBcfChart(data) {
                     line: { color: 'rgba(0,0,0,0.3)', width: 0.5 } },
                 text: texts,
                 customdata: custom,
+                meta: { boatId: boat.id, role: 'dots' },
                 hoverinfo: 'text',
                 showlegend: false,
                 legendgroup: boat.id
@@ -491,11 +492,15 @@ function renderBcfChart(data) {
 
             if (showTrendLinear) {
                 const t = weightedOlsTrend(entries);
-                if (t) traces.push({
-                    x: t.x, y: t.y, type: 'scatter', mode: 'lines',
+                // Many points along the line so hovering anywhere on it shows the boat and
+                // highlights its dots (see highlightBoatDots), not just at its two ends.
+                const dense = t ? densifyTrend(t, 40) : null;
+                if (dense) traces.push({
+                    x: dense.x, y: dense.y, type: 'scatter', mode: 'lines',
                     name: `${name} linear trend`,
                     line: { color, dash: 'dash', width: 1.5 },
                     legendgroup: boat.id,
+                    meta: { boatId: boat.id, role: 'trend' },
                     hovertemplate: `${esc(name)} linear trend: %{y:.4f}<extra></extra>`
                 });
             }
@@ -527,11 +532,18 @@ function renderBcfChart(data) {
         showlegend: !hideLegend,
         legend: {orientation: 'v', xanchor: 'left', x: 0},
         margin: { t: 20, b: 60, l: 60, r: 20 },
-        hovermode: 'closest'
+        hovermode: 'closest',
+        // Plotly keeps the user's zoom/pan across redraws while uirevision is unchanged,
+        // so editing the handicap calculator does not zoom back out. It changes — and the
+        // view resets — when the axes mean something different: another divisor, Y-from-0,
+        // time window, common-races filter or set of boats.
+        uirevision: [divisor ? divisor.label : 'BCF', yFromZero, recentMonths, showCommonRacesOnly,
+            data.boats.map(b => b.id).join(',')].join('|')
     };
 
     const chartDiv = document.getElementById('comparison-chart');
     Plotly.react('comparison-chart', traces, layout, { responsive: true });
+    chartDiv._highlightedBoat = null;   // the redraw replaced the dots
 
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_click');
     chartDiv.on('plotly_click', (eventData) => {
@@ -540,6 +552,62 @@ function renderBcfChart(data) {
         if (!pt.customdata) return;
         const {raceId, divisionName, seriesId} = pt.customdata;
         if (raceId) showRaceDivisionInline(raceId, divisionName || '', seriesId || null);
+    });
+
+    // Hovering a linear trend line highlights that boat's dots and dims the others.
+    chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_hover');
+    chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_unhover');
+    chartDiv.on('plotly_hover', (eventData) => {
+        const pt = eventData.points && eventData.points[0];
+        const meta = pt && pt.data && pt.data.meta;
+        highlightBoatDots(chartDiv, meta && meta.role === 'trend' ? meta.boatId : null);
+    });
+    chartDiv.on('plotly_unhover', () => highlightBoatDots(chartDiv, null));
+}
+
+// Straight line through t's two end points, resampled to n evenly spaced dates.
+function densifyTrend(t, n) {
+    const d0 = Date.parse(t.x[0]), d1 = Date.parse(t.x[1]);
+    const x = [], y = [];
+    for (let i = 0; i < n; i++) {
+        const f = i / (n - 1);
+        x.push(new Date(d0 + f * (d1 - d0)).toISOString().slice(0, 10));
+        y.push(t.y[0] + f * (t.y[1] - t.y[0]));
+    }
+    return { x, y };
+}
+
+// Highlights the BCF chart dots of boatId (outlined, fully opaque) and dims every other
+// boat's dots; boatId null restores them. Styles the rendered SVG points directly rather
+// than restyling, because a restyle redraws the chart and drops the hover label.
+function highlightBoatDots(chartDiv, boatId) {
+    if (chartDiv._highlightedBoat === boatId) return;
+    chartDiv._highlightedBoat = boatId;
+    chartDiv.querySelectorAll('.scatterlayer .trace').forEach(g => {
+        const cd = g.__data__;
+        const trace = cd && cd[0] && cd[0].trace;
+        if (!trace || !trace.meta || trace.meta.role !== 'dots') return;
+        const mine = trace.meta.boatId === boatId;
+        g.querySelectorAll('.points path').forEach(p => {
+            if (p.dataset.origOpacity === undefined) {
+                p.dataset.origOpacity = p.style.opacity;
+                p.dataset.origStroke = p.style.stroke;
+                p.dataset.origStrokeWidth = p.style.strokeWidth;
+            }
+            if (boatId == null) {
+                p.style.opacity = p.dataset.origOpacity;
+                p.style.stroke = p.dataset.origStroke;
+                p.style.strokeWidth = p.dataset.origStrokeWidth;
+            } else if (mine) {
+                p.style.opacity = '1';
+                p.style.stroke = '#000';
+                p.style.strokeWidth = '1.5px';
+            } else {
+                p.style.opacity = '0.1';
+                p.style.stroke = p.dataset.origStroke;
+                p.style.strokeWidth = p.dataset.origStrokeWidth;
+            }
+        });
     });
 }
 
@@ -971,7 +1039,9 @@ function renderInlineDivisionChart() {
         legend: {orientation: 'h', y: -0.18},
         margin: {t: 80, b: 80, l: 60, r: 20},
         hovermode: 'closest',
-        annotations
+        annotations,
+        // Keep zoom across calculator edits; reset for another race/division, X-axis or Y-from-0.
+        uirevision: [inlineDivisionRaceId, inlineDivisionName, inlineDivXFactor, yFromZero].join('|')
     };
 
     Plotly.react('bcfc-race-division-chart', traces, layout, {responsive: true});
@@ -1208,7 +1278,10 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         showlegend: !hideLegend,
         legend: { orientation: 'h', y: -0.2 },
         margin: { t: 20, b: hideLegend ? 70 : 100, l: 80, r: 20 },
-        hovermode: 'closest'
+        hovermode: 'closest',
+        // Keep zoom across calculator edits; reset for other variants, from-0 or time window.
+        // (Another pair of boats gets a new chart element, which starts unzoomed anyway.)
+        uirevision: [variantA, variantB, fromZero, recentMonths].join('|')
     };
 
     Plotly.react(divId, traces, layout, { responsive: true });
