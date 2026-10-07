@@ -1118,6 +1118,7 @@ function clearSelection(entity) {
         hideBoatClubPanel();
     }
     if (entity === 'designs') { hideIgnorePanel(); hideEditDesignPanel(); }
+    if (entity === 'series') hideEditSeriesPanel();
     if (entity === 'clubs') {
         hideEditClubPanel();
         hideImportClubPanel();
