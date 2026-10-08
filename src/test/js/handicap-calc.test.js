@@ -138,3 +138,29 @@ test('formatStatus: match-path falls back to matched when matchedBoats omitted (
     assert.equal(r.msg, 'Fetched 5 entries — matched 5 boats, applied 5 handicaps');
     assert.equal(r.ok, true);
 });
+
+// normaliseVariant maps hand-written variant spellings to the calculator's three values.
+const normaliseVariant = HandicapCalc.normaliseVariant;
+
+test('normaliseVariant: accepts common spellings', () => {
+    for (const v of ['nonspin', 'nonSpin', 'NS', 'non-spin', 'Non Spinnaker'])
+        assert.equal(normaliseVariant(v), 'nonSpin', v);
+    for (const v of ['spin', 'Spin', 'SPINNAKER'])
+        assert.equal(normaliseVariant(v), 'spin', v);
+    for (const v of ['2h', '2HD', 'two-handed', 'twoHanded', 'Double Handed', 'DH', 'shorthanded'])
+        assert.equal(normaliseVariant(v), 'twoHanded', v);
+});
+
+test('normaliseVariant: missing or unknown is undefined', () => {
+    assert.equal(normaliseVariant(undefined), undefined);
+    assert.equal(normaliseVariant(null), undefined);
+    assert.equal(normaliseVariant('genoa'), undefined);
+});
+
+test('formatStatus: add-boats path reports boats not found', () => {
+    const rows = [{sailno: 'R350', handicap: 1.0}, {sailno: 'X1', handicap: 1.1}];
+    const r = formatStatus(rows, {matched: 1, notFound: ['X1 Ghost']}, true, 'Loaded');
+    assert.match(r.msg, /added 1 boat/);
+    assert.match(r.msg, /1 not found: X1 Ghost/);
+    assert.equal(r.ok, false);
+});

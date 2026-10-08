@@ -676,14 +676,34 @@ function pfCalc() {
 async function addBoatsFromRows(rows) {
     if (selectedItems.length > 0) return null;
 
-    // Each loaded row is expected to carry a canonical row.boatId (downloaded handicap
-    // files include it). The frontend trusts the boatId; rows without one are skipped.
+    // Rows from a downloaded handicap file carry a canonical boatId. Hand-written files often
+    // have only a sail number and/or name — those are looked up on the server (sail + name,
+    // then sail alone, then name alone; each must be unique) and the boatId filled in, so
+    // the handicaps then load against it too.
+    const unresolved = rows.filter(r => r && !r.boatId && (r.sailno || r.name));
+    const labels = new Map();   // boatId → chip label from the server's record
+    if (unresolved.length > 0) {
+        const res = await fetchJson('/api/boats/resolve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({rows: unresolved.map(r => ({sailno: r.sailno, name: r.name}))})
+        });
+        const found = (res && res.boats) || [];
+        unresolved.forEach((r, i) => {
+            const b = found[i];
+            if (!b) return;
+            r.boatId = b.boatId;
+            labels.set(b.boatId, b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name);
+        });
+    }
+
     const added = new Set();
     const matched = [];
+    const notFound = [];
 
     for (const row of rows) {
-        if (!row.boatId) {
-            console.warn('load-handicaps: row has no boatId, skipping', row);
+        if (!row || !row.boatId) {
+            if (row) notFound.push([row.sailno, row.name].filter(Boolean).join(' ') || '(no sail number or name)');
             continue;
         }
         if (added.has(row.boatId)) continue;
@@ -692,7 +712,7 @@ async function addBoatsFromRows(rows) {
     }
 
     matched.forEach(row => {
-        const label = row.sailno ? `${row.sailno} ${row.name}` : row.name;
+        const label = labels.get(row.boatId) || (row.sailno ? `${row.sailno} ${row.name}` : row.name);
         selectedItems.push({
             type: 'boat',
             id: row.boatId,
@@ -713,7 +733,7 @@ async function addBoatsFromRows(rows) {
         loadElapsedCharts();
     }
 
-    return {handled: true, matched: matched.length};
+    return {handled: true, matched: matched.length, notFound};
 }
 
 function renderHandicapCalc(data) {

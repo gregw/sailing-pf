@@ -286,6 +286,20 @@ const HandicapCalc = (function () {
     const VARIANT_LABELS = {spin: 'Spin', nonSpin: 'NS', twoHanded: '2H'};
     const VARIANT_ORDER = ['spin', 'nonSpin', 'twoHanded'];
 
+    // Maps the variant spellings people write in hand-made files ("nonspin", "NS",
+    // "Non-Spinnaker", "2H", "double handed", …) to 'spin' | 'nonSpin' | 'twoHanded'.
+    // Returns undefined for a missing or unrecognised value, which loads as "no variant".
+    const VARIANT_ALIASES = {
+        spin: 'spin', s: 'spin', spinnaker: 'spin',
+        nonspin: 'nonSpin', ns: 'nonSpin', nonspinnaker: 'nonSpin',
+        twohanded: 'twoHanded', '2h': 'twoHanded', '2hd': 'twoHanded', dh: 'twoHanded',
+        doublehanded: 'twoHanded', shorthanded: 'twoHanded', sh: 'twoHanded'
+    };
+    function normaliseVariant(v) {
+        if (v == null) return undefined;
+        return VARIANT_ALIASES[String(v).toLowerCase().replace(/[^a-z0-9]/g, '')];
+    }
+
     // Build the status string and colour-flag for a load attempt. Pure helper so the
     // file-load path has one message shape, and so the logic is unit-testable.
     //
@@ -317,8 +331,13 @@ const HandicapCalc = (function () {
             // later via the session-storage replay path inside setBoats(). We can't show an
             // "applied" count yet, so report what's available in the source instead.
             const added = result.matched;
-            const msg = `${leadVerb} ${entries(total)} — added ${boats(added)}, ${handicaps(withHcap)} in source`;
-            return {msg, ok: added > 0 && withHcap > 0};
+            let msg = `${leadVerb} ${entries(total)} — added ${boats(added)}, ${handicaps(withHcap)} in source`;
+            const notFound = result.notFound || [];
+            if (notFound.length > 0) {
+                const shown = notFound.slice(0, 5).join(', ');
+                msg += ` — ${notFound.length} not found: ${shown}${notFound.length > 5 ? ', …' : ''}`;
+            }
+            return {msg, ok: added > 0 && withHcap > 0 && notFound.length === 0};
         }
 
         const matchedBoats = result.matchedBoats ?? result.matched;
@@ -1660,11 +1679,16 @@ const HandicapCalc = (function () {
                 const text = await file.text();
                 const data = JSON.parse(text);
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps in file');
+                data.forEach(r => {
+                    if (r && r.variant != null) r.variant = normaliseVariant(r.variant);
+                });
                 applySourceVariantOverride(data);
-                rememberFetchedRows(data);
                 const cbResult = cfg.onFetchedRows ? await cfg.onFetchedRows(data) : null;
+                // After onFetchedRows, which may fill in boatIds looked up from sail/name, so
+                // the replay of these handicaps onto the added boats matches by boatId.
+                rememberFetchedRows(data);
                 const result = cbResult?.handled
-                    ? {matched: cbResult.matched}
+                    ? {matched: cbResult.matched, notFound: cbResult.notFound}
                     : setHandicapsByMatch(data);
                 if (status) {
                     const r = formatStatus(data, result, !!cbResult?.handled, 'Loaded');
@@ -1743,6 +1767,7 @@ const HandicapCalc = (function () {
         showPentagonPopupAt, hidePentagonPopup,
         decideVariantAction,
         formatStatus,
+        normaliseVariant,
     };
 })();
 

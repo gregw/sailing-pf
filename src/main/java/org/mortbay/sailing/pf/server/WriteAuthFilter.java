@@ -17,12 +17,13 @@ class WriteAuthFilter implements Filter
 {
     private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
     /**
-     * POST endpoints that are open to unauthenticated users (read-only request logging).
+     * POST endpoints that are open to unauthenticated users (read-only: request logging and
+     * boat lookup).
      */
     private static final Set<String> OPEN_POST_PATHS = Set.of(
         "/api/boats/merge-request", "/api/designs/merge-request",
         "/api/boats/edit-request", "/api/designs/edit-request", "/api/clubs/edit-request",
-        "/api/series/edit-request",
+        "/api/series/edit-request", "/api/boats/resolve",
         "/api/boats/exclude-request", "/api/designs/exclude-request",
         "/api/clubs/exclude-request", "/api/races/exclude-request",
         "/api/series/exclude-request",

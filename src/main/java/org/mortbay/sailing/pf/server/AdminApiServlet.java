@@ -238,6 +238,10 @@ public class AdminApiServlet extends HttpServlet
         {
             handleEditSeries(req, resp);
         }
+        else if ("/boats/resolve".equals(path))
+        {
+            handleResolveBoats(req, resp);
+        }
         else if ("/clubs/import".equals(path))
         {
             handleClubImport(req, resp);
@@ -1221,6 +1225,71 @@ public class AdminApiServlet extends HttpServlet
             resp.setStatus(500);
             writeJson(resp, Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * POST /api/boats/resolve — read-only lookup of boats by sail number and/or name, for
+     * loading a hand-written handicap file that has no boatIds. Body
+     * {@code {rows: [{sailno, name}, ...]}}; returns {@code {boats: [...]}} in the same order,
+     * each {@code {boatId, sailNumber, name}} or null when no unique boat matches. Tries
+     * sail number + name, then sail number alone, then name alone — each must be unique.
+     */
+    private void handleResolveBoats(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            List<Map<String, Object>> out = new ArrayList<>();
+            if (body.get("rows") instanceof List<?> rows)
+            {
+                for (Object o : rows)
+                {
+                    Map<?, ?> row = o instanceof Map<?, ?> m ? m : Map.of();
+                    String sail = row.get("sailno") == null ? null : row.get("sailno").toString();
+                    String name = row.get("name") == null ? null : row.get("name").toString();
+                    Boat boat = resolveBoat(sail, name);
+                    if (boat == null)
+                    {
+                        out.add(null);
+                        continue;
+                    }
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("boatId", boat.id());
+                    m.put("sailNumber", boat.sailNumber());
+                    m.put("name", boat.name());
+                    out.add(m);
+                }
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("boats", out);
+            writeJson(resp, result);
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(400);
+            writeJson(resp, Map.of("error", String.valueOf(e.getMessage())));
+        }
+    }
+
+    private Boat resolveBoat(String sail, String name)
+    {
+        boolean haveSail = sail != null && !sail.isBlank();
+        boolean haveName = name != null && !name.isBlank();
+        if (haveSail && haveName)
+        {
+            var both = store.findBoat(sail, name);
+            if (both.isPresent())
+                return both.get();
+        }
+        if (haveSail)
+        {
+            var bySail = store.findBoat(sail, null);
+            if (bySail.isPresent())
+                return bySail.get();
+        }
+        if (haveName)
+            return store.findBoat(null, name).orElse(null);
+        return null;
     }
 
     private static String nullIfBlank(String s)
