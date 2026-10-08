@@ -355,6 +355,53 @@ const HandicapCalc = (function () {
     //   'skip'     — do not load this handicap (variants disagree under 'filter').
     //   'override' — load handicap AND replace the boat's variant ('set' mode).
     //   'apply'    — load handicap, keep the existing variant.
+    // ---- Smallest-change handicap optimisers (pure; exported for the charts and tests) ----
+    //
+    // Both take the current handicaps h0 (Map boatId → value) and return a new Map with the
+    // smallest relative change, i.e. minimising Σ ((h − h0) / h0)², that meets the target.
+    // Boats the target does not involve keep their handicap.
+
+    // Make the linear function S(h) = Σ c[b]·h[b] zero (e.g. a weighted average trend slope,
+    // which is linear in the handicaps). With h = h0·(1 + u) the constraint is S0 + d·u = 0
+    // where d[b] = c[b]·h0[b], and the smallest u is u = −S0·d / (d·d). Returns null when no
+    // handicap affects S.
+    function minChangeToZeroLinear(h0, c) {
+        let s0 = 0, dd = 0;
+        const d = new Map();
+        c.forEach((cb, b) => {
+            const h = h0.get(b);
+            if (h == null || !isFinite(cb)) return;
+            s0 += cb * h;
+            d.set(b, cb * h);
+            dd += cb * h * cb * h;
+        });
+        if (dd === 0) return null;
+        const out = new Map(h0);
+        d.forEach((db, b) => out.set(b, h0.get(b) * (1 - s0 * db / dd)));
+        return out;
+    }
+
+    // Make every boat's level equal, where a boat's level scales as 1/handicap (e.g. a chart
+    // line of BCF / allocated handicap) and is currently levels[b]. Any common level L is
+    // reached by h = h0·levels/L; the smallest change takes 1/L = Σ levels / Σ levels².
+    // Returns null when there are no levels.
+    function minChangeToEqualLevels(h0, levels) {
+        let sum = 0, sumSq = 0;
+        levels.forEach((l, b) => {
+            if (h0.get(b) == null || !isFinite(l) || l <= 0) return;
+            sum += l;
+            sumSq += l * l;
+        });
+        if (sumSq === 0) return null;
+        const invL = sum / sumSq;
+        const out = new Map(h0);
+        levels.forEach((l, b) => {
+            if (h0.get(b) == null || !isFinite(l) || l <= 0) return;
+            out.set(b, h0.get(b) * l * invL);
+        });
+        return out;
+    }
+
     function decideVariantAction(mode, itemVariant, currentBoatVariant) {
         if (mode === 'filter' && itemVariant && currentBoatVariant !== itemVariant) return 'skip';
         if (mode === 'set' && itemVariant && itemVariant !== currentBoatVariant) return 'override';
@@ -1591,6 +1638,16 @@ const HandicapCalc = (function () {
             return out;
         }
 
+        // Public: write new values into a set's inputs (Map boatId → value; boats not in the
+        // map are untouched), then recalculate — which saves and notifies the page.
+        function setSetValues(setIdx, values) {
+            setInputCells(setIdx).forEach(inp => {
+                const v = values.get(inp.dataset.boatId);
+                if (v != null && isFinite(v)) inp.value = v.toFixed(4);
+            });
+            recalc();
+        }
+
         function getSetValues(setIdx) {
             const m = new Map();
             setInputCells(setIdx).forEach(inp => {
@@ -1761,7 +1818,7 @@ const HandicapCalc = (function () {
         return {
             setBoats, setHandicapsByMatch, useDisplayedFactor, clearAll,
             getEnteredHandicaps, getEnteredValues,
-            getAllSets, getShowPf, getShowRf, recalc, updateVariant,
+            getAllSets, setSetValues, getShowPf, getShowRf, recalc, updateVariant,
             applyPairwiseFit,
             // Compare-checkbox accessors (no-op when cfg.compareSelect is false).
             getCompareSelection: () => new Set(compareSelectedIds),
@@ -1776,6 +1833,8 @@ const HandicapCalc = (function () {
         decideVariantAction,
         formatStatus,
         normaliseVariant,
+        minChangeToZeroLinear,
+        minChangeToEqualLevels,
     };
 })();
 

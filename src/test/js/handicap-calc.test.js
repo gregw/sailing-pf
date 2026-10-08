@@ -164,3 +164,55 @@ test('formatStatus: add-boats path reports boats not found', () => {
     assert.match(r.msg, /1 not found: X1 Ghost/);
     assert.equal(r.ok, false);
 });
+
+// Smallest-change optimisers behind "Flatten slope" (series) and "Level lines" (compare).
+const {minChangeToZeroLinear, minChangeToEqualLevels} = HandicapCalc;
+const relChange = (h0, h) => [...h0.keys()].reduce((a, b) => a + (h.get(b) / h0.get(b) - 1) ** 2, 0);
+
+test('minChangeToZeroLinear: makes the linear function zero', () => {
+    const h0 = new Map([['a', 0.9], ['b', 1.0], ['c', 1.1], ['x', 1.3]]);
+    const c = new Map([['a', -2], ['b', 0.5], ['c', 3]]);   // 'x' does not affect it
+    const h = minChangeToZeroLinear(h0, c);
+    const s = [...c].reduce((a, [b, cb]) => a + cb * h.get(b), 0);
+    assert.ok(Math.abs(s) < 1e-12, `S = ${s}`);
+    assert.equal(h.get('x'), 1.3, 'uninvolved boat unchanged');
+});
+
+test('minChangeToZeroLinear: no other zeroing change is smaller', () => {
+    const h0 = new Map([['a', 0.9], ['b', 1.0], ['c', 1.1]]);
+    const c = new Map([['a', -2], ['b', 0.5], ['c', 3]]);
+    const h = minChangeToZeroLinear(h0, c);
+    const best = relChange(h0, h);
+    // Move along the constraint surface: any direction v with Σ c·h0·v = 0 keeps S at 0.
+    for (const [va, vb] of [[0.01, 0], [0, 0.01], [-0.02, 0.01]]) {
+        const vc = -(c.get('a') * 0.9 * va + c.get('b') * 1.0 * vb) / (c.get('c') * 1.1);
+        const alt = new Map([['a', h.get('a') + 0.9 * va], ['b', h.get('b') + 1.0 * vb],
+            ['c', h.get('c') + 1.1 * vc]]);
+        assert.ok(relChange(h0, alt) >= best - 1e-12);
+    }
+});
+
+test('minChangeToZeroLinear: null when nothing affects it', () => {
+    assert.equal(minChangeToZeroLinear(new Map([['a', 1]]), new Map()), null);
+});
+
+test('minChangeToEqualLevels: every line ends at the same level', () => {
+    const h0 = new Map([['a', 0.9], ['b', 1.0], ['c', 1.1], ['x', 1.3]]);
+    const levels = new Map([['a', 1.02], ['b', 0.97], ['c', 1.05]]);
+    const h = minChangeToEqualLevels(h0, levels);
+    // A boat's level scales as 1/handicap.
+    const after = [...levels].map(([b, l]) => l * h0.get(b) / h.get(b));
+    after.forEach(v => assert.ok(Math.abs(v - after[0]) < 1e-12, String(after)));
+    assert.equal(h.get('x'), 1.3, 'boat without a line unchanged');
+});
+
+test('minChangeToEqualLevels: the common level is the smallest-change one', () => {
+    const h0 = new Map([['a', 0.9], ['b', 1.0], ['c', 1.1]]);
+    const levels = new Map([['a', 1.02], ['b', 0.97], ['c', 1.05]]);
+    const h = minChangeToEqualLevels(h0, levels);
+    const best = relChange(h0, h);
+    for (const k of [0.99, 1.01]) {
+        const alt = new Map([...h].map(([b, v]) => [b, v * k]));   // another common level
+        assert.ok(relChange(h0, alt) >= best - 1e-12);
+    }
+});

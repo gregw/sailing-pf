@@ -357,12 +357,14 @@ function computeBcfDivisor(data) {
         });
         return {label: 'RF', perBoat};
     }
-    const activeSet = calc.getAllSets().find(s => s.show);
+    const allSets = calc.getAllSets();
+    const setIdx = allSets.findIndex(s => s.show);
+    const activeSet = allSets[setIdx];
     if (activeSet && activeSet.values.size > 0) {
         const perBoat = new Map();
         // Allocated entries are user-typed — treat as full confidence.
         activeSet.values.forEach((v, boatId) => perBoat.set(boatId, {value: v, weight: 1}));
-        return {label: activeSet.name, perBoat};
+        return {label: activeSet.name, perBoat, setIdx};
     }
     return null;
 }
@@ -394,6 +396,8 @@ function renderBcfChart(data) {
     // When a divisor is active, dots are plotted as BCF / divisor (mirrors
     // Factor.applyInverse). Boats with no divisor entry are skipped entirely.
     const divisor = computeBcfDivisor(data);
+    // Each boat's trend-line level (its average over the period shown), for Level lines.
+    const lineLevels = new Map();
 
     let minDate = null, maxDate = null;
     data.boats.forEach(b => {
@@ -494,6 +498,7 @@ function renderBcfChart(data) {
                 // Many points along the line so hovering anywhere on it shows the boat and
                 // highlights its dots (see highlightBoatInChart), not just at its two ends.
                 const dense = t ? densifyTrend(t, 40) : null;
+                if (dense) lineLevels.set(boat.id, (dense.y[0] + dense.y[dense.y.length - 1]) / 2);
                 if (dense) traces.push({
                     x: dense.x, y: dense.y, type: 'scatter', mode: 'lines',
                     name: `${name} linear trend`,
@@ -512,6 +517,7 @@ function renderBcfChart(data) {
                 const avgLabel = slidingAverageDrops > 0
                     ? `best ${best} of ${slidingAverageCount} avg`
                     : `${slidingAverageCount}-finish avg`;
+                if (s) lineLevels.set(boat.id, s.y.reduce((a, y) => a + y, 0) / s.y.length);
                 if (s) traces.push({
                     x: s.x, y: s.y, type: 'scatter', mode: 'lines',
                     name: `${name} ${avgLabel}`,
@@ -523,6 +529,12 @@ function renderBcfChart(data) {
             }
         }
     });
+
+    // Level lines needs an allocated-set divisor (the only editable one) and 2+ lines.
+    lastLevelLines = divisor && divisor.setIdx != null && lineLevels.size >= 2
+        ? {setIdx: divisor.setIdx, levels: lineLevels} : null;
+    const levelBtn = document.getElementById('level-lines-btn');
+    if (levelBtn) levelBtn.disabled = !lastLevelLines;
 
     const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;
     const yTitle = divisor ? `Factor ratio: BCF / ${divisor.label}` : 'Factor';
@@ -567,6 +579,32 @@ function renderBcfChart(data) {
         setTrendHighlight(meta && meta.role === 'trend' ? meta.boatId : null);
     });
     chartDiv.on('plotly_unhover', () => setTrendHighlight(null));
+}
+
+let lastLevelLines = null;   // {setIdx, levels: Map boatId → line level} from the last BCF draw
+
+// Level lines: with an allocated set as the divisor each boat's line is its BCFs / its
+// handicap, so its level scales as 1/handicap. Sets the handicaps — by the smallest relative
+// change — so every line has the same average level over the period shown.
+function onLevelLines() {
+    const status = document.getElementById('level-lines-status');
+    if (!lastLevelLines || !pfCalcController) return;
+    const {setIdx, levels} = lastLevelLines;
+    const h0 = pfCalcController.getAllSets()[setIdx].values;
+    const h = HandicapCalc.minChangeToEqualLevels(h0, levels);
+    if (!h) {
+        if (status) status.textContent = 'Nothing to adjust.';
+        return;
+    }
+    let changed = 0, maxPct = 0;
+    levels.forEach((l, b) => {
+        if (!h0.has(b)) return;
+        const pct = Math.abs(h.get(b) / h0.get(b) - 1) * 100;
+        if (pct > 0.005) changed++;
+        maxPct = Math.max(maxPct, pct);
+    });
+    pfCalcController.setSetValues(setIdx, h);
+    if (status) status.textContent = `Adjusted ${changed} handicap${changed === 1 ? '' : 's'}, by at most ${maxPct.toFixed(2)}%.`;
 }
 
 // Carries the user's zoom/pan over to a chart's next redraw: if the chart's previous draw
@@ -1371,6 +1409,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-pf-line')      .addEventListener('change', e => { showPfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('trend-mode').addEventListener('change', e => { trendMode = e.target.value; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('level-lines-btn').addEventListener('click', onLevelLines);
     document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
     const recentSel = document.getElementById('recent-months');
     recentMonths = parseInt(recentSel.value, 10) || 0;

@@ -3380,6 +3380,7 @@ async function loadSeriesChart(seriesId) {
         label.textContent = 'No chart data available for this series.';
         document.getElementById('series-division-select').innerHTML = '';
         Plotly.purge('series-chart');
+        showSeriesTrendSummary(null);
         seriesPfCalc().setBoats([]);
         renderCompareButtons('series-compare-btn-container', []);
         return;
@@ -3606,6 +3607,7 @@ function renderSeriesChartForDivision(divName, opts) {
                 x: xs, y: ys,
                 mode: 'lines+markers', type: 'scatter',
                 name: traceName,
+                meta: {dataset: 'PF corrected'},
                 legendgroup: groupKey,
                 line: {dash: 'solid', color: color, width: 1.5},
                 marker: {size: 5},
@@ -3633,6 +3635,7 @@ function renderSeriesChartForDivision(divName, opts) {
                     x: rXs, y: rYs,
                     mode: 'lines+markers', type: 'scatter',
                     name: traceName + ' (RF)',
+                    meta: {dataset: 'RF corrected'},
                     legendgroup: groupKey + ':rf',
                     line: {dash: 'dot', color: color, width: 1.25},
                     marker: {size: 4},
@@ -3663,6 +3666,7 @@ function renderSeriesChartForDivision(divName, opts) {
                         x: eXs, y: eYs,
                         mode: 'lines+markers', type: 'scatter',
                         name: traceName + ' (elapsed)',
+                        meta: {dataset: 'Elapsed'},
                         legendgroup: groupKey + ':elapsed',
                         line: {dash: 'dash', color: color, width: 1},
                         marker: {size: 4},
@@ -3699,6 +3703,10 @@ function renderSeriesChartForDivision(divName, opts) {
                     y: allocPts.map(p => p.correctedMin),
                     mode: 'lines+markers', type: 'scatter',
                     name: traceLabel,
+                    // points: what Flatten slope needs to express this line's slope in the
+                    // handicaps (x, elapsed minutes and boat of each point).
+                    meta: {dataset: `${s.name} corrected`, setIdx: allocSets.indexOf(s),
+                        points: allocPts.map(p => ({boatId: p.f.boatId, x: xOf(p.f, 'PF'), e: p.f.elapsed / 60}))},
                     legendgroup: allocLegendKey,
                     showlegend: !allocatedLegendShownFor.has(allocLegendKey),
                     line: {dash: 'dash', color: allocColor, width: 1.5},
@@ -3743,8 +3751,15 @@ function renderSeriesChartForDivision(divName, opts) {
         });
     });
 
+    // Flatten slope works on the one ticked allocated set's lines — not when the x-axis is
+    // the allocated handicap itself, since x would then move with the handicaps.
+    lastSeriesAllocTraces = traces.filter(t => t.meta && t.meta.points);
+    const flattenBtn = document.getElementById('series-flatten-btn');
+    if (flattenBtn) flattenBtn.disabled = lastSeriesAllocTraces.length === 0 || divXFactor === 'Allocated';
+
     if (traces.length === 0) {
         Plotly.purge('series-chart');
+        showSeriesTrendSummary(null);
         return;
     }
 
@@ -3753,12 +3768,18 @@ function renderSeriesChartForDivision(divName, opts) {
         // allocated), in the line's colour and legend group. The race lines and podium
         // markers fade so the trends stand out.
         const dataTraces = traces.slice();
+        const fits = [];
         dataTraces.forEach(t => {
             t.opacity = 0.25;
             if (t.mode !== 'lines+markers') return;
             const trend = linearFitTrace(t);
-            if (trend) traces.push(trend);
+            if (!trend) return;
+            traces.push(trend);
+            fits.push({dataset: t.meta && t.meta.dataset, slope: trend.meta.slope, n: trend.meta.n});
         });
+        showSeriesTrendSummary(fits);
+    } else {
+        showSeriesTrendSummary(null);
     }
 
     const layout = {
@@ -3812,7 +3833,88 @@ function linearFitTrace(t) {
         `${t.name} trend`, (t.line && t.line.color) || '#333',
         {dash: 'solid', baseWidth: 3, hoverWidth: 6, showlegend: false});
     trend.legendgroup = t.legendgroup;
+    trend.meta.slope = slope;
+    trend.meta.n = xs.length;
     return trend;
+}
+
+let lastSeriesAllocTraces = [];
+
+/**
+ * The boat-weighted average of the race trend slopes of the given allocated lines, as a
+ * linear function of the handicaps: returns Map boatId → c with slope = Σ c[b]·h[b]. Each
+ * line's OLS slope of y = elapsed·h against x is Σ a_i·e_i·h_i with a_i = (x_i − x̄)/Σ(x − x̄)²,
+ * and lines are weighted by their number of points, as in showSeriesTrendSummary.
+ */
+function seriesSlopeCoefficients(allocTraces) {
+    const lines = allocTraces.map(t => t.meta.points.filter(p => p.x != null && isFinite(p.x)))
+        .filter(pts => {
+            if (pts.length < 2) return false;
+            const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+            return pts.some(p => p.x !== mx);
+        });
+    const total = lines.reduce((a, pts) => a + pts.length, 0);
+    const c = new Map();
+    lines.forEach(pts => {
+        const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+        const ssx = pts.reduce((a, p) => a + (p.x - mx) ** 2, 0);
+        pts.forEach(p => c.set(p.boatId,
+            (c.get(p.boatId) || 0) + (pts.length / total) * ((p.x - mx) / ssx) * p.e));
+    });
+    return c;
+}
+
+function onSeriesFlattenSlope() {
+    const status = document.getElementById('series-flatten-status');
+    const traces = lastSeriesAllocTraces;
+    if (!traces || traces.length === 0) return;
+    const setIdx = traces[0].meta.setIdx;
+    const calc = seriesPfCalc();
+    const h0 = calc.getAllSets()[setIdx].values;
+    const h = HandicapCalc.minChangeToZeroLinear(h0, seriesSlopeCoefficients(traces));
+    if (!h) {
+        if (status) status.textContent = 'Nothing to adjust.';
+        return;
+    }
+    let changed = 0, maxPct = 0;
+    h.forEach((v, b) => {
+        const pct = Math.abs(v / h0.get(b) - 1) * 100;
+        if (pct > 0.005) changed++;
+        maxPct = Math.max(maxPct, pct);
+    });
+    calc.setSetValues(setIdx, h);
+    if (status) status.textContent = `Adjusted ${changed} handicap${changed === 1 ? '' : 's'}, by at most ${maxPct.toFixed(2)}%.`;
+}
+
+/**
+ * Shows, per dataset (PF corrected, an allocated set, …), the weighted average slope of its
+ * race trend lines — each race weighted by its number of boats — under the series chart
+ * title. A slope near 0 means corrected time does not drift with speed: the handicaps are
+ * fair to fast and slow boats alike. fits null hides it.
+ */
+function showSeriesTrendSummary(fits) {
+    const el = document.getElementById('series-trend-summary');
+    if (!el) return;
+    if (!fits || fits.length === 0) {
+        el.style.display = 'none';
+        el.textContent = '';
+        return;
+    }
+    const byDataset = new Map();
+    fits.forEach(f => {
+        const key = f.dataset || 'Trend';
+        const acc = byDataset.get(key) || {sum: 0, n: 0, lines: 0};
+        acc.sum += f.slope * f.n;
+        acc.n += f.n;
+        acc.lines++;
+        byDataset.set(key, acc);
+    });
+    el.innerHTML = 'Weighted average trend slope (min per unit of x, races weighted by boats): '
+        + [...byDataset.entries()].map(([name, a]) =>
+            `<b>${esc(name)}</b> ${(a.sum / a.n).toFixed(2)} `
+            + `<span style="color:#777;">(${a.lines} line${a.lines === 1 ? '' : 's'}, ${a.n} boats)</span>`)
+            .join(' &nbsp;·&nbsp; ');
+    el.style.display = '';
 }
 
 function olsSlope(xs, ys) {
