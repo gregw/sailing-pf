@@ -731,7 +731,10 @@ async function addBoatsFromRows(rows) {
             // Seed the calculator's variant for THIS new boat from the source row, so the
             // fetched handicap loads against the matching variant; fall back to the table
             // majority when the source row carries no variant info.
-            initialVariant: row.variant || majorityVariant()
+            initialVariant: row.variant || majorityVariant(),
+            // Even if the calculator saw this boat before (e.g. Clear then re-load), take the
+            // file's variant — otherwise On import: Filter would skip its handicap.
+            forceVariant: !!row.variant
         });
     });
 
@@ -779,6 +782,7 @@ function renderHandicapCalc(data) {
             boatName: b.name || null,
             designName: b.designName || null,
             variant,
+            forceVariant: !!item?.forceVariant,
             pfAll: {
                 spin: b.pfSpin ? b.pfSpin.value : null,
                 nonSpin: b.pfNonSpin ? b.pfNonSpin.value : null,
@@ -806,6 +810,12 @@ function renderHandicapCalc(data) {
     });
 
     pfCalc().setBoats(calcBoats, {showBestFit});
+    // A forced variant applies once, when the boat arrives; after that the calculator's own
+    // per-boat variant (which the user may change) is kept.
+    if (selectedItems.some(i => i.forceVariant)) {
+        selectedItems.forEach(i => delete i.forceVariant);
+        saveSelection();
+    }
 }
 
 // ---- Inline race-division chart (shown below BCFC chart on dot click) ----

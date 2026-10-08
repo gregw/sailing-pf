@@ -3280,7 +3280,8 @@ function applyRaceCalcDivision(divName) {
             label: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
             designId: b.designId || null,
             designName: b.designName || null,
-        })));
+        })),
+        id => raceCalc().getBoatVariant(id));
     // Re-render division chart so the allocated line picks up any applied entries.
     if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
 }
@@ -3293,7 +3294,10 @@ const COMPARE_PALETTE = [
 ];
 
 // rows: [{id, label, designId, designName}]
-function renderCompareButtons(containerId, rows) {
+// variantOf(boatId), when given, is read on click: Compare Boats then opens each boat in the
+// Spin/NS/2H variant it has here, so the handicaps carried over (saved with that variant)
+// are not filtered out there as a variant mismatch.
+function renderCompareButtons(containerId, rows, variantOf) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
@@ -3307,7 +3311,8 @@ function renderCompareButtons(containerId, rows) {
             type: 'boat',
             id: r.id,
             label: r.label,
-            color: COMPARE_PALETTE[i % COMPARE_PALETTE.length]
+            color: COMPARE_PALETTE[i % COMPARE_PALETTE.length],
+            ...(variantOf ? {initialVariant: variantOf(r.id), forceVariant: true} : {})
         }));
         sessionStorage.setItem('pf-comparison-items', JSON.stringify(items));
         window.location.href = '/comparison.html';
@@ -3480,7 +3485,8 @@ function renderSeriesChartForDivision(divName, opts) {
                 label: b.name,
                 designId: b.designId,
                 designName: b.designName,
-            })));
+            })),
+            id => seriesPfCalc().getBoatVariant(id));
     }
     // [{name, color, focused, show, values}] — `show` flags come from calc-header tickboxes.
     const allocSets = seriesPfCalc().getAllSets();

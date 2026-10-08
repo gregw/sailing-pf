@@ -348,6 +348,9 @@ const HandicapCalc = (function () {
             msg += ' (source has no allocated handicaps)';
         else if (applied < withHcap)
             msg += ` (${withHcap - applied} of ${withHcap} unmatched)`;
+        if (result.skippedVariant > 0)
+            msg += ` — ${result.skippedVariant} skipped because their Spin/NS/2H variant differs from`
+                + ` the boat's (change "On import" to apply them)`;
         return {msg, ok: applied > 0};
     }
 
@@ -1383,7 +1386,9 @@ const HandicapCalc = (function () {
             }
         }
 
-        function loadFromSession() {
+        // forcedIds: boats whose variant was just forced by setBoats — a variant remembered
+        // in the session must not undo that.
+        function loadFromSession(forcedIds) {
             if (!cfg.sessionKey) return;
             const data = readSession();
             if (!data) return;
@@ -1406,6 +1411,7 @@ const HandicapCalc = (function () {
             // Restore per-boat variant overrides before render so dropdowns reflect them.
             if (data.variants && typeof data.variants === 'object') {
                 Object.entries(data.variants).forEach(([id, v]) => {
+                    if (forcedIds && forcedIds.has(id)) return;
                     boatVariants.set(id, v);
                     const boat = calcBoats.find(b => b.id === id);
                     if (boat) applyVariantToPf(boat, v);
@@ -1432,9 +1438,13 @@ const HandicapCalc = (function () {
             if (opts && opts.showBestFit !== undefined) cfg.showBestFit = opts.showBestFit;
             const incoming = (newBoats || []);
             // Seed per-boat variant from boat.variant, applying pfAll if provided.
+            // b.forceVariant (a boat just brought in with a known variant) replaces one already
+            // tracked from earlier.
+            const forcedIds = new Set();
             incoming.forEach(b => {
                 const v = b.variant || 'spin';
-                if (!boatVariants.has(b.id)) boatVariants.set(b.id, v);
+                if (b.forceVariant) forcedIds.add(b.id);
+                if (!boatVariants.has(b.id) || b.forceVariant) boatVariants.set(b.id, v);
                 applyVariantToPf(b, boatVariants.get(b.id));
             });
             // Designs are anchored on RF (they have no PF); boats are anchored on PF.
@@ -1452,7 +1462,7 @@ const HandicapCalc = (function () {
                     cfg.onCompareSelectionChange(new Set(compareSelectedIds));
             }
             render();
-            loadFromSession();
+            loadFromSession(forcedIds);
         }
 
         // Update variant for all boats whose current variant === oldVariant → newVariant.
@@ -1485,11 +1495,16 @@ const HandicapCalc = (function () {
             let variantsChanged = false;
             const used = new Set();
             const remaining = [...rows];
+            const skippedVariant = new Set();   // rows that found their boat but were filtered
 
             function applyTo(boat, item) {
                 const mode = cfg.variantModeSelect?.value || 'ignore';
                 const action = decideVariantAction(mode, item.variant, boatVariant(boat));
-                if (action === 'skip') return;
+                if (action === 'skip') {
+                    skippedVariant.add(item);
+                    return;
+                }
+                skippedVariant.delete(item);
                 used.add(boat.id);
                 matchedBoats++;
                 if (action === 'override') {
@@ -1555,7 +1570,7 @@ const HandicapCalc = (function () {
                 return tn !== '' && normaliseDesignName(b.boatName) === tn;
             });
 
-            return {matched, matchedBoats, variantsChanged};
+            return {matched, matchedBoats, variantsChanged, skippedVariant: skippedVariant.size};
         }
 
         // Public: load rows into the focused set. Returns {matched, matchedBoats} for the
@@ -1564,7 +1579,8 @@ const HandicapCalc = (function () {
             const result = applyEntriesToSet(focusedIdx, rows);
             if (result.variantsChanged) render();
             recalc();
-            return {matched: result.matched, matchedBoats: result.matchedBoats};
+            return {matched: result.matched, matchedBoats: result.matchedBoats,
+                skippedVariant: result.skippedVariant};
         }
 
         // Public: fill every empty input in the focused set with the value currently

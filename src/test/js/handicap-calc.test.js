@@ -239,3 +239,10 @@ test('mergeEntryLists: matches entries without boatId by sail number and name', 
     assert.equal(m.length, 1);
     assert.equal(m[0].handicap, 1.0);
 });
+
+test('formatStatus: reports rows skipped for a variant mismatch', () => {
+    const rows = [{boatId: 'a', handicap: 1.0, variant: 'nonSpin'}, {boatId: 'b', handicap: 1.1, variant: 'nonSpin'}];
+    const r = formatStatus(rows, {matched: 0, matchedBoats: 0, skippedVariant: 2}, false, 'Loaded');
+    assert.match(r.msg, /2 skipped because their Spin\/NS\/2H variant differs/);
+    assert.equal(r.ok, false);
+});
