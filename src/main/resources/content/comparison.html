@@ -83,7 +83,7 @@
         <button id="bcfc-div-next-btn" disabled onclick="inlineDivNext()">Next race →</button>
     </div>
     <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.25rem;font-size:0.9rem;">
-        <label>X-axis: <select id="bcfc-div-xfactor" onchange="onInlineDivXFactorChange()"></select></label>
+        <label>X-axis<a href="ui-tips.md#chart-xaxis" class="info-btn info-btn-wide" data-tip="Where each boat sits across the chart: 1/factor, so faster boats are on the left.&#10;--- : each line at its own factor (PF corrected at 1/PF, RF corrected at 1/RF, elapsed at 1/BCF). Corrected lines should be level and the elapsed line straight.&#10;PF / RF: every line against the boat&#x27;s PF or RF, fixed before the race. A level corrected line means fair handicaps; a slope means a bias between faster and slower boats. Use these to judge fairness.&#10;BCF: against how each boat actually sailed this race (1/BCF is its elapsed time ÷ par). The elapsed line is straight, but corrected lines slope up by construction, because x comes from the result itself, so their slope says nothing about fairness.&#10;Allocated: against the focused allocated set; lines corrected by those handicaps should be level if they suit this race." target="_blank">ⓘ</a>: <select id="bcfc-div-xfactor" onchange="onInlineDivXFactorChange()"></select></label>
         <label title="Show the Elapsed time line in the chart">
             <input type="checkbox" id="bcfc-show-elapsed" onchange="onInlineShowElapsedChange(this)"> Elapsed
         </label>

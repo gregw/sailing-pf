@@ -3761,7 +3761,10 @@ function renderSeriesChartForDivision(divName, opts) {
     // the allocated handicap itself, since x would then move with the handicaps.
     lastSeriesAllocTraces = traces.filter(t => t.meta && t.meta.points);
     const flattenBtn = document.getElementById('series-flatten-btn');
-    if (flattenBtn) flattenBtn.disabled = lastSeriesAllocTraces.length === 0 || divXFactor === 'Allocated';
+    // Nor on the BCF axis: x then comes from each race's result, so every corrected line
+    // slopes up by construction and flattening that slope would be meaningless.
+    if (flattenBtn) flattenBtn.disabled = lastSeriesAllocTraces.length === 0
+        || divXFactor === 'Allocated' || divXFactor === 'BCF';
 
     if (traces.length === 0) {
         Plotly.purge('series-chart');
@@ -3915,7 +3918,12 @@ function showSeriesTrendSummary(fits) {
         acc.lines++;
         byDataset.set(key, acc);
     });
-    el.innerHTML = 'Weighted average trend slope (min per unit of x, races weighted by boats): '
+    el.innerHTML = 'Weighted average trend slope (min per unit of x, races weighted by boats)'
+        + (divXFactor === 'BCF'
+            ? ' <span style="color:#a04020;">— on the BCF axis these slopes come from the results themselves'
+              + ' and do not measure fairness; use PF, RF or Allocated</span>'
+            : '')
+        + ': '
         + [...byDataset.entries()].map(([name, a]) =>
             `<b>${esc(name)}</b> ${(a.sum / a.n).toFixed(2)} `
             + `<span style="color:#777;">(${a.lines} line${a.lines === 1 ? '' : 's'}, ${a.n} boats)</span>`)
