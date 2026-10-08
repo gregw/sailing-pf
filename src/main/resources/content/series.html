@@ -145,10 +145,7 @@
             <label title="Least-squares trend line for every race line shown; the races' own lines fade so the trends stand out">
                 <input type="checkbox" id="series-show-trend" onchange="onSeriesTrendChange(this)"> Linear trend
             </label>
-            <button id="series-flatten-btn" type="button" disabled onclick="onSeriesFlattenSlope()"
-                    title="Adjust the ticked allocated set, by the smallest change, so its races' weighted average trend slope is 0">
-                Flatten slope</button>
-            <span id="series-flatten-status" style="font-size:0.85rem;color:#555;"></span>
+
             <label title="Show the legend overlaid on the chart">
                 <input type="checkbox" id="series-show-legend" onchange="onShowLegendChange(this)"> Legend
             </label>
@@ -175,6 +172,11 @@
                 <button id="series-use-rf-btn" style="margin-left:0.5rem;padding:4px 12px;" title="Fill empty entries in the focused set with the displayed RF value">
                     Use RF
                 </button>
+                <button id="series-flatten-btn" type="button" disabled onclick="onSeriesFlattenSlope()" style="margin-left:0.5rem;padding:4px 12px;"
+                        title="Adjust the ticked allocated set, by the smallest change, so its races' weighted average trend slope is 0">
+                    Flatten slope
+                </button>
+                <span id="series-flatten-status" style="margin-left:0.5rem;font-size:0.85rem;color:#555;"></span>
             </div>
             <div id="series-compare-btn-container" style="margin-top:0.5rem;"></div>
             <div id="series-fetch-handicaps-form" style="margin-top:1rem;padding:0.8rem;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
