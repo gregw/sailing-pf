@@ -37,11 +37,12 @@
       <label title="Show PF (Performance Factor) horizontal line per boat">
         <input type="checkbox" id="show-pf-line" checked> PF line
       </label>
-      <label title="Show weighted linear trend line per boat">
-        <input type="checkbox" id="show-trend-linear" checked> Linear trend
-      </label>
-      <label title="Show trailing N-finish weighted average per boat">
-        <input type="checkbox" id="show-trend-sliding" checked> Sliding average
+      <label title="Trend line per boat: a weighted linear trend, or a trailing average of recent finishes">Trend:
+        <select id="trend-mode">
+          <option value="none">None</option>
+          <option value="linear" selected>Linear</option>
+          <option value="average">Average</option>
+        </select>
       </label>
       <label title="Hide the chart legend">
         <input type="checkbox" id="hide-legend"> Hide legend
@@ -97,7 +98,9 @@
     <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
       Enter a handicap for any boat — all three columns are scaled accordingly.
     </p>
-    <table class="pf-calc-table"></table>
+    <div class="resizable-box" id="pf-calc-box">
+        <div class="resizable-box-scroll"><table class="pf-calc-table"></table></div>
+    </div>
           <div style="margin-top:0.5rem;">
               <button id="use-pf-btn" style="padding:4px 12px;" title="Fill empty entries in the focused set with the displayed PF value">
                   Use PF

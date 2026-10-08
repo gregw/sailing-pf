@@ -971,10 +971,20 @@ const HandicapCalc = (function () {
             const designText = b.designName
                 ? `<span style="color:#555;font-style:italic">${b.designName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`
                 : null;
-            tdSailno.addEventListener('mouseenter', () => showPentagonPopup(tdSailno, b.id, color, designText));
-            tdSailno.addEventListener('mouseleave', hidePentagonPopup);
-            link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color, designText));
-            link.addEventListener('mouseleave', hidePentagonPopup);
+            // Hovering a boat shows its performance profile and highlights it in the page's
+            // charts (highlightBoatInCharts, from common.js, when the page has it).
+            const enter = el => () => {
+                showPentagonPopup(el, b.id, color, designText);
+                if (typeof highlightBoatInCharts === 'function') highlightBoatInCharts(b.id);
+            };
+            const leave = () => {
+                hidePentagonPopup();
+                if (typeof highlightBoatInCharts === 'function') highlightBoatInCharts(null);
+            };
+            tdSailno.addEventListener('mouseenter', enter(tdSailno));
+            tdSailno.addEventListener('mouseleave', leave);
+            link.addEventListener('mouseenter', enter(link));
+            link.addEventListener('mouseleave', leave);
 
             const cells = [tdSailno, tdName, makeVariantCell(b)];
             if (compareEnabled) cells.unshift(makeCompareCell(b));

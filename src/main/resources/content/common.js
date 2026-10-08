@@ -263,6 +263,108 @@ function initChartResize(chartId, defaultHeight) {
     });
 }
 
+/**
+ * Highlights one boat's points in a Plotly chart: its markers fully opaque with a dark
+ * outline, every other boat's markers dimmed; boatId null restores them. A point belongs to
+ * a boat through {@code customdata[i].boatId}, or the whole trace through
+ * {@code meta.boatId}; points of traces with neither are left alone. Styles the rendered
+ * SVG markers directly rather than restyling, because a restyle redraws the chart and drops
+ * any hover label.
+ */
+function highlightBoatInChart(gd, boatId) {
+    if (!gd) return;
+    gd.querySelectorAll('.scatterlayer .trace').forEach(g => {
+        const cd = g.__data__;
+        const trace = cd && cd[0] && cd[0].trace;
+        if (!trace) return;
+        const traceBoat = trace.meta && trace.meta.boatId;
+        const custom = trace.customdata;
+        g.querySelectorAll('.points path').forEach(p => {
+            const i = p.__data__ && p.__data__.i;
+            const pointBoat = (custom && custom[i] && custom[i].boatId) || traceBoat;
+            if (!pointBoat) return;
+            if (p.dataset.origOpacity === undefined) {
+                p.dataset.origOpacity = p.style.opacity;
+                p.dataset.origStroke = p.style.stroke;
+                p.dataset.origStrokeWidth = p.style.strokeWidth;
+            }
+            if (boatId == null) {
+                p.style.opacity = p.dataset.origOpacity;
+                p.style.stroke = p.dataset.origStroke;
+                p.style.strokeWidth = p.dataset.origStrokeWidth;
+                // Forget them: a later redraw may restyle this element, so re-capture next time.
+                delete p.dataset.origOpacity;
+                delete p.dataset.origStroke;
+                delete p.dataset.origStrokeWidth;
+            } else if (pointBoat === boatId) {
+                p.style.opacity = '1';
+                p.style.stroke = '#000';
+                p.style.strokeWidth = '2px';
+            } else {
+                p.style.opacity = '0.15';
+                p.style.stroke = p.dataset.origStroke;
+                p.style.strokeWidth = p.dataset.origStrokeWidth;
+            }
+        });
+    });
+}
+
+/** {@link highlightBoatInChart} on every Plotly chart on the page. */
+function highlightBoatInCharts(boatId) {
+    document.querySelectorAll('.js-plotly-plot').forEach(gd => highlightBoatInChart(gd, boatId));
+}
+
+const BOX_HEIGHTS_KEY = 'pf.boxHeights';
+
+/**
+ * Makes a {@code .resizable-box} (wrapping a {@code .resizable-box-scroll}) height-adjustable
+ * with a corner grab handle, like the charts. Dragging sets the scroll area's max-height, so
+ * a short table still shrinks to fit and a long one scrolls. The height is remembered for the
+ * session per box id. Every {@code .resizable-box[id]} on a page is wired automatically.
+ */
+function initBoxResize(box, defaultMaxHeight) {
+    const scroll = box.querySelector('.resizable-box-scroll');
+    if (!scroll || box.dataset.resizeWired === 'true') return;
+    box.dataset.resizeWired = 'true';
+    let stored = {};
+    try { stored = JSON.parse(sessionStorage.getItem(BOX_HEIGHTS_KEY) || '{}'); } catch (e) { /* ignore */ }
+    scroll.style.maxHeight = (stored[box.id] || defaultMaxHeight) + 'px';
+
+    const handle = document.createElement('div');
+    handle.className = 'chart-resize-handle';
+    handle.title = 'Drag to resize';
+    box.appendChild(handle);
+
+    let startY = 0, startHeight = 0, resizing = false;
+    handle.addEventListener('mousedown', e => {
+        resizing = true;
+        startY = e.clientY;
+        startHeight = scroll.offsetHeight;
+        e.preventDefault();
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', e => {
+        if (!resizing) return;
+        const h = Math.max(100, startHeight + e.clientY - startY);
+        scroll.style.maxHeight = h + 'px';
+        try {
+            const heights = JSON.parse(sessionStorage.getItem(BOX_HEIGHTS_KEY) || '{}');
+            heights[box.id] = h;
+            sessionStorage.setItem(BOX_HEIGHTS_KEY, JSON.stringify(heights));
+        } catch (err) { /* ignore */ }
+    });
+    document.addEventListener('mouseup', () => {
+        if (!resizing) return;
+        resizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () =>
+    document.querySelectorAll('.resizable-box[id]').forEach(box => initBoxResize(box, 600)));
+
 /** Reference std dev in log space at weight = 1.0.  See .claude/error_bars.md. */
 const SIGMA_0 = 0.020;
 

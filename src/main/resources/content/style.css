@@ -499,6 +499,10 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
     button { padding: 5px 10px; font-size: 0.85rem; }
 }
 
+/* Height-resizable box (e.g. the handicap calculator table) — see initBoxResize */
+.resizable-box { position: relative; display: inline-block; max-width: 100%; vertical-align: top; }
+.resizable-box-scroll { overflow: auto; max-width: 100%; padding-bottom: 4px; }
+
 /* Chart resize handle */
 .chart-resize-handle {
     position: absolute;

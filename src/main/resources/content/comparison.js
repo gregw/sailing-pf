@@ -26,8 +26,7 @@ let allAvailable = _persistedBool('all-available', false);
 let showErrorBars    = false;
 let showRfLine = _persistedBool('show-rf-line', true);
 let showPfLine = _persistedBool('show-pf-line', true);
-let showTrendLinear = _persistedBool('show-trend-linear', true);
-let showTrendSliding = _persistedBool('show-trend-sliding', true);
+let trendMode = _persistedStr('trend-mode', 'linear');   // 'none' | 'linear' | 'average'
 let hideLegend = _persistedBool('hide-legend', false);
 let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
 let showCommonRacesOnly = _persistedBool('common-races-only', false);
@@ -490,10 +489,10 @@ function renderBcfChart(data) {
                 legendgroup: boat.id
             });
 
-            if (showTrendLinear) {
+            if (trendMode === 'linear') {
                 const t = weightedOlsTrend(entries);
                 // Many points along the line so hovering anywhere on it shows the boat and
-                // highlights its dots (see highlightBoatDots), not just at its two ends.
+                // highlights its dots (see highlightBoatInChart), not just at its two ends.
                 const dense = t ? densifyTrend(t, 40) : null;
                 if (dense) traces.push({
                     x: dense.x, y: dense.y, type: 'scatter', mode: 'lines',
@@ -504,10 +503,10 @@ function renderBcfChart(data) {
                     hovertemplate: `${esc(name)} linear trend: %{y:.4f}<extra></extra>`
                 });
             }
-            // Sliding average is hidden in divisor mode — its seed value (PF) lives in
-            // the unscaled domain and would skew the early window.
-            if (showTrendSliding && !divisor) {
-                const pfSeed = pfFactor ? pfFactor.value : null;
+            // The average's seed (PF) is divided by the same divisor as the dots, so the
+            // early window stays in the plotted domain.
+            if (trendMode === 'average') {
+                const pfSeed = pfFactor ? pfFactor.value / (div ? div.value : 1) : null;
                 const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, pfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
                 const avgLabel = slidingAverageDrops > 0
@@ -518,6 +517,7 @@ function renderBcfChart(data) {
                     name: `${name} ${avgLabel}`,
                     line: { color, dash: 'dot', width: 1.5 },
                     legendgroup: boat.id,
+                    meta: { boatId: boat.id, role: 'trend' },   // hover highlights the boat's dots
                     hovertemplate: `${esc(name)} ${avgLabel}: %{y:.4f}<extra></extra>`
                 });
             }
@@ -541,7 +541,7 @@ function renderBcfChart(data) {
 
     const chartDiv = document.getElementById('comparison-chart');
     Plotly.react('comparison-chart', traces, layout, { responsive: true });
-    chartDiv._highlightedBoat = null;   // the redraw replaced the dots
+    chartDiv._trendHighlight = null;   // the redraw replaced the dots
 
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_click');
     chartDiv.on('plotly_click', (eventData) => {
@@ -555,12 +555,18 @@ function renderBcfChart(data) {
     // Hovering a linear trend line highlights that boat's dots and dims the others.
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_hover');
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_unhover');
+    // plotly_hover fires on every mouse move, so only restyle when the hovered boat changes.
+    const setTrendHighlight = boatId => {
+        if (chartDiv._trendHighlight === boatId) return;
+        chartDiv._trendHighlight = boatId;
+        highlightBoatInChart(chartDiv, boatId);
+    };
     chartDiv.on('plotly_hover', (eventData) => {
         const pt = eventData.points && eventData.points[0];
         const meta = pt && pt.data && pt.data.meta;
-        highlightBoatDots(chartDiv, meta && meta.role === 'trend' ? meta.boatId : null);
+        setTrendHighlight(meta && meta.role === 'trend' ? meta.boatId : null);
     });
-    chartDiv.on('plotly_unhover', () => highlightBoatDots(chartDiv, null));
+    chartDiv.on('plotly_unhover', () => setTrendHighlight(null));
 }
 
 // Carries the user's zoom/pan over to a chart's next redraw: if the chart's previous draw
@@ -591,40 +597,6 @@ function densifyTrend(t, n) {
         y.push(t.y[0] + f * (t.y[1] - t.y[0]));
     }
     return { x, y };
-}
-
-// Highlights the BCF chart dots of boatId (outlined, fully opaque) and dims every other
-// boat's dots; boatId null restores them. Styles the rendered SVG points directly rather
-// than restyling, because a restyle redraws the chart and drops the hover label.
-function highlightBoatDots(chartDiv, boatId) {
-    if (chartDiv._highlightedBoat === boatId) return;
-    chartDiv._highlightedBoat = boatId;
-    chartDiv.querySelectorAll('.scatterlayer .trace').forEach(g => {
-        const cd = g.__data__;
-        const trace = cd && cd[0] && cd[0].trace;
-        if (!trace || !trace.meta || trace.meta.role !== 'dots') return;
-        const mine = trace.meta.boatId === boatId;
-        g.querySelectorAll('.points path').forEach(p => {
-            if (p.dataset.origOpacity === undefined) {
-                p.dataset.origOpacity = p.style.opacity;
-                p.dataset.origStroke = p.style.stroke;
-                p.dataset.origStrokeWidth = p.style.strokeWidth;
-            }
-            if (boatId == null) {
-                p.style.opacity = p.dataset.origOpacity;
-                p.style.stroke = p.dataset.origStroke;
-                p.style.strokeWidth = p.dataset.origStrokeWidth;
-            } else if (mine) {
-                p.style.opacity = '1';
-                p.style.stroke = '#000';
-                p.style.strokeWidth = '1.5px';
-            } else {
-                p.style.opacity = '0.1';
-                p.style.stroke = p.dataset.origStroke;
-                p.style.strokeWidth = p.dataset.origStrokeWidth;
-            }
-        });
-    });
 }
 
 // ---- Handicap calculator (thin adapter over shared HandicapCalc module) ----
@@ -926,6 +898,7 @@ function renderInlineDivisionChart() {
         // (approximately) straight rather than hyperbolic. Faster boats sit on the left.
         const xs = finishers.map(f => f.pf > 0 ? 1 / f.pf : null);
         const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        const boatCustom = finishers.map(f => ({boatId: f.boatId}));   // for highlightBoatInCharts
         const elapsed = finishers.map(f => f.elapsed / 60);
         const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
 
@@ -933,12 +906,14 @@ function renderInlineDivisionChart() {
         if (inlineShowElapsed) traces.push({
             x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
             line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+            customdata: boatCustom,
             text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])),
             hoverinfo: 'text'
         });
         if (showPf) traces.push({
             x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
             line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+            customdata: boatCustom,
             text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])),
             hoverinfo: 'text'
         });
@@ -956,6 +931,7 @@ function renderInlineDivisionChart() {
                 name: traceName,
                 line: {dash: 'longdash', color: s.color, width: 2},
                 marker: {size: 8, symbol: 'square'},
+                customdata: s.pts.map(p => ({boatId: p.f.boatId})),
                 text: s.pts.map(p =>
                     `${esc(p.name)}<br>${esc(s.name)}: ${p.handicap.toFixed(4)}`
                     + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
@@ -997,6 +973,7 @@ function renderInlineDivisionChart() {
 
         const xs = plotFinishers.map(getX);
         const names = plotFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));   // for highlightBoatInCharts
         const elapsed = plotFinishers.map(f => f.elapsed / 60);
         const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
         const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
@@ -1005,16 +982,19 @@ function renderInlineDivisionChart() {
         if (inlineShowElapsed) traces.push({
             x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
             line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+            customdata: boatCustom,
             text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])), hoverinfo: 'text'
         });
         if (showPf) traces.push({
             x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
             line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+            customdata: boatCustom,
             text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])), hoverinfo: 'text'
         });
         if (showRf && rfCorr.some(v => v != null)) traces.push({
             x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
             line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+            customdata: boatCustom,
             text: names.map((n, i) => hoverText(n, 'RF corrected', rfCorr[i])), hoverinfo: 'text'
         });
 
@@ -1043,6 +1023,7 @@ function renderInlineDivisionChart() {
                 mode: 'lines+markers', type: 'scatter',
                 name: traceName,
                 line: {dash: 'longdash', color: s.color, width: 2}, marker: {size: 8, symbol: 'square'},
+                customdata: allocFiltered.map(p => ({boatId: p.f.boatId})),
                 text: allocFiltered.map(p =>
                     `${esc(p.name)}<br>${esc(s.name)}: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
                 hoverinfo: 'text'
@@ -1380,8 +1361,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     persistControl('show-rf-line');
     persistControl('show-pf-line');
-    persistControl('show-trend-linear');
-    persistControl('show-trend-sliding');
+    persistControl('trend-mode');
     persistControl('hide-legend');
     persistControl('recent-months');
     persistControl('common-races-only');
@@ -1390,8 +1370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     persistControl('boat-search');
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-pf-line')      .addEventListener('change', e => { showPfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('trend-mode').addEventListener('change', e => { trendMode = e.target.value; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
     const recentSel = document.getElementById('recent-months');
     recentMonths = parseInt(recentSel.value, 10) || 0;
