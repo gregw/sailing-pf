@@ -396,7 +396,7 @@ function renderBcfChart(data) {
     // When a divisor is active, dots are plotted as BCF / divisor (mirrors
     // Factor.applyInverse). Boats with no divisor entry are skipped entirely.
     const divisor = computeBcfDivisor(data);
-    // Each boat's trend-line level (its average over the period shown), for Level lines.
+    // Each boat's trend-line level (its average over the period shown), for Optimise.
     const lineLevels = new Map();
 
     let minDate = null, maxDate = null;
@@ -530,7 +530,7 @@ function renderBcfChart(data) {
         }
     });
 
-    // Level lines needs an allocated-set divisor (the only editable one) and 2+ lines.
+    // Optimise needs an allocated-set divisor (the only editable one) and 2+ lines.
     lastLevelLines = divisor && divisor.setIdx != null && lineLevels.size >= 2
         ? {setIdx: divisor.setIdx, levels: lineLevels} : null;
     const levelBtn = document.getElementById('level-lines-btn');
@@ -583,7 +583,7 @@ function renderBcfChart(data) {
 
 let lastLevelLines = null;   // {setIdx, levels: Map boatId → line level} from the last BCF draw
 
-// Level lines: with an allocated set as the divisor each boat's line is its BCFs / its
+// Optimise (level lines): with an allocated set as the divisor each boat's line is its BCFs / its
 // handicap, so its level scales as 1/handicap. Sets the handicaps — by the smallest relative
 // change — so every line has the same average level over the period shown.
 function onLevelLines() {

@@ -216,3 +216,26 @@ test('minChangeToEqualLevels: the common level is the smallest-change one', () =
         assert.ok(relChange(h0, alt) >= best - 1e-12);
     }
 });
+
+// mergeEntryLists backs the calculator's "merge set into the one on its left" button.
+const mergeEntryLists = HandicapCalc.mergeEntryLists;
+
+test('mergeEntryLists: averages shared boats and keeps the rest', () => {
+    const a = [{boatId: 'b1', sailno: 'AUS1', name: 'One', handicap: 1.0},
+               {boatId: 'b2', sailno: 'AUS2', name: 'Two', handicap: 0.9}];
+    const b = [{boatId: 'b1', sailno: 'AUS1', name: 'One', handicap: 1.1},
+               {boatId: 'b3', sailno: 'AUS3', name: 'Three', handicap: 0.8}];
+    const m = new Map(mergeEntryLists(a, b).map(e => [e.boatId, e.handicap]));
+    assert.equal(m.get('b1'), 1.05);
+    assert.equal(m.get('b2'), 0.9);
+    assert.equal(m.get('b3'), 0.8);
+    assert.equal(m.size, 3);
+    assert.equal(a[0].handicap, 1.0, 'inputs not mutated');
+});
+
+test('mergeEntryLists: matches entries without boatId by sail number and name', () => {
+    const m = mergeEntryLists([{sailno: 'AUS 12', name: 'Blue Streak', handicap: 0.95}],
+                              [{sailno: '12', name: 'blue streak', handicap: 1.05}]);
+    assert.equal(m.length, 1);
+    assert.equal(m[0].handicap, 1.0);
+});

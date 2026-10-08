@@ -403,6 +403,25 @@ const HandicapCalc = (function () {
         return out;
     }
 
+    // Merges two sets' remembered entry lists ({boatId?, sailno, name, handicap, …}) into one:
+    // a boat in both gets the average of its two handicaps (rounded to 4 dp), a boat in only
+    // one keeps its entry. Boats are matched by boatId, else by sail number + name.
+    function mergeEntryLists(a, b) {
+        const key = e => e.boatId
+            || `${stripPrefix(normaliseSailNumber(e.sailno || ''))}|${normaliseDesignName(e.name || '')}`;
+        const out = new Map();
+        (a || []).forEach(e => out.set(key(e), {...e}));
+        (b || []).forEach(e => {
+            const k = key(e);
+            const prev = out.get(k);
+            if (prev && prev.handicap != null && e.handicap != null)
+                prev.handicap = parseFloat(((prev.handicap + e.handicap) / 2).toFixed(4));
+            else if (!prev || prev.handicap == null)
+                out.set(k, {...e});
+        });
+        return [...out.values()];
+    }
+
     function decideVariantAction(mode, itemVariant, currentBoatVariant) {
         if (mode === 'filter' && itemVariant && currentBoatVariant !== itemVariant) return 'skip';
         if (mode === 'set' && itemVariant && itemVariant !== currentBoatVariant) return 'override';
@@ -849,6 +868,17 @@ const HandicapCalc = (function () {
                 b.addEventListener('click', () => scaleSet(idx, f));
                 topRow.appendChild(b);
             });
+
+            if (idx > 0) {
+                const mergeBtn = document.createElement('button');
+                mergeBtn.type = 'button';
+                mergeBtn.textContent = '⇐';
+                mergeBtn.title = `Merge ${set.name} into ${sets[idx - 1].name}: each handicap becomes the `
+                    + `average of the two (or the one value, if only one is set); ${set.name} is removed`;
+                mergeBtn.style.cssText = 'font-size:0.85rem;padding:0 4px;cursor:pointer;line-height:1.1;background:none;border:1px solid #ccc;border-radius:2px;';
+                mergeBtn.addEventListener('click', () => mergeSetIntoPrevious(idx));
+                topRow.appendChild(mergeBtn);
+            }
 
             if (sets.length > 1) {
                 const rm = document.createElement('button');
@@ -1651,6 +1681,32 @@ const HandicapCalc = (function () {
             return out;
         }
 
+        // Merge set idx into the set on its left: each boat's value becomes the average of the
+        // two (or whichever one is set), for the visible inputs and the remembered entries of
+        // boats not currently in the table; then set idx is removed.
+        function mergeSetIntoPrevious(idx) {
+            if (idx < 1 || idx >= sets.length) return;
+            const into = idx - 1;
+            setInputCells(into).forEach(inp => {
+                const other = section.querySelector(
+                    `.pf-calc-input[data-boat-id="${inp.dataset.boatId}"][data-set-idx="${idx}"]`);
+                const a = parseFloat(inp.value);
+                const b = other ? parseFloat(other.value) : NaN;
+                if (!isNaN(a) && !isNaN(b)) inp.value = ((a + b) / 2).toFixed(4);
+                else if (isNaN(a) && !isNaN(b)) inp.value = b.toFixed(4);
+            });
+            const remembered = cfg.sessionKey ? readSession() : null;
+            if (remembered && remembered.sets && remembered.sets[idx]) {
+                const target = remembered.sets[into] || (remembered.sets[into] = {name: sets[into].name, entries: []});
+                target.entries = mergeEntryLists(target.entries, remembered.sets[idx].entries);
+                try {
+                    sessionStorage.setItem(cfg.sessionKey, JSON.stringify(remembered));
+                } catch (e) { /* quota or disabled storage — ignore */
+                }
+            }
+            removeSet(idx);   // re-keys the inputs, drops idx from the session, renders, recalcs
+        }
+
         // Multiply every handicap in a set by factor: the visible inputs, and the set's
         // remembered entries for boats not currently in the table (other divisions / races),
         // so the ratios between all of them stay the same.
@@ -1870,6 +1926,7 @@ const HandicapCalc = (function () {
         normaliseVariant,
         minChangeToZeroLinear,
         minChangeToEqualLevels,
+        mergeEntryLists,
     };
 })();
 
