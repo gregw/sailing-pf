@@ -269,7 +269,7 @@ function filterEntries(entries, variant) {
 }
 
 // Active divisor for the BCF chart, when the calc's RF or a set "show" tickbox is on
-// (singleSelectShow ensures at most one). Designs have no PF. Returns null when no
+// (the calculator ensures at most one). Designs have no PF. Returns null when no
 // divisor is active. perBoat values mirror Factor.applyInverse — the chart plots
 // y' = e.backCalcFactor / value and intensity weight w' = e.weight × weight.
 function computeBcfDivisor(data) {
@@ -509,9 +509,9 @@ function dCalc() {
         sessionKey: HANDICAP_STORAGE_KEY,
         compareSelect: true,
         compareMax: 2,
-        // Design page repurposes the RF / per-set "show" tickboxes as a single divisor
-        // selector for the BCF chart, so at most one may be ticked.
-        singleSelectShow: true,
+        // The RF / per-set "show" tickbox picks the BCF chart's divisor, so start with none
+        // ticked (no divisor).
+        startUnticked: true,
         onCompareSelectionChange: () => loadElapsedCharts(),
         onChange: () => {
             // Re-render the BCF chart so a divisor toggle (or its clearing) is reflected.

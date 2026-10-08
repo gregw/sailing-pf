@@ -383,24 +383,22 @@ const HandicapCalc = (function () {
         const compareSelectedIds = new Set();
 
         // Sets — one column per set, focused set drives load/clear/typing/scaled-preview.
-        // `show` per set (default true) drives whether consumers (charts) plot that set's
-        // allocated-corrected dataset; same idea for showPf / showRf at the controller level.
-        // With singleSelectShow the tickboxes pick a single consumer option (e.g. the BCF
-        // chart divisor), so nothing is ticked until the user chooses.
-        const defaultShow = !cfg.singleSelectShow;
-        let sets = [{name: 'Allocated', show: defaultShow}];
+        // `show` per set drives whether consumers (charts) plot that set's allocated-corrected
+        // dataset; same idea for showPf / showRf at the controller level. At most one is shown
+        // at a time (enforceSingleShow). It starts as PF (RF for designs, which have no PF),
+        // or nothing when cfg.startUnticked — where the tickbox picks an option such as the
+        // BCF chart divisor, so nothing is ticked until the user chooses.
+        let sets = [{name: 'Allocated', show: false}];
         let focusedIdx = 0;
         let nextSetN = 2;
-        let showPf = !isDesign && defaultShow;   // designs have no PF column — keep showPf permanently false
-        let showRf = defaultShow;
+        let showPf = !isDesign && !cfg.startUnticked;   // designs have no PF column — keep showPf permanently false
+        let showRf = isDesign && !cfg.startUnticked;
 
-        // When cfg.singleSelectShow is true, the PF, RF, and per-set "show" tickboxes act as
-        // a radio group — at most one may be true. enforceSingleShow keeps that invariant.
-        // `kept` identifies the just-ticked one ('pf', 'rf', or a setIdx); when null
-        // (e.g. on session restore), the first true flag in priority order [pf, rf, sets…]
-        // wins and the rest are cleared.
+        // The PF, RF, and per-set "show" tickboxes act as a radio group — at most one may be
+        // true, so the charts never plot several corrected datasets at once. `kept` identifies
+        // the just-ticked one ('pf', 'rf', or a setIdx); when null (e.g. on session restore),
+        // the first true flag in priority order [pf, rf, sets…] wins and the rest are cleared.
         function enforceSingleShow(kept) {
-            if (!cfg.singleSelectShow) return;
             if (kept == null) {
                 if (showPf) kept = 'pf';
                 else if (showRf) kept = 'rf';
@@ -440,7 +438,7 @@ const HandicapCalc = (function () {
         }
 
         function addSet() {
-            sets.push({name: `Set ${nextSetN++}`, show: defaultShow});
+            sets.push({name: `Set ${nextSetN++}`, show: false});
             focusedIdx = sets.length - 1;
             render();
             saveToSession();
@@ -730,7 +728,7 @@ const HandicapCalc = (function () {
                 else showRf = cb.checked;
                 if (cb.checked) enforceSingleShow(c.key);
                 saveToSession();
-                if (cfg.singleSelectShow) render();
+                render();   // untick the others
                 if (cfg.onChange) cfg.onChange();
             });
             wrap.appendChild(cb);
@@ -771,7 +769,7 @@ const HandicapCalc = (function () {
                 set.show = showCb.checked;
                 if (showCb.checked) enforceSingleShow(idx);
                 saveToSession();
-                if (cfg.singleSelectShow) render();
+                render();   // untick the others
                 if (cfg.onChange) cfg.onChange();
             });
             topRow.appendChild(showCb);
@@ -1302,13 +1300,13 @@ const HandicapCalc = (function () {
 
             // Reshape `sets` and focus to match what's persisted.
             sets = data.sets.map(s => ({name: s.name || 'Allocated', show: s.show !== false}));
-            if (sets.length === 0) sets = [{name: 'Allocated', show: defaultShow}];
+            if (sets.length === 0) sets = [{name: 'Allocated', show: false}];
             focusedIdx = Math.max(0, Math.min(sets.length - 1, data.focused | 0));
             // Designs have no PF column — never restore a persisted showPf for them.
             if (!isDesign && typeof data.showPf === 'boolean') showPf = data.showPf;
             if (typeof data.showRf === 'boolean') showRf = data.showRf;
             // Restored state may have multiple flags true (e.g. saved by another page
-            // without the constraint). Prune to a single flag if singleSelectShow is set.
+            // before the constraint). Prune to a single flag.
             enforceSingleShow(null);
             // Ensure auto-naming continues from the highest existing "Set N".
             nextSetN = Math.max(2, ...sets.map(s => {
