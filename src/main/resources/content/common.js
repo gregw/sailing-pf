@@ -264,12 +264,13 @@ function initChartResize(chartId, defaultHeight) {
 }
 
 /**
- * Highlights one boat's points in a Plotly chart: its markers fully opaque with a dark
- * outline, every other boat's markers dimmed; boatId null restores them. A point belongs to
- * a boat through {@code customdata[i].boatId}, or the whole trace through
- * {@code meta.boatId}; points of traces with neither are left alone. Styles the rendered
- * SVG markers directly rather than restyling, because a restyle redraws the chart and drops
- * any hover label.
+ * Highlights one boat in a Plotly chart: its markers fully opaque with a dark outline and its
+ * own lines (a trend or average whose trace has {@code meta.boatId}) drawn thicker, while every
+ * other boat's markers and lines are dimmed; boatId null restores them. A marker belongs to a
+ * boat through {@code customdata[i].boatId}, or the whole trace through {@code meta.boatId};
+ * anything with neither is left alone, as are lines joining several boats. Styles the rendered
+ * SVG directly rather than restyling, because a restyle redraws the chart and drops any hover
+ * label.
  */
 function highlightBoatInChart(gd, boatId) {
     if (!gd) return;
@@ -282,31 +283,44 @@ function highlightBoatInChart(gd, boatId) {
         g.querySelectorAll('.points path').forEach(p => {
             const i = p.__data__ && p.__data__.i;
             const pointBoat = (custom && custom[i] && custom[i].boatId) || traceBoat;
-            if (!pointBoat) return;
-            if (p.dataset.origOpacity === undefined) {
-                p.dataset.origOpacity = p.style.opacity;
-                p.dataset.origStroke = p.style.stroke;
-                p.dataset.origStrokeWidth = p.style.strokeWidth;
-            }
-            if (boatId == null) {
-                p.style.opacity = p.dataset.origOpacity;
-                p.style.stroke = p.dataset.origStroke;
-                p.style.strokeWidth = p.dataset.origStrokeWidth;
-                // Forget them: a later redraw may restyle this element, so re-capture next time.
-                delete p.dataset.origOpacity;
-                delete p.dataset.origStroke;
-                delete p.dataset.origStrokeWidth;
-            } else if (pointBoat === boatId) {
-                p.style.opacity = '1';
-                p.style.stroke = '#000';
-                p.style.strokeWidth = '2px';
-            } else {
-                p.style.opacity = '0.15';
-                p.style.stroke = p.dataset.origStroke;
-                p.style.strokeWidth = p.dataset.origStrokeWidth;
-            }
+            if (pointBoat)
+                styleHighlight(p, boatId == null ? null : pointBoat === boatId, false);
         });
+        if (traceBoat)
+            g.querySelectorAll('.lines path').forEach(l =>
+                styleHighlight(l, boatId == null ? null : traceBoat === boatId, true));
     });
+}
+
+// Applies (on = true), dims (on = false) or restores (on = null) one marker or line element,
+// remembering its own style the first time so it can be put back.
+function styleHighlight(el, on, isLine) {
+    if (el.dataset.origOpacity === undefined) {
+        el.dataset.origOpacity = el.style.opacity;
+        el.dataset.origStroke = el.style.stroke;
+        el.dataset.origStrokeWidth = el.style.strokeWidth;
+    }
+    if (on == null) {
+        el.style.opacity = el.dataset.origOpacity;
+        el.style.stroke = el.dataset.origStroke;
+        el.style.strokeWidth = el.dataset.origStrokeWidth;
+        // Forget them: a later redraw may restyle this element, so re-capture next time.
+        delete el.dataset.origOpacity;
+        delete el.dataset.origStroke;
+        delete el.dataset.origStrokeWidth;
+    } else if (on) {
+        el.style.opacity = '1';
+        if (isLine) {
+            el.style.strokeWidth = ((parseFloat(el.dataset.origStrokeWidth) || 1.5) * 2.5) + 'px';
+        } else {
+            el.style.stroke = '#000';
+            el.style.strokeWidth = '2px';
+        }
+    } else {
+        el.style.opacity = isLine ? '0.2' : '0.15';
+        el.style.stroke = el.dataset.origStroke;
+        el.style.strokeWidth = el.dataset.origStrokeWidth;
+    }
 }
 
 /** {@link highlightBoatInChart} on every Plotly chart on the page. */
