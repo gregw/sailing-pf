@@ -284,6 +284,7 @@ const HandicapCalc = (function () {
     }
 
     const VARIANT_LABELS = {spin: 'Spin', nonSpin: 'NS', twoHanded: '2H'};
+    const SET_SCALE_STEP = 1.01;   // the calculator's per-set − / + buttons scale by this
     const VARIANT_ORDER = ['spin', 'nonSpin', 'twoHanded'];
 
     // Maps the variant spellings people write in hand-made files ("nonspin", "NS",
@@ -836,6 +837,18 @@ const HandicapCalc = (function () {
             nameSpan.textContent = set.name;
             nameSpan.style.cssText = `color:${setColor(idx)};font-weight:${idx === focusedIdx ? 'bold' : 'normal'};`;
             topRow.appendChild(nameSpan);
+
+            // − / + scale every handicap in this set by 1/1.01 or 1.01 — about ±0.01 on a
+            // 1.000 boat — so the ratios between boats are unchanged.
+            [['−', 1 / SET_SCALE_STEP, 'Decrease'], ['+', SET_SCALE_STEP, 'Increase']].forEach(([txt, f, verb]) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = txt;
+                b.title = `${verb} every ${set.name} handicap by 1% (≈0.01 at 1.000), keeping the ratios between them`;
+                b.style.cssText = 'font-size:0.85rem;padding:0 5px;cursor:pointer;line-height:1.1;background:none;border:1px solid #ccc;border-radius:2px;';
+                b.addEventListener('click', () => scaleSet(idx, f));
+                topRow.appendChild(b);
+            });
 
             if (sets.length > 1) {
                 const rm = document.createElement('button');
@@ -1636,6 +1649,28 @@ const HandicapCalc = (function () {
                 }
             });
             return out;
+        }
+
+        // Multiply every handicap in a set by factor: the visible inputs, and the set's
+        // remembered entries for boats not currently in the table (other divisions / races),
+        // so the ratios between all of them stay the same.
+        function scaleSet(setIdx, factor) {
+            const remembered = cfg.sessionKey ? readSession() : null;
+            if (remembered && remembered.sets && remembered.sets[setIdx]) {
+                (remembered.sets[setIdx].entries || []).forEach(e => {
+                    if (e.handicap != null && isFinite(e.handicap))
+                        e.handicap = parseFloat((e.handicap * factor).toFixed(4));
+                });
+                try {
+                    sessionStorage.setItem(cfg.sessionKey, JSON.stringify(remembered));
+                } catch (e) { /* quota or disabled storage — ignore */
+                }
+            }
+            setInputCells(setIdx).forEach(inp => {
+                const v = parseFloat(inp.value);
+                if (!isNaN(v)) inp.value = (v * factor).toFixed(4);
+            });
+            recalc();
         }
 
         // Public: write new values into a set's inputs (Map boatId → value; boats not in the
