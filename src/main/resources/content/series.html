@@ -142,8 +142,8 @@
             <label title="Start the PF axis at zero">
                 <input type="checkbox" id="series-x-from-zero" onchange="onDivChartXFromZeroChange(this)"> From 0.0F
             </label>
-            <label title="Line through the median PF / PF-corrected time point, with the average slope of the per-race trends">
-                <input type="checkbox" id="series-show-overall-trend" onchange="onSeriesOverallTrendChange(this)"> Overall trend
+            <label title="Least-squares trend line for every race line shown; the races' own lines fade so the trends stand out">
+                <input type="checkbox" id="series-show-trend" onchange="onSeriesTrendChange(this)"> Linear trend
             </label>
             <label title="Show the legend overlaid on the chart">
                 <input type="checkbox" id="series-show-legend" onchange="onShowLegendChange(this)"> Legend

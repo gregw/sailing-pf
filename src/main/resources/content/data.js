@@ -431,8 +431,8 @@ function sessionBool(key, dflt) {
 let showRaceElapsed = sessionBool(RACE_ELAPSED_KEY, true);
 let showRaceErrorBars = sessionBool(RACE_ERR_KEY,   false);
 let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
-const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
-let showSeriesOverallTrend = sessionBool(SERIES_OVERALL_TREND_KEY, false);
+const SERIES_TREND_KEY = 'pf.divChart.seriesTrend';
+let showSeriesTrend = sessionBool(SERIES_TREND_KEY, false);
 const SERIES_ELAPSED_KEY = 'pf.divChart.seriesShowElapsed';
 let showSeriesElapsed = sessionBool(SERIES_ELAPSED_KEY, false);
 // Shared between race-division and series charts; default off so the plot area stays
@@ -725,9 +725,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (errCb) errCb.checked = showRaceErrorBars;
     if (trendCb) trendCb.checked = showRaceTrendLine;
 
-    // Series-chart overall-trend + elapsed toggles.
-    const seriesTrendCb = document.getElementById('series-show-overall-trend');
-    if (seriesTrendCb) seriesTrendCb.checked = showSeriesOverallTrend;
+    // Series-chart linear-trend + elapsed toggles.
+    const seriesTrendCb = document.getElementById('series-show-trend');
+    if (seriesTrendCb) seriesTrendCb.checked = showSeriesTrend;
     const seriesElapsedCb = document.getElementById('series-show-elapsed');
     if (seriesElapsedCb) seriesElapsedCb.checked = showSeriesElapsed;
 
@@ -2663,9 +2663,9 @@ function onDivXFactorChange(sel) {
         renderSeriesChartForDivision(seriesCurrentDivision, {refreshCalc: false});
 }
 
-function onSeriesOverallTrendChange(cb) {
-    showSeriesOverallTrend = cb.checked;
-    sessionStorage.setItem(SERIES_OVERALL_TREND_KEY, String(showSeriesOverallTrend));
+function onSeriesTrendChange(cb) {
+    showSeriesTrend = cb.checked;
+    sessionStorage.setItem(SERIES_TREND_KEY, String(showSeriesTrend));
     onSeriesDivisionChange();
 }
 
@@ -3748,37 +3748,16 @@ function renderSeriesChartForDivision(divName, opts) {
         return;
     }
 
-    if (showSeriesOverallTrend) {
-        // One trend line per division. In "All" mode: one trend per division (combining
-        // its races across the series); in single-division mode: one trend. Trends echo
-        // the dataset visibility so the PF and per-set Allocated trends disappear with
-        // their data.
-        const trendDivs = allDivisions ? seriesDivOrder : [divName];
-        const trendGetX = f => xOf(f, 'PF');
-        trendDivs.forEach((dn, i) => {
-            const lighten = allDivisions ? Math.min(0.4, i * 0.18) : 0;
-            if (showPfLine) {
-                const trend = computeSeriesOverallTrend(data, dn, trendGetX);
-                if (trend) {
-                    if (allDivisions) {
-                        trend.name = `Overall ${dn || 'Results'} — ${trend.name}`;
-                        trend.line.color = lightenColor('#333', lighten);
-                    }
-                    traces.push(trend);
-                }
-            }
-            visibleAllocSets.forEach(s => {
-                const allocTrend = computeSeriesAllocatedTrend(data, dn, s.values, trendGetX);
-                if (!allocTrend) return;
-                const baseName = visibleAllocSets.length > 1 ? s.name : 'Allocated';
-                if (allDivisions) {
-                    allocTrend.name = `${baseName} ${dn || 'Results'} — ${allocTrend.name.replace(/^Allocated /, '')}`;
-                } else if (visibleAllocSets.length > 1) {
-                    allocTrend.name = allocTrend.name.replace(/^Allocated /, `${s.name} `);
-                }
-                allocTrend.line.color = lightenColor(s.color, lighten);
-                traces.push(allocTrend);
-            });
+    if (showSeriesTrend) {
+        // A least-squares trend for every race line shown (PF / RF corrected, elapsed,
+        // allocated), in the line's colour and legend group. The race lines and podium
+        // markers fade so the trends stand out.
+        const dataTraces = traces.slice();
+        dataTraces.forEach(t => {
+            t.opacity = 0.25;
+            if (t.mode !== 'lines+markers') return;
+            const trend = linearFitTrace(t);
+            if (trend) traces.push(trend);
         });
     }
 
@@ -3812,77 +3791,28 @@ function renderSeriesChartForDivision(divName, opts) {
 }
 
 /**
- * Computes the series overall trend trace for the given division: the line with the
- * average OLS slope of each race's (PF, PF-corrected-minutes) points, anchored at the
- * median of all PF values and the median of all PF-corrected-minutes values across the
- * division. Returns null if there is insufficient data (fewer than two races with at
- * least two qualifying finishers each).
+ * The least-squares trend of one series-chart line: a solid line in the trace's colour across
+ * its x range, in its legend group (so hiding the line from the legend hides its trend too).
+ * Returns null with fewer than two points.
  */
-function computeSeriesOverallTrend(data, divName, getX) {
-    const slopes = [];
-    const allX = [];
-    const allY = [];
-    data.races.forEach(race => {
-        const finishers = getRaceFinishers(race, divName)
-            .filter(f => f.pf != null && f.pf > 0 && f.pfCorrected != null);
-        const pts = finishers
-            .map(f => ({x: getX(f), y: f.pfCorrected / 60}))
-            .filter(p => p.x != null);
-        if (pts.length < 2) return;
-        const xs = pts.map(p => p.x);
-        const ys = pts.map(p => p.y);
-        allX.push(...xs);
-        allY.push(...ys);
-        const s = olsSlope(xs, ys);
-        if (s != null && isFinite(s)) slopes.push(s);
+function linearFitTrace(t) {
+    const xs = [], ys = [];
+    (t.x || []).forEach((x, i) => {
+        const y = t.y[i];
+        if (x != null && y != null && isFinite(x) && isFinite(y)) {
+            xs.push(x);
+            ys.push(y);
+        }
     });
-    if (slopes.length === 0 || allX.length === 0) return null;
-
-    const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
-    const medX = median(allX);
-    const medY = median(allY);
-    const intercept = medY - avgSlope * medX;
-    const xMin = Math.min(...allX);
-    const xMax = Math.max(...allX);
-    return trendLineTrace(avgSlope, intercept, xMin, xMax, 'Overall trend', '#333',
-        {dash: 'dot', baseWidth: 3, hoverWidth: 6});
-}
-
-/**
- * Same as computeSeriesOverallTrend, but uses allocated-handicap corrected times
- * (elapsed * allocatedHandicap) as Y, plotted against PF on X. Returns null when no
- * allocated handicaps are entered, or when fewer than two races have at least two
- * allocated finishers.
- */
-function computeSeriesAllocatedTrend(data, divName, allocByBoat, getX) {
-    if (!allocByBoat || allocByBoat.size === 0) return null;
-    const slopes = [];
-    const allX = [];
-    const allY = [];
-    data.races.forEach(race => {
-        const finishers = getRaceFinishers(race, divName).filter(f =>
-            f.pf != null && f.pf > 0 && f.elapsed != null && f.elapsed > 0 && allocByBoat.has(f.boatId));
-        const pts = finishers
-            .map(f => ({x: getX(f), y: f.elapsed * allocByBoat.get(f.boatId) / 60}))
-            .filter(p => p.x != null);
-        if (pts.length < 2) return;
-        const xs = pts.map(p => p.x);
-        const ys = pts.map(p => p.y);
-        allX.push(...xs);
-        allY.push(...ys);
-        const s = olsSlope(xs, ys);
-        if (s != null && isFinite(s)) slopes.push(s);
-    });
-    if (slopes.length === 0 || allX.length === 0) return null;
-
-    const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
-    const medX = median(allX);
-    const medY = median(allY);
-    const intercept = medY - avgSlope * medX;
-    const xMin = Math.min(...allX);
-    const xMax = Math.max(...allX);
-    return trendLineTrace(avgSlope, intercept, xMin, xMax, 'Allocated trend', '#a04020',
-        {dash: 'dashdot', baseWidth: 4, hoverWidth: 8});
+    const slope = olsSlope(xs, ys);
+    if (slope == null || !isFinite(slope)) return null;
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const trend = trendLineTrace(slope, my - slope * mx, Math.min(...xs), Math.max(...xs),
+        `${t.name} trend`, (t.line && t.line.color) || '#333',
+        {dash: 'solid', baseWidth: 3, hoverWidth: 6, showlegend: false});
+    trend.legendgroup = t.legendgroup;
+    return trend;
 }
 
 function olsSlope(xs, ys) {
@@ -3898,13 +3828,6 @@ function olsSlope(xs, ys) {
         den += dx * dx;
     }
     return den > 0 ? num / den : null;
-}
-
-function median(arr) {
-    const s = arr.slice().sort((a, b) => a - b);
-    const n = s.length;
-    if (n === 0) return 0;
-    return (n % 2) ? s[(n - 1) >> 1] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
 // Browse-page chart resizers — handler lives in common.js.
