@@ -106,6 +106,7 @@ public class SailSysImporter
     private int seriesVisited;
     private int racesImported;
     private int racesAlreadyPresent;
+    private int racesSkipped;
     private int finishersImported;
     private int seriesCollisions;
 
@@ -187,9 +188,11 @@ public class SailSysImporter
      * @param finishers           finisher records written
      * @param seriesCollisions    races whose ID was already taken by a *different* series, so
      *                            their divisions were merged into it rather than stored apart
+     * @param racesSkipped        races a series lists but SailSys has no finalised results for
+     *                            yet (an error response, or not finished / processed)
      */
     public record RunResult(int clubs, int series, int racesImported, int racesAlreadyPresent,
-                            int finishers, int seriesCollisions) {}
+                            int finishers, int seriesCollisions, int racesSkipped) {}
 
     /**
      * Configures the on-disk response cache and rate limiting. Returns {@code this} so it can
@@ -225,6 +228,7 @@ public class SailSysImporter
         seriesVisited = 0;
         racesImported = 0;
         racesAlreadyPresent = 0;
+        racesSkipped = 0;
         finishersImported = 0;
         seriesCollisions = 0;
         boolean restricted = clubIds != null && !clubIds.isEmpty();
@@ -276,13 +280,14 @@ public class SailSysImporter
 
         store.save();
         ImporterLog.info(LOG, "SailSys: run complete -- {} club(s), {} series, {} race(s) imported, "
-                + "{} already present, {} finishers",
-            clubsVisited, seriesVisited, racesImported, racesAlreadyPresent, finishersImported);
+                + "{} already present, {} skipped (no results yet), {} finishers",
+            clubsVisited, seriesVisited, racesImported, racesAlreadyPresent, racesSkipped,
+            finishersImported);
         if (seriesCollisions > 0)
             ImporterLog.warn(LOG, "SailSys: {} race(s) shared an ID with a race from a different "
                 + "series and were merged into it", seriesCollisions);
         return new RunResult(clubsVisited, seriesVisited, racesImported, racesAlreadyPresent,
-            finishersImported, seriesCollisions);
+            finishersImported, seriesCollisions, racesSkipped);
     }
 
     /** Run tallies, for tests to assert the counters are actually wired. */
@@ -393,9 +398,21 @@ public class SailSysImporter
                         + "also claims it; merging", raceId, existing.seriesIds(), seriesName);
             }
 
+            // A series lists races before they have results; say why each one was not
+            // imported, rather than dropping it silently.
             String raceJson = fetchRaceJson(race.id);
-            if (raceJson != null && isApiFound(raceJson))
-                processRaceJson(raceJson, club);
+            if (raceJson == null || !isApiFound(raceJson))
+            {
+                racesSkipped++;
+                ImporterLog.info(LOG, "SailSys: series {} race {} ({}) skipped -- no results from "
+                    + "SailSys: {}", sailsysSeriesId, race.id, date, errorMessage(raceJson));
+            }
+            else if (!processRaceJson(raceJson, club))
+            {
+                racesSkipped++;
+                ImporterLog.info(LOG, "SailSys: series {} race {} ({}) skipped -- not yet finished "
+                    + "and processed in SailSys", sailsysSeriesId, race.id, date);
+            }
         }
     }
 
@@ -446,25 +463,7 @@ public class SailSysImporter
         if (cachedFile != null && Files.exists(cachedFile))
             cachedJson = Files.readString(cachedFile);
 
-        boolean useCache = false;
-        if (cachedJson != null)
-        {
-            if (isApiFound(cachedJson))
-            {
-                LocalDate raceDate = peekRaceDate(cachedJson);
-                if (!isRecent(raceDate))
-                {
-                    int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
-                    useCache = !isStale(cachedFile, maxAge);
-                }
-                // recent success -> always refetch so live results are picked up
-            }
-            else
-            {
-                useCache = isStale(cachedFile, youngCacheMaxAgeDays);
-            }
-        }
-        if (useCache)
+        if (cachedJson != null && isCachedRaceUsable(cachedJson, cachedFile))
             return cachedJson;
 
         try
@@ -487,6 +486,25 @@ public class SailSysImporter
             ImporterLog.warn(LOG, "SailSys: error fetching race id={}: {}", id, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Whether a cached race response can be used instead of fetching it again. Only a cached
+     * success is ever reused — and not for a recent race, whose results may still change, nor
+     * once the file is older than the cache age for the race's age. A cached error is always
+     * refetched: a series only lists races that exist, and an error such as "This series is
+     * not displaying entrants or results" is transient. (Errors used to be reused, which kept
+     * races cached before their series published results out of the database for good.)
+     */
+    boolean isCachedRaceUsable(String cachedJson, Path cachedFile)
+    {
+        if (!isApiFound(cachedJson))
+            return false;
+        LocalDate raceDate = peekRaceDate(cachedJson);
+        if (isRecent(raceDate))
+            return false;
+        int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
+        return !isStale(cachedFile, maxAge);
     }
 
     /** A throttled GET returning the body; the delay is the politeness the scanner lacked. */
@@ -532,6 +550,19 @@ public class SailSysImporter
             return (response.data != null) ? parseDate(response.data.dateTime) : null;
         }
         catch (Exception e) { return null; }
+    }
+
+    /** The error message of a SailSys error response, for logging; "no response" for null. */
+    String errorMessage(String json)
+    {
+        if (json == null)
+            return "no response";
+        try
+        {
+            RaceResponse response = MAPPER.readValue(json, RaceResponse.class);
+            return response.errorMessage != null ? response.errorMessage : "result=" + response.result;
+        }
+        catch (Exception e) { return "unreadable response"; }
     }
 
     boolean isApiFound(String json)

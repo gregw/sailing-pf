@@ -641,6 +641,8 @@ public void stop()
                 run.putCount("sailsys.finishers", result.finishers());
                 if (result.seriesCollisions() > 0)
                     run.putCount("sailsys.seriesCollisions", result.seriesCollisions());
+                if (result.racesSkipped() > 0)
+                    run.putCount("sailsys.racesSkipped", result.racesSkipped());
             }
             default -> throw new IllegalArgumentException("Importer is not club-scoped: " + name);
         }

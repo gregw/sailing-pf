@@ -399,6 +399,52 @@ class SailSysImporterTest
         assertEquals(LocalDate.of(2020, 9, 13), date);
     }
 
+    // --- response cache ---
+
+    /**
+     * A cached error must never be reused: races listed by a 2026/27 series were cached in
+     * April with "This series is not displaying entrants or results", and the old rule reused
+     * such errors once they were over a week old, so the races were never imported.
+     */
+    @Test
+    void cachedErrorIsNeverReused() throws IOException
+    {
+        Path cached = tempDir.resolve("race-041507.json");
+        Files.writeString(cached, "{\"data\":null,\"errorMessage\":\"This series is not displaying "
+            + "entrants or results.\",\"result\":\"error\",\"httpCode\":400}");
+        Files.setLastModifiedTime(cached, java.nio.file.attribute.FileTime.from(
+            java.time.Instant.now().minus(java.time.Duration.ofDays(170))));
+        assertFalse(importer.isCachedRaceUsable(Files.readString(cached), cached), "old error");
+
+        Files.setLastModifiedTime(cached, java.nio.file.attribute.FileTime.from(java.time.Instant.now()));
+        assertFalse(importer.isCachedRaceUsable(Files.readString(cached), cached), "fresh error");
+        assertEquals("This series is not displaying entrants or results.",
+            importer.errorMessage(Files.readString(cached)));
+    }
+
+    @Test
+    void cachedSuccessForOldRaceIsReusedUntilStale() throws IOException
+    {
+        Path cached = tempDir.resolve("race-000001.json");
+        Files.writeString(cached, raceJson(1, 4, "2020-09-13T00:00:00.000", "2020-09-13T15:00:00.000",
+            1, "MYC", "Manly Yacht Club", "Series", "PHS", false, List.of()));
+        assertTrue(importer.isCachedRaceUsable(Files.readString(cached), cached), "fresh cache of an old race");
+
+        Files.setLastModifiedTime(cached, java.nio.file.attribute.FileTime.from(
+            java.time.Instant.now().minus(java.time.Duration.ofDays(400))));
+        assertFalse(importer.isCachedRaceUsable(Files.readString(cached), cached), "stale cache");
+    }
+
+    @Test
+    void cachedSuccessForRecentRaceIsRefetched() throws IOException
+    {
+        String today = LocalDate.now() + "T00:00:00.000";
+        Path cached = tempDir.resolve("race-000002.json");
+        Files.writeString(cached, raceJson(2, 4, today, today,
+            1, "MYC", "Manly Yacht Club", "Series", "PHS", false, List.of()));
+        assertFalse(importer.isCachedRaceUsable(Files.readString(cached), cached));
+    }
+
     // --- run() ---
 
 
