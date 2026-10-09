@@ -2561,8 +2561,11 @@ function setupRaceDivisionChart(raceId, raceJson) {
     if (raceName)   labelParts.push(raceName);
     document.getElementById('race-series-race-label').textContent = labelParts.join(' — ');
 
+    // Keep the division chosen on the previous race (prev/next navigation); otherwise show
+    // All for a multi-division race.
     const preferred = preferredDivision && divisions.some(d => d.value === preferredDivision)
-        ? preferredDivision : divisions[0].value;
+        ? preferredDivision
+        : divisions.length > 1 ? '__all__' : divisions[0].value;
     preferredDivision = null;
     select.value = preferred;
     loadRaceDivChart(raceId, preferred);
@@ -3404,7 +3407,10 @@ async function loadSeriesChart(seriesId) {
     if (divNames.length > 1) opts.push(`<option value="__all__">All</option>`);
     sel.innerHTML = opts.join('');
 
-    renderSeriesChartForDivision(divNames[0] || '');
+    // A multi-division series opens on All.
+    const initialDiv = divNames.length > 1 ? '__all__' : (divNames[0] || '');
+    sel.value = initialDiv;
+    renderSeriesChartForDivision(initialDiv);
     section.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
