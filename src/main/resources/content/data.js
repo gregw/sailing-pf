@@ -163,7 +163,7 @@ const COLUMNS = {
               gotoEntity('designs', {q: item.designId});
           } },
         { label: 'RF',  anchor: 'col-boat-rf', sortKey: 'spinRef',
-          tip: 'Reference Factor for the selected variant — IRC-equivalent handicap derived from certificates or median performance. Colour: green = high confidence, red = low.',
+          tip: 'Reference Factor for the selected variant — IRC-equivalent handicap derived from certificates or median performance. Comparable to IRC ratings (TCC) of {targetYearPhrase}. Colour: green = high confidence, red = low.',
           render: item => {
               const v = boatVariant === 'nonSpin' ? item.nonSpinRef
                       : boatVariant === 'twoHanded' ? item.twoHandedRef : item.spinRef;
@@ -172,7 +172,7 @@ const COLUMNS = {
                   : '<span style="color:#bbb">—</span>';
           } },
         { label: 'PF', anchor: 'col-boat-pf', sortKey: 'pf',
-          tip: 'Performance Factor for the selected variant — back-calculated time correction factor optimized over this boat\'s racing history. Colour: green = high confidence, red = low.',
+          tip: 'Performance Factor for the selected variant — back-calculated time correction factor optimized over this boat\'s racing history. Comparable to IRC ratings (TCC) of {targetYearPhrase}. Colour: green = high confidence, red = low.',
           render: item => {
               const v = boatVariant === 'nonSpin' ? item.pfNonSpin
                       : boatVariant === 'twoHanded' ? item.pfTwoHanded : item.pf;
@@ -206,20 +206,20 @@ const COLUMNS = {
           } },
         {
             label: 'RF Spin', key: 'spinRef', anchor: 'col-design-rf-spin',
-            tip: 'Reference Factor for spinnaker sailing. Color indicates confidence: green = high, red = low.',
+            tip: 'Reference Factor for spinnaker sailing. Comparable to IRC ratings (TCC) of {targetYearPhrase}. Color indicates confidence: green = high, red = low.',
           render: v => v && v.value != null
             ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
         {
             label: 'RF No-Spin', key: 'nonSpinRef', anchor: 'col-design-rf-nospin',
-            tip: 'Reference Factor for non-spinnaker sailing. Color indicates confidence: green = high, red = low.',
+            tip: 'Reference Factor for non-spinnaker sailing. Comparable to IRC ratings (TCC) of {targetYearPhrase}. Color indicates confidence: green = high, red = low.',
             render: v => v && v.value != null
                 ? weightSpan(v.value, v.value.toFixed(4), v.weight)
                 : '<span style="color:#bbb">—</span>'
         },
         {
             label: 'RF 2-Handed', key: 'twoHandedRef', anchor: 'col-design-rf-2handed',
-            tip: 'Reference Factor for two-handed sailing. Color indicates confidence: green = high, red = low.',
+            tip: 'Reference Factor for two-handed sailing. Comparable to IRC ratings (TCC) of {targetYearPhrase}. Color indicates confidence: green = high, red = low.',
             render: v => v && v.value != null
                 ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
@@ -843,10 +843,10 @@ function renderBoatPf(data) {
       <table style="width:auto;margin-top:0.4rem;">
         <thead><tr>
           <th>Variant${infoBtn('col-pf-variant','Spin, Non-Spin, or Two-Handed handicap variant.')}</th>
-          <th>RF${infoBtn('col-pf-rf','Reference Factor — IRC-equivalent handicap derived from certificates.')}</th>
+          <th>RF${infoBtn('col-pf-rf','Reference Factor — IRC-equivalent handicap derived from certificates. Comparable to IRC ratings (TCC) of {targetYearPhrase}.')}</th>
           <th>RF Wt${infoBtn('col-ref-weight','RF confidence weight: 1.0 = direct certificate, lower = inferred or multi-hop conversion.')}</th>
           <th>Gen${infoBtn('col-rf-gen','RF generation — the pipeline step that assigned this factor. Lower = earlier/more-direct; higher = later propagation or cross-variant fill.')}</th>
-          <th>PF${infoBtn('col-pf-value','Performance Factor — back-calculated handicap averaged across this boat\'s race history.')}</th>
+          <th>PF${infoBtn('col-pf-value','Performance Factor — back-calculated handicap averaged across this boat\'s race history. Comparable to IRC ratings (TCC) of {targetYearPhrase}.')}</th>
           <th>PF Wt${infoBtn('col-pf-weight','PF confidence weight — proportional to number of informative races.')}</th>
           <th>Delta${infoBtn('col-pf-delta','PF minus RF. Near zero = race history is consistent with the certificate.')}</th>
           <th>Races${infoBtn('col-pf-races','Number of races contributing to this PF estimate.')}</th>

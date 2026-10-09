@@ -103,9 +103,37 @@ function esc(val) {
 }
 
 function infoBtn(anchor, tip) {
-    const escapedTip = tip.replace(/"/g, '&quot;');
-    return `<a href="ui-tips.md#${anchor}" class="info-btn" data-tip="${escapedTip}" target="_blank" onclick="event.stopPropagation()">ⓘ</a>`;
+    const attr = s => s.replace(/"/g, '&quot;');
+    // A tip naming the target IRC year keeps its template, so the year can be filled in
+    // once it is known (see fillTargetYear).
+    const template = tip.includes('{targetYearPhrase}') ? ` data-tip-template="${attr(tip)}"` : '';
+    return `<a href="ui-tips.md#${anchor}" class="info-btn" data-tip="${attr(fillTargetYear(tip))}"${template} target="_blank" onclick="event.stopPropagation()">ⓘ</a>`;
 }
+
+// ---- Target IRC year ----
+//
+// PF and RF are on the IRC scale of the configured target year. Tips say so through the
+// {targetYearPhrase} placeholder: "the target year (2026)", or "the target year" until
+// /api/settings has answered (the year is then cached for the session).
+const TARGET_YEAR_KEY = 'pf.targetIrcYear';
+
+function fillTargetYear(text) {
+    let year = null;
+    try { year = sessionStorage.getItem(TARGET_YEAR_KEY); } catch (e) { /* storage disabled */ }
+    return text.split('{targetYearPhrase}').join(year ? `the target year (${year})` : 'the target year');
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        if (sessionStorage.getItem(TARGET_YEAR_KEY)) return;
+        const resp = await fetch('/api/settings');
+        const settings = resp.ok ? await resp.json() : null;
+        if (!settings || !settings.targetIrcYear) return;
+        sessionStorage.setItem(TARGET_YEAR_KEY, String(settings.targetIrcYear));
+        document.querySelectorAll('[data-tip-template]').forEach(el =>
+            el.setAttribute('data-tip', fillTargetYear(el.getAttribute('data-tip-template'))));
+    } catch (e) { /* tips keep "the target year" */ }
+});
 
 // Axis title for a "speed factor" (1/factor) x-axis. The formula argument is the
 // expression after the colon, e.g. '1/PF' or '1/PF, 1/RF'. Plotly renders axis

@@ -96,6 +96,9 @@ public class AdminApiServlet extends HttpServlet
             handleStats(resp);
         else if ("/health".equals(path))
             handleHealth(resp);
+        else if ("/settings".equals(path))
+            writeJson(resp, _taskService != null
+                ? Map.of("targetIrcYear", _taskService.targetIrcYear()) : Map.of());
         else if (path.matches("/boats/[^/]+/pf"))
             handleBoatPf(path.replaceAll("^/boats/|/pf$", ""), resp);
         else if (path.matches("/boats/[^/]+/profile"))
