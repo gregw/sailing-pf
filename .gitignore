@@ -2,6 +2,8 @@
 wiki
 pf-data/*
 !pf-data/config
+# holds the OAuth client secret — see pf-data/config/auth.yaml.example
+pf-data/config/auth.yaml
 .claude/*
 ~.claude/claude-questions.txt
 

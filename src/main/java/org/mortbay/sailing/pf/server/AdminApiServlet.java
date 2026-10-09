@@ -70,8 +70,6 @@ public class AdminApiServlet extends HttpServlet
     private final HttpClient httpClient;
     private final AuthConfig authConfig;
 
-    private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
-
     public AdminApiServlet(DataStore store, TaskService taskService, AnalysisCache cache,
                            HttpClient httpClient, AuthConfig authConfig)
     {
@@ -4062,13 +4060,10 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, Map.of("boatA", boatAMap, "boatB", boatBMap, "points", points));
     }
 
-    /** Mirrors {@link WriteAuthFilter}: admin-connector or session-claims counts as authenticated. */
+    /** Mirrors {@link WriteAuthFilter}: only editors (see {@link Access#isEditor}) count as authenticated. */
     private boolean isAuthenticated(HttpServletRequest req)
     {
-        if (authConfig != null && authConfig.isAdminConnector(req))
-            return true;
-        jakarta.servlet.http.HttpSession session = req.getSession(false);
-        return session != null && session.getAttribute(CLAIMS_ATTR) != null;
+        return Access.isEditor(req, authConfig);
     }
 
 }

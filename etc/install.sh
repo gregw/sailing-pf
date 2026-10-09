@@ -58,6 +58,12 @@ echo "==> Creating data directory $DATA_DIR…"
 mkdir -p "$DATA_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
 
+# The sign-in example only — auth.yaml itself (which holds the client secret) is never
+# written here, so an upgrade cannot replace the deployed OAuth client.
+mkdir -p "$DATA_DIR/config"
+install -m 644 -o "$SERVICE_USER" -g "$SERVICE_USER" \
+    "$(dirname "$0")/../pf-data/config/auth.yaml.example" "$DATA_DIR/config/auth.yaml.example"
+
 echo "==> Pre-building the project…"
 sudo -u "$SERVICE_USER" \
     HOME="$DATA_DIR" \

@@ -18,7 +18,7 @@
     <jackson.version>2.21.1</jackson.version>
     <junit.version>5.13.4</junit.version>
     <hamcrest.version>3.0</hamcrest.version>
-    <jetty.version>12.1.6</jetty.version>
+    <jetty.version>12.1.12</jetty.version>
     <pf-data>pf-data</pf-data>
   </properties>
 

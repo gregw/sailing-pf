@@ -58,7 +58,7 @@ class BoatResolveApiTest
         store.putBoat(new Boat("200-twin-b", "200", "Twin", null, List.of(), List.of(), List.of(), null, null));
 
         // adminPort = -1 so WriteAuthFilter treats every request as unauthenticated.
-        AuthConfig authConfig = new AuthConfig(null, null, "http://localhost", null, -1, 0, null);
+        AuthConfig authConfig = AuthConfig.disabled(-1, 0, null);
         server = new Server();
         ServerConnector connector = new ServerConnector(server);
         connector.setPort(0);

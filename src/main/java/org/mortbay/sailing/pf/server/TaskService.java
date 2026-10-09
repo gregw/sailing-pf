@@ -70,7 +70,6 @@ public class TaskService
         CONFIG_COMMENTS.put("pfLambda:",                   "# --- PF optimiser ---");
         CONFIG_COMMENTS.put("slidingAverageCount:",         "# --- Sliding average / consistency ---");
         CONFIG_COMMENTS.put("diversityNonSpinWeight:",      "# --- Diversity weights (multi-variant PF) ---");
-        CONFIG_COMMENTS.put("googleClientId:",              "# --- Authentication ---");
         CONFIG_COMMENTS.put("adminPort:",                   "# --- Server ports ---");
     }
 
@@ -283,10 +282,6 @@ public class TaskService
                                Double diversitySpinWeight,        // null → default 1.0
                                Double diversityTwoHandedWeight,   // null → default 1.2
                                Integer consistencyDropInterval,   // null → default 11
-                               String googleClientId,            // null → fall back to env/devMode
-                               String googleClientSecret,        // null → fall back to env
-                               String authBaseUrl,               // null → fall back to env, then localhost
-                               String authAllowedDomain,         // null → no domain restriction
                                Integer adminPort,                // null → default 8888
                                Integer userPort,                 // null → default 8080
                                String natGatewayIp,              // null → no gateway protection
@@ -345,10 +340,6 @@ public class TaskService
     private volatile double diversitySpinWeight      = 1.0;
     private volatile double diversityTwoHandedWeight = 1.2;
     private volatile int    consistencyDropInterval  = 11;
-    private volatile String googleClientId = null;
-    private volatile String googleClientSecret = null;
-    private volatile String authBaseUrl = null;
-    private volatile String authAllowedDomain = null;
     private volatile int adminPort = 8888;
     private volatile int userPort = 8080;
     private volatile String natGatewayIp = null;
@@ -444,10 +435,6 @@ public class TaskService
             if (config.diversitySpinWeight()      != null) diversitySpinWeight      = config.diversitySpinWeight();
             if (config.diversityTwoHandedWeight() != null) diversityTwoHandedWeight = config.diversityTwoHandedWeight();
             if (config.consistencyDropInterval()  != null) consistencyDropInterval  = config.consistencyDropInterval();
-            googleClientId     = config.googleClientId();
-            googleClientSecret = config.googleClientSecret();
-            authBaseUrl        = config.authBaseUrl();
-            authAllowedDomain  = config.authAllowedDomain();
             if (config.adminPort() != null) adminPort = config.adminPort();
             if (config.userPort() != null) userPort = config.userPort();
             natGatewayIp = config.natGatewayIp();
@@ -810,21 +797,13 @@ public void stop()
         return pfMaxFactor;
     }
 
-    public AuthConfig authConfig()
+    /**
+     * Sign-in settings from {@code config/auth.yaml} (see {@link AuthConfig#load}) with the
+     * connector ports from admin.yaml. Throws when auth.yaml is enabled but incomplete.
+     */
+    public AuthConfig authConfig() throws IOException
     {
-        String id     = firstNonBlank(System.getenv("GOOGLE_CLIENT_ID"),     googleClientId);
-        String secret = firstNonBlank(System.getenv("GOOGLE_CLIENT_SECRET"), googleClientSecret);
-        String base   = firstNonBlank(System.getenv("AUTH_BASE_URL"),        authBaseUrl,
-                                      "http://localhost:" + userPort);
-        String domain = firstNonBlank(System.getenv("AUTH_ALLOWED_DOMAIN"),  authAllowedDomain);
-        return new AuthConfig(id, secret, base, domain, adminPort, userPort, natGatewayIp);
-    }
-
-    private static String firstNonBlank(String... candidates)
-    {
-        for (String s : candidates)
-            if (s != null && !s.isBlank()) return s;
-        return null;
+        return AuthConfig.load(dataRoot.resolve("config"), adminPort, userPort, natGatewayIp);
     }
 
     public boolean submitScheduledRun()
@@ -1150,7 +1129,6 @@ public void stop()
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,
-                    googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain,
                     adminPort, userPort, natGatewayIp,
                     new LinkedHashMap<>(lastRunTimes)));
             Files.writeString(configFile, addConfigComments(yaml));

@@ -50,7 +50,7 @@ class UserRequestTest
 
         // adminPort = -1 (an impossible local port) so isAdminConnector() is always
         // false and WriteAuthFilter enforces authentication for non-open paths.
-        AuthConfig authConfig = new AuthConfig(null, null, "http://localhost", null, -1, 0, null);
+        AuthConfig authConfig = AuthConfig.disabled(-1, 0, null);
 
         server = new Server();
         ServerConnector connector = new ServerConnector(server);

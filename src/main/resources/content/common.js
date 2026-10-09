@@ -178,14 +178,15 @@ function persistControl(id, opts) {
 async function fetchJson(url, options) {
     try {
         const resp = await fetch(url, options);
-        if (resp.status === 401) {
+        if (resp.status === 401 || resp.status === 403) {
             if (!document.getElementById('auth-nudge')) {
                 const nudge = document.createElement('div');
                 nudge.id = 'auth-nudge';
                 nudge.className = 'import-warning-banner';
-                nudge.innerHTML = 'Sign in required for this action. ' +
-                    '<a href="/auth/protected">Sign in</a> &nbsp; ' +
-                    '<button onclick="this.parentElement.remove()">×</button>';
+                nudge.innerHTML = (resp.status === 401
+                        ? `Sign in required for this action. <a href="${esc(signInUrl())}">Sign in</a>`
+                        : 'This account can view but not change data.')
+                    + ' &nbsp; <button onclick="this.parentElement.remove()">×</button>';
                 document.querySelector('main, body').prepend(nudge);
             }
             return null;
@@ -576,24 +577,37 @@ function errorBounds(factor, weight) {
     });
 })();
 
-// Auth state — loaded once per page; fires pf:authready when done
-window.pfAuth = { authenticated: false, email: null };
+// The sign-in link: back to this page afterwards.
+function signInUrl() {
+    return '/auth/login?return=' + encodeURIComponent(location.pathname + location.search);
+}
+
+// Auth state — loaded once per page; fires pf:authready when done. `authenticated` means
+// "may change data" (an editor, or the admin connector); `signedIn` only that someone is.
+window.pfAuth = { authenticated: false, signedIn: false, email: null };
 (async function loadAuthState() {
     const data = await fetchJson('/auth/status');
     if (!data) return;
-    window.pfAuth = { authenticated: data.authenticated, email: data.email || null,
-                       devMode: !!data.devMode };
+    window.pfAuth = { authenticated: !!data.authenticated, signedIn: !!data.signedIn,
+                      email: data.email || null, adminConnector: !!data.adminConnector };
     const nav = document.querySelector('.site-nav');
     if (nav) {
         const widget = document.createElement('span');
-        widget.style.marginLeft = 'auto';
-        if (data.authenticated && !data.devMode) {
-            widget.innerHTML = esc(data.email) +
-                ' &nbsp; <a href="/auth/logout">Sign out</a>';
-        } else if (!data.authenticated) {
-            widget.innerHTML = '<a href="/auth/protected">Sign in</a>';
+        widget.className = 'nav-auth';
+        if (data.signedIn) {
+            widget.innerHTML = esc(data.email)
+                + (data.editor ? '' : ' <span title="This account can view but not change data">(read-only)</span>')
+                + ' &nbsp; <a href="/auth/logout">Sign out</a>';
+        } else if (data.enabled && !data.adminConnector) {
+            widget.innerHTML = `<a href="${esc(signInUrl())}">Sign in</a>`;
         }
-        nav.appendChild(widget);
+        // Beside the Share button, at the right of the nav.
+        const share = document.getElementById('nav-share');
+        if (share) share.prepend(widget);
+        else {
+            widget.style.marginLeft = 'auto';
+            nav.appendChild(widget);
+        }
     }
     document.dispatchEvent(new CustomEvent('pf:authready'));
 })();

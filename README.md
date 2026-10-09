@@ -92,6 +92,28 @@ mvn exec:java -Dpf-data=/path/to/pf-data
 
 The admin UI is served on port 8888 and the public UI on port 8080 by default.
 
+## Signing in
+
+Everyone can read everything. Changes (edits, exclusions, imports, handicap-type settings, …)
+can always be made on the admin port. To let people make them from the public port, turn on
+Google sign-in: copy `pf-data/config/auth.yaml.example` to `config/auth.yaml` in the data
+directory and fill in an OAuth client — the example walks through creating one. Then:
+
+- **Anyone** with a Google account can sign in, but is read-only.
+- **Editors** — accounts in one of `allowedDomains:` (checked against the Workspace domain Google
+  asserts) or listed in `editors:` — can make changes.
+
+`auth.yaml` holds the client secret and is gitignored; the example beside it is committed and
+must never carry a real one. A file that is enabled without a client ID and secret stops the
+server from starting rather than leaving it unprotected.
+
+- **Google requires HTTPS** for the redirect, except on `localhost`. If a reverse proxy (nginx,
+  Caddy) terminates TLS in front of the public port, set `forwardedHeaders: true` so the sign-in
+  redirect uses the public address — it is applied to the public port only, never the admin
+  port. Leave it `false` when the public port is exposed directly.
+- **It needs the internet:** the server contacts Google at startup and on each sign-in.
+- **Sessions are in memory:** a restart signs everybody out.
+
 ## Installing as a systemd service (Raspberry Pi / Debian)
 
 The `etc/` directory contains a systemd unit file and an install script for running the server

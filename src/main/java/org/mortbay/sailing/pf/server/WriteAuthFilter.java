@@ -11,11 +11,14 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 
+/**
+ * Lets only editors ({@link Access#isEditor}) make POST requests, apart from the open
+ * request-logging and lookup endpoints. Not signed in → 401 with a sign-in URL; signed in
+ * but not an editor → 403.
+ */
 class WriteAuthFilter implements Filter
 {
-    private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
     /**
      * POST endpoints that are open to unauthenticated users (read-only: request logging and
      * boat lookup).
@@ -62,16 +65,23 @@ class WriteAuthFilter implements Filter
             chain.doFilter(req, res);
             return;
         }
-        HttpSession session = request.getSession(false);
-        Object claims = session != null ? session.getAttribute(CLAIMS_ATTR) : null;
-        if (claims == null)
+        if (Access.isEditor(request, authConfig))
         {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\":\"unauthenticated\",\"loginUrl\":\"/auth/protected\"}");
+            chain.doFilter(req, res);
             return;
         }
-        chain.doFilter(req, res);
+        response.setContentType("application/json");
+        if (Access.claims(request) == null)
+        {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("{\"error\":\"unauthenticated\",\"loginUrl\":\"/auth/login\"}");
+        }
+        else
+        {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.getWriter().write("{\"error\":\"forbidden\",\"message\":"
+                + "\"This account can view but not change data\"}");
+        }
     }
 
     @Override

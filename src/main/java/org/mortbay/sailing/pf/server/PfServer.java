@@ -5,6 +5,7 @@ import java.util.EnumSet;
 
 import jakarta.servlet.DispatcherType;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.WWWAuthenticationProtocolHandler;
 import org.eclipse.jetty.client.transport.HttpClientTransportDynamic;
 import org.eclipse.jetty.ee10.servlet.FilterHolder;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
@@ -16,6 +17,9 @@ import org.eclipse.jetty.security.SecurityHandler;
 import org.eclipse.jetty.security.openid.OpenIdAuthenticator;
 import org.eclipse.jetty.security.openid.OpenIdConfiguration;
 import org.eclipse.jetty.security.openid.OpenIdLoginService;
+import org.eclipse.jetty.server.ForwardedRequestCustomizer;
+import org.eclipse.jetty.server.HttpConfiguration;
+import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
@@ -46,6 +50,8 @@ public class PfServer
 
         TaskService taskService = new TaskService(store, httpClient, dataRoot);
         taskService.start();
+        // Early, so a broken auth.yaml stops startup before the long analysis runs.
+        AuthConfig authConfig = taskService.authConfig();
 
         AnalysisCache cache = new AnalysisCache(store);
         cache.refresh(taskService.targetIrcYear(), taskService.outlierSigma(), taskService.clubCertificateWeight(),
@@ -53,11 +59,17 @@ public class PfServer
         taskService.setCache(cache);
         taskService.runStartupTasks();
 
-        AuthConfig authConfig = taskService.authConfig();
-
         Server server = new Server();
 
-        ServerConnector userConnector = new ServerConnector(server);
+        // Only the user connector trusts X-Forwarded-* (when a reverse proxy sits in front of
+        // it): behind a proxy the request's own host and scheme are the proxy's, and without
+        // this the sign-in redirect_uri would be http://localhost:<port>/... which Google
+        // refuses. Never on the admin connector, where a forged X-Forwarded-For could slip
+        // past the NAT-gateway check in AuthConfig.isAdminConnector.
+        HttpConfiguration userHttp = new HttpConfiguration();
+        if (authConfig.forwardedHeaders())
+            userHttp.addCustomizer(new ForwardedRequestCustomizer());
+        ServerConnector userConnector = new ServerConnector(server, new HttpConnectionFactory(userHttp));
         userConnector.setName("user");
         userConnector.setPort(authConfig.userPort());
         server.addConnector(userConnector);
@@ -69,32 +81,14 @@ public class PfServer
 
         ServletContextHandler context = new ServletContextHandler("/");
 
-        // Session handler (required for OpenID and for WriteAuthFilter's session check)
+        // Sessions hold the signed-in account; the cookie is marked Secure on HTTPS requests
+        // (Jetty's default), which behind a proxy relies on forwardedHeaders.
         SessionHandler sessionHandler = new SessionHandler();
         sessionHandler.getSessionCookieConfig().setAttribute("SameSite", "Lax");
-        if (authConfig.baseUrl().startsWith("https://"))
-            sessionHandler.getSessionCookieConfig().setSecure(true);
         context.setSessionHandler(sessionHandler);
 
-        // OpenID security handler (prod only — dev mode skips OAuth entirely)
-        if (!authConfig.devMode())
-        {
-            OpenIdConfiguration openIdConfig = new OpenIdConfiguration(
-                "https://accounts.google.com",
-                authConfig.clientId(),
-                authConfig.clientSecret()
-            );
-            openIdConfig.addScopes("openid", "email");
-
-            OpenIdLoginService loginService = new OpenIdLoginService(openIdConfig);
-            OpenIdAuthenticator authenticator = new OpenIdAuthenticator(openIdConfig, "/error");
-
-            SecurityHandler.PathMapped security = new SecurityHandler.PathMapped();
-            security.setLoginService(loginService);
-            security.setAuthenticator(authenticator);
-            security.put("/auth/protected", Constraint.ANY_USER);
-            context.setSecurityHandler(security);
-        }
+        if (authConfig.enabled())
+            secure(context, authConfig, server);
 
         context.addServlet(new ServletHolder(new AuthServlet(authConfig)), "/auth/*");
         FilterHolder waf = new FilterHolder(new WriteAuthFilter(authConfig));
@@ -124,5 +118,62 @@ public class PfServer
         LOG.info("PF server started — user: http://localhost:{}/ admin: http://localhost:{}/",
             authConfig.userPort(), authConfig.adminPort());
         server.join();
+    }
+
+    /**
+     * Puts the context behind OpenID Connect sign-in. Only {@link AuthServlet#LOGIN_PATH} (and
+     * its old name {@code /auth/protected}) requires a login — asking for it is asking to sign
+     * in; every page stays readable, and what a signed-in account may change is decided per
+     * request ({@link Access#isEditor}). The issuer is all that is configured: its endpoints and
+     * keys are discovered from it at startup, so a server with sign-in on needs the network to
+     * start. Sessions are in memory, so a restart signs everybody out.
+     */
+    private static void secure(ServletContextHandler context, AuthConfig auth, Server server)
+    {
+        OpenIdConfiguration oidc = new OpenIdConfiguration.Builder()
+            .issuer(auth.issuer())
+            .clientId(auth.clientId())
+            .clientSecret(auth.clientSecret())
+            // The address and Workspace domain come in these; "openid" is added by
+            // OpenIdConfiguration itself.
+            .scopes("email", "profile")
+            .httpClient(tokenExchangeClient())
+            .build();
+        // The identity provider and its HTTP client are the server's to start and stop.
+        server.addBean(oidc);
+
+        // The third argument is the ERROR PAGE: without one Jetty answers a failed callback
+        // with a bare 403, and every way sign-in can fail looks the same.
+        OpenIdAuthenticator authenticator =
+            new OpenIdAuthenticator(oidc, auth.redirectPath(), AuthServlet.ERROR_PATH, null);
+        SecurityHandler.PathMapped security = new SecurityHandler.PathMapped();
+        security.setLoginService(new OpenIdLoginService(oidc));
+        security.setAuthenticator(authenticator);
+        security.put(AuthServlet.LOGIN_PATH, Constraint.ANY_USER);
+        security.put("/auth/protected", Constraint.ANY_USER);
+        context.setSecurityHandler(security);
+        LOG.info("Sign-in via {}, callback {}", auth.issuer(), auth.redirectPath());
+    }
+
+    /**
+     * The client that redeems the authorisation code, without the WWW-Authenticate handler.
+     * When the client id or secret is wrong, Google's token endpoint answers 401 with a JSON
+     * body naming the problem ({@code invalid_client}) and no WWW-Authenticate header; that
+     * handler would turn it into an opaque "protocol violation" and discard the body. This
+     * client only talks to the token endpoint, which never challenges, so nothing is lost and
+     * Jetty reports the provider's own error.
+     */
+    private static HttpClient tokenExchangeClient()
+    {
+        return new HttpClient()
+        {
+            @Override
+            protected void doStart() throws Exception
+            {
+                super.doStart();
+                // After super.doStart(): the default handlers are installed as it starts.
+                getProtocolHandlers().remove(WWWAuthenticationProtocolHandler.NAME);
+            }
+        };
     }
 }

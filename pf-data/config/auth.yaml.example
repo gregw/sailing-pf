@@ -1,0 +1,53 @@
+# Sailing PF sign-in — copy to auth.yaml (in the same config directory) and fill in.
+#
+#   cp auth.yaml.example auth.yaml
+#
+# auth.yaml holds a client secret and is in .gitignore. THIS file is committed and must
+# never contain a real one. If you paste a secret here by mistake, treat it as leaked:
+# revoke it in the Google Cloud console and issue a new one.
+
+# Off by default. With this false, or with no auth.yaml at all, nobody can sign in and
+# changes can only be made through the admin connector (adminPort in admin.yaml).
+enabled: false
+
+# --- Google OAuth client -----------------------------------------------------
+#
+# In the Google Cloud console (APIs & Services):
+#
+#   1. OAuth consent screen: "Internal" restricts sign-in to your Workspace; "External"
+#      lets any Google account sign in — editors are still only those listed below.
+#   2. Credentials > Create credentials > OAuth client ID, type "Web application".
+#      Use a client of its own rather than sharing sail-jinx's: each can then be rotated
+#      or revoked without touching the other.
+#   3. Authorised redirect URI: the public address plus redirectPath below, exactly,
+#      including scheme and port — Google matches it as a literal string, e.g.
+#         http://localhost:8081/auth/callback
+#         https://pf.example.org/auth/callback
+#      Google requires https except for localhost.
+#   4. Copy the client ID and secret here.
+
+issuer: "https://accounts.google.com"
+clientId: "000000000000-xxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+clientSecret: "REPLACE-ME"
+
+# Where Google sends the browser back. Must match the registered redirect URI.
+redirectPath: "/auth/callback"
+
+# --- Who may change data -----------------------------------------------------
+#
+# Anyone the issuer authenticates may sign in, but only editors may change data:
+# accounts in one of these Workspace domains (checked against the "hd" claim Google
+# asserts, then the address) ...
+allowedDomains:
+  - "myc.org.au"
+# ... and these individual addresses.
+editors: []
+
+# --- Behind a reverse proxy --------------------------------------------------
+#
+# Set true when nginx / Caddy / a load balancer terminates TLS in front of the user
+# port: the sign-in redirect is built from the request, and without the proxy's
+# X-Forwarded-* headers it would point at http://localhost:<port> and Google would
+# refuse it. Leave false when the user port is exposed directly — those headers are
+# then whatever the client chose to send. Never applied to the admin port.
+forwardedHeaders: false
