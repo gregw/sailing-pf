@@ -8,6 +8,9 @@ const PALETTE = [
 
 const STORAGE_KEY = 'pf-comparison-items';
 const HANDICAP_STORAGE_KEY = 'pf.allocated.handicaps';
+// A share link carries the boats compared, the calculator's sets and the race-division chart
+// settings; the page's other controls are carried automatically (see buildShareUrl).
+window.PF_SHARE_KEYS = [STORAGE_KEY, HANDICAP_STORAGE_KEY, 'pf.inlineDiv.*'];
 
 // Initial values come from sessionStorage if present (session persistence across page
 // navigation), otherwise the HTML defaults (matching the `checked` attributes).

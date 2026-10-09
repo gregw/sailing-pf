@@ -440,6 +440,7 @@ let showSeriesElapsed = sessionBool(SERIES_ELAPSED_KEY, false);
 const SHOW_LEGEND_KEY = 'pf.divChart.showLegend';
 let showLegend = sessionBool(SHOW_LEGEND_KEY, false);
 let preferredDivision = null;
+let pendingSeriesDivision = null;   // division named by a share link, for the next series chart
 let divXFactor = sessionStorage.getItem(DIV_XFACTOR_KEY) || '---';
 let lastRaceDivData = null;
 
@@ -617,6 +618,7 @@ function renderTable(entity, items, append) {
     }
 
     const baseIdx = append ? tbody.children.length : 0;
+    let selectionRestored = false;
     items.forEach((item, itemIdx) => {
         const globalIdx = baseIdx + itemIdx;
         const tr = document.createElement('tr');
@@ -627,7 +629,15 @@ function renderTable(entity, items, append) {
                 : 'Excluded';
         }
         if (item.ignored)  tr.classList.add('ignored');
-        if (state.selected[entity].has(item.id)) tr.classList.add('selected');
+        if (state.selected[entity].has(item.id)) {
+            tr.classList.add('selected');
+            // A selection restored from a share link arrives as bare ids; pick up the row
+            // data the action bar needs as the rows come in.
+            if (!state.selectedData[entity].has(item.id)) {
+                state.selectedData[entity].set(item.id, item);
+                selectionRestored = true;
+            }
+        }
         // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
         const tdCb = document.createElement('td');
         tdCb.style.textAlign = 'center';
@@ -683,6 +693,7 @@ function renderTable(entity, items, append) {
         });
         tbody.appendChild(tr);
     });
+    if (selectionRestored) updateMergeBar(entity);
 }
 
 function renderScrollStatus(entity) {
@@ -739,6 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function loadDetail(entity, id, item, {scroll = true} = {}) {
+    state.openDetail = {entity, id};   // for share links
     if (entity === 'series') {
         loadSeriesChart(id);
         const jd = document.getElementById('json-raw-series');
@@ -3407,8 +3419,12 @@ async function loadSeriesChart(seriesId) {
     if (divNames.length > 1) opts.push(`<option value="__all__">All</option>`);
     sel.innerHTML = opts.join('');
 
-    // A multi-division series opens on All.
-    const initialDiv = divNames.length > 1 ? '__all__' : (divNames[0] || '');
+    // A multi-division series opens on All, unless a share link named a division.
+    const initialDiv = pendingSeriesDivision != null && (divNames.includes(pendingSeriesDivision)
+            || (pendingSeriesDivision === '__all__' && divNames.length > 1))
+        ? pendingSeriesDivision
+        : divNames.length > 1 ? '__all__' : (divNames[0] || '');
+    pendingSeriesDivision = null;
     sel.value = initialDiv;
     renderSeriesChartForDivision(initialDiv);
     section.scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -4170,9 +4186,50 @@ document.addEventListener('DOMContentLoaded', () => {
 //                      boatId), with optional &label=<text> for the filter banner.
 //   ?q=<text>        → seed the search box (clears any persisted search).
 //   none of the above → restore the persisted search and list.
+// Session state a share link carries for these pages (see buildShareUrl in common.js):
+// chart settings, the boat variant, and the handicap calculator's allocated sets.
+window.PF_SHARE_KEYS = ['pf.divChart.*', 'pf.ctrl.boat-variant', 'pf.allocated.handicaps'];
+
+// The current view as URL params, read back by initFromUrlOrSession: search or filter, sort,
+// the open row, ticked rows and the race / series chart's division.
+window.pfShareParams = () => {
+    const entity = window.PF_ENTITY || 'boats';
+    const p = {};
+    const f = state.filter[entity];
+    if (f) {
+        p[f.param] = f.value;
+        p.label = f.label;
+    } else {
+        const q = document.getElementById('q-' + entity);
+        if (q && q.value) p.q = q.value;
+    }
+    p.sort = state.sort[entity];
+    p.dir = state.dir[entity];
+    if (state.openDetail && state.openDetail.entity === entity) p.open = state.openDetail.id;
+    if (state.selected[entity].size > 0) p.sel = [...state.selected[entity]].join(',');
+    const divSel = document.getElementById(entity === 'races' ? 'race-division-select'
+        : entity === 'series' ? 'series-division-select' : '');
+    if (divSel && divSel.value && p.open) p.div = divSel.value;
+    return p;
+};
+
 function initFromUrlOrSession() {
     const entity = window.PF_ENTITY || 'boats';
     const params = new URLSearchParams(location.search);
+
+    // Share-link view: sort order, ticked rows, the open row and its chart division.
+    if (params.get('sort')) state.sort[entity] = params.get('sort');
+    if (params.get('dir') === 'asc' || params.get('dir') === 'desc') state.dir[entity] = params.get('dir');
+    if (params.get('sel')) state.selected[entity] = new Set(params.get('sel').split(',').filter(Boolean));
+    const open = params.get('open');
+    if (open) {
+        if (params.get('div') != null) {
+            if (entity === 'races') preferredDivision = params.get('div');
+            if (entity === 'series') pendingSeriesDivision = params.get('div');
+        }
+        // After the list has started loading, so the row stays in its sorted context.
+        setTimeout(() => loadDetail(entity, open), 0);
+    }
 
     const id = params.get('id');
     if (id) {

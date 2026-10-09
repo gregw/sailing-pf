@@ -19,6 +19,9 @@ const PALETTE = [
 
 const STORAGE_KEY = 'pf-designComparison-items';
 const HANDICAP_STORAGE_KEY = 'pf.design.allocated.handicaps';
+// A share link carries the designs compared and the calculator's sets; the page's other
+// controls are carried automatically (see buildShareUrl).
+window.PF_SHARE_KEYS = [STORAGE_KEY, HANDICAP_STORAGE_KEY];
 
 // Initial values come from sessionStorage if present (session persistence across
 // page navigation), otherwise the HTML defaults (matching the `checked` attributes).

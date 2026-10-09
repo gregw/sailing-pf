@@ -26,6 +26,9 @@ a { color: #2255aa; }
   font-size: 0.95rem;
 }
 .site-nav a { text-decoration: none; color: #333; }
+.site-nav .nav-share { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+.share-btn { padding: 3px 12px; cursor: pointer; }
+.share-status { font-size: 0.8rem; color: #2e7d32; }
 .site-nav a:hover { color: #2255aa; }
 .site-nav a.nav-home { font-weight: bold; font-size: 1.1rem; margin-right: 0.5rem; color: #111; }
 

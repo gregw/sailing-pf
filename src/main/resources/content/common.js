@@ -1,5 +1,99 @@
 // Shared utilities used by all PF pages
 
+// ---- Share links ----
+//
+// The nav's Share button copies a link to the current view. A page describes its view with
+//   window.pfShareParams()  → {param: value} of page-specific URL params (sort, open row, …),
+//                             which the page itself reads back on load;
+//   window.PF_SHARE_KEYS    → sessionStorage keys (a trailing * matches a prefix) holding
+//                             state such as the compare list or allocated handicaps;
+// and every control wired with persistControl is included automatically. In the link these
+// appear as c.<control key>=… and k.<session key>=…; opening it writes them back into
+// sessionStorage (below, before any page script reads them) and drops them from the
+// address bar, so a refresh does not undo later changes.
+
+// Only these session keys may be set from a link.
+const SHAREABLE_SESSION_KEYS = ['pf.ctrl.*', 'pf.divChart.*', 'pf.inlineDiv.*', 'pf-comparison-items',
+    'pf-designComparison-items', 'pf.allocated.handicaps', 'pf.design.allocated.handicaps'];
+
+function sessionKeyMatches(pattern, key) {
+    return pattern.endsWith('*') ? key.startsWith(pattern.slice(0, -1)) : key === pattern;
+}
+
+(function applySharedState() {
+    const params = new URLSearchParams(location.search);
+    let changed = false;
+    for (const [k, v] of [...params]) {
+        let storageKey = null;
+        if (k.startsWith('c.')) storageKey = 'pf.ctrl.' + k.slice(2);
+        else if (k.startsWith('k.')) storageKey = k.slice(2);
+        if (storageKey == null) continue;
+        params.delete(k);
+        changed = true;
+        if (!SHAREABLE_SESSION_KEYS.some(p => sessionKeyMatches(p, storageKey))) continue;
+        try { sessionStorage.setItem(storageKey, v); } catch (e) { /* storage disabled */ }
+    }
+    if (changed) {
+        const rest = params.toString();
+        history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+})();
+
+// control storage key (without 'pf.ctrl.') → element id, for every persistControl'd control
+const PF_SHARED_CONTROLS = new Map();
+
+function buildShareUrl() {
+    const url = new URL(location.pathname, location.origin);
+    const page = typeof window.pfShareParams === 'function' ? window.pfShareParams() : null;
+    if (page) {
+        Object.entries(page).forEach(([k, v]) => {
+            if (v != null && v !== '') url.searchParams.set(k, String(v));
+        });
+    } else {
+        new URLSearchParams(location.search).forEach((v, k) => url.searchParams.set(k, v));
+    }
+    PF_SHARED_CONTROLS.forEach((id, key) => {
+        const el = document.getElementById(id);
+        if (el) url.searchParams.set('c.' + key, el.type === 'checkbox' ? String(el.checked) : el.value);
+    });
+    const keys = new Set();
+    (window.PF_SHARE_KEYS || []).forEach(pattern => {
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const k = sessionStorage.key(i);
+            if (sessionKeyMatches(pattern, k)) keys.add(k);
+        }
+    });
+    keys.forEach(k => {
+        // Controls already carried by c.<key> are read from the page, not storage.
+        if (k.startsWith('pf.ctrl.') && PF_SHARED_CONTROLS.has(k.slice(8))) return;
+        url.searchParams.set('k.' + k, sessionStorage.getItem(k));
+    });
+    return url.href;
+}
+
+async function shareCurrentView() {
+    const href = buildShareUrl();
+    const status = document.getElementById('share-status');
+    try {
+        await navigator.clipboard.writeText(href);
+        if (status) {
+            status.textContent = 'Link copied';
+            setTimeout(() => { status.textContent = ''; }, 2500);
+        }
+    } catch (e) {
+        // No clipboard access (e.g. plain http): let the user copy it by hand.
+        window.prompt('Copy this link:', href);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('share-btn');
+    if (!btn) return;
+    btn.addEventListener('click', shareCurrentView);
+    const wrap = document.getElementById('nav-share');
+    if (wrap) wrap.style.display = '';
+});
+
 function esc(val) {
     if (val == null) return '';
     return String(val)
@@ -36,6 +130,7 @@ function persistControl(id, opts) {
     const el = document.getElementById(id);
     if (!el) return null;
     const key = 'pf.ctrl.' + (opts.key || id);
+    PF_SHARED_CONTROLS.set(opts.key || id, id);
     const isCheckbox = el.type === 'checkbox';
     const stored = sessionStorage.getItem(key);
     if (stored !== null) {
