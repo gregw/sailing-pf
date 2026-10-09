@@ -398,7 +398,10 @@ clubs:
     - "https://www.mhyc.com.au/files/results/2021/champsregattas/index.htm"
     - "https://www.mhyc.com.au/files/results/2020/club/index.htm"
     - "https://www.mhyc.com.au/files/results/2021/club/index.htm"
-    sailsys: null
+    sailsys:
+      club-5:
+        name: "MHYC Keelboat racing"
+        club: 5
     boats: null
     seriesTypes:
       mhyc.com.au/club-non-pointscore-pacific-rigging-wednesday-series: "ns"
