@@ -508,8 +508,8 @@ const HandicapCalc = (function () {
         }
 
         function addSet() {
-            sets.push({name: `Set ${nextSetN++}`, show: false});
-            focusedIdx = sets.length - 1;
+            sets.push({name: `Set ${nextSetN++}`, show: true});
+            tickSet(sets.length - 1);   // a new set is for entering handicaps into
             render();
             saveToSession();
             recalc();
@@ -559,12 +559,29 @@ const HandicapCalc = (function () {
             recalc();
         }
 
-        function setFocus(idx) {
-            if (idx < 0 || idx >= sets.length || idx === focusedIdx) return;
+        // The ticked allocated set, or -1 when PF, RF or nothing is ticked.
+        function activeSetIdx() {
+            return sets.findIndex(s => s.show !== false);
+        }
+
+        // Tick set idx (unticking everything else) and make it the set the other columns
+        // scale by and that load / download / clear / Use PF / Use RF act on.
+        function tickSet(idx) {
+            sets[idx].show = true;
+            enforceSingleShow(idx);
             focusedIdx = idx;
-            render();
-            saveToSession();
-            recalc();
+        }
+
+        // Load / download / clear / Use PF / Use RF need an allocated set to act on: disable
+        // them (cfg.fileInput, cfg.downloadBtn, cfg.setControls) unless one is ticked.
+        function updateSetControls() {
+            const ok = activeSetIdx() >= 0;
+            [cfg.fileInput, cfg.downloadBtn, ...(cfg.setControls || [])].forEach(el => {
+                if (!el) return;
+                if (el.dataset.enabledTitle === undefined) el.dataset.enabledTitle = el.title || '';
+                el.disabled = !ok;
+                el.title = ok ? el.dataset.enabledTitle : 'Tick an allocated handicap column first';
+            });
         }
 
         // Delta = entered - predicted. Predicted = boat[ftKey] * R, where R is the
@@ -645,6 +662,7 @@ const HandicapCalc = (function () {
         }
 
         function render() {
+            updateSetControls();
             // Capture current entered values per (setIdx, boatId) so we can preserve them
             // across re-renders triggered by sort / focus / add-set / remove-set.
             const entered = new Map();   // key: `${setIdx}|${boatId}` → string
@@ -707,7 +725,7 @@ const HandicapCalc = (function () {
             // Sail No + Boat name columns (leading, sortable).
             leadCols.forEach(c => hdrTr.appendChild(makeSortableTh(c)));
 
-            // One header per set: name + focus radio + remove button.
+            // One header per set: tickbox + name + buttons.
             sets.forEach((s, i) => hdrTr.appendChild(makeSetHeaderTh(s, i)));
 
             // "+ Add column" header — only shown once at least one set has entries, so
@@ -826,38 +844,35 @@ const HandicapCalc = (function () {
             const wrap = document.createElement('div');
             wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
 
-            // Top row: show tickbox + focus radio + name + (× when removable).
+            // Top row: tickbox + name + buttons. The tickbox picks the one dataset the charts
+            // show and, for an allocated set, the set that load / download / clear / Use PF /
+            // Use RF act on (see activeSetIdx).
             const topRow = document.createElement('div');
             topRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
 
             const showCb = document.createElement('input');
             showCb.type = 'checkbox';
             showCb.checked = set.show !== false;
-            showCb.title = `Show ${set.name} corrected dataset in chart`;
+            showCb.title = `Show ${set.name} corrected dataset in chart, and use it for load / `
+                + 'download / clear / Use PF / Use RF';
             showCb.style.cssText = 'margin:0;cursor:pointer;';
             showCb.addEventListener('change', () => {
                 set.show = showCb.checked;
-                if (showCb.checked) enforceSingleShow(idx);
-                saveToSession();
-                render();   // untick the others
-                if (cfg.onChange) cfg.onChange();
+                if (showCb.checked) {
+                    tickSet(idx);
+                    render();   // untick the others
+                    recalc();   // the other columns now scale by this set; saves, notifies
+                } else {
+                    saveToSession();
+                    render();
+                    if (cfg.onChange) cfg.onChange();
+                }
             });
             topRow.appendChild(showCb);
 
-            const radio = document.createElement('input');
-            radio.type = 'radio';
-            radio.name = `pf-calc-focus-${section.id || ''}`;
-            radio.checked = idx === focusedIdx;
-            radio.title = `Focus ${set.name} for load / clear / upload / download`;
-            radio.style.cssText = 'margin:0;cursor:pointer;';
-            radio.addEventListener('change', () => {
-                if (radio.checked) setFocus(idx);
-            });
-            topRow.appendChild(radio);
-
             const nameSpan = document.createElement('span');
             nameSpan.textContent = set.name;
-            nameSpan.style.cssText = `color:${setColor(idx)};font-weight:${idx === focusedIdx ? 'bold' : 'normal'};`;
+            nameSpan.style.cssText = `color:${setColor(idx)};font-weight:${idx === activeSetIdx() ? 'bold' : 'normal'};`;
             topRow.appendChild(nameSpan);
 
             // − / + scale every handicap in this set by 1/1.01 or 1.01 — about ±0.01 on a
@@ -1106,9 +1121,25 @@ const HandicapCalc = (function () {
             input.addEventListener('blur', () => {
                 const n = parseFloat(input.value);
                 if (!isNaN(n)) input.value = n.toFixed(4);
+                if (typeof setChartHighlight === 'function') setChartHighlight('focus', null);
             });
+            // Focusing a handicap highlights its boat in the page's charts (common.js).
             input.addEventListener('focus', () => {
-                if (setIdx !== focusedIdx) setFocus(setIdx);
+                if (setIdx !== activeSetIdx()) {
+                    // Entering a handicap into a set ticks it. That re-renders the table,
+                    // replacing this input: put the focus back into the new one, whose own
+                    // focus handler then does the highlighting.
+                    tickSet(setIdx);
+                    render();
+                    recalc();
+                    const again = section.querySelector(
+                        `.pf-calc-input[data-boat-id="${b.id}"][data-set-idx="${setIdx}"]`);
+                    if (again && again !== input) {
+                        again.focus();
+                        return;
+                    }
+                }
+                if (typeof setChartHighlight === 'function') setChartHighlight('focus', b.id);
             });
             tdInput.appendChild(input);
             return tdInput;
@@ -1401,8 +1432,9 @@ const HandicapCalc = (function () {
             if (!isDesign && typeof data.showPf === 'boolean') showPf = data.showPf;
             if (typeof data.showRf === 'boolean') showRf = data.showRf;
             // Restored state may have multiple flags true (e.g. saved by another page
-            // before the constraint). Prune to a single flag.
+            // before the constraint). Prune to a single flag; a ticked set is also the focus.
             enforceSingleShow(null);
+            if (activeSetIdx() >= 0) focusedIdx = activeSetIdx();
             // Ensure auto-naming continues from the highest existing "Set N".
             nextSetN = Math.max(2, ...sets.map(s => {
                 const m = /^Set\s+(\d+)$/.exec(s.name);
@@ -1745,6 +1777,21 @@ const HandicapCalc = (function () {
             recalc();
         }
 
+        // Public: if the ticked column is an allocated set with no values for the boats now in
+        // the table, tick PF instead (RF for designs) so the chart has something to show.
+        // For pages that load a new race / series into the calculator; returns true if it
+        // switched. Saves, but does not call onChange — the caller is about to draw.
+        function preferFactorOverEmptySet() {
+            const idx = sets.findIndex(s => s.show !== false);
+            if (idx < 0 || getSetValues(idx).size > 0) return false;
+            if (isDesign) showRf = true;
+            else showPf = true;
+            enforceSingleShow(isDesign ? 'rf' : 'pf');
+            saveToSession();
+            render();
+            return true;
+        }
+
         // Public: write new values into a set's inputs (Map boatId → value; boats not in the
         // map are untouched), then recalculate — which saves and notifies the page.
         function setSetValues(setIdx, values) {
@@ -1925,7 +1972,7 @@ const HandicapCalc = (function () {
         return {
             setBoats, setHandicapsByMatch, useDisplayedFactor, clearAll,
             getEnteredHandicaps, getEnteredValues,
-            getAllSets, setSetValues, getShowPf, getShowRf, recalc, updateVariant,
+            getAllSets, setSetValues, preferFactorOverEmptySet, getShowPf, getShowRf, recalc, updateVariant,
             applyPairwiseFit,
             // Compare-checkbox accessors (no-op when cfg.compareSelect is false).
             getCompareSelection: () => new Set(compareSelectedIds),

@@ -149,7 +149,7 @@
             <label title="Show the legend overlaid on the chart">
                 <input type="checkbox" id="series-show-legend" onchange="onShowLegendChange(this)"> Legend
             </label>
-            <label>X-axis<a href="ui-tips.md#chart-xaxis" class="info-btn info-btn-wide" data-tip="Where each boat sits across the chart: 1/factor, so faster boats are on the left.&#10;--- : each line at its own factor (PF corrected at 1/PF, RF corrected at 1/RF, elapsed at 1/BCF). Corrected lines should be level and the elapsed line straight.&#10;PF / RF: every line against the boat&#x27;s PF or RF, fixed before the race. A level corrected line means fair handicaps; a slope means a bias between faster and slower boats. Use these to judge fairness.&#10;BCF: against how each boat actually sailed this race (1/BCF is its elapsed time ÷ par). The elapsed line is straight, but corrected lines slope up by construction, because x comes from the result itself, so their slope says nothing about fairness.&#10;Allocated: against the focused allocated set; lines corrected by those handicaps should be level if they suit this race." target="_blank">ⓘ</a>: <select id="series-div-xfactor" onchange="onDivXFactorChange(this)"></select></label>
+            <label>X-axis<a href="ui-tips.md#chart-xaxis" class="info-btn info-btn-wide" data-tip="Where each boat sits across the chart: 1/factor, so faster boats are on the left.&#10;--- : each line at its own factor (PF corrected at 1/PF, RF corrected at 1/RF, elapsed at 1/BCF). Corrected lines should be level and the elapsed line straight.&#10;PF / RF: every line against the boat&#x27;s PF or RF, fixed before the race. A level corrected line means fair handicaps; a slope means a bias between faster and slower boats. Use these to judge fairness.&#10;BCF: against how each boat actually sailed this race (1/BCF is its elapsed time ÷ par). The elapsed line is straight, but corrected lines slope up by construction, because x comes from the result itself, so their slope says nothing about fairness.&#10;Allocated: against the ticked (or last ticked) allocated set; lines corrected by those handicaps should be level if they suit this race." target="_blank">ⓘ</a>: <select id="series-div-xfactor" onchange="onDivXFactorChange(this)"></select></label>
         </div>
         <div id="series-trend-summary" style="display:none;font-size:0.9rem;color:#333;margin:0.25rem 0;"></div>
         <div id="series-chart" style="width:100%;height:500px;"></div>
@@ -166,10 +166,10 @@
                 <div class="resizable-box-scroll"><table class="pf-calc-table"></table></div>
             </div>
             <div style="margin-top:0.5rem;">
-                <button id="series-use-pf-btn" style="padding:4px 12px;" title="Fill empty entries in the focused set with the displayed PF value">
+                <button id="series-use-pf-btn" style="padding:4px 12px;" title="Fill empty entries in the ticked allocated set with the displayed PF value">
                     Use PF
                 </button>
-                <button id="series-use-rf-btn" style="margin-left:0.5rem;padding:4px 12px;" title="Fill empty entries in the focused set with the displayed RF value">
+                <button id="series-use-rf-btn" style="margin-left:0.5rem;padding:4px 12px;" title="Fill empty entries in the ticked allocated set with the displayed RF value">
                     Use RF
                 </button>
                 <button id="series-flatten-btn" type="button" disabled onclick="onSeriesFlattenSlope()" style="margin-left:0.5rem;padding:4px 12px;"

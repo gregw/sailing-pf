@@ -447,9 +447,33 @@ function styleHighlight(el, on, isLine) {
     }
 }
 
-/** {@link highlightBoatInChart} on every Plotly chart on the page. */
+// The boat highlighted in the page's charts comes from two sources: hovering a boat in the
+// handicap calculator, and the focus being in one of its handicap inputs. Hover wins while it
+// lasts; otherwise the focused input's boat stays highlighted.
+const chartHighlight = {hover: null, focus: null};
+
+/** Sets one source of the charts' highlighted boat (null clears it) and re-applies. */
+function setChartHighlight(source, boatId) {
+    chartHighlight[source] = boatId;
+    const id = chartHighlight.hover ?? chartHighlight.focus;
+    document.querySelectorAll('.js-plotly-plot').forEach(gd => {
+        // Typing a handicap redraws the charts, which drops the styling: re-apply it after
+        // every redraw. (Re-registered each time so a chart only ever has one such listener.)
+        if (gd.on && gd.removeListener) {
+            if (gd._pfAfterplot) gd.removeListener('plotly_afterplot', gd._pfAfterplot);
+            gd._pfAfterplot = () => {
+                const cur = chartHighlight.hover ?? chartHighlight.focus;
+                if (cur != null) highlightBoatInChart(gd, cur);
+            };
+            gd.on('plotly_afterplot', gd._pfAfterplot);
+        }
+        highlightBoatInChart(gd, id);
+    });
+}
+
+/** Hover highlight: {@link highlightBoatInChart} on every Plotly chart on the page. */
 function highlightBoatInCharts(boatId) {
-    document.querySelectorAll('.js-plotly-plot').forEach(gd => highlightBoatInChart(gd, boatId));
+    setChartHighlight('hover', boatId);
 }
 
 const BOX_HEIGHTS_KEY = 'pf.boxHeights';

@@ -3245,6 +3245,9 @@ function raceCalc() {
         variantModeSelect: document.getElementById('handicap-variant-mode'),
         sourceVariantSelect: document.getElementById('handicap-source-variant'),
         downloadBtn: document.getElementById('download-handicaps-btn'),
+        // Act on the ticked allocated set — disabled while none is ticked.
+        setControls: ['clear-handicaps-btn', 'use-pf-btn', 'use-rf-btn']
+            .map(id => document.getElementById(id)),
         downloadStatus: document.getElementById('download-status'),
         onChange: () => {
             if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
@@ -3289,6 +3292,7 @@ function applyRaceCalcDivision(divName) {
         bestFit: null
     }));
     raceCalc().setBoats(boats);
+    raceCalc().preferFactorOverEmptySet();   // an empty allocated set would chart nothing
     renderCompareButtons('race-compare-btn-container',
         filtered.map(b => ({
             id: b.id,
@@ -3373,6 +3377,9 @@ function seriesPfCalc() {
         fileInput: document.getElementById('series-handicap-file'),
         fileStatus: document.getElementById('series-file-status'),
         downloadBtn: document.getElementById('series-download-handicaps-btn'),
+        // Act on the ticked allocated set — disabled while none is ticked.
+        setControls: ['series-clear-handicaps-btn', 'series-use-pf-btn', 'series-use-rf-btn']
+            .map(id => document.getElementById(id)),
         downloadStatus: document.getElementById('series-download-status'),
         onChange: () => {
             // Re-render only the chart; the calc has already updated its own DOM.
@@ -3501,6 +3508,7 @@ function renderSeriesChartForDivision(divName, opts) {
     if (!opts || opts.refreshCalc !== false) {
         const calcBoats = buildSeriesCalcBoats(data, divName);
         seriesPfCalc().setBoats(calcBoats);
+        seriesPfCalc().preferFactorOverEmptySet();   // an empty allocated set would chart nothing
         renderCompareButtons('series-compare-btn-container',
             calcBoats.map(b => ({
                 id: b.id,

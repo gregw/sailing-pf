@@ -656,6 +656,9 @@ function pfCalc() {
         variantModeSelect: document.getElementById('handicap-variant-mode'),
         sourceVariantSelect: document.getElementById('handicap-source-variant'),
         downloadBtn: document.getElementById('download-handicaps-btn'),
+        // Act on the ticked allocated set — disabled while none is ticked.
+        setControls: ['clear-handicaps-btn', 'use-pf-btn', 'use-rf-btn']
+            .map(id => document.getElementById(id)),
         downloadStatus: document.getElementById('download-status'),
         compareSelect: true,
         compareMax: 2,
