@@ -10,6 +10,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -136,6 +137,8 @@ public class BwpsImporter
     private final DataStore store;
     private final HttpClient httpClient;
     private int recentRaceReimportDays = 30;
+    /** Pause before each yacht page fetch: one page per boat imported, so be polite. */
+    int yachtPageDelayMs = 200;
     private int minYear = DEFAULT_MIN_YEAR;
 
     public BwpsImporter(DataStore store, HttpClient httpClient)
@@ -177,14 +180,14 @@ public class BwpsImporter
         this.minYear = minYear;
 
         int currentYear = LocalDate.now().getYear();
-        // Sail number → design, from the yacht listing pages; filled in by both phases.
-        Map<String, String> yachtDesigns = new LinkedHashMap<>();
+        // Sail number → yacht listing entry (design, detail page), filled in by both phases.
+        Map<String, YachtInfo> yachts = new LinkedHashMap<>();
 
         // Phase 1: BWPS minor races from the results pages. A failure here must not stop
         // the major races below.
         try
         {
-            importBwpsResults(minYear, currentYear, yachtDesigns);
+            importBwpsResults(minYear, currentYear, yachts);
         }
         catch (Exception e)
         {
@@ -198,12 +201,12 @@ public class BwpsImporter
             for (int year = Math.max(config.minYear(), minYear); year <= currentYear; year++)
             {
                 // Fetch yacht designs for this year's race website (may 404 for future years)
-                yachtDesigns.putAll(fetchYachtDesigns(
+                yachts.putAll(fetchYachtListing(
                     config.websiteBase() + "/race/" + year + "/yachts"));
 
                 try
                 {
-                    importCycaFeedsYear(config, year, yachtDesigns);
+                    importCycaFeedsYear(config, year, yachts);
                 }
                 catch (Exception e)
                 {
@@ -227,7 +230,7 @@ public class BwpsImporter
     // for its certificate. Hobart and Gold Coast are skipped here — phase 2 imports them.
 
     /** Imports every minor BWPS race of the seasons fromYear..toYear. */
-    void importBwpsResults(int fromYear, int toYear, Map<String, String> yachtDesigns)
+    void importBwpsResults(int fromYear, int toYear, Map<String, YachtInfo> yachts)
     {
         for (int year = fromYear; year <= toYear; year++)
         {
@@ -242,7 +245,6 @@ public class BwpsImporter
                 continue;
             }
             LOG.info("BWPS: {} race(s) listed for {}: {}", slugs.size(), year, slugs);
-            yachtDesigns.putAll(fetchYachtDesigns(BASE_URL + "/race/" + year + "/yachts"));
             for (String slug : slugs)
             {
                 String raceName = raceNameFromSlug(slug);
@@ -250,7 +252,7 @@ public class BwpsImporter
                     continue;   // phase 2
                 try
                 {
-                    importBwpsRace(year, slug, raceName, yachtDesigns);
+                    importBwpsRace(year, slug, raceName, yachts);
                 }
                 catch (Exception e)
                 {
@@ -287,7 +289,7 @@ public class BwpsImporter
     }
 
     /** Imports one minor race, unless it is already held and not recent. */
-    void importBwpsRace(int year, String slug, String raceName, Map<String, String> yachtDesigns)
+    void importBwpsRace(int year, String slug, String raceName, Map<String, YachtInfo> yachts)
         throws Exception
     {
         String seriesName = SERIES_NAME_PREFIX + " " + year;
@@ -354,6 +356,9 @@ public class BwpsImporter
             return;
         }
 
+        // This race's yacht list: design and detail page (club) per boat.
+        yachts.putAll(fetchYachtListing(BASE_URL + "/race/" + year + "/yachts/" + slug));
+
         // Elapsed times from Line Honours only: finish (its CorrectedTime, at TCF 1) − start.
         Map<String, Duration> elapsedBySailNum =
             buildElapsedMap(fetchCategory(cycaRaceId, lhCat), start.atZone(SYDNEY_TZ));
@@ -362,10 +367,10 @@ public class BwpsImporter
         // a Line Honours elapsed time are dropped.
         LinkedHashMap<String, List<Finisher>> divMap = new LinkedHashMap<>();
         int count = processFeedsEntries(fetchCategory(cycaRaceId, ircCat), "IRC", raceDate,
-            elapsedBySailNum, divMap, SOURCE, yachtDesigns);
+            elapsedBySailNum, divMap, SOURCE, yachts);
         if (orcCat != null)
             count += processFeedsEntries(fetchCategory(cycaRaceId, orcCat), "ORC", raceDate,
-                elapsedBySailNum, divMap, SOURCE, yachtDesigns);
+                elapsedBySailNum, divMap, SOURCE, yachts);
         if (divMap.isEmpty())
         {
             ImporterLog.warn(LOG, "BWPS: '{}' {} -- no IRC/ORC finishers with Line Honours times",
@@ -402,7 +407,7 @@ public class BwpsImporter
      * Imports a single year of a CYCA feeds-API race (RSHYR or Gold Coast).
      */
     void importCycaFeedsYear(CycaFeedsRaceConfig config, int year,
-                             Map<String, String> yachtDesigns) throws Exception
+                             Map<String, YachtInfo> yachts) throws Exception
     {
         // Determine race date
         LocalDate raceDate = config.raceDate(year);
@@ -480,7 +485,7 @@ public class BwpsImporter
         List<FeedsEntry> ircEntries = fetchCategory(cycaRaceId, cats.ircCategoryId());
         LOG.info("{}: year {} -- {} IRC entries", config.source(), year, ircEntries.size());
         count += processFeedsEntries(ircEntries, "IRC", raceDate, elapsedBySailNum, divMap,
-            config.source(), yachtDesigns);
+            config.source(), yachts);
 
         // ORC All (optional)
         if (cats.orcCategoryId() != null)
@@ -489,7 +494,7 @@ public class BwpsImporter
             List<FeedsEntry> orcEntries = fetchCategory(cycaRaceId, cats.orcCategoryId());
             LOG.info("{}: year {} -- {} ORC entries", config.source(), year, orcEntries.size());
             count += processFeedsEntries(orcEntries, "ORC", raceDate, elapsedBySailNum, divMap,
-                config.source(), yachtDesigns);
+                config.source(), yachts);
         }
 
         if (divMap.isEmpty())
@@ -771,7 +776,7 @@ public class BwpsImporter
 
     private int processFeedsEntries(List<FeedsEntry> entries, String system, LocalDate date,
         Map<String, Duration> elapsedBySailNum, LinkedHashMap<String, List<Finisher>> divMap,
-        String source, Map<String, String> yachtDesigns)
+        String source, Map<String, YachtInfo> yachts)
     {
         int count = 0;
         for (FeedsEntry entry : entries)
@@ -798,8 +803,12 @@ public class BwpsImporter
                 ? entry.nameRace().replaceAll("(?i)\\((DH|TH)\\)", "").trim()
                 : entry.nameRace();
 
-            // Look up design from yacht listing pages
-            String design = yachtDesigns.get(sailNum);
+            // The yacht list gives the design and a link to the yacht's own page, which also
+            // gives its club (fetched once per run for every boat imported).
+            YachtInfo listed = yachts.get(sailNum);
+            YachtDetails details = listed != null ? yachtDetails(listed.detailUrl()) : null;
+            String design = listed != null && listed.type() != null ? listed.type()
+                : details != null ? details.type() : null;
 
             Boat boat = store.findOrCreateBoat(entry.sailNumber(), cleanName, design, date, source);
             if (boat == null)
@@ -808,6 +817,7 @@ public class BwpsImporter
                     source, cleanName, entry.sailNumber());
                 continue;
             }
+            boat = applyYachtDetails(boat, details, date, source);
             String certNum = inferCertificate(boat, system, date.getYear(), entry.tcf(), dh, source);
 
             // Division key: "IRC Div 3", "ORC", etc. A double-handed entry goes in its own
@@ -882,31 +892,135 @@ public class BwpsImporter
      * goldcoast.cycaracing.com all share the same table format:
      * [Yacht Name, Sail Number, State/Country, Type, Category].
      */
-    Map<String, String> fetchYachtDesigns(String url)
+    /** One row of a yacht list page: its design ("Type") and the yacht's own page. */
+    record YachtInfo(String name, String type, String detailUrl) {}
+
+    /** What a yacht's own page adds: its club and design. */
+    record YachtDetails(String club, String type) {}
+
+    /**
+     * Fetches and parses a yacht list page (columns Yacht Name, Sail Number, State / Country,
+     * Type, …), returning normalised sail number → {@link YachtInfo}, with each row's link to
+     * the yacht's own page made absolute. An unreachable page yields an empty map.
+     */
+    Map<String, YachtInfo> fetchYachtListing(String url)
     {
-        Map<String, String> result = new LinkedHashMap<>();
+        Map<String, YachtInfo> result = new LinkedHashMap<>();
         try
         {
-            String html = fetchHtml(url);
-            Document doc = Jsoup.parse(html, url);
-            for (Element row : doc.select("table tr"))
-            {
-                Elements cells = row.select("td");
-                if (cells.size() < 4)
-                    continue;
-
-                String sailNumber = cells.get(1).text().trim();
-                String type       = cells.get(3).text().trim();
-                if (!sailNumber.isBlank() && !type.isBlank())
-                    result.put(normSailNum(sailNumber), type);
-            }
-            LOG.info("BWPS: parsed {} yacht design(s) from {}", result.size(), url);
+            result.putAll(parseYachtListing(fetchHtml(url), url));
+            LOG.info("BWPS: parsed {} yacht(s) from {}", result.size(), url);
         }
         catch (Exception e)
         {
             ImporterLog.warn(LOG, "BWPS: failed to fetch yacht listing from {}: {}", url, e.getMessage());
         }
         return result;
+    }
+
+    static Map<String, YachtInfo> parseYachtListing(String html, String url)
+    {
+        Map<String, YachtInfo> result = new LinkedHashMap<>();
+        Document doc = Jsoup.parse(html, url);
+        for (Element row : doc.select("table tr"))
+        {
+            Elements cells = row.select("td");
+            if (cells.size() < 4)
+                continue;
+            String sailNumber = cells.get(1).text().trim();
+            if (sailNumber.isBlank())
+                continue;
+            String type = cells.get(3).text().trim();
+            Element link = row.selectFirst("a[href]");
+            String detailUrl = link != null ? link.absUrl("href") : null;
+            String name = link != null ? link.text().trim() : cells.get(0).text().trim();
+            result.put(normSailNum(sailNumber), new YachtInfo(name,
+                type.isBlank() ? null : type, detailUrl == null || detailUrl.isBlank() ? null : detailUrl));
+        }
+        return result;
+    }
+
+    /** Parses a yacht's own page: its table of label → value rows (Club, Type, …). */
+    static YachtDetails parseYachtDetails(String html)
+    {
+        Map<String, String> fields = new LinkedHashMap<>();
+        for (Element row : Jsoup.parse(html).select("table tr"))
+        {
+            Element th = row.selectFirst("th");
+            Element td = row.selectFirst("td");
+            if (th != null && td != null)
+                fields.putIfAbsent(th.text().trim().toLowerCase(Locale.ENGLISH), td.text().trim());
+        }
+        String club = fields.get("club");
+        String type = fields.get("type");
+        return new YachtDetails(club == null || club.isBlank() ? null : club,
+            type == null || type.isBlank() ? null : type);
+    }
+
+    // Yacht pages fetched this run, by URL (null when the page could not be read).
+    private final Map<String, YachtDetails> yachtDetailsCache = new HashMap<>();
+
+    /** The yacht's own page, fetched once per run (politely spaced); null if unavailable. */
+    YachtDetails yachtDetails(String detailUrl)
+    {
+        if (detailUrl == null)
+            return null;
+        if (yachtDetailsCache.containsKey(detailUrl))
+            return yachtDetailsCache.get(detailUrl);
+        YachtDetails details = null;
+        try
+        {
+            if (yachtPageDelayMs > 0)
+                Thread.sleep(yachtPageDelayMs);
+            details = parseYachtDetails(fetchHtml(detailUrl));
+        }
+        catch (InterruptedException e)
+        {
+            Thread.currentThread().interrupt();
+        }
+        catch (Exception e)
+        {
+            LOG.debug("BWPS: could not read yacht page {}: {}", detailUrl, e.getMessage());
+        }
+        yachtDetailsCache.put(detailUrl, details);
+        return details;
+    }
+
+    /**
+     * Completes a boat from its yacht page: a missing club is filled in (unless the boat is
+     * marked as having no club), and a club or design that disagrees with what is held is
+     * logged, not changed. Returns the boat as now stored.
+     */
+    Boat applyYachtDetails(Boat boat, YachtDetails details, LocalDate date, String source)
+    {
+        if (details == null)
+            return boat;
+        if (details.club() != null)
+        {
+            Club club = store.findUniqueClubByShortName(details.club(), null,
+                source + " yacht page for " + boat.id());
+            if (club == null)
+                LOG.debug("{}: yacht page club '{}' for {} matches no club", source, details.club(), boat.id());
+            else if (boat.clubIds().isEmpty())
+            {
+                if (!store.isExplicitlyNoClub(boat.id()))
+                {
+                    boat = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
+                        List.of(club.id()), boat.certificates(), addSource(boat.sources(), source),
+                        Instant.now(), null);
+                    store.putBoat(boat);
+                    LOG.info("{}: club of {} set to {} from its yacht page", source, boat.id(), club.id());
+                }
+            }
+            else if (!boat.clubIds().contains(club.id()))
+                LOG.info("{}: yacht page gives club {} ('{}') for {}, held as {} -- not changed",
+                    source, club.id(), details.club(), boat.id(), boat.clubIds());
+        }
+        if (details.type() != null && boat.designId() != null && !boat.designId().isBlank()
+            && !boat.designId().equals(store.resolveDesignId(details.type(), boat, date)))
+            LOG.info("{}: yacht page gives design '{}' for {}, held as {} -- not changed",
+                source, details.type(), boat.id(), boat.designId());
+        return boat;
     }
 
     // ========================================================================

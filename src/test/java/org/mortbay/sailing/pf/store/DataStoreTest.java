@@ -1780,6 +1780,30 @@ class DataStoreTest {
         store.stop();
     }
 
+    @Test
+    void resolveDesignIdAppliesBoatDesignOverrides(@TempDir Path tempDir) throws IOException
+    {
+        Files.createDirectories(tempDir.resolve("config"));
+        Files.writeString(tempDir.resolve("config/design.yaml"), """
+            boatDesignOverrides:
+            - designId: "sydney36mkii"
+              canonicalName: "Sydney 36 MkII"
+              boats:
+              - sailNumber: "6499"
+                name: "Supernova"
+            """);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat supernova = new Boat("6499-supernova-sydney36mkii", "6499", "Supernova", "sydney36mkii",
+            List.of(), List.of(), List.of(), null, null);
+        LocalDate date = LocalDate.of(2026, 9, 26);
+        assertEquals("sydney36mkii", store.resolveDesignId("Sydney 36", supernova, date),
+            "the boat's override wins over the reported class");
+        assertEquals("sydney36", store.resolveDesignId("Sydney 36", null, date));
+        assertEquals("sydney36", store.resolveDesignId("Sydney 36"));
+        store.stop();
+    }
+
     private Race buildRace() {
         return new Race(
                 "myc.com.au-2020-09-13-0001",

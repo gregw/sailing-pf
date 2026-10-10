@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Certificate;
+import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
@@ -56,6 +57,7 @@ class BwpsImporterTest
         CannedImporter(DataStore store)
         {
             super(store, null);
+            yachtPageDelayMs = 0;
         }
 
         @Override
@@ -113,6 +115,19 @@ class BwpsImporterTest
           "TCF":1.1,"DivisionName":"2","CorrectedTime":"0001-01-01T00:00:00"}]
         """;
 
+    // The race's yacht list: Moneypenny links its own page; Disko Trooper is not listed.
+    private static final String YACHTS_187 = """
+        <table><tr><th>Yacht Name</th><th>Sail Number</th><th>State</th><th>Type</th></tr>
+        <tr><td><a href="/race/2025/yachts/flinders-islet-race/moneypenny/">Moneypenny</a> AUS10</td>
+            <td>AUS10</td><td>NSW</td><td>TP52</td></tr></table>
+        """;
+
+    private void putClub(String id, String shortName, String longName)
+    {
+        store.putClub(new Club(id, shortName, longName, "NSW", false, null, List.of(), List.of(),
+            List.of(), List.of(), null));
+    }
+
     private CannedImporter canned()
     {
         CannedImporter imp = new CannedImporter(store);
@@ -122,6 +137,10 @@ class BwpsImporterTest
         imp.responses.put("/Race/Summary/187", SUMMARY_187);
         imp.responses.put("/Results/Final/187/1068", LH_187);
         imp.responses.put("/Results/Final/187/1071", IRC_187);
+        imp.responses.put("/race/2025/yachts/flinders-islet-race", YACHTS_187);
+        imp.responses.put("/race/2025/yachts/flinders-islet-race/moneypenny/",
+            "<table><tr><th>Yacht Name</th><td>Moneypenny</td></tr>"
+            + "<tr><th>Club</th><td>MHYC</td></tr><tr><th>Type</th><td>TP52</td></tr></table>");
         return imp;
     }
 
@@ -171,6 +190,36 @@ class BwpsImporterTest
     }
 
     @Test
+    void yachtPageFillsInClubAndListGivesDesign()
+    {
+        putClub("mhyc.com.au", "MHYC", "Middle Harbour Yacht Club");
+        canned().importBwpsResults(2025, 2025, new LinkedHashMap<>());
+
+        Boat moneypenny = store.boats().values().stream()
+            .filter(b -> "Moneypenny".equals(b.name())).findFirst().orElseThrow();
+        assertEquals(List.of("mhyc.com.au"), moneypenny.clubIds());
+        assertEquals("tp52", moneypenny.designId());
+
+        Boat disko = store.boats().values().stream()
+            .filter(b -> "Disko Trooper".equals(b.name())).findFirst().orElseThrow();
+        assertTrue(disko.clubIds().isEmpty(), "not on the yacht list: nothing to fill in");
+    }
+
+    @Test
+    void yachtPageDoesNotOverwriteAHeldClub()
+    {
+        putClub("mhyc.com.au", "MHYC", "Middle Harbour Yacht Club");
+        putClub("rpayc.com.au", "RPAYC", "Royal Prince Alfred Yacht Club");
+        store.putBoat(new Boat("AUS10-moneypenny-tp52", "AUS10", "Moneypenny", "tp52",
+            List.of("rpayc.com.au"), List.of(), List.of("Test"), null, null));
+        canned().importBwpsResults(2025, 2025, new LinkedHashMap<>());
+        List<Boat> moneypennys = store.boats().values().stream()
+            .filter(b -> "Moneypenny".equals(b.name())).toList();
+        assertEquals(1, moneypennys.size(), "the held boat is used, not a new one");
+        assertEquals(List.of("rpayc.com.au"), moneypennys.getFirst().clubIds());
+    }
+
+    @Test
     void heldRaceIsNotFetchedAgain()
     {
         canned().importBwpsResults(2025, 2025, new LinkedHashMap<>());
@@ -179,8 +228,7 @@ class BwpsImporterTest
         // 2025-09-20 is long past the recent-reimport window: only the index is fetched.
         CannedImporter again = canned();
         again.importBwpsResults(2025, 2025, new LinkedHashMap<>());
-        assertEquals(List.of(BwpsImporter.BASE_URL + "/race/2025/results",
-                BwpsImporter.BASE_URL + "/race/2025/yachts"), again.fetched);
+        assertEquals(List.of(BwpsImporter.BASE_URL + "/race/2025/results"), again.fetched);
         assertEquals(1, store.races().size());
     }
 

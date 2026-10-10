@@ -776,6 +776,48 @@ public class DataStore
     }
 
     /** Finds or creates a design by class name -- used internally by findOrCreateBoat. */
+    /**
+     * The design ID a class name resolves to — the same lookup as {@link #findOrCreateDesign}
+     * (exact ID, a held design's name or alias, then the alias seed) — without creating
+     * anything. Null for a blank name.
+     */
+    public String resolveDesignId(String className)
+    {
+        requireStarted();
+        if (className == null || className.isBlank())
+            return null;
+        String designId = IdGenerator.normaliseDesignName(className);
+        if (designs.containsKey(designId))
+            return designId;
+        for (Design d : designs.values())
+        {
+            if (designNameMatches(d, designId))
+                return d.id();
+        }
+        String canonicalId = aliases.resolveDesignAlias(designId);
+        return canonicalId != null ? canonicalId : designId;
+    }
+
+    /**
+     * As {@link #resolveDesignId(String)} for a class name reported for this boat, but first
+     * applying a boat design override from design.yaml ({@code boatDesignOverrides}) — as
+     * {@link #findOrCreateBoat} does — so e.g. a "Sydney 36" reported for a boat overridden
+     * to the MkII resolves to the MkII.
+     */
+    public String resolveDesignId(String className, Boat boat, LocalDate date)
+    {
+        requireStarted();
+        if (boat != null)
+        {
+            String override = designCatalogue.resolveDesignOverride(
+                IdGenerator.normaliseSailNumber(boat.sailNumber()),
+                IdGenerator.normaliseName(boat.name()), date);
+            if (override != null)
+                return override;
+        }
+        return resolveDesignId(className);
+    }
+
     private Design findOrCreateDesign(String className)
     {
         if (className == null || className.isBlank())
