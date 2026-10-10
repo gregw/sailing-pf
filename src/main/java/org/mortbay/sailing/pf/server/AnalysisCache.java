@@ -536,22 +536,10 @@ public class AnalysisCache implements DataStore.InvalidationListener
      */
     private void refreshProfiles()
     {
-        // Build raceId → divisionName → dispersion lookup from current raceDerived
-        Map<String, Map<String, Double>> dispersionMap = new LinkedHashMap<>();
-        for (RaceDerived rd : raceDerived.values())
-        {
-            if (rd.divisionPfs() == null) continue;
-            Map<String, Double> divMap = new LinkedHashMap<>();
-            for (DivisionPf dh : rd.divisionPfs())
-                divMap.put(dh.divisionName(), dh.dispersion());
-            if (!divMap.isEmpty())
-                dispersionMap.put(rd.race().id(), divMap);
-        }
-
         this.profilesByBoatId = new PerformanceProfileBuilder(
                 diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                 consistencyDropInterval)
-            .buildAll(residualsByBoatId, dispersionMap, store.races());
+            .buildAll(residualsByBoatId, store.races());
         LOG.info("AnalysisCache: computed performance profiles for {} boats", profilesByBoatId.size());
     }
 }

@@ -3,8 +3,10 @@ package org.mortbay.sailing.pf.analysis;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,10 +34,15 @@ import org.mortbay.sailing.pf.data.Race;
  *       untapped potential and a genuinely inconsistent boat. Lower raw = better rank</li>
  *   <li><b>Diversity</b> — variant-weighted Σ(√encounters) over distinct (opponent, variant)
  *       pairs; rewards both breadth of opposition and frequency of meeting it</li>
- *   <li><b>Chaotic</b> — mean squared residual weighted inversely by fleet dispersion;
- *       large residuals on calm days are penalised more than large residuals on chaotic days,
- *       so boats with small residuals in chaos rank best, and boats with large residuals in
- *       calm conditions rank worst. Lower raw = better rank</li>
+ *   <li><b>Chaotic</b> — whether the boat's inconsistency comes in disorderly races (the rest
+ *       of the fleet also strayed from its handicaps — explained by the conditions) or in orderly
+ *       races (the rest of the fleet finished close to its handicaps — the boat's own doing). The
+ *       ratio of the boat's orderly-weighted mean squared residual (each race weighted by 1 / the
+ *       spread of the <em>other</em> boats in its division) to its plain mean squared residual:
+ *       low = errors in disorderly races, high = errors in orderly races. Being a ratio it does
+ *       not depend on how big the boat's errors are, so it is largely independent of Consistency —
+ *       and a consistent boat's one blunder in an orderly race counts for a lot. Shrunk towards the
+ *       fleet's median ratio for small samples. Lower raw = better rank</li>
  *   <li><b>Stability</b> — asymmetric slope penalty on weighted linear regression of residual vs date:
  *       level slope = best; improving (negative slope) = moderate penalty;
  *       declining (positive slope) = double penalty</li>
@@ -45,6 +52,10 @@ public class PerformanceProfileBuilder
 {
     private static final int RECENT_DAYS = 365;
     private static final int MIN_CHAOTIC_PAIRS = 5;
+    /** Chaotic ratio shrinkage: (n·ratio + K·median) / (n + K) — K pseudo-races at the fleet median. */
+    private static final double CHAOTIC_SHRINK_K = 5.0;
+    /** A division's spread (for Chaotic) needs at least this many other boats' residuals. */
+    private static final int MIN_SPREAD_OTHERS = 3;
 
     /** A race 2× longer than the fleet median counts this many times more in the Frequency spoke. */
     private static final double FREQUENCY_DURATION_SCALE = 1.2;
@@ -67,8 +78,8 @@ public class PerformanceProfileBuilder
     private static final double CONSISTENCY_FAST_WEIGHT = 1.5;
 
     /**
-     * Floor added to dispersion in the Chaotic 1/dispersion weighting to avoid
-     * blow-ups when dispersion is near zero (very tight fleet day).
+     * Floor added to the spread in the Chaotic 1/spread weighting to avoid blow-ups when
+     * the spread is near zero (very tight fleet day).
      */
     private static final double DISPERSION_EPSILON = 0.01;
 
@@ -101,16 +112,23 @@ public class PerformanceProfileBuilder
      * Computes profiles for all boats with residual data, returning a map from boatId to profile.
      * Boats with no finishes in the last {@value #RECENT_DAYS} days are excluded.
      *
-     * @param residualsByBoatId        PF residuals keyed by boatId
-     * @param dispersionByRaceDivision raceId → divisionName → race dispersion (weighted IQR / T₀)
-     * @param races                    all races from the DataStore (for diversity lookup)
+     * @param residualsByBoatId PF residuals keyed by boatId
+     * @param races             all races from the DataStore (for diversity lookup)
      */
     public Map<String, PerformanceProfile> buildAll(
         Map<String, List<EntryResidual>> residualsByBoatId,
-        Map<String, Map<String, Double>> dispersionByRaceDivision,
         Map<String, Race> races)
     {
         LocalDate cutoff = LocalDate.now().minusDays(RECENT_DAYS);
+
+        // Every boat's residual in each race-division of the window, for Chaotic's spread of
+        // the *other* boats (leave-one-out, so a boat's own error never excuses itself).
+        Map<String, List<Double>> residualsByRaceDiv = new HashMap<>();
+        for (List<EntryResidual> residuals : residualsByBoatId.values())
+            for (EntryResidual r : residuals)
+                if (!r.raceDate().isBefore(cutoff))
+                    residualsByRaceDiv.computeIfAbsent(raceDivKey(r), k -> new ArrayList<>())
+                        .add(r.residual());
 
         // --- Pre-compute per-race-division median elapsed time (seconds) ---
         // Used to weight the Frequency spoke by race duration (dampened power law).
@@ -152,7 +170,8 @@ public class PerformanceProfileBuilder
         // [1] diversity (variant-weighted Σ√encounters, higher = better),
         // [2] consistency (asymmetric mean r², lower = better),
         // [3] stability (slope penalty, lower = better),
-        // [4] chaotic (1/dispersion-weighted mean r², lower = better; NaN if insufficient)
+        // [4] chaotic (orderly-weighted / plain mean r², shrunk to the fleet median; lower = better;
+        //     NaN if insufficient), [5] races used for chaotic
         Map<String, double[]> raw = new LinkedHashMap<>();
 
         for (Map.Entry<String, List<EntryResidual>> entry : residualsByBoatId.entrySet())
@@ -273,10 +292,11 @@ public class PerformanceProfileBuilder
             // Level (slope ≈ 0) → penalty = 0 → best rank.
             double slopePenalty = computeSlopePenalty(recent);
 
-            // Chaotic: mean r² weighted by 1/dispersion. Lower = better.
-            double chaotic = computeChaotic(recent, dispersionByRaceDivision);
+            // Chaotic: orderly-race share of error (see computeChaotic); shrunk below, once the
+            // fleet's typical ratio is known. Lower = better.
+            double[] chaotic = computeChaotic(recent, residualsByRaceDiv);
 
-            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, chaotic});
+            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, chaotic[0], chaotic[1]});
         }
 
         if (raw.isEmpty()) return Map.of();
@@ -287,6 +307,7 @@ public class PerformanceProfileBuilder
         double[] divScores   = percentileRanks(raw, 1, true);
         double[] consScores  = percentileRanks(raw, 2, false);
         double[] stabScores  = percentileRanks(raw, 3, false);  // lower penalty = better
+        shrinkChaotic(raw);
         double[] ncScores = chaoticRanks(raw);
 
         String[] ids = raw.keySet().toArray(new String[0]);
@@ -336,7 +357,7 @@ public class PerformanceProfileBuilder
     /**
      * Percentile ranks for Chaotic (index 4). Boats with NaN penalty (insufficient
      * paired observations) get score 0. Among boats with a valid penalty, lower penalty
-     * = better rank (small residuals on calm days).
+     * = better rank (errors in disorderly rather than orderly races).
      */
     private static double[] chaoticRanks(Map<String, double[]> raw)
     {
@@ -403,42 +424,99 @@ public class PerformanceProfileBuilder
 
     // --- Chaotic raw metric ---
 
-    /**
-     * Computes the Chaotic penalty: mean squared residual weighted inversely by fleet
-     * dispersion. Calm conditions (low dispersion → high weight) penalise large residuals
-     * heavily; chaotic conditions (high dispersion → low weight) excuse them. Therefore:
-     * <ul>
-     *   <li>small residuals on chaotic days → very low contribution → best rank</li>
-     *   <li>large residuals on chaotic days → moderate contribution → middle rank</li>
-     *   <li>large residuals on calm days → very high contribution → worst rank</li>
-     * </ul>
-     * Returns {@link Double#NaN} if fewer than {@link #MIN_CHAOTIC_PAIRS} races have
-     * dispersion data; such boats are ranked 0 by {@link #chaoticRanks}.
-     */
-    private static double computeChaotic(
-        List<EntryResidual> recent,
-        Map<String, Map<String, Double>> dispersionByRaceDivision)
+    private static String raceDivKey(EntryResidual r)
     {
-        if (dispersionByRaceDivision == null || dispersionByRaceDivision.isEmpty())
-            return Double.NaN;
+        return r.raceId() + "|" + r.divisionName();
+    }
 
-        double sumW = 0, sumWR2 = 0;
+    /**
+     * The Chaotic ratio: how much of the boat's error comes in orderly races (the rest of the
+     * fleet finished close to its handicaps), independent of how big its errors are.
+     * <pre>
+     *   spread_i = IQR of the other boats' residuals in race i's division (leave-one-out)
+     *   orderly  = Σ w_i r_i² / (spread_i + ε)  /  Σ w_i / (spread_i + ε)
+     *   plain    = Σ w_i r_i²  /  Σ w_i
+     *   ratio    = orderly / plain                   (1 if the boat has no error at all)
+     * </pre>
+     * Low: the boat's errors come in disorderly races, when the whole fleet strayed — explained
+     * by the conditions. High: they come in orderly races — the boat's own. Because the error
+     * size cancels, a very consistent boat is judged on the pattern of the little error it has,
+     * so one blunder in an orderly race weighs heavily. Races whose division has fewer than
+     * {@value #MIN_SPREAD_OTHERS} other boats are left out.
+     *
+     * @return {ratio, n races used}; ratio is {@link Double#NaN} if fewer than
+     *         {@value #MIN_CHAOTIC_PAIRS} races remain (such boats are ranked 0 by
+     *         {@link #chaoticRanks}). {@link #shrinkChaotic} then shrinks small samples.
+     */
+    static double[] computeChaotic(List<EntryResidual> recent, Map<String, List<Double>> residualsByRaceDiv)
+    {
+        double sumOrderlyW = 0, sumOrderlyWR2 = 0, sumW = 0, sumWR2 = 0;
         int count = 0;
         for (EntryResidual r : recent)
         {
-            Map<String, Double> divMap = dispersionByRaceDivision.get(r.raceId());
-            if (divMap == null) continue;
-            Double d = divMap.get(r.divisionName());
-            if (d == null) continue;
-            double w = r.weight() / (d + DISPERSION_EPSILON);
-            sumW   += w;
-            sumWR2 += w * r.residual() * r.residual();
+            List<Double> all = residualsByRaceDiv.get(raceDivKey(r));
+            if (all == null || all.size() - 1 < MIN_SPREAD_OTHERS)
+                continue;
+            double spread = iqrWithoutOne(all, r.residual());
+            double r2 = r.residual() * r.residual();
+            double orderlyW = r.weight() / (spread + DISPERSION_EPSILON);
+            sumOrderlyW += orderlyW;
+            sumOrderlyWR2 += orderlyW * r2;
+            sumW += r.weight();
+            sumWR2 += r.weight() * r2;
             count++;
         }
+        if (count < MIN_CHAOTIC_PAIRS || sumW < 1e-12 || sumOrderlyW < 1e-12)
+            return new double[]{Double.NaN, count};
+        double plain = sumWR2 / sumW;
+        double ratio = plain < 1e-12 ? 1.0 : (sumOrderlyWR2 / sumOrderlyW) / plain;
+        return new double[]{ratio, count};
+    }
 
-        if (count < MIN_CHAOTIC_PAIRS)
-            return Double.NaN;
-        return sumW > 1e-12 ? sumWR2 / sumW : Double.NaN;
+    /**
+     * Shrinks each boat's Chaotic ratio (raw[4], from raw[5] races) towards the fleet's median
+     * ratio m: (n · ratio + K · m) / (n + K). Towards the median rather than 1 because errors are
+     * naturally larger in disorderly races, so the typical ratio is below 1; shrinking to 1
+     * would mark every lightly-raced boat as worse than typical.
+     */
+    static void shrinkChaotic(Map<String, double[]> raw)
+    {
+        double[] ratios = raw.values().stream().mapToDouble(v -> v[4]).filter(v -> !Double.isNaN(v))
+            .sorted().toArray();
+        if (ratios.length == 0)
+            return;
+        double median = quantile(ratios, ratios.length, 0.5);
+        for (double[] v : raw.values())
+            if (!Double.isNaN(v[4]))
+                v[4] = (v[5] * v[4] + CHAOTIC_SHRINK_K * median) / (v[5] + CHAOTIC_SHRINK_K);
+    }
+
+    /** Interquartile range of {@code values} with one occurrence of {@code exclude} removed. */
+    static double iqrWithoutOne(List<Double> values, double exclude)
+    {
+        double[] others = new double[values.size() - 1];
+        boolean skipped = false;
+        int k = 0;
+        for (double v : values)
+        {
+            if (!skipped && v == exclude)
+            {
+                skipped = true;
+                continue;
+            }
+            if (k < others.length)
+                others[k++] = v;
+        }
+        Arrays.sort(others, 0, k);
+        return quantile(others, k, 0.75) - quantile(others, k, 0.25);
+    }
+
+    private static double quantile(double[] sorted, int n, double q)
+    {
+        double pos = q * (n - 1);
+        int lo = (int)Math.floor(pos);
+        int hi = Math.min(lo + 1, n - 1);
+        return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo]);
     }
 
     // --- Overall score ---

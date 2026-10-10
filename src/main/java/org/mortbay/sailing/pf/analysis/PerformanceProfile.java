@@ -13,6 +13,6 @@ public record PerformanceProfile(
     double diversity,     // percentile rank by variant-weighted Σ√(encounters) per (opponent, variant)
     double consistency,   // percentile rank by mean asymmetric r² (negative residuals weighted more); lower = better
     double stability,     // percentile rank by asymmetric slope penalty (level=best, declining=worst)
-    double chaotic,       // percentile rank by mean r² weighted by 1/dispersion; lower = better
+    double chaotic,       // percentile rank by orderly-race share of error (orderly-weighted / plain mean r²); lower = better
     double overallScore   // normalised polygon area [0,1]
 ) {}

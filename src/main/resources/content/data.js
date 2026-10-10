@@ -860,7 +860,7 @@ function renderBoatPf(data) {
 
     if (data.profile) {
         const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. Chaotic: whether inconsistency correlates with fleet-wide conditions. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. Chaotic: whether the boat\'s errors come in orderly races, where the rest of the fleet finished close to its handicaps (its own), or in disorderly races (excusable), regardless of how big they are. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
         html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
