@@ -7,18 +7,19 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -43,8 +44,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Imports race results for the CYCA Blue Water Pointscore (BWPS) from three data sources:
  * <ol>
- *   <li><b>BWPS standings</b> at {@code bwps.cycaracing.com/standings/} -- minor offshore races
- *       (Bird Island, Cabbage Tree Island, Flinders Islet, etc.).</li>
+ *   <li><b>BWPS minor offshore races</b> (Bird Island, Cabbage Tree Island, Flinders Islet,
+ *       etc.): listed at {@code bwps.cycaracing.com/race/<year>/results}, each race page giving
+ *       its raceId for the CYCA feeds API. (The old {@code /standings/} pages are gone.)</li>
  *   <li><b>Rolex Sydney Hobart Yacht Race (RSHYR)</b> via the CYCA feeds API at
  *       {@code feeds.cycaracing.com} -- higher-quality per-division data from the dedicated
  *       race website.</li>
@@ -75,10 +77,6 @@ public class BwpsImporter
     public static final int DEFAULT_MIN_YEAR = 2020;
     static final String CLUB_ID = "cyca.com.au";
     static final String SERIES_NAME_PREFIX = "Blue Water Pointscore";
-
-    /** Formatter for BWPS finish time strings: e.g. "29 Dec 2025 02:39:32 PM". */
-    private static final DateTimeFormatter FINISH_FMT =
-        DateTimeFormatter.ofPattern("d MMM yyyy h:mm:ss a", Locale.ENGLISH);
 
     // --- CYCA feeds API constants ---
     static final String FEEDS_BASE = "https://feeds.cycaracing.com";
@@ -178,15 +176,22 @@ public class BwpsImporter
         this.recentRaceReimportDays = recentRaceReimportDays;
         this.minYear = minYear;
 
-        // Phase 1: BWPS minor races from the standings site
-        importBwpsStandings();
+        int currentYear = LocalDate.now().getYear();
+        // Sail number → design, from the yacht listing pages; filled in by both phases.
+        Map<String, String> yachtDesigns = new LinkedHashMap<>();
+
+        // Phase 1: BWPS minor races from the results pages. A failure here must not stop
+        // the major races below.
+        try
+        {
+            importBwpsResults(minYear, currentYear, yachtDesigns);
+        }
+        catch (Exception e)
+        {
+            ImporterLog.error(LOG, "BWPS: minor-race import failed: {}", e.getMessage(), e);
+        }
 
         // Phase 2: Major races via CYCA feeds API
-        int currentYear = LocalDate.now().getYear();
-
-        // Fetch yacht designs from the BWPS catch-all listing page
-        Map<String, String> yachtDesigns = new LinkedHashMap<>();
-        yachtDesigns.putAll(fetchYachtDesigns(BASE_URL + "/the-yachts/"));
 
         for (CycaFeedsRaceConfig config : List.of(RSHYR_CONFIG, GOLDCOAST_CONFIG))
         {
@@ -212,482 +217,182 @@ public class BwpsImporter
     }
 
     // ========================================================================
-    // Phase 1: BWPS minor races from standings site
+    // Phase 1: BWPS minor races from the results pages + CYCA feeds
     // ========================================================================
+    //
+    // The BWPS site lists each season's races at /race/<year>/results, linking to
+    // /race/<year>/results/<race-slug>; each race page embeds its CYCA feeds raceId. The feeds
+    // give the start time (Race/Summary) and the results per category: elapsed times come only
+    // from Line Honours (finish − start); the IRC (and ORC) results supply each boat's rating
+    // for its certificate. Hobart and Gold Coast are skipped here — phase 2 imports them.
 
-    private void importBwpsStandings() throws Exception
+    /** Imports every minor BWPS race of the seasons fromYear..toYear. */
+    void importBwpsResults(int fromYear, int toYear, Map<String, String> yachtDesigns)
     {
-        LOG.info("BWPS: fetching race list from {}/standings/", BASE_URL);
-        String mainHtml = fetchHtml(BASE_URL + "/standings/");
-        List<RaceOption> races = parseRaceSelector(mainHtml);
-        LOG.info("BWPS: found {} races", races.size());
-
-        for (RaceOption race : races)
+        for (int year = fromYear; year <= toYear; year++)
         {
-            LOG.info("BWPS: fetching years for race '{}'", race.name());
-            String raceHtml;
+            List<String> slugs;
             try
             {
-                raceHtml = fetchHtml(BASE_URL + race.url());
+                slugs = parseResultsIndex(fetchString(BASE_URL + "/race/" + year + "/results"), year);
             }
             catch (Exception e)
             {
-                ImporterLog.error(LOG, "BWPS: failed to fetch race page {}: {}", race.url(), e.getMessage());
+                ImporterLog.warn(LOG, "BWPS: no results index for {}: {}", year, e.getMessage());
                 continue;
             }
-
-            List<YearOption> years = parseYearSelector(raceHtml);
-            for (YearOption year : years)
+            LOG.info("BWPS: {} race(s) listed for {}: {}", slugs.size(), year, slugs);
+            yachtDesigns.putAll(fetchYachtDesigns(BASE_URL + "/race/" + year + "/yachts"));
+            for (String slug : slugs)
             {
-                if (year.year() < minYear)
-                    continue;
-                LOG.info("BWPS: processing race='{}' year={}", race.name(), year.yearLabel());
+                String raceName = raceNameFromSlug(slug);
+                if (isFeedsMajorRace(raceName))
+                    continue;   // phase 2
                 try
                 {
-                    processRaceEdition(race.name(), year.year(), year.url());
+                    importBwpsRace(year, slug, raceName, yachtDesigns);
                 }
                 catch (Exception e)
                 {
-                    ImporterLog.error(LOG, "BWPS: failed to process race='{}' year={}: {}",
-                        race.name(), year.yearLabel(), e.getMessage(), e);
+                    ImporterLog.error(LOG, "BWPS: failed to import '{}' {}: {}", raceName, year,
+                        e.getMessage(), e);
                 }
             }
         }
     }
 
-    // --- BWPS race edition processor (package-private for testing) ---
-
-    void processRaceEdition(String raceName, int year, String standingsUrl) throws Exception
+    /** The race slugs linked from a season's results index, in page order. */
+    static List<String> parseResultsIndex(String html, int year)
     {
-        // Major races are imported via the CYCA feeds API with higher-quality data
+        Matcher m = Pattern.compile("href=\"/race/" + year + "/results/([a-z0-9-]+)/?\"").matcher(html);
+        LinkedHashSet<String> slugs = new LinkedHashSet<>();
+        while (m.find())
+            slugs.add(m.group(1));
+        return List.copyOf(slugs);
+    }
+
+    /** "flinders-islet-race" → "Flinders Islet Race". */
+    static String raceNameFromSlug(String slug)
+    {
+        return Arrays.stream(slug.split("-"))
+            .filter(w -> !w.isEmpty())
+            .map(w -> Character.toUpperCase(w.charAt(0)) + w.substring(1))
+            .collect(Collectors.joining(" "));
+    }
+
+    private static boolean isFeedsMajorRace(String raceName)
+    {
         String upper = raceName.toUpperCase(Locale.ENGLISH);
-        for (String keyword : FEEDS_RACE_KEYWORDS)
-        {
-            if (upper.contains(keyword))
-            {
-                LOG.debug("BWPS: skipping '{}' {} -- imported via CYCA feeds API", raceName, year);
-                return;
-            }
-        }
+        return FEEDS_RACE_KEYWORDS.stream().anyMatch(upper::contains);
+    }
 
-        String standingsHtml = fetchHtml(BASE_URL + standingsUrl);
-        Map<String, String> tabs = parseCategoryTabs(standingsHtml);
-
-        String ircTabUrl = tabs.get("IRC");
-        String lhTabUrl  = tabs.get("Line Honours");
-        if (ircTabUrl == null || lhTabUrl == null)
-        {
-            ImporterLog.warn(LOG, "BWPS: race='{}' year={} -- IRC or Line Honours tab not found; tabs={}",
-                raceName, year, tabs.keySet());
-            return;
-        }
-
-        // Collect IRC rows; add ORC rows if an ORC tab exists
-        List<StandingsRow> standingsRows = new ArrayList<>(
-            parseStandingsTable(fetchHtml(BASE_URL + ircTabUrl), "IRC"));
-        for (Map.Entry<String, String> tab : tabs.entrySet())
-        {
-            String label = tab.getKey();
-            if (label.equalsIgnoreCase("ORC") || label.equalsIgnoreCase("ORCi")
-                    || label.equalsIgnoreCase("ORC Club"))
-            {
-                standingsRows.addAll(parseStandingsTable(fetchHtml(BASE_URL + tab.getValue()), "ORC"));
-            }
-        }
-
-        List<LhRow> lhRows = parseLineHonoursTable(fetchHtml(BASE_URL + lhTabUrl));
-
-        LocalDate raceDate = computeRaceDate(lhRows, year);
-        if (raceDate == null)
-        {
-            ImporterLog.warn(LOG, "BWPS: race='{}' year={} -- could not compute race date", raceName, year);
-            return;
-        }
-
-        // Group by season: all races in the same calendar year belong to one series
+    /** Imports one minor race, unless it is already held and not recent. */
+    void importBwpsRace(int year, String slug, String raceName, Map<String, String> yachtDesigns)
+        throws Exception
+    {
         String seriesName = SERIES_NAME_PREFIX + " " + year;
         String seriesId   = IdGenerator.generateSeriesId(CLUB_ID, seriesName);
-        String raceId     = IdGenerator.generateRaceId(CLUB_ID, raceDate, 1);
 
-        Race existingRace = store.races().get(raceId);
-        if (existingRace != null && !isRecentRace(raceDate)
-            && SOURCE.equals(existingRace.source()))
+        // Held already (matched by name and year, so no request is needed) and not recent.
+        Race held = store.races().values().stream()
+            .filter(r -> CLUB_ID.equals(r.clubId()) && SOURCE.equals(r.source())
+                && raceName.equalsIgnoreCase(r.name()) && r.date() != null && r.date().getYear() == year)
+            .findFirst().orElse(null);
+        if (held != null && !isRecentRace(held.date()))
         {
-            LOG.debug("BWPS: race {} already imported by BWPS, updating series membership only", raceId);
+            updateClubSeries(CLUB_ID, seriesId, seriesName, held.id());
+            return;
+        }
+
+        Matcher idMatch = RACE_ID_JS.matcher(fetchString(BASE_URL + "/race/" + year + "/results/" + slug));
+        if (!idMatch.find())
+        {
+            ImporterLog.warn(LOG, "BWPS: no raceId on the results page for '{}' {}", raceName, year);
+            return;
+        }
+        int cycaRaceId = Integer.parseInt(idMatch.group(1));
+
+        RaceSummary summary = MAPPER.readValue(
+            fetchString(FEEDS_BASE + "/Race/Summary/" + cycaRaceId), RaceSummary.class);
+        if (summary.startDateTime() == null || summary.startDateTime().startsWith(ZERO_DATE_PREFIX))
+        {
+            LOG.info("BWPS: '{}' {} (raceId={}) has no start time yet -- skipping", raceName, year, cycaRaceId);
+            return;
+        }
+        LocalDateTime start = LocalDateTime.parse(summary.startDateTime());
+        if (start.atZone(SYDNEY_TZ).isAfter(ZonedDateTime.now(SYDNEY_TZ)))
+        {
+            LOG.info("BWPS: '{}' {} starts {} -- not sailed yet, skipping", raceName, year, start);
+            return;
+        }
+        LocalDate raceDate = start.toLocalDate();
+        String raceId = IdGenerator.generateRaceId(CLUB_ID, raceDate, 1);
+        Race existing = store.races().get(raceId);
+        if (existing != null && SOURCE.equals(existing.source()) && !isRecentRace(raceDate))
+        {
             updateClubSeries(CLUB_ID, seriesId, seriesName, raceId);
             return;
         }
 
-        // Index LH rows by boatDetailUrl for fast lookup
-        Map<String, LhRow> lhByUrl = new LinkedHashMap<>();
-        for (LhRow lh : lhRows)
+        Integer lhCat = null, ircCat = null, orcCat = null;
+        for (SummaryCategory c : summary.categories() == null ? List.<SummaryCategory>of() : summary.categories())
         {
-            if ("FINISHED".equalsIgnoreCase(lh.status()))
-                lhByUrl.put(lh.boatDetailUrl(), lh);
+            if (c.id() == null || c.name() == null)
+                continue;
+            String name = c.name().trim().toUpperCase(Locale.ENGLISH);
+            if (lhCat == null && (name.equals("LINE HONOURS") || "Line Honours".equalsIgnoreCase(c.type())))
+                lhCat = c.id();
+            else if (ircCat == null && name.equals("IRC"))
+                ircCat = c.id();
+            else if (orcCat == null && (name.equals("ORC") || name.equals("ORCI")))
+                orcCat = c.id();
+        }
+        if (lhCat == null || ircCat == null)
+        {
+            ImporterLog.warn(LOG, "BWPS: '{}' {} (raceId={}) -- Line Honours or IRC category missing",
+                raceName, year, cycaRaceId);
+            return;
         }
 
-        // Build finishers grouped by division
+        // Elapsed times from Line Honours only: finish (its CorrectedTime, at TCF 1) − start.
+        Map<String, Duration> elapsedBySailNum =
+            buildElapsedMap(fetchCategory(cycaRaceId, lhCat), start.atZone(SYDNEY_TZ));
+
+        // IRC (and ORC) results only for each boat's rating → certificate; finishers without
+        // a Line Honours elapsed time are dropped.
         LinkedHashMap<String, List<Finisher>> divMap = new LinkedHashMap<>();
-        int finisherCount = 0;
-
-        for (StandingsRow row : standingsRows)
-        {
-            if (!"FINISHED".equalsIgnoreCase(row.status()))
-                continue;
-
-            LhRow lh = lhByUrl.get(row.boatDetailUrl());
-            if (lh == null)
-                continue;  // boat not in Line Honours (retired before finishing?)
-
-            BoatDetail detail;
-            try
-            {
-                detail = parseBoatDetail(fetchHtml(BASE_URL + row.boatDetailUrl()));
-            }
-            catch (Exception e)
-            {
-                ImporterLog.warn(LOG, "BWPS: failed to fetch boat detail {}: {}", row.boatDetailUrl(), e.getMessage());
-                continue;
-            }
-
-            // CYCA appends "(TH)" or "(DH)" (Two Handed / Double Handed) to entries
-            // in the two-handed division.  Strip the suffix before creating the boat so
-            // that the same physical boat is not stored under two different identities,
-            // and record the flag so the certificate is correctly marked twoHanded.
-            String rawName = detail.yachtName();
-            boolean twoHanded = rawName != null
-                && (rawName.toUpperCase(Locale.ENGLISH).contains("(TH)")
-                    || rawName.toUpperCase(Locale.ENGLISH).contains("(DH)"));
-            String boatName = twoHanded
-                ? rawName.replaceAll("(?i)\\((TH|DH)\\)", "").trim()
-                : rawName;
-
-            String designName = (detail.type() != null && !detail.type().isBlank())
-                ? detail.type() : null;
-            Boat boat = store.findOrCreateBoat(detail.sailNumber(), boatName, designName, raceDate, SOURCE);
-
-            if (detail.club() != null && !detail.club().isBlank() && boat.clubIds().isEmpty()
-                && !store.isExplicitlyNoClub(boat.id()))
-            {
-                Club fromClub = store.findUniqueClubByShortName(detail.club(), null,
-                    "BWPS boat sailNumber=" + detail.sailNumber() + " name=" + boatName);
-                if (fromClub != null)
-                {
-                    store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), List.of(fromClub.id()), boat.certificates(),
-                        addSource(boat.sources(), SOURCE), Instant.now(), null));
-                }
-            }
-
-            // Re-read boat after potential club update
-            boat = store.boats().get(boat.id());
-            String certNum = inferCertificate(boat, row.system(), year, row.hcap(), twoHanded, SOURCE);
-
-            Duration lhElapsed = lh.elapsed();
-            if (lhElapsed == null || lhElapsed.isNegative() || lhElapsed.isZero())
-            {
-                ImporterLog.warn(LOG, "BWPS: skipping finisher '{}' in race '{}' year={}: non-positive elapsed {}",
-                    boat.id(), raceName, year, lhElapsed);
-                continue;
-            }
-            Finisher finisher = new Finisher(boat.id(), lhElapsed, false, certNum);
-            divMap.computeIfAbsent(row.div(), k -> new ArrayList<>()).add(finisher);
-            finisherCount++;
-        }
-
+        int count = processFeedsEntries(fetchCategory(cycaRaceId, ircCat), "IRC", raceDate,
+            elapsedBySailNum, divMap, SOURCE, yachtDesigns);
+        if (orcCat != null)
+            count += processFeedsEntries(fetchCategory(cycaRaceId, orcCat), "ORC", raceDate,
+                elapsedBySailNum, divMap, SOURCE, yachtDesigns);
         if (divMap.isEmpty())
         {
-            ImporterLog.warn(LOG, "BWPS: race='{}' year={} -- no finished IRC/ORC boats with elapsed times", raceName, year);
+            ImporterLog.warn(LOG, "BWPS: '{}' {} -- no IRC/ORC finishers with Line Honours times",
+                raceName, year);
             return;
         }
 
         List<Division> divisions = divMap.entrySet().stream()
             .map(e -> new Division(e.getKey(), List.copyOf(e.getValue())))
             .toList();
-
         store.putRace(new Race(raceId, CLUB_ID, List.of(seriesId), raceDate, 1,
             raceName, divisions, SOURCE, Instant.now(), null));
         LOG.info("BWPS: imported race {} '{}' {} ({} finishers, {} division(s))",
-            raceId, raceName, year, finisherCount, divisions.size());
-
+            raceId, raceName, year, count, divisions.size());
         updateClubSeries(CLUB_ID, seriesId, seriesName, raceId);
     }
 
-    // ========================================================================
-    // BWPS standings parsers (package-private for testing)
-    // ========================================================================
+    /** The parts of /Race/Summary/{raceId} used: start time and the results categories. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record RaceSummary(@JsonProperty("StartDateTime") String startDateTime,
+                       @JsonProperty("Status") String status,
+                       @JsonProperty("Categories") List<SummaryCategory> categories) {}
 
-    List<RaceOption> parseRaceSelector(String html)
-    {
-        Document doc = Jsoup.parse(html, BASE_URL);
-        List<RaceOption> result = new ArrayList<>();
-        Element select = doc.selectFirst("select[aria-labelledby=standings-filters-race-label]");
-        if (select == null)
-            return result;
-        for (Element option : select.select("option"))
-        {
-            String url  = option.attr("value").trim();
-            String name = option.text().trim();
-            if (!url.isBlank() && !name.isBlank())
-                result.add(new RaceOption(name, url));
-        }
-        return result;
-    }
-
-    List<YearOption> parseYearSelector(String html)
-    {
-        Document doc = Jsoup.parse(html, BASE_URL);
-        List<YearOption> result = new ArrayList<>();
-        Element select = doc.selectFirst("select[aria-labelledby=standings-filters-year-label]");
-        if (select == null)
-            return result;
-        for (Element option : select.select("option"))
-        {
-            String url   = option.attr("value").trim();
-            String label = option.text().trim();
-            if (url.isBlank() || label.isBlank())
-                continue;
-            try
-            {
-                int year = Integer.parseInt(label);
-                result.add(new YearOption(label, year, url));
-            }
-            catch (NumberFormatException e)
-            {
-                LOG.debug("BWPS: skipping year option with non-integer label '{}'", label);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Returns a map of category tab labels to their href values (relative URLs).
-     * De-duplicated by label -- the same tab may appear twice in the HTML (mobile + desktop).
-     */
-    Map<String, String> parseCategoryTabs(String html)
-    {
-        Document doc = Jsoup.parse(html, BASE_URL);
-        Map<String, String> result = new LinkedHashMap<>();
-        for (Element a : doc.select("a[href*='/Standings?categoryId']"))
-        {
-            String label = a.text().trim();
-            String href  = a.attr("href").trim();
-            if (!label.isBlank() && !href.isBlank())
-                result.putIfAbsent(label, href);
-        }
-        return result;
-    }
-
-    /**
-     * Parses an IRC or ORC standings table.
-     * Expected column order: [index, yacht+link, DIV, status, HCAP, corrected time]
-     */
-    List<StandingsRow> parseStandingsTable(String html, String system)
-    {
-        Document doc = Jsoup.parse(html, BASE_URL);
-        List<StandingsRow> result = new ArrayList<>();
-        Element table = doc.selectFirst("table.standings");
-        if (table == null)
-        {
-            ImporterLog.warn(LOG, "BWPS: no standings table found (system={})", system);
-            return result;
-        }
-
-        Element headerRow = table.selectFirst("thead tr");
-        if (headerRow != null)
-        {
-            boolean hasHcap = headerRow.select("th").stream()
-                .anyMatch(th -> th.text().trim().equalsIgnoreCase("HCAP"));
-            if (!hasHcap)
-            {
-                ImporterLog.warn(LOG, "BWPS: standings table for system={} has no HCAP column -- skipping", system);
-                return result;
-            }
-        }
-
-        for (Element row : table.select("tbody tr"))
-        {
-            Elements cells = row.select("td");
-            if (cells.size() < 5)
-                continue;
-
-            Element yachtCell = cells.get(1);
-            Element link = yachtCell.selectFirst("a[href]");
-            if (link == null)
-                continue;
-
-            String boatDetailUrl = link.attr("href").trim();
-            String boatName      = link.text().trim();
-            String div           = cells.get(2).text().trim();
-            String status        = cells.get(3).text().trim();
-            String hcapText      = cells.get(4).text().trim();
-
-            if (boatDetailUrl.isBlank() || boatName.isBlank() || hcapText.isBlank())
-                continue;
-
-            double hcap;
-            try
-            {
-                hcap = Double.parseDouble(hcapText);
-            }
-            catch (NumberFormatException e)
-            {
-                LOG.debug("BWPS: could not parse HCAP '{}' for boat '{}'; skipping", hcapText, boatName);
-                continue;
-            }
-
-            result.add(new StandingsRow(boatDetailUrl, boatName, div, status, hcap, system));
-        }
-        return result;
-    }
-
-    /**
-     * Parses the Line Honours standings table.
-     * Expected column order: [index, yacht+link, status, elapsed+finish_datetime]
-     */
-    List<LhRow> parseLineHonoursTable(String html)
-    {
-        Document doc = Jsoup.parse(html, BASE_URL);
-        List<LhRow> result = new ArrayList<>();
-        Element table = doc.selectFirst("table.standings");
-        if (table == null)
-        {
-            ImporterLog.warn(LOG, "BWPS: no standings table found on Line Honours page");
-            return result;
-        }
-
-        for (Element row : table.select("tbody tr"))
-        {
-            Elements cells = row.select("td");
-            if (cells.size() < 4)
-                continue;
-
-            Element yachtCell = cells.get(1);
-            Element link = yachtCell.selectFirst("a[href]");
-            if (link == null)
-                continue;
-
-            String boatDetailUrl = link.attr("href").trim();
-            String boatName      = link.text().trim();
-            String status        = cells.get(2).text().trim();
-            Element timeCell     = cells.get(3);
-
-            String elapsedText = timeCell.ownText().trim();
-            Duration elapsed = parseElapsed(elapsedText);
-            if (elapsed == null)
-                continue;
-
-            Element smallDiv = timeCell.selectFirst("div.small");
-            String finishText = smallDiv != null ? smallDiv.text().trim() : null;
-
-            result.add(new LhRow(boatDetailUrl, boatName, status, elapsed, finishText));
-        }
-        return result;
-    }
-
-    /**
-     * Parses a BWPS boat detail page.
-     * Extracts from the {@code <td>LABEL</td><td>VALUE</td>} table rows:
-     * Sail Number, State, Club, Type (design), and Yacht Name.
-     */
-    BoatDetail parseBoatDetail(String html)
-    {
-        Document doc = Jsoup.parse(html, BASE_URL);
-        Map<String, String> fields = new LinkedHashMap<>();
-
-        for (Element row : doc.select("table tr"))
-        {
-            Elements cells = row.select("td");
-            if (cells.size() >= 2)
-            {
-                String label = cells.get(0).text().trim();
-                String value = cells.get(1).text().trim();
-                if (!label.isBlank())
-                    fields.putIfAbsent(label, value);
-            }
-        }
-
-        return new BoatDetail(
-            fields.get("Yacht Name"),
-            fields.get("Sail Number"),
-            fields.get("Owner"),
-            fields.get("State"),
-            fields.get("Club"),
-            fields.get("Type")
-        );
-    }
-
-    /**
-     * Parses an elapsed time in {@code DD:HH:MM:SS} format.
-     *
-     * @param text raw cell text, e.g. {@code "03:01:39:32"} or {@code "00:06:15:44"}
-     * @return parsed Duration, or {@code null} if the format is unrecognised
-     */
-    static Duration parseElapsed(String text)
-    {
-        if (text == null || text.isBlank())
-            return null;
-        String token = text.trim().split("\\s+")[0];
-        String[] parts = token.split(":");
-        if (parts.length != 4)
-            return null;
-        try
-        {
-            int days    = Integer.parseInt(parts[0]);
-            int hours   = Integer.parseInt(parts[1]);
-            int minutes = Integer.parseInt(parts[2]);
-            int seconds = Integer.parseInt(parts[3]);
-            return Duration.ofDays(days).plusHours(hours).plusMinutes(minutes).plusSeconds(seconds);
-        }
-        catch (NumberFormatException e)
-        {
-            return null;
-        }
-    }
-
-    /**
-     * Computes the race start date from the first Line Honours finisher.
-     * Parses the finish date/time, subtracts the elapsed time, and returns the date.
-     * Handles year wraparound (finish in Jan–Mar → finish year = year + 1).
-     */
-    static LocalDate computeRaceDate(List<LhRow> lhRows, int year)
-    {
-        LhRow first = lhRows.stream()
-            .filter(r -> "FINISHED".equalsIgnoreCase(r.status()))
-            .findFirst().orElse(null);
-        if (first == null || first.finishText() == null)
-            return null;
-
-        String[] tokens = first.finishText().trim().split("\\s+");
-        if (tokens.length < 4)
-            return null;
-
-        int finishYear = year;
-        try
-        {
-            String monthStr = tokens[1];
-            int month = parseMonthIndex(monthStr);
-            if (month <= 3)
-                finishYear = year + 1;
-        }
-        catch (Exception e)
-        {
-            // leave finishYear = year
-        }
-
-        String fullDateTimeStr = tokens[0] + " " + tokens[1] + " " + finishYear
-            + " " + tokens[2] + " " + tokens[3];
-        try
-        {
-            LocalDateTime finishDt = LocalDateTime.parse(fullDateTimeStr, FINISH_FMT);
-            return finishDt.minus(first.elapsed()).toLocalDate();
-        }
-        catch (Exception e)
-        {
-            ImporterLog.warn(LOG, "BWPS: could not parse finish datetime '{}': {}", fullDateTimeStr, e.getMessage());
-            return null;
-        }
-    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SummaryCategory(@JsonProperty("Id") Integer id,
+                           @JsonProperty("Name") String name,
+                           @JsonProperty("Type") String type) {}
 
     // ========================================================================
     // Phase 2: CYCA feeds API races (RSHYR, Gold Coast)
@@ -1105,12 +810,16 @@ public class BwpsImporter
             }
             String certNum = inferCertificate(boat, system, date.getYear(), entry.tcf(), dh, source);
 
-            // Division key: "IRC Div 3", "ORC", etc.
+            // Division key: "IRC Div 3", "ORC", etc. A double-handed entry goes in its own
+            // "… Two-Handed" division: the finisher's variant is read from the division name
+            // (EntryVariant), so this is what makes its result a two-handed one.
             String divKey;
             if (entry.divisionName() != null && !entry.divisionName().isBlank())
                 divKey = system + " Div " + entry.divisionName();
             else
                 divKey = system;
+            if (dh)
+                divKey += " Two-Handed";
 
             divMap.computeIfAbsent(divKey, k -> new ArrayList<>())
                 .add(new Finisher(boat.id(), elapsed, false, certNum));
@@ -1339,23 +1048,6 @@ public class BwpsImporter
             throw new RuntimeException("HTTP " + response.getStatus() + " for " + url);
         return response.getContentAsString();
     }
-
-    // ========================================================================
-    // Inner records -- BWPS standings
-    // ========================================================================
-
-    record RaceOption(String name, String url) {}
-
-    record YearOption(String yearLabel, int year, String url) {}
-
-    record StandingsRow(String boatDetailUrl, String boatName, String div,
-                        String status, double hcap, String system) {}
-
-    record LhRow(String boatDetailUrl, String boatName, String status,
-                 Duration elapsed, String finishText) {}
-
-    record BoatDetail(String yachtName, String sailNumber, String owner,
-                      String state, String club, String type) {}
 
     // ========================================================================
     // Inner types -- CYCA feeds API

@@ -1,5 +1,13 @@
 package org.mortbay.sailing.pf.importer;
 
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,36 +17,28 @@ import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.importer.BwpsImporter.BoatDetail;
-import org.mortbay.sailing.pf.importer.BwpsImporter.LhRow;
-import org.mortbay.sailing.pf.importer.BwpsImporter.RaceOption;
-import org.mortbay.sailing.pf.importer.BwpsImporter.StandingsRow;
-import org.mortbay.sailing.pf.importer.BwpsImporter.YearOption;
 import org.mortbay.sailing.pf.store.DataStore;
 
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import static org.junit.jupiter.api.Assertions.*;
-
+/**
+ * The BWPS minor-race import: results index → race page raceId → CYCA feeds (Race/Summary for
+ * the start, Line Honours for elapsed times, IRC for ratings). Responses are canned.
+ */
 class BwpsImporterTest
 {
     @TempDir Path tempDir;
     private DataStore store;
-    private BwpsImporter importer;
 
     @BeforeEach
     void setUp()
     {
         store = new DataStore(tempDir);
         store.start();
-        importer = new BwpsImporter(store, null); // httpClient not used in parse methods
+        store.setAutoSanityCheck(false);
     }
 
     @AfterEach
@@ -47,372 +47,170 @@ class BwpsImporterTest
         store.stop();
     }
 
-    // --- parseRaceSelector ---
-
-    @Test
-    void parseRaceSelectorExtractsAllRaces()
+    /** An importer answering from a URL-substring → body map, recording every URL fetched. */
+    static class CannedImporter extends BwpsImporter
     {
-        String html = fixture("standings-main.html");
-        List<RaceOption> races = importer.parseRaceSelector(html);
+        final Map<String, String> responses = new LinkedHashMap<>();
+        final List<String> fetched = new ArrayList<>();
 
-        assertEquals(2, races.size());
-        assertEquals("Flinders Islet Race", races.get(0).name());
-        assertEquals("/standings?seriesId=11", races.get(0).url());
-        assertEquals("Rolex Sydney Hobart Yacht Race", races.get(1).name());
-        assertEquals("/standings?seriesId=15", races.get(1).url());
-    }
-
-    @Test
-    void parseRaceSelectorReturnsEmptyWhenSelectorAbsent()
-    {
-        List<RaceOption> races = importer.parseRaceSelector("<html><body></body></html>");
-        assertTrue(races.isEmpty());
-    }
-
-    // --- parseYearSelector ---
-
-    @Test
-    void parseYearSelectorExtractsYears()
-    {
-        String html = fixture("standings-main.html");
-        List<YearOption> years = importer.parseYearSelector(html);
-
-        assertEquals(4, years.size());
-        assertEquals(2025, years.get(0).year());
-        assertEquals("2025", years.get(0).yearLabel());
-        assertEquals("/standings?categoryId=1071&raceId=187&seriesId=11", years.get(0).url());
-        assertEquals(2018, years.get(3).year());
-    }
-
-    @Test
-    void parseYearSelectorFiltersOutNonIntegerLabels()
-    {
-        String html = "<html><body>" +
-            "<select aria-labelledby=\"standings-filters-year-label\">" +
-            "<option value=\"/s?y=2023\">2023</option>" +
-            "<option value=\"/s?y=bad\">LATEST</option>" +
-            "</select></body></html>";
-        List<YearOption> years = importer.parseYearSelector(html);
-
-        assertEquals(1, years.size());
-        assertEquals(2023, years.get(0).year());
-    }
-
-    // --- parseCategoryTabs ---
-
-    @Test
-    void parseCategoryTabsFindsIrcAndLineHonours()
-    {
-        String html = fixture("standings-irc.html");
-        Map<String, String> tabs = importer.parseCategoryTabs(html);
-
-        assertTrue(tabs.containsKey("IRC"));
-        assertTrue(tabs.containsKey("Line Honours"));
-        assertTrue(tabs.containsKey("PHS")); // PHS tab is present; ignored during processing
-        assertEquals("/Standings?categoryId=1071&raceId=187&seriesId=11", tabs.get("IRC"));
-        assertEquals("/Standings?categoryId=1068&raceId=187&seriesId=11", tabs.get("Line Honours"));
-    }
-
-    @Test
-    void parseCategoryTabsDeduplicatesRepeatedTabs()
-    {
-        String html = "<html><body>" +
-            "<a href=\"/Standings?categoryId=1&raceId=1&seriesId=1\">IRC</a>" +
-            "<a href=\"/Standings?categoryId=1&raceId=1&seriesId=1\">IRC</a>" +
-            "</body></html>";
-        Map<String, String> tabs = importer.parseCategoryTabs(html);
-
-        assertEquals(1, tabs.size());
-        assertTrue(tabs.containsKey("IRC"));
-    }
-
-    // --- parseStandingsTable ---
-
-    @Test
-    void parseStandingsTableExtractsRows()
-    {
-        String html = fixture("standings-irc.html");
-        List<StandingsRow> rows = importer.parseStandingsTable(html, "IRC");
-
-        assertEquals(3, rows.size());
-
-        StandingsRow first = rows.get(0);
-        assertEquals("/the-yachts/flinders-islet-race/2025/moneypenny/?raceId=187&seriesId=11",
-            first.boatDetailUrl());
-        assertEquals("Moneypenny", first.boatName());
-        assertEquals("1", first.div());
-        assertEquals("FINISHED", first.status());
-        assertEquals(1.560, first.hcap(), 0.0001);
-        assertEquals("IRC", first.system());
-    }
-
-    @Test
-    void parseStandingsTableSkipsRowsWithNoLink()
-    {
-        String html = "<html><body><table class=\"standings\">" +
-            "<thead><tr><th colspan=\"2\">Yacht</th><th>DIV</th><th>Position</th><th>HCAP</th><th>Time</th></tr></thead>" +
-            "<tbody><tr><td>1</td><td>No link</td><td>1</td><td>FINISHED</td><td>1.500</td><td></td></tr></tbody>" +
-            "</table></body></html>";
-        List<StandingsRow> rows = importer.parseStandingsTable(html, "IRC");
-        assertTrue(rows.isEmpty());
-    }
-
-    @Test
-    void parseStandingsTableReturnsEmptyWhenNoHcapColumn()
-    {
-        // Line Honours table has no HCAP column — should return empty
-        String html = fixture("standings-lh.html");
-        List<StandingsRow> rows = importer.parseStandingsTable(html, "IRC");
-        assertTrue(rows.isEmpty());
-    }
-
-    // --- parseLineHonoursTable ---
-
-    @Test
-    void parseLineHonoursTableExtractsElapsedAndFinishText()
-    {
-        String html = fixture("standings-lh.html");
-        List<LhRow> rows = importer.parseLineHonoursTable(html);
-
-        assertEquals(2, rows.size());
-
-        LhRow first = rows.get(0);
-        assertEquals("/the-yachts/flinders-islet-race/2025/moneypenny/?raceId=187&seriesId=11",
-            first.boatDetailUrl());
-        assertEquals("Moneypenny", first.boatName());
-        assertEquals("FINISHED", first.status());
-        assertEquals(Duration.ofHours(6).plusMinutes(15).plusSeconds(44), first.elapsed());
-        assertEquals("20 Sep 04:15:44 PM", first.finishText());
-    }
-
-    // --- parseBoatDetail ---
-
-    @Test
-    void parseBoatDetailExtractsAllFields()
-    {
-        String html = fixture("boat-moneypenny.html");
-        BoatDetail detail = importer.parseBoatDetail(html);
-
-        assertEquals("Moneypenny", detail.yachtName());
-        assertEquals("AUS1234", detail.sailNumber());
-        assertEquals("Robert Appleyard", detail.owner());
-        assertEquals("WA", detail.state());
-        assertEquals("RPYC", detail.club());
-        assertEquals("TP52", detail.type());
-    }
-
-    @Test
-    void parseBoatDetailHandlesMissingFields()
-    {
-        String html = "<html><body><table><tbody>" +
-            "<tr><td>Yacht Name</td><td>Mystery</td></tr>" +
-            "</tbody></table></body></html>";
-        BoatDetail detail = importer.parseBoatDetail(html);
-
-        assertEquals("Mystery", detail.yachtName());
-        assertNull(detail.sailNumber());
-        assertNull(detail.type());
-    }
-
-    // --- parseElapsed ---
-
-    @Test
-    void parseElapsedHandlesMultiDayFormat()
-    {
-        Duration d = BwpsImporter.parseElapsed("03:01:39:32");
-        assertNotNull(d);
-        assertEquals(Duration.ofDays(3).plusHours(1).plusMinutes(39).plusSeconds(32), d);
-    }
-
-    @Test
-    void parseElapsedHandlesSameDayFormat()
-    {
-        Duration d = BwpsImporter.parseElapsed("00:06:15:44");
-        assertNotNull(d);
-        assertEquals(Duration.ofHours(6).plusMinutes(15).plusSeconds(44), d);
-    }
-
-    @Test
-    void parseElapsedIgnoresTrailingSpeedAndDate()
-    {
-        Duration d = BwpsImporter.parseElapsed("00:06:15:44 14.1 20 Sep 04:15:44 PM");
-        assertNotNull(d);
-        assertEquals(Duration.ofHours(6).plusMinutes(15).plusSeconds(44), d);
-    }
-
-    @Test
-    void parseElapsedReturnsNullForBlank()
-    {
-        assertNull(BwpsImporter.parseElapsed(null));
-        assertNull(BwpsImporter.parseElapsed(""));
-        assertNull(BwpsImporter.parseElapsed("   "));
-    }
-
-    @Test
-    void parseElapsedReturnsNullForThreePartFormat()
-    {
-        // TopYacht-style H:MM:SS is not valid as BWPS elapsed time
-        assertNull(BwpsImporter.parseElapsed("6:15:44"));
-    }
-
-    // --- computeRaceDate ---
-
-    @Test
-    void computeRaceDateFromFlindersFirstFinisher()
-    {
-        // Moneypenny: finished 20 Sep 04:15:44 PM, elapsed 6h15m44s → start ~10:00 AM 20 Sep
-        LhRow row = new LhRow(
-            "/the-yachts/test/", "Moneypenny", "FINISHED",
-            Duration.ofHours(6).plusMinutes(15).plusSeconds(44),
-            "20 Sep 04:15:44 PM");
-        LocalDate date = BwpsImporter.computeRaceDate(List.of(row), 2025);
-        assertEquals(LocalDate.of(2025, 9, 20), date);
-    }
-
-    @Test
-    void computeRaceDateFromSydneyHobartFirstFinisher()
-    {
-        // Sydney Hobart: finished 29 Dec 02:39:32 PM, elapsed 3d1h39m32s → start 26 Dec
-        LhRow row = new LhRow(
-            "/the-yachts/test/", "Fast Boat", "FINISHED",
-            Duration.ofDays(3).plusHours(1).plusMinutes(39).plusSeconds(32),
-            "29 Dec 02:39:32 PM");
-        LocalDate date = BwpsImporter.computeRaceDate(List.of(row), 2025);
-        assertEquals(LocalDate.of(2025, 12, 26), date);
-    }
-
-    @Test
-    void computeRaceDateUsesNextYearWhenFinishIsJanuary()
-    {
-        // Race year 2025, boat finishes 5 Jan after 10 days → finish is 5 Jan 2026, start 26 Dec 2025
-        LhRow row = new LhRow(
-            "/the-yachts/test/", "Slow Boat", "FINISHED",
-            Duration.ofDays(10),
-            "5 Jan 12:00:00 PM");
-        LocalDate date = BwpsImporter.computeRaceDate(List.of(row), 2025);
-        assertEquals(LocalDate.of(2025, 12, 26), date);
-    }
-
-    @Test
-    void computeRaceDateReturnsNullWhenNoFinishers()
-    {
-        assertNull(BwpsImporter.computeRaceDate(List.of(), 2025));
-    }
-
-    @Test
-    void computeRaceDateSkipsRetiredAndUsesFirstFinished()
-    {
-        LhRow retired  = new LhRow("/r/", "Retired", "RETIRED",
-            Duration.ofHours(5), null);
-        LhRow finished = new LhRow("/f/", "Finisher", "FINISHED",
-            Duration.ofHours(6).plusMinutes(15).plusSeconds(44),
-            "20 Sep 04:15:44 PM");
-        LocalDate date = BwpsImporter.computeRaceDate(List.of(retired, finished), 2025);
-        assertEquals(LocalDate.of(2025, 9, 20), date);
-    }
-
-    // --- processRaceEdition (integration) ---
-
-    @Test
-    void processRaceEditionStoresRaceAndFinishers() throws Exception
-    {
-        // Subclass that overrides fetchHtml to serve local fixtures
-        BwpsImporter fixtureImporter = new BwpsImporter(store, null)
+        CannedImporter(DataStore store)
         {
-            @Override
-            String fetchHtml(String url)
+            super(store, null);
+        }
+
+        @Override
+        String fetchString(String url) throws Exception
+        {
+            fetched.add(url);
+            for (Map.Entry<String, String> e : responses.entrySet())
             {
-                if (url.contains("categoryId=1071"))
-                    return fixture("standings-irc.html");
-                if (url.contains("categoryId=1068"))
-                    return fixture("standings-lh.html");
-                if (url.contains("moneypenny"))
-                    return fixture("boat-moneypenny.html");
-                if (url.contains("speedy"))
-                    return fixture("boat-speedy.html");
-                return "<html><body></body></html>";
+                if (url.endsWith(e.getKey()))
+                    return e.getValue();
             }
-        };
+            throw new RuntimeException("HTTP 404 for " + url);
+        }
 
-        fixtureImporter.processRaceEdition(
-            "Flinders Islet Race", 2025,
-            "/Standings?categoryId=1071&raceId=187&seriesId=11");
+        @Override
+        String fetchHtml(String url) throws Exception
+        {
+            return fetchString(url);
+        }
+    }
 
-        // Race stored
+    private static final String INDEX_2025 = """
+        <a href="/race/2025/results">Results</a>
+        <a href="/race/2025/results/flinders-islet-race">Flinders Islet Race</a>
+        <a href="/race/2025/results/rolex-sydney-hobart-yacht-race">Hobart</a>
+        <a href="/race/2025/results/flinders-islet-race">again</a>
+        <a href="/race/2024/results/flinders-islet-race">last year</a>
+        """;
+
+    private static final String SUMMARY_187 = """
+        {"RaceId":187,"Status":"Race completed","StartDateTime":"2025-09-20T10:00:00",
+         "Categories":[
+          {"Id":1071,"Name":"IRC","Type":"Handicap"},
+          {"Id":1072,"Name":"PHS","Type":"Handicap"},
+          {"Id":1068,"Name":"Line Honours","Type":"Line Honours"}]}
+        """;
+
+    // Line Honours: CorrectedTime is the finish (TCF 1). Speedy retired.
+    private static final String LH_187 = """
+        [{"NameRace":"Moneypenny","SailNumber":"AUS10","Status":"Finished","IsFinished":true,
+          "TCF":1.0,"DivisionName":"","CorrectedTime":"2025-09-20T16:15:44"},
+         {"NameRace":"Disko Trooper (DH)","SailNumber":"AUS99","Status":"Finished","IsFinished":true,
+          "TCF":1.0,"DivisionName":"","CorrectedTime":"2025-09-20T21:30:00"},
+         {"NameRace":"Speedy","SailNumber":"1234","Status":"Retired","IsFinished":false,
+          "TCF":1.0,"DivisionName":"","CorrectedTime":"0001-01-01T00:00:00"}]
+        """;
+
+    // IRC: ratings only; the times here are corrected and must not be used.
+    private static final String IRC_187 = """
+        [{"NameRace":"Moneypenny","SailNumber":"AUS10","Status":"Finished","IsFinished":true,
+          "TCF":1.6,"DivisionName":"1","CorrectedTime":"2025-09-21T02:00:00"},
+         {"NameRace":"Disko Trooper (DH)","SailNumber":"AUS99","Status":"Finished","IsFinished":true,
+          "TCF":0.996,"DivisionName":"2","CorrectedTime":"2025-09-20T21:26:52"},
+         {"NameRace":"Speedy","SailNumber":"1234","Status":"Retired","IsFinished":false,
+          "TCF":1.1,"DivisionName":"2","CorrectedTime":"0001-01-01T00:00:00"}]
+        """;
+
+    private CannedImporter canned()
+    {
+        CannedImporter imp = new CannedImporter(store);
+        imp.responses.put("/race/2025/results", INDEX_2025);
+        imp.responses.put("/race/2025/results/flinders-islet-race",
+            "<script>(function(){const raceId = 187; window.raceConfig = {};})();</script>");
+        imp.responses.put("/Race/Summary/187", SUMMARY_187);
+        imp.responses.put("/Results/Final/187/1068", LH_187);
+        imp.responses.put("/Results/Final/187/1071", IRC_187);
+        return imp;
+    }
+
+    @Test
+    void parsesResultsIndexAndRaceNames()
+    {
+        assertEquals(List.of("flinders-islet-race", "rolex-sydney-hobart-yacht-race"),
+            BwpsImporter.parseResultsIndex(INDEX_2025, 2025));
+        assertEquals("Flinders Islet Race", BwpsImporter.raceNameFromSlug("flinders-islet-race"));
+        assertEquals("Bird Island Race", BwpsImporter.raceNameFromSlug("bird-island-race"));
+    }
+
+    @Test
+    void importsMinorRaceWithLineHonoursElapsedAndIrcRatings()
+    {
+        CannedImporter imp = canned();
+        imp.importBwpsResults(2025, 2025, new LinkedHashMap<>());
+
         assertEquals(1, store.races().size());
-        Race race = store.races().values().iterator().next();
-        assertEquals(BwpsImporter.CLUB_ID, race.clubId());
-        assertEquals(LocalDate.of(2025, 9, 20), race.date());
-        assertFalse(race.divisions().isEmpty());
+        Race race = store.races().get("cyca.com.au-2025-09-20-0001");
+        assertNotNull(race, store.races().keySet().toString());
+        assertEquals("Flinders Islet Race", race.name());
+        assertEquals(BwpsImporter.SOURCE, race.source());
+        assertEquals(List.of(IdGenerator.generateSeriesId(BwpsImporter.CLUB_ID, "Blue Water Pointscore 2025")),
+            race.seriesIds());
 
-        // Two finished boats (retired boat excluded)
-        int totalFinishers = race.divisions().stream()
-            .mapToInt(d -> d.finishers().size()).sum();
-        assertEquals(2, totalFinishers);
+        Map<String, Division> divs = new LinkedHashMap<>();
+        race.divisions().forEach(d -> divs.put(d.name(), d));
+        assertEquals(List.of("IRC Div 1", "IRC Div 2 Two-Handed"), List.copyOf(divs.keySet()),
+            "the (DH) entry is a two-handed result; the retired boat is dropped");
 
-        // Both boats stored with IRC certificates
-        assertEquals(2, store.boats().size());
-        for (Boat boat : store.boats().values())
-        {
-            assertFalse(boat.certificates().isEmpty(),
-                "boat " + boat.id() + " should have an inferred certificate");
-            Certificate cert = boat.certificates().get(0);
-            assertEquals("IRC", cert.system());
-            assertEquals(2025, cert.year());
-            assertTrue(cert.certificateNumber().startsWith("bwps-irc-"));
-        }
+        Finisher moneypenny = divs.get("IRC Div 1").finishers().getFirst();
+        assertEquals(Duration.ofHours(6).plusMinutes(15).plusSeconds(44), moneypenny.elapsedTime(),
+            "elapsed = Line Honours finish − start, not the IRC corrected time");
 
-        // All finishers have elapsed times
-        List<Finisher> all = race.divisions().stream()
-            .flatMap(d -> d.finishers().stream()).toList();
-        assertTrue(all.stream().allMatch(f -> f.elapsedTime() != null));
-        assertTrue(all.stream().anyMatch(f ->
-            Duration.ofHours(6).plusMinutes(15).plusSeconds(44).equals(f.elapsedTime())));
+        Finisher disko = divs.get("IRC Div 2 Two-Handed").finishers().getFirst();
+        assertEquals(Duration.ofHours(11).plusMinutes(30), disko.elapsedTime());
+        Boat diskoBoat = store.boats().get(disko.boatId());
+        assertEquals("Disko Trooper", diskoBoat.name(), "(DH) stripped from the name");
+        Certificate cert = diskoBoat.certificates().getFirst();
+        assertEquals("IRC", cert.system());
+        assertEquals(0.996, cert.value(), 1e-9);
+        assertTrue(cert.twoHanded());
+
+        assertFalse(imp.fetched.stream().anyMatch(u -> u.contains("hobart")),
+            "Hobart is left to phase 2: " + imp.fetched);
     }
 
     @Test
-    void processRaceEditionIsIdempotent() throws Exception
+    void heldRaceIsNotFetchedAgain()
     {
-        BwpsImporter fixtureImporter = new BwpsImporter(store, null)
-        {
-            @Override
-            String fetchHtml(String url)
-            {
-                if (url.contains("categoryId=1071"))
-                    return fixture("standings-irc.html");
-                if (url.contains("categoryId=1068"))
-                    return fixture("standings-lh.html");
-                if (url.contains("moneypenny"))
-                    return fixture("boat-moneypenny.html");
-                if (url.contains("speedy"))
-                    return fixture("boat-speedy.html");
-                return "<html><body></body></html>";
-            }
-        };
+        canned().importBwpsResults(2025, 2025, new LinkedHashMap<>());
+        assertEquals(1, store.races().size());
 
-        fixtureImporter.processRaceEdition(
-            "Flinders Islet Race", 2025,
-            "/Standings?categoryId=1071&raceId=187&seriesId=11");
-        fixtureImporter.processRaceEdition(
-            "Flinders Islet Race", 2025,
-            "/Standings?categoryId=1071&raceId=187&seriesId=11");
-
-        assertEquals(1, store.races().size(), "second run should not create a duplicate race");
+        // 2025-09-20 is long past the recent-reimport window: only the index is fetched.
+        CannedImporter again = canned();
+        again.importBwpsResults(2025, 2025, new LinkedHashMap<>());
+        assertEquals(List.of(BwpsImporter.BASE_URL + "/race/2025/results",
+                BwpsImporter.BASE_URL + "/race/2025/yachts"), again.fetched);
+        assertEquals(1, store.races().size());
     }
 
-    // --- Helpers ---
-
-    private static String fixture(String name)
+    @Test
+    void raceWithoutStartIsSkipped()
     {
-        URL url = BwpsImporterTest.class.getClassLoader().getResource("bwps/" + name);
-        assertNotNull(url, "fixture not found: bwps/" + name);
-        try
-        {
-            return Files.readString(Path.of(url.toURI()), StandardCharsets.UTF_8);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException("failed to read fixture: " + name, e);
-        }
+        CannedImporter imp = canned();
+        imp.responses.put("/Race/Summary/187",
+            "{\"RaceId\":187,\"StartDateTime\":\"0001-01-01T00:00:00\",\"Categories\":[]}");
+        imp.importBwpsResults(2025, 2025, new LinkedHashMap<>());
+        assertTrue(store.races().isEmpty());
+    }
+
+    @Test
+    void raceNotYetSailedIsSkippedWithoutFetchingResults()
+    {
+        CannedImporter imp = canned();
+        imp.responses.put("/Race/Summary/187", SUMMARY_187.replace("2025-09-20T10:00:00",
+            LocalDate.now().plusYears(1) + "T10:00:00"));
+        imp.importBwpsResults(2025, 2025, new LinkedHashMap<>());
+        assertTrue(store.races().isEmpty());
+        assertFalse(imp.fetched.stream().anyMatch(u -> u.contains("/Results/")), imp.fetched.toString());
+    }
+
+    @Test
+    void missingIndexYearIsSkipped()
+    {
+        CannedImporter imp = canned();
+        imp.importBwpsResults(2025, 2026, new LinkedHashMap<>());   // 2026 index is a 404
+        assertEquals(1, store.races().size(), "2025 still imported");
+        assertEquals(LocalDate.of(2025, 9, 20), store.races().values().iterator().next().date());
     }
 }
