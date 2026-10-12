@@ -284,7 +284,7 @@ public class TaskService
                                Integer consistencyDropInterval,   // null → default 11
                                Integer adminPort,                // null → default 8888
                                Integer userPort,                 // null → default 8080
-                               String natGatewayIp,              // null → no gateway protection
+                               String natGatewayIp,              // deprecated: now in auth.yaml (still honoured if auth.yaml has none)
                                Map<String, Instant> lastRunTimes) // null → empty
     {}
 

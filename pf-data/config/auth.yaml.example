@@ -10,6 +10,14 @@
 # changes can only be made through the admin connector (adminPort in admin.yaml).
 enabled: false
 
+# --- Admin port protection (applies whether or not sign-in is enabled) --------
+#
+# The admin port treats every request as an editor. If the public NAT gateway / router
+# forwards traffic to this machine, give its address here: requests from it are then
+# treated as public even on the admin port. (Formerly in admin.yaml; kept here because
+# admin.yaml is committed with the published config.)
+natGatewayIp: null
+
 # --- Google OAuth client -----------------------------------------------------
 #
 # In the Google Cloud console (APIs & Services):

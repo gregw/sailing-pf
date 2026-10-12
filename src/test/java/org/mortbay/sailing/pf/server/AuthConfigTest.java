@@ -33,6 +33,31 @@ class AuthConfigTest
     }
 
     @Test
+    void natGatewayIpComesFromAuthYamlEvenWithSignInOff() throws Exception
+    {
+        Files.writeString(configDir.resolve("auth.yaml"), "enabled: false\nnatGatewayIp: 10.19.25.1\n");
+        AuthConfig auth = AuthConfig.load(configDir, 8888, 8081, null);
+        assertFalse(auth.enabled());
+        assertEquals("10.19.25.1", auth.natGatewayIp());
+    }
+
+    @Test
+    void authYamlNatGatewayIpWinsOverAdminYaml() throws Exception
+    {
+        Files.writeString(configDir.resolve("auth.yaml"), "natGatewayIp: 10.0.0.2\n");
+        assertEquals("10.0.0.2", AuthConfig.load(configDir, 8888, 8081, "10.0.0.1").natGatewayIp());
+    }
+
+    @Test
+    void adminYamlNatGatewayIpStillHonouredUntilMoved() throws Exception
+    {
+        // No auth.yaml at all, or one without natGatewayIp: the admin.yaml value still applies.
+        assertEquals("10.0.0.1", AuthConfig.load(configDir, 8888, 8081, "10.0.0.1").natGatewayIp());
+        Files.writeString(configDir.resolve("auth.yaml"), "enabled: false\n");
+        assertEquals("10.0.0.1", AuthConfig.load(configDir, 8888, 8081, "10.0.0.1").natGatewayIp());
+    }
+
+    @Test
     void disabledFileIsOff() throws Exception
     {
         assertFalse(load("enabled: false\nclientId: x\n").enabled());

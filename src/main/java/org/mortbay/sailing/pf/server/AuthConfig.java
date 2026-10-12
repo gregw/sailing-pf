@@ -22,6 +22,10 @@ import org.slf4j.LoggerFactory;
  * {@code .gitignore}; {@code auth.yaml.example} beside it shows the shape. The connector
  * ports come from {@code admin.yaml}.
  *
+ * <p>{@code auth.yaml} also holds {@code natGatewayIp} (it was in {@code admin.yaml}, which is
+ * committed with the published config): it applies whether or not sign-in is enabled. A value
+ * still in {@code admin.yaml} is honoured, with a warning, when {@code auth.yaml} has none.
+ *
  * <p><b>Absent means off.</b> No file, or {@code enabled: false}: nobody can sign in, and
  * changes can only be made through the admin connector — as before sign-in existed.
  *
@@ -73,17 +77,20 @@ record AuthConfig(boolean enabled, String issuer, String clientId, String client
      * not there. A file that is present but enabled without a client ID and secret is
      * <em>not</em> treated as off — failing open on a broken security config would leave the
      * server unprotected without anyone noticing — so this throws and the server does not start.
+     *
+     * @param legacyNatGatewayIp natGatewayIp from admin.yaml, used only when auth.yaml has none
      */
-    static AuthConfig load(Path configDir, int adminPort, int userPort, String natGatewayIp)
+    static AuthConfig load(Path configDir, int adminPort, int userPort, String legacyNatGatewayIp)
         throws IOException
     {
         Path file = configDir.resolve("auth.yaml");
-        if (!Files.isRegularFile(file))
+        AuthFile f = Files.isRegularFile(file) ? YAML.readValue(file.toFile(), AuthFile.class) : null;
+        String natGatewayIp = natGatewayIp(f, legacyNatGatewayIp, file);
+        if (f == null)
         {
             LOG.info("No {} -- sign-in is off; changes only through the admin connector", file);
             return disabled(adminPort, userPort, natGatewayIp);
         }
-        AuthFile f = YAML.readValue(file.toFile(), AuthFile.class);
         List<String> domains = new ArrayList<>();
         if (f.allowedDomain != null)
             domains.add(f.allowedDomain);
@@ -107,6 +114,23 @@ record AuthConfig(boolean enabled, String issuer, String clientId, String client
             auth.allowedDomains().isEmpty() ? "no domains" : "accounts in " + auth.allowedDomains(),
             auth.editors().size(), auth.forwardedHeaders() ? "; trusting X-Forwarded-* on the user port" : "");
         return auth;
+    }
+
+    /** auth.yaml's natGatewayIp, else the deprecated admin.yaml one (with a warning). */
+    private static String natGatewayIp(AuthFile f, String legacy, Path file)
+    {
+        boolean hasLegacy = legacy != null && !legacy.isBlank();
+        if (f != null && f.natGatewayIp != null && !f.natGatewayIp.isBlank())
+        {
+            if (hasLegacy && !legacy.equals(f.natGatewayIp))
+                LOG.warn("natGatewayIp differs between {} ({}) and admin.yaml ({}) -- using {}'s; "
+                    + "remove it from admin.yaml", file, f.natGatewayIp, legacy, file.getFileName());
+            return f.natGatewayIp.trim();
+        }
+        if (hasLegacy)
+            LOG.warn("natGatewayIp is set in admin.yaml, which is committed with the published config; "
+                + "move it to {} (it works there with or without sign-in enabled)", file);
+        return hasLegacy ? legacy.trim() : null;
     }
 
     /**
@@ -167,5 +191,6 @@ record AuthConfig(boolean enabled, String issuer, String clientId, String client
         public List<String> allowedDomains;
         public List<String> editors;
         public boolean forwardedHeaders;
+        public String natGatewayIp;
     }
 }

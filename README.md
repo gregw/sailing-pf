@@ -114,6 +114,11 @@ server from starting rather than leaving it unprotected.
 - **It needs the internet:** the server contacts Google at startup and on each sign-in.
 - **Sessions are in memory:** a restart signs everybody out.
 
+`auth.yaml` also holds `natGatewayIp`, which protects the admin port whether or not sign-in is
+enabled: requests arriving from the public NAT gateway's address are treated as public even on
+the admin port. It used to live in `admin.yaml`; a value still there is honoured (with a warning
+in the log) until it is moved.
+
 ## Installing as a systemd service (Raspberry Pi / Debian)
 
 The `etc/` directory contains a systemd unit file and an install script for running the server
