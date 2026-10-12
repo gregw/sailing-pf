@@ -165,35 +165,45 @@ test('formatStatus: add-boats path reports boats not found', () => {
     assert.equal(r.ok, false);
 });
 
-// Smallest-change optimisers behind "Flatten slope" (series) and "Level lines" (compare).
-const {minChangeToZeroLinear, minChangeToEqualLevels} = HandicapCalc;
+// Optimisers behind "Optimise" on the series page and "Level lines" on the compare page.
+const {tiltToZeroLinear, minChangeToEqualLevels} = HandicapCalc;
 const relChange = (h0, h) => [...h0.keys()].reduce((a, b) => a + (h.get(b) / h0.get(b) - 1) ** 2, 0);
+const sOf = (c, h) => [...c].reduce((a, [b, cb]) => a + cb * h.get(b), 0);
 
-test('minChangeToZeroLinear: makes the linear function zero', () => {
+test('tiltToZeroLinear: makes the linear function zero', () => {
     const h0 = new Map([['a', 0.9], ['b', 1.0], ['c', 1.1], ['x', 1.3]]);
-    const c = new Map([['a', -2], ['b', 0.5], ['c', 3]]);   // 'x' does not affect it
-    const h = minChangeToZeroLinear(h0, c);
-    const s = [...c].reduce((a, [b, cb]) => a + cb * h.get(b), 0);
-    assert.ok(Math.abs(s) < 1e-12, `S = ${s}`);
+    const c = new Map([['a', -2], ['b', 0.5], ['c', 1.1]]);   // 'x' does not affect it
+    const h = tiltToZeroLinear(h0, c);
+    assert.ok(Math.abs(sOf(c, h)) < 1e-9, `S = ${sOf(c, h)}`);
     assert.equal(h.get('x'), 1.3, 'uninvolved boat unchanged');
 });
 
-test('minChangeToZeroLinear: no other zeroing change is smaller', () => {
-    const h0 = new Map([['a', 0.9], ['b', 1.0], ['c', 1.1]]);
-    const c = new Map([['a', -2], ['b', 0.5], ['c', 3]]);
-    const h = minChangeToZeroLinear(h0, c);
-    const best = relChange(h0, h);
-    // Move along the constraint surface: any direction v with Σ c·h0·v = 0 keeps S at 0.
-    for (const [va, vb] of [[0.01, 0], [0, 0.01], [-0.02, 0.01]]) {
-        const vc = -(c.get('a') * 0.9 * va + c.get('b') * 1.0 * vb) / (c.get('c') * 1.1);
-        const alt = new Map([['a', h.get('a') + 0.9 * va], ['b', h.get('b') + 1.0 * vb],
-            ['c', h.get('c') + 1.1 * vc]]);
-        assert.ok(relChange(h0, alt) >= best - 1e-12);
-    }
+test('tiltToZeroLinear: equal handicaps change equally, however much each boat raced', () => {
+    // 'b' and 'b2' have the same handicap; 'b2' sailed far more (a much larger coefficient).
+    const h0 = new Map([['a', 0.9], ['b', 1.0], ['b2', 1.0], ['c', 1.1]]);
+    const c = new Map([['a', -2], ['b', 0.1], ['b2', 5], ['c', -1]]);
+    const h = tiltToZeroLinear(h0, c);
+    assert.ok(Math.abs(sOf(c, h)) < 1e-9);
+    assert.equal(h.get('b'), h.get('b2'));
 });
 
-test('minChangeToZeroLinear: null when nothing affects it', () => {
-    assert.equal(minChangeToZeroLinear(new Map([['a', 1]]), new Map()), null);
+test('tiltToZeroLinear: keeps the average level and the order', () => {
+    const h0 = new Map([['a', 0.8], ['b', 0.95], ['c', 1.05], ['d', 1.2]]);
+    const c = new Map([['a', -1.3], ['b', -0.5], ['c', 0.4], ['d', 0.6]]);
+    const h = tiltToZeroLinear(h0, c);
+    const logMean = m => [...m.values()].reduce((a, v) => a + Math.log(v), 0) / m.size;
+    assert.ok(Math.abs(logMean(h) - logMean(h0)) < 1e-12, 'geometric mean kept');
+    const order = m => [...m].sort((x, y) => x[1] - y[1]).map(e => e[0]).join();
+    assert.equal(order(h), order(h0));
+});
+
+test('tiltToZeroLinear: null when no tilt can zero it', () => {
+    assert.equal(tiltToZeroLinear(new Map([['a', 1]]), new Map()), null);
+    // All the same handicap: a tilt changes nothing.
+    assert.equal(tiltToZeroLinear(new Map([['a', 1], ['b', 1]]), new Map([['a', 1], ['b', 2]])), null);
+    // Only a tilt that reverses the order (k < −1) would zero this one.
+    assert.equal(tiltToZeroLinear(new Map([['a', 0.8], ['b', 0.95], ['c', 1.05], ['d', 1.2]]),
+        new Map([['a', -1], ['b', -0.5], ['c', 0.4], ['d', 1.5]])), null);
 });
 
 test('minChangeToEqualLevels: every line ends at the same level', () => {

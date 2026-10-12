@@ -3958,9 +3958,9 @@ function onSeriesFlattenSlope() {
     const setIdx = traces[0].meta.setIdx;
     const calc = seriesPfCalc();
     const h0 = calc.getAllSets()[setIdx].values;
-    const h = HandicapCalc.minChangeToZeroLinear(h0, seriesSlopeCoefficients(traces));
+    const h = HandicapCalc.tiltToZeroLinear(h0, seriesSlopeCoefficients(traces));
     if (!h) {
-        if (status) status.textContent = 'Nothing to adjust.';
+        if (status) status.textContent = 'No tilt of the handicaps (keeping their order) levels the slope.';
         return;
     }
     let changed = 0, maxPct = 0;

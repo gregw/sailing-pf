@@ -359,29 +359,44 @@ const HandicapCalc = (function () {
     //   'skip'     — do not load this handicap (variants disagree under 'filter').
     //   'override' — load handicap AND replace the boat's variant ('set' mode).
     //   'apply'    — load handicap, keep the existing variant.
-    // ---- Smallest-change handicap optimisers (pure; exported for the charts and tests) ----
+    // ---- Handicap optimisers (pure; exported for the charts and tests) ----
     //
-    // Both take the current handicaps h0 (Map boatId → value) and return a new Map with the
-    // smallest relative change, i.e. minimising Σ ((h − h0) / h0)², that meets the target.
-    // Boats the target does not involve keep their handicap.
+    // Both take the current handicaps h0 (Map boatId → value) and return a new Map. Each boat's
+    // change depends only on its own handicap or its own results -- never on how many races it
+    // sailed -- so boats alike are treated alike. Boats the target does not involve keep theirs.
 
     // Make the linear function S(h) = Σ c[b]·h[b] zero (e.g. a weighted average trend slope,
-    // which is linear in the handicaps). With h = h0·(1 + u) the constraint is S0 + d·u = 0
-    // where d[b] = c[b]·h0[b], and the smallest u is u = −S0·d / (d·d). Returns null when no
-    // handicap affects S.
-    function minChangeToZeroLinear(h0, c) {
-        let s0 = 0, dd = 0;
-        const d = new Map();
-        c.forEach((cb, b) => {
-            const h = h0.get(b);
-            if (h == null || !isFinite(cb)) return;
-            s0 += cb * h;
-            d.set(b, cb * h);
-            dd += cb * h * cb * h;
-        });
-        if (dd === 0) return null;
+    // which is linear in the handicaps) by tilting the handicaps: h = h0·(h0 / G)^k, with G the
+    // geometric mean of the involved handicaps (so their average level is kept) and k the one
+    // exponent that zeroes S. Boats with the same handicap change by the same percentage. Only
+    // k > −1 is allowed, which keeps the order of the handicaps (k ≤ −1 would turn the fastest
+    // boat into the slowest). Returns null when no such tilt zeroes S.
+    function tiltToZeroLinear(h0, c) {
+        const boats = [...c.keys()].filter(b => h0.get(b) > 0 && isFinite(c.get(b)));
+        if (boats.length < 2) return null;
+        const logG = boats.reduce((a, b) => a + Math.log(h0.get(b)), 0) / boats.length;
+        const s = k => boats.reduce((a, b) =>
+            a + c.get(b) * h0.get(b) * Math.exp(k * (Math.log(h0.get(b)) - logG)), 0);
+        const s0 = s(0);
+        if (s0 === 0) return new Map(h0);
+        // Bracket a sign change, searching outward from k = 0 on both sides (towards −1 on the
+        // negative side), then bisect.
+        let lo = null, hi = null;
+        for (let step = 0.125; step <= 256 && lo == null; step *= 2)
+            for (const k of [step, -1 + 1 / (1 + 8 * step)])
+                if (Math.sign(s(k)) !== Math.sign(s0)) {
+                    [lo, hi] = [0, k];
+                    break;
+                }
+        if (lo == null) return null;
+        for (let i = 0; i < 100; i++) {
+            const mid = (lo + hi) / 2;
+            if (Math.sign(s(mid)) === Math.sign(s0)) lo = mid;
+            else hi = mid;
+        }
+        const k = (lo + hi) / 2;
         const out = new Map(h0);
-        d.forEach((db, b) => out.set(b, h0.get(b) * (1 - s0 * db / dd)));
+        boats.forEach(b => out.set(b, h0.get(b) * Math.exp(k * (Math.log(h0.get(b)) - logG))));
         return out;
     }
 
@@ -2041,7 +2056,7 @@ const HandicapCalc = (function () {
         decideVariantAction,
         formatStatus,
         normaliseVariant,
-        minChangeToZeroLinear,
+        tiltToZeroLinear,
         minChangeToEqualLevels,
         mergeEntryLists,
         equalisingFactor,
