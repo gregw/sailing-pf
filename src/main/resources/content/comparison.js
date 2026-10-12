@@ -229,30 +229,6 @@ function weightedOlsTrend(entries) {
              y: [slope * x0 + intercept, slope * x1 + intercept] };
 }
 
-function slidingAverage(entries, n, drops, seed) {
-    if (entries.length < 2) return null;
-    const pts = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-    const xs = [], ys = [];
-    const keep = Math.max(1, n - (drops || 0));
-    // Build N virtual seed entries at the PF value so the average is fully initialised
-    // from race 1; these are not plotted but fill the window before real data.
-    const virtual = seed != null
-        ? Array.from({ length: n }, () => ({ backCalcFactor: seed }))
-        : [];
-    for (let i = 0; i < pts.length; i++) {
-        // Window = last n real entries, padded on the left with virtual seed entries
-        const realWindow = pts.slice(Math.max(0, i - n + 1), i + 1);
-        const pad = virtual.slice(Math.max(0, n - i - 1));  // virtual entries that still fit
-        const window = [...pad, ...realWindow];
-        // Sort window by backCalcFactor ascending, drop the worst (highest) values
-        const sorted = [...window].sort((a, b) => a.backCalcFactor - b.backCalcFactor);
-        const used = sorted.slice(0, Math.min(keep, sorted.length));
-        xs.push(pts[i].date);
-        ys.push(used.reduce((a, p) => a + p.backCalcFactor, 0) / used.length);
-    }
-    return xs.length >= 2 ? { x: xs, y: ys } : null;
-}
-
 // ---- Main chart ----
 
 async function loadChart() {
@@ -515,7 +491,7 @@ function renderBcfChart(data) {
             // early window stays in the plotted domain.
             if (trendMode === 'average') {
                 const pfSeed = pfFactor ? pfFactor.value / (div ? div.value : 1) : null;
-                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, pfSeed);
+                const s = Trends.slidingAverage(entries, slidingAverageCount, slidingAverageDrops, pfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
                 const avgLabel = slidingAverageDrops > 0
                     ? `best ${best} of ${slidingAverageCount} avg`

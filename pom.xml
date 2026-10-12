@@ -126,6 +126,7 @@
               <arguments>
                 <argument>--test</argument>
                 <argument>${project.basedir}/src/test/js/handicap-calc.test.js</argument>
+                <argument>${project.basedir}/src/test/js/trends.test.js</argument>
               </arguments>
               <skip>${maven.test.skip}</skip>
             </configuration>

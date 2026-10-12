@@ -206,26 +206,6 @@ function weightedOlsTrend(entries) {
              y: [slope * x0 + intercept, slope * x1 + intercept] };
 }
 
-function slidingAverage(entries, n, drops, seed) {
-    if (entries.length < 2) return null;
-    const pts = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-    const xs = [], ys = [];
-    const keep = Math.max(1, n - (drops || 0));
-    const virtual = seed != null
-        ? Array.from({ length: n }, () => ({ backCalcFactor: seed }))
-        : [];
-    for (let i = 0; i < pts.length; i++) {
-        const realWindow = pts.slice(Math.max(0, i - n + 1), i + 1);
-        const pad = virtual.slice(Math.max(0, n - i - 1));
-        const window = [...pad, ...realWindow];
-        const sorted = [...window].sort((a, b) => a.backCalcFactor - b.backCalcFactor);
-        const used = sorted.slice(0, Math.min(keep, sorted.length));
-        xs.push(pts[i].date);
-        ys.push(used.reduce((a, p) => a + p.backCalcFactor, 0) / used.length);
-    }
-    return xs.length >= 2 ? { x: xs, y: ys } : null;
-}
-
 // ---- Variant helpers ----
 
 // The page has no global variant selector — each design's variant lives in the
@@ -442,7 +422,7 @@ function renderBcfChart(data) {
             // the unscaled domain and would skew the early window.
             if (showTrendSliding && !divisor) {
                 const rfSeed = rfFactor ? rfFactor.value : null;
-                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, rfSeed);
+                const s = Trends.slidingAverage(entries, slidingAverageCount, slidingAverageDrops, rfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
                 const avgLabel = slidingAverageDrops > 0
                     ? `best ${best} of ${slidingAverageCount} avg`
