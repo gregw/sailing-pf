@@ -601,6 +601,29 @@ function errorBounds(factor, weight) {
     });
 })();
 
+// Phone menu (☰): opens the pages as a list; a tap outside it, a link, or Escape closes it.
+(function () {
+    const nav = document.querySelector('.site-nav');
+    const toggle = nav && nav.querySelector('.nav-toggle');
+    if (!toggle) return;
+    function setOpen(open) {
+        nav.classList.toggle('open', open);
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.textContent = open ? '✕' : '☰';
+    }
+    toggle.addEventListener('click', e => {
+        e.stopPropagation();
+        setOpen(!nav.classList.contains('open'));
+    });
+    document.addEventListener('click', e => {
+        if (nav.classList.contains('open') && (!nav.contains(e.target) || e.target.closest('a')))
+            setOpen(false);
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') setOpen(false);
+    });
+})();
+
 // The sign-in link: back to this page afterwards.
 function signInUrl() {
     return '/auth/login?return=' + encodeURIComponent(location.pathname + location.search);
@@ -624,6 +647,12 @@ window.pfAuth = { authenticated: false, signedIn: false, email: null };
                 + ' &nbsp; <a href="/auth/logout">Sign out</a>';
         } else if (data.enabled && !data.adminConnector) {
             widget.innerHTML = `<a href="${esc(signInUrl())}">Sign in</a>`;
+        }
+        // On phones it is in the ☰ menu instead (see style.css).
+        if (widget.innerHTML) {
+            const inMenu = widget.cloneNode(true);
+            inMenu.className = 'nav-auth-menu';
+            nav.appendChild(inMenu);
         }
         // Beside the Share button, at the right of the nav.
         const share = document.getElementById('nav-share');
