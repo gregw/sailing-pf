@@ -20,6 +20,12 @@ package org.mortbay.sailing.pf.analysis;
  * is available (e.g. graph not loaded, or no other variant has races). The PF value falls
  * back to the boat's RF, but its weight is capped at this value to reflect that we have no
  * direct observation of the boat in this variant. Defaults to 0.2.
+ *
+ * <p>{@code ageHalfLifeYears} fades older results when fitting each boat's PF: a race counts
+ * 0.5^(age / H), where age is measured back from the boat's own most recent race in that
+ * variant (so a boat that has not raced for years keeps its last results at full weight).
+ * Applied to the PF update and the PF confidence only — not to the division par times.
+ * 0 disables it; the 15-argument constructor (and {@link #DEFAULT}) leave it off.
  */
 public record PfConfig(
     double lambda,                  // regularisation strength (pulls PF toward RF)
@@ -36,9 +42,30 @@ public record PfConfig(
     double outerPfConvergenceThreshold, // max |Δlog(PF)| between outer cycles; outer loop also converges when this is met
     boolean logOuterDiagnostics,    // when true, log top weight-flippers and PF-movers each outer cycle
     double dubiousFactor,           // PF threshold above which entry weights ramp down (default 1.5)
-    double maxFactor                // PF threshold at/above which entry weights are zero (default 2.0)
+    double maxFactor,               // PF threshold at/above which entry weights are zero (default 2.0)
+    double ageHalfLifeYears         // half-life of a result's weight, in years before the boat's latest race; 0 = off
 )
 {
     public static final PfConfig DEFAULT = new PfConfig(
         1.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0, 0.25, 0.2, 1.0e-3, false, 1.5, 2.0);
+
+    /** Without age decay (ageHalfLifeYears = 0). */
+    public PfConfig(double lambda, double convergenceThreshold, int maxInnerIterations,
+                    int maxOuterIterations, double outlierK, double asymmetryFactor,
+                    double outerDampingFactor, double outerConvergenceThreshold,
+                    double crossVariantLambda, double graphCrossVariantLambda,
+                    double noRaceFallbackWeight, double outerPfConvergenceThreshold,
+                    boolean logOuterDiagnostics, double dubiousFactor, double maxFactor)
+    {
+        this(lambda, convergenceThreshold, maxInnerIterations, maxOuterIterations, outlierK,
+            asymmetryFactor, outerDampingFactor, outerConvergenceThreshold, crossVariantLambda,
+            graphCrossVariantLambda, noRaceFallbackWeight, outerPfConvergenceThreshold,
+            logOuterDiagnostics, dubiousFactor, maxFactor, 0.0);
+    }
+
+    /** The weight multiplier for a result {@code ageYears} before the boat's latest race. */
+    public double ageDecay(double ageYears)
+    {
+        return ageHalfLifeYears > 0 && ageYears > 0 ? Math.pow(0.5, ageYears / ageHalfLifeYears) : 1.0;
+    }
 }

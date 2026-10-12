@@ -1,6 +1,7 @@
 package org.mortbay.sailing.pf.analysis;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -283,6 +284,13 @@ public class PfOptimiser
             boatVariantEntries[e.variant()][e.boatOrdinal()].add(i);
         }
 
+        // Age decay per entry: older results count less in the boat's own PF (Step B and its
+        // confidence), measured back from the boat's latest race in that variant — see
+        // PfConfig.ageHalfLifeYears. The division par times (Step A) are not decayed: each
+        // boat's decay depends on its own latest race, so it would let the most-retired boat in
+        // an old race dominate that race's par time.
+        double[] ageDecay = computeAgeDecay(entries, boatVariantEntries, config);
+
         // --- Build per-variant-pair graph-converter cache ---
         // For each ordered (v2 → v) pair we probe convertViaGraph at two seed values and fit
         // a log-linear function: predLogPf_v = slope * logPf_v2 + intercept, weighted by the
@@ -377,7 +385,7 @@ public class PfOptimiser
                         for (int idx : bEntries)
                         {
                             Entry e = entries.get(idx);
-                            double w = entryWeights[idx];
+                            double w = entryWeights[idx] * ageDecay[idx];
                             sumW  += w;
                             sumWX += w * (logT[e.divOrdinal()] - e.logElapsed());
                         }
@@ -526,7 +534,7 @@ public class PfOptimiser
 
         // --- Step 19: Output assembly ---
         return assembleResult(config, ordinalToBoatId, ordinalToDivKey, boatLogRf,
-            logPf, logT, divIqrLog, entries, entryWeights, entryCount,
+            logPf, logT, divIqrLog, entries, entryWeights, ageDecay, entryCount,
             divEntryIndexes, boatVariantEntries, nBoats, nDivs, totalInner, outerIter,
             innerConverged, outerConverged, finalMaxDelta, finalMaxWeightChange,
             List.copyOf(outerDeltaTrace), finalMaxPfDelta, List.copyOf(outerPfDeltaTrace),
@@ -715,11 +723,47 @@ public class PfOptimiser
         LOG.info(sb2.toString());
     }
 
+    /**
+     * The age-decay multiplier of each entry: {@link PfConfig#ageDecay} of the entry's age in
+     * years before its boat's most recent race in the same variant (1 when decay is off or the
+     * date is unknown).
+     */
+    static double[] computeAgeDecay(List<Entry> entries, List<Integer>[][] boatVariantEntries,
+                                    PfConfig config)
+    {
+        double[] decay = new double[entries.size()];
+        Arrays.fill(decay, 1.0);
+        if (config.ageHalfLifeYears() <= 0)
+            return decay;
+        for (List<Integer>[] byBoat : boatVariantEntries)
+        {
+            for (List<Integer> idxs : byBoat)
+            {
+                LocalDate latest = null;
+                for (int idx : idxs)
+                {
+                    LocalDate d = entries.get(idx).raceDate();
+                    if (d != null && (latest == null || d.isAfter(latest)))
+                        latest = d;
+                }
+                if (latest == null)
+                    continue;
+                for (int idx : idxs)
+                {
+                    LocalDate d = entries.get(idx).raceDate();
+                    if (d != null)
+                        decay[idx] = config.ageDecay(ChronoUnit.DAYS.between(d, latest) / 365.25);
+                }
+            }
+        }
+        return decay;
+    }
+
     private PfResult assembleResult(PfConfig config,
                                      String[] ordinalToBoatId, DivisionKey[] ordinalToDivKey,
                                     Map<String, double[]> boatLogRf,
                                      double[][] logPf, double[] logT, double[] divIqrLog,
-                                     List<Entry> entries, double[] entryWeights,
+                                     List<Entry> entries, double[] entryWeights, double[] ageDecay,
                                      int[][] entryCount,
                                      List<List<Integer>> divEntryIndexes,
                                      List<Integer>[][] boatVariantEntries,
@@ -770,7 +814,7 @@ public class PfOptimiser
                         // Compute confidence from total weighted entry count
                         double totalEntryWeight = 0;
                         for (int idx : boatVariantEntries[v][b])
-                            totalEntryWeight += entryWeights[idx];
+                            totalEntryWeight += entryWeights[idx] * ageDecay[idx];
                         double confidence = Math.min(1.0, totalEntryWeight / 5.0);
 
                         pfFactors[v] = new Factor(pfVal, confidence);
@@ -804,7 +848,7 @@ public class PfOptimiser
                             double totalV2EntryWeight = 0;
                             for (int idx : boatVariantEntries[v2][b])
                             {
-                                totalV2EntryWeight += entryWeights[idx];
+                                totalV2EntryWeight += entryWeights[idx] * ageDecay[idx];
                             }
                             if (totalV2EntryWeight <= 0)
                                 continue;

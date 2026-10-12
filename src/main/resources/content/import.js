@@ -74,6 +74,7 @@ async function loadImporters() {
         document.getElementById('pf-asymmetry').value = data.pfConfig.asymmetryFactor;
         document.getElementById('pf-dubious-factor').value = data.pfConfig.dubiousFactor;
         document.getElementById('pf-max-factor').value = data.pfConfig.maxFactor;
+        document.getElementById('pf-age-half-life').value = data.pfConfig.ageHalfLifeYears;
         document.getElementById('pf-outer-damping').value = data.pfConfig.outerDampingFactor;
         document.getElementById('pf-outer-convergence').value = data.pfConfig.outerConvergenceThreshold;
         document.getElementById('pf-outer-pf-convergence').value = data.pfConfig.outerPfConvergenceThreshold;
@@ -244,6 +245,9 @@ async function saveSchedule() {
     const pfAsymmetryFactor = parseFloat(document.getElementById('pf-asymmetry').value) || null;
     const pfDubiousFactor = parseFloat(document.getElementById('pf-dubious-factor').value) || null;
     const pfMaxFactor = parseFloat(document.getElementById('pf-max-factor').value) || null;
+    // 0 means "no age decay", so keep it (unlike the fields above, where 0 means unset).
+    const ageHalfLife = parseFloat(document.getElementById('pf-age-half-life').value);
+    const pfAgeHalfLifeYears = isNaN(ageHalfLife) ? null : ageHalfLife;
     const pfOuterDampingFactor = parseFloat(document.getElementById('pf-outer-damping').value) || null;
     const pfOuterConvergenceThreshold = parseFloat(document.getElementById('pf-outer-convergence').value) || null;
     const pfOuterPfConvergenceThreshold = parseFloat(document.getElementById('pf-outer-pf-convergence').value) || null;
@@ -255,7 +259,7 @@ async function saveSchedule() {
             pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-            pfDubiousFactor, pfMaxFactor
+            pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears
         })
     });
     if (!resp.ok) {

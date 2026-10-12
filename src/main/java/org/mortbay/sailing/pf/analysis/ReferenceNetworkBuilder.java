@@ -1,6 +1,8 @@
 package org.mortbay.sailing.pf.analysis;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -93,6 +95,11 @@ public class ReferenceNetworkBuilder
 
     /** Actual club certificate weight multiplier used by this instance. */
     private final double clubBaseWeight;
+    /**
+     * Half-life, in years before the boat's latest race in that variant, of a race's weight when
+     * propagating an RF from races (see {@link PfConfig#ageHalfLifeYears}); 0 = no age decay.
+     */
+    private final double ageHalfLifeYears;
 
     public ReferenceNetworkBuilder()
     {
@@ -101,11 +108,18 @@ public class ReferenceNetworkBuilder
 
     public ReferenceNetworkBuilder(double clubBaseWeight)
     {
+        this(clubBaseWeight, 0.0);
+    }
+
+    public ReferenceNetworkBuilder(double clubBaseWeight, double ageHalfLifeYears)
+    {
         this.clubBaseWeight = clubBaseWeight;
+        this.ageHalfLifeYears = ageHalfLifeYears;
     }
 
     // Per-boat race participation entry: one per (race, division) containing this boat.
-    private record DivisionEntry(Duration elapsed, boolean nonSpinnaker, List<Finisher> peers) {}
+    private record DivisionEntry(Duration elapsed, boolean nonSpinnaker, List<Finisher> peers,
+                                 LocalDate date) {}
 
     // ==========================================================================
     // Public API
@@ -204,7 +218,7 @@ public class ReferenceNetworkBuilder
         {
             lastGen = gen;
             // Step 10: propagate via race co-participation (spin and nonSpin variants only)
-            int fromRaces = propagateViaRaces(result, boatDivIndex, gen);
+            int fromRaces = propagateViaRaces(result, boatDivIndex, gen, ageHalfLifeYears);
             LOG.info("ReferenceNetworkBuilder iteration {}: {} from races", gen, fromRaces);
 
             // Converged — but only exit after at least 2 generations so that race propagation
@@ -635,7 +649,7 @@ public class ReferenceNetworkBuilder
                             peers.add(peer);
                     }
                     index.computeIfAbsent(f.boatId(), k -> new ArrayList<>())
-                         .add(new DivisionEntry(f.elapsedTime(), f.nonSpinnaker(), peers));
+                         .add(new DivisionEntry(f.elapsedTime(), f.nonSpinnaker(), peers, race.date()));
                 }
             }
         }
@@ -659,7 +673,8 @@ public class ReferenceNetworkBuilder
     private static int propagateViaRaces(
         Map<String, ReferenceFactors> brf,
         Map<String, List<DivisionEntry>> boatDivIndex,
-        int generation)
+        int generation,
+        double ageHalfLifeYears)
     {
         int newCount = 0;
 
@@ -678,6 +693,18 @@ public class ReferenceNetworkBuilder
             List<Factor> impliedSpin    = needSpin    ? new ArrayList<>() : null;
             List<Factor> impliedNonSpin = needNonSpin ? new ArrayList<>() : null;
 
+            // Older races count less: age measured back from the boat's latest race in the
+            // same variant, so a boat that has not raced lately keeps its last races at full weight.
+            LocalDate latestSpin = null, latestNonSpin = null;
+            for (DivisionEntry entry : entries)
+            {
+                if (entry.date() == null) continue;
+                if (entry.nonSpinnaker())
+                    latestNonSpin = latestNonSpin == null || entry.date().isAfter(latestNonSpin) ? entry.date() : latestNonSpin;
+                else
+                    latestSpin = latestSpin == null || entry.date().isAfter(latestSpin) ? entry.date() : latestSpin;
+            }
+
             for (DivisionEntry entry : entries)
             {
                 boolean isNS = entry.nonSpinnaker();
@@ -686,6 +713,10 @@ public class ReferenceNetworkBuilder
 
                 long myNanos = entry.elapsed().toNanos();
                 if (myNanos <= 0) continue;
+                LocalDate latest = isNS ? latestNonSpin : latestSpin;
+                double decay = ageHalfLifeYears > 0 && latest != null && entry.date() != null
+                    ? Math.pow(0.5, ChronoUnit.DAYS.between(entry.date(), latest) / 365.25 / ageHalfLifeYears)
+                    : 1.0;
 
                 for (Finisher peer : entry.peers())
                 {
@@ -702,7 +733,7 @@ public class ReferenceNetworkBuilder
                     double implied = peerFactor.value() * peerNanos / (double) myNanos;
                     if (implied <= 0 || implied > 3.0) continue;
 
-                    Factor impliedFactor = new Factor(implied, peerFactor.weight());
+                    Factor impliedFactor = new Factor(implied, peerFactor.weight() * decay);
                     if (isNS) impliedNonSpin.add(impliedFactor);
                     else      impliedSpin.add(impliedFactor);
                 }

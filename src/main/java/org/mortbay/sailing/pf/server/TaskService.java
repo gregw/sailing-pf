@@ -276,6 +276,7 @@ public class TaskService
                                Boolean pfLogOuterDiagnostics,        // null → false
                                Double pfDubiousFactor,               // null → default 1.5
                                Double pfMaxFactor,                   // null → default 2.0
+                               Double pfAgeHalfLifeYears,            // null → default 2.0; 0 = no age decay
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -334,6 +335,7 @@ public class TaskService
     private volatile boolean pfLogOuterDiagnostics = false;
     private volatile double pfDubiousFactor = 1.5;
     private volatile double pfMaxFactor = 2.0;
+    private volatile double pfAgeHalfLifeYears = 2.0;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -429,6 +431,8 @@ public class TaskService
                 pfDubiousFactor = config.pfDubiousFactor();
             if (config.pfMaxFactor() != null)
                 pfMaxFactor = config.pfMaxFactor();
+            if (config.pfAgeHalfLifeYears() != null)
+                pfAgeHalfLifeYears = config.pfAgeHalfLifeYears();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -657,7 +661,8 @@ public void stop()
                                        Double pfOuterPfConvergenceThreshold,
                                        Boolean pfLogOuterDiagnostics,
                                        Double pfDubiousFactor,
-                                       Double pfMaxFactor)
+                                       Double pfMaxFactor,
+                                       Double pfAgeHalfLifeYears)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
@@ -684,6 +689,12 @@ public void stop()
             this.pfDubiousFactor = pfDubiousFactor;
         if (pfMaxFactor != null)
             this.pfMaxFactor = pfMaxFactor;
+        if (pfAgeHalfLifeYears != null)
+        {
+            this.pfAgeHalfLifeYears = pfAgeHalfLifeYears;
+            if (cache != null)
+                cache.setAgeHalfLifeYears(pfAgeHalfLifeYears);
+        }
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -699,6 +710,7 @@ public void stop()
         this.cache = cache;
         cache.setDiversityWeights(diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight);
         cache.setConsistencyDropInterval(consistencyDropInterval);
+        cache.setAgeHalfLifeYears(pfAgeHalfLifeYears);
     }
 
     public ImportStatus currentStatus()
@@ -800,6 +812,11 @@ public void stop()
     public double pfMaxFactor()
     {
         return pfMaxFactor;
+    }
+
+    public double pfAgeHalfLifeYears()
+    {
+        return pfAgeHalfLifeYears;
     }
 
     /**
@@ -1035,7 +1052,7 @@ public void stop()
             pfCrossVariantLambda, pfGraphCrossVariantLambda,
             pfNoRaceFallbackWeight,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-            pfDubiousFactor, pfMaxFactor);
+            pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears);
     }
 
     /**
@@ -1132,7 +1149,7 @@ public void stop()
                     pfCrossVariantLambda, pfGraphCrossVariantLambda,
                     pfNoRaceFallbackWeight,
                     pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-                    pfDubiousFactor, pfMaxFactor,
+                    pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,

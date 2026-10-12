@@ -70,6 +70,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile double diversitySpinWeight      = 1.0;
     private volatile double diversityTwoHandedWeight = 1.2;
     private volatile int    consistencyDropInterval  = 11;
+    private volatile double ageHalfLifeYears         = 0.0;
 
     public void setDiversityWeights(double nonSpin, double spin, double twoHanded)
     {
@@ -81,6 +82,12 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public void setConsistencyDropInterval(int interval)
     {
         this.consistencyDropInterval = interval;
+    }
+
+    /** Age half-life for the RF race propagation (the PF optimiser gets it via PfConfig). */
+    public void setAgeHalfLifeYears(double years)
+    {
+        this.ageHalfLifeYears = years;
     }
 
     public AnalysisCache(DataStore store)
@@ -105,7 +112,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         List<ComparisonResult> newComparisons = new HandicapAnalyser(store, sigma).analyseAll();
         ConversionGraph graph = ConversionGraph.from(newComparisons, minR2, minPairs);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
-        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
+        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears).build(store, graph, year);
 
         comparisons = newComparisons;
         targetYear  = year;
@@ -130,7 +137,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         LOG.info("AnalysisCache: refreshing reference factors...");
         ConversionGraph graph = ConversionGraph.from(comparisons, minR2, minPairs);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
-        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
+        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears).build(store, graph, year);
         targetYear = year;
         minAnalysisR2 = minR2;
         minAnalysisPairs = minPairs;
