@@ -113,9 +113,21 @@ public class ReferenceNetworkBuilder
 
     public ReferenceNetworkBuilder(double clubBaseWeight, double ageHalfLifeYears)
     {
+        this(clubBaseWeight, ageHalfLifeYears, DuplicateRaces.NONE);
+    }
+
+    /**
+     * @param duplicates copies of the same race: race propagation uses each boat's result
+     *                   once, from the copy where it counts (see {@link DuplicateRaces})
+     */
+    public ReferenceNetworkBuilder(double clubBaseWeight, double ageHalfLifeYears, DuplicateRaces duplicates)
+    {
         this.clubBaseWeight = clubBaseWeight;
         this.ageHalfLifeYears = ageHalfLifeYears;
+        this.duplicates = duplicates;
     }
+
+    private final DuplicateRaces duplicates;
 
     // Per-boat race participation entry: one per (race, division) containing this boat.
     private record DivisionEntry(Duration elapsed, boolean nonSpinnaker, List<Finisher> peers,
@@ -210,7 +222,7 @@ public class ReferenceNetworkBuilder
         // Steps 10–11: iterative race co-participation propagation.
         // Run for at least 2 generations before considering convergence, so that boats added in
         // generation 1 can themselves serve as references for others in generation 2.
-        Map<String, List<DivisionEntry>> boatDivIndex = buildBoatDivisionIndex(store, currentYear);
+        Map<String, List<DivisionEntry>> boatDivIndex = buildBoatDivisionIndex(store, currentYear, duplicates);
         Map<String, Boat> boats = store.boats();
 
         int lastGen = 1;
@@ -622,10 +634,11 @@ public class ReferenceNetworkBuilder
 
     /**
      * Builds an index from boatId to all (elapsed, nonSpinnaker, peers) entries —
-     * one per (race, division) in which the boat appeared.
+     * one per (race, division) in which the boat appeared, except copies of a duplicate race
+     * in which its result does not count. Its peers include every boat in that division.
      */
     private static Map<String, List<DivisionEntry>> buildBoatDivisionIndex(
-        DataStore store, int currentYear)
+        DataStore store, int currentYear, DuplicateRaces duplicates)
     {
         Map<String, List<DivisionEntry>> index = new LinkedHashMap<>();
         for (Race race : store.races().values())
@@ -634,13 +647,14 @@ public class ReferenceNetworkBuilder
             if (store.isRaceExcluded(race.id())) continue;
             if (store.isClubExcluded(race.clubId())) continue;
 
-            for (Division div : race.divisions())
+            for (int di = 0; di < race.divisions().size(); di++)
             {
-                List<Finisher> finishers = div.finishers();
+                List<Finisher> finishers = race.divisions().get(di).finishers();
                 for (Finisher f : finishers)
                 {
                     if (f.elapsedTime() == null) continue;
                     if (store.isBoatExcluded(f.boatId())) continue;
+                    if (duplicates.isReferenceOnly(race.id(), di, f.boatId())) continue;
                     List<Finisher> peers = new ArrayList<>(finishers.size() - 1);
                     for (Finisher peer : finishers)
                     {

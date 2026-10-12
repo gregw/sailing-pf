@@ -30,6 +30,7 @@ import org.mortbay.sailing.pf.analysis.BoatDerived;
 import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
 import org.mortbay.sailing.pf.analysis.DivisionPf;
+import org.mortbay.sailing.pf.analysis.DuplicateRaces;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
 import org.mortbay.sailing.pf.analysis.PerformanceProfile;
 import org.mortbay.sailing.pf.analysis.PfQuality;
@@ -2562,6 +2563,7 @@ public class AdminApiServlet extends HttpServlet
                 fm.put("division", div.name());
                 fm.put("elapsed", elapsedSec);
                 fm.put("variant", fVariant);
+                fm.put("countedIn", finisherCountedIn(race, div, f));
                 fm.put("pf", pfVal);
                 fm.put("rf", rfVal);
                 fm.put("pfWeight", pfFactor != null ? pfFactor.weight() : null);
@@ -2598,6 +2600,14 @@ public class AdminApiServlet extends HttpServlet
         result.put("divisionName",    divisionName);
         result.put("divisionVariant", divisionVariant);
         result.put("totalFinishers",  totalFinishers);
+        result.put("sameRaceAs",      cache.duplicates().sameRaceAs(raceId).stream()
+            .map(id ->
+            {
+                Map<String, Object> m = new LinkedHashMap<>();   // raceName may be null
+                m.put("raceId", id);
+                m.put("raceName", raceName(store.races().get(id)));
+                return m;
+            }).toList());
         result.put("finishers",       finishers);
         writeJson(resp, result);
     }
@@ -2678,12 +2688,29 @@ public class AdminApiServlet extends HttpServlet
 
     /**
      * Determines the handicap variant for a finisher: "twoHanded", "nonSpin", or "spin" —
-     * decided by {@link EntryVariant#of}, as in PfOptimiser.
+     * decided by {@link EntryVariant#of}, or across the copies of a duplicate race
+     * ({@link DuplicateRaces#variant}), as in PfOptimiser.
      */
     private String finisherVariant(Race race, Division div, Finisher f)
     {
-        return EntryVariant.of(store.raceSeriesType(race), div, f,
-            store.isBoatNoSpinnakerDesign(f.boatId())).code();
+        return cache.duplicates().variant(store, race, divisionIndex(race, div), div, f).code();
+    }
+
+    /** The race in which this finisher's result counts, if it is a reference-only copy; else null. */
+    private String finisherCountedIn(Race race, Division div, Finisher f)
+    {
+        return cache.duplicates().countedIn(race.id(), divisionIndex(race, div), f.boatId());
+    }
+
+    private static int divisionIndex(Race race, Division div)
+    {
+        List<Division> divisions = race.divisions();
+        for (int i = 0; i < divisions.size(); i++)
+        {
+            if (divisions.get(i) == div)
+                return i;
+        }
+        return divisions.indexOf(div);
     }
 
     private static Factor selectVariantFactor(BoatPf pf, ReferenceFactors rf, String variant, boolean usePf)

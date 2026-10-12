@@ -2824,6 +2824,19 @@ async function loadRaceDivChart(raceId, divisionName) {
         }
     }
 
+    // Copies of this race imported elsewhere (another series, club or source): each boat's
+    // result counts once, in the copy where its division is largest.
+    const dupEl = document.getElementById('race-duplicate-note');
+    if (dupEl) {
+        const copies = data.sameRaceAs || [];
+        const elsewhere = data.finishers.filter(f => f.countedIn).length;
+        dupEl.innerHTML = copies.length === 0 ? '' :
+            'Same race as ' + copies.map(c =>
+                `<a href="races.html?${new URLSearchParams({id: c.raceId})}">${esc(c.raceId)}</a>`).join(', ')
+            + (elsewhere > 0 ? ` — ${elsewhere} of these results count there, not here` : '')
+            + ` ${infoBtn('race-duplicates', 'The same race imported more than once. Each boat\'s result counts once in its PF, in the copy where its division is largest; here it only helps set the reference time.')}`;
+    }
+
     renderDivisionChart(data);
 }
 

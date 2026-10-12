@@ -16,7 +16,6 @@ import org.mortbay.sailing.pf.data.EntryVariant;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +58,9 @@ public class PfOptimiser
         String boatId,          // for output assembly
         String raceId,          // for output assembly
         String divisionName,    // for output assembly
-        LocalDate raceDate      // for output assembly
+        LocalDate raceDate,     // for output assembly
+        boolean counted         // false: reference-only copy of a duplicate race (DuplicateRaces) —
+                                // sets its division's T₀ but is not counted in the boat's PF
     ) {}
 
     private static final int SPIN = 0;
@@ -142,6 +143,7 @@ public class PfOptimiser
         return optimise(store, boatDerivedMap, config, stopCheck, null, 0);
     }
 
+    /** Runs with every result counted once per race it appears in (no duplicate handling). */
     public PfResult optimise(
         DataStore store,
         Map<String, BoatDerived> boatDerivedMap,
@@ -149,6 +151,24 @@ public class PfOptimiser
         Supplier<Boolean> stopCheck,
         ConversionGraph graph,
         int targetYear)
+    {
+        return optimise(store, boatDerivedMap, config, stopCheck, graph, targetYear, DuplicateRaces.NONE);
+    }
+
+    /**
+     * @param duplicates copies of the same race (see {@link DuplicateRaces}): a reference-only
+     *                   result helps set its division's T₀ (Step A) but is left out of its
+     *                   boat's PF (Step B), confidence, race count and residuals; and a
+     *                   finisher's variant is the one decided across the copies
+     */
+    public PfResult optimise(
+        DataStore store,
+        Map<String, BoatDerived> boatDerivedMap,
+        PfConfig config,
+        Supplier<Boolean> stopCheck,
+        ConversionGraph graph,
+        int targetYear,
+        DuplicateRaces duplicates)
     {
         // --- Setup: build working data structures ---
         Map<String, Integer> boatOrdinals = new HashMap<>();
@@ -165,10 +185,6 @@ public class PfOptimiser
             if (store.isRaceExcluded(race.id())) continue;
             if (store.isClubExcluded(race.clubId())) continue;
             if (race.divisions() == null) continue;
-
-            // The series type overrides per-entry flags (SailSys takes them from the boat's
-            // certificate, not the race rules) — see EntryVariant.of.
-            SeriesType raceType = store.raceSeriesType(race);
 
             for (int di = 0; di < race.divisions().size(); di++)
             {
@@ -187,8 +203,10 @@ public class PfOptimiser
                     if (bd == null || bd.referenceFactors() == null) continue;
 
                     ReferenceFactors rf = bd.referenceFactors();
-                    int variant = determineVariant(f, div, raceType,
-                        store.isBoatNoSpinnakerDesign(f.boatId()));
+                    // The series type overrides per-entry flags (SailSys takes them from the
+                    // boat's certificate, not the race rules) — see EntryVariant.of — and a
+                    // duplicate race's copies agree on one variant (DuplicateRaces).
+                    int variant = variantIndex(duplicates.variant(store, race, di, div, f));
                     Factor rfFactor = variantFactor(rf, variant);
                     // Allow rfFactor.weight() == 0: the Step-B formula degenerates cleanly to a
                     // pure race-derived PF (no regularisation toward RF) when rfW = 0, so these
@@ -208,11 +226,14 @@ public class PfOptimiser
                         boatOrd, -1, // divOrdinal set below
                         Math.log(f.elapsedTime().toNanos()),
                         variant, rfFactor.weight(),
-                        f.boatId(), race.id(), div.name(), race.date()));
+                        f.boatId(), race.id(), div.name(), race.date(),
+                        !duplicates.isReferenceOnly(race.id(), di, f.boatId())));
                 }
 
-                // Skip divisions with <2 qualifying entries
+                // Skip divisions with <2 qualifying entries, or whose every result counts in
+                // another copy of the race (it could not change any PF).
                 if (divEntries.size() < 2) continue;
+                if (divEntries.stream().noneMatch(Entry::counted)) continue;
 
                 DivisionKey dk = new DivisionKey(race.id(), di);
                 int divOrd = divOrdinals.computeIfAbsent(dk, k -> divOrdinals.size());
@@ -220,7 +241,8 @@ public class PfOptimiser
                 // Fix up divOrdinal in entries
                 for (Entry e : divEntries)
                     entries.add(new Entry(e.boatOrdinal(), divOrd, e.logElapsed(),
-                        e.variant(), e.refWeight(), e.boatId(), e.raceId(), e.divisionName(), e.raceDate()));
+                        e.variant(), e.refWeight(), e.boatId(), e.raceId(), e.divisionName(), e.raceDate(),
+                        e.counted()));
             }
         }
 
@@ -260,10 +282,12 @@ public class PfOptimiser
                 logPf[v][b] = Double.isNaN(lr[v]) ? 0.0 : lr[v];
         }
 
-        // Per-boat per-variant entry counts
+        // Per-boat per-variant counts of counted entries (reference-only ones are not the
+        // boat's results — they count in another copy of the race)
         int[][] entryCount = new int[3][nBoats];
         for (Entry e : entries)
-            entryCount[e.variant()][e.boatOrdinal()]++;
+            if (e.counted())
+                entryCount[e.variant()][e.boatOrdinal()]++;
 
         // Build per-division entry index for fast iteration
         List<List<Integer>> divEntryIndexes = new ArrayList<>();
@@ -272,7 +296,8 @@ public class PfOptimiser
         for (int i = 0; i < entries.size(); i++)
             divEntryIndexes.get(entries.get(i).divOrdinal()).add(i);
 
-        // Build per-boat-variant entry index
+        // Build per-boat-variant index of counted entries: Step B, confidence and residuals
+        // read it, so a reference-only entry reaches only its division's T₀ (Step A).
         @SuppressWarnings("unchecked")
         List<Integer>[][] boatVariantEntries = new List[3][nBoats];
         for (int v = 0; v < 3; v++)
@@ -281,7 +306,8 @@ public class PfOptimiser
         for (int i = 0; i < entries.size(); i++)
         {
             Entry e = entries.get(i);
-            boatVariantEntries[e.variant()][e.boatOrdinal()].add(i);
+            if (e.counted())
+                boatVariantEntries[e.variant()][e.boatOrdinal()].add(i);
         }
 
         // Age decay per entry: older results count less in the boat's own PF (Step B and its
@@ -541,10 +567,9 @@ public class PfOptimiser
             store, boatDerivedMap, varConv);
     }
 
-    private static int determineVariant(Finisher f, Division div, SeriesType raceType,
-                                        boolean noSpinDesign)
+    private static int variantIndex(EntryVariant variant)
     {
-        return switch (EntryVariant.of(raceType, div, f, noSpinDesign))
+        return switch (variant)
         {
             case SPIN -> SPIN;
             case NON_SPIN -> NON_SPIN;

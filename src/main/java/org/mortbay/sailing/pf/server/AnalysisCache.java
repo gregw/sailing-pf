@@ -18,6 +18,7 @@ import org.mortbay.sailing.pf.analysis.DivisionPf;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
 import org.mortbay.sailing.pf.analysis.HandicapAnalyser;
 import org.mortbay.sailing.pf.analysis.PerformanceProfile;
+import org.mortbay.sailing.pf.analysis.DuplicateRaces;
 import org.mortbay.sailing.pf.analysis.PerformanceProfileBuilder;
 import org.mortbay.sailing.pf.analysis.PfConfig;
 import org.mortbay.sailing.pf.analysis.PfOptimiser;
@@ -71,6 +72,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile double diversityTwoHandedWeight = 1.2;
     private volatile int    consistencyDropInterval  = 11;
     private volatile double ageHalfLifeYears         = 0.0;
+    private volatile DuplicateRaces duplicates       = DuplicateRaces.NONE;
 
     public void setDiversityWeights(double nonSpin, double spin, double twoHanded)
     {
@@ -112,7 +114,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         List<ComparisonResult> newComparisons = new HandicapAnalyser(store, sigma).analyseAll();
         ConversionGraph graph = ConversionGraph.from(newComparisons, minR2, minPairs);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
-        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears).build(store, graph, year);
+        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears, refreshDuplicates()).build(store, graph, year);
 
         comparisons = newComparisons;
         targetYear  = year;
@@ -137,7 +139,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         LOG.info("AnalysisCache: refreshing reference factors...");
         ConversionGraph graph = ConversionGraph.from(comparisons, minR2, minPairs);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
-        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears).build(store, graph, year);
+        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears, refreshDuplicates()).build(store, graph, year);
         targetYear = year;
         minAnalysisR2 = minR2;
         minAnalysisPairs = minPairs;
@@ -449,6 +451,20 @@ public class AnalysisCache implements DataStore.InvalidationListener
         return lastPfQuality;
     }
 
+    /** Finds the copies of the same race among the races as they are now. */
+    private DuplicateRaces refreshDuplicates()
+    {
+        DuplicateRaces found = DuplicateRaces.find(store);
+        duplicates = found;
+        return found;
+    }
+
+    /** Copies of the same race, as found by the latest reference-factor or PF run. */
+    public DuplicateRaces duplicates()
+    {
+        return duplicates;
+    }
+
     /**
      * Runs the PF optimiser and merges results into the Derived maps.
      */
@@ -458,7 +474,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
         // Build the conversion graph from the cached comparisons so the optimiser can
         // apply the fleet-wide cross-variant pull on top of per-boat RF anchoring.
         ConversionGraph graph = ConversionGraph.from(comparisons, minAnalysisR2, minAnalysisPairs);
-        PfResult result = new PfOptimiser().optimise(store, boatDerived, config, stopCheck, graph, targetYear);
+        PfResult result = new PfOptimiser().optimise(store, boatDerived, config, stopCheck, graph, targetYear,
+            refreshDuplicates());
         if (result.boatPfs().isEmpty())
         {
             LOG.info("AnalysisCache: PF optimiser returned no results (stopped or no data)");

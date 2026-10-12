@@ -65,4 +65,21 @@ public enum EntryVariant
             return NON_SPIN;
         return raceType == SeriesType.TWO_HANDED ? TWO_HANDED : SPIN;
     }
+
+    /**
+     * True if {@link #of} decides this finisher's variant from the race — its series type or
+     * its division name — rather than from the finisher's own spinnaker flag, which sources
+     * such as SailSys take from the boat's certificate, not the race rules.
+     */
+    public static boolean isExplicit(SeriesType raceType, Division div, Finisher f, boolean noSpinDesign)
+    {
+        if (noSpinDesign && (raceType == SeriesType.SPIN || raceType == SeriesType.TWO_HANDED))
+            raceType = null;
+        if (raceType == SeriesType.NON_SPIN || raceType == SeriesType.SPIN)
+            return true;
+        String divName = div.name();
+        if (SeriesType.containsTwoHandedKeyword(divName) || SeriesType.containsNonSpinKeyword(divName))
+            return true;
+        return !f.nonSpinnaker() && raceType == SeriesType.TWO_HANDED;
+    }
 }
