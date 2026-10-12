@@ -212,6 +212,17 @@ function fmtTime(seconds) {
 }
 
 /**
+ * Which of two boats (or designs) is faster, from the head to head elapsed-time slope
+ * (elapsed A / elapsed B): e.g. "B 2.3% faster", or "even" within 0.05%.
+ */
+function fasterText(slope, nameA, nameB) {
+    if (!(slope > 0) || !isFinite(slope)) return '';
+    if (Math.abs(slope - 1) < 0.0005) return 'even';
+    return slope > 1 ? `${nameB} ${((slope - 1) * 100).toFixed(1)}% faster`
+                     : `${nameA} ${((1 / slope - 1) * 100).toFixed(1)}% faster`;
+}
+
+/**
  * Push 1st/2nd/3rd podium markers (by smallest pfCorrected) onto the given Plotly traces array.
  * `xs` are x-axis values per finisher (matching the PF-corrected line); `pfCorr` are the
  * corresponding corrected times in MINUTES (already divided by 60). Markers are placed on the

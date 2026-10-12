@@ -9,6 +9,7 @@
 - **Sliding average fix**: The "best k of N" average on the comparison charts dropped the best races instead of the worst; it now drops the worst and weights each finish, so a down-weighted outlier no longer drags the line down.
 - **Equalise**: With several allocated handicap columns, one click scales each to the same average as the ticked column, keeping its ratios.
 - **Mobile menu**: On phones the page menu folds into a ☰ button that opens a full-width list of pages.
+- **Head to head chart**: The elapsed time chart has its own Hide legend box, "From 0" now really zooms in on the races when unticked, and the best fit says which boat is faster and by how much.
 
 ### August 2026
 

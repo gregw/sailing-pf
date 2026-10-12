@@ -43,6 +43,7 @@ let showRfLine = _persistedBool('show-rf-line', true);
 let showTrendLinear = _persistedBool('show-trend-linear', true);
 let showTrendSliding = _persistedBool('show-trend-sliding', true);
 let hideLegend = _persistedBool('hide-legend', false);
+let hideElapsedLegend = _persistedBool('elapsed-hide-legend', false);
 let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
 let showCommonRacesOnly = _persistedBool('common-races-only', false);
 let slidingAverageCount = 8;
@@ -737,18 +738,19 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         customdata
     });
 
+    const fromZero = document.getElementById('elapsed-from-zero')?.checked ?? true;
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
     const xPad = (xMax - xMin) * 0.05 || xMin * 0.05;
-    const x0 = 0, x1 = xMax + xPad;
+    const x0 = fromZero ? 0 : Math.max(0, xMin - xPad), x1 = xMax + xPad;
 
     const fit = linearFitElapsed(xs, ys);
     lastElapsedFit = fit;
     if (fit) {
         traces.push({
             x: [x0, x1],
-            y: [0, fit.slope * x1],
+            y: [fit.slope * x0, fit.slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `Best fit (slope ${fit.slope.toFixed(4)})`,
+            name: `Best fit (slope ${fit.slope.toFixed(4)}: ${esc(fasterText(fit.slope, nameA, nameB))})`,
             line: { color: colorA, width: 2 }
         });
     }
@@ -760,22 +762,21 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         const slope = rfB.value / rfA.value;
         traces.push({
             x: [x0, x1],
-            y: [0, slope * x1],
+            y: [slope * x0, slope * x1],
             type: 'scatter', mode: 'lines',
             name: `RF ratio (${rfB.value.toFixed(4)} / ${rfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: colorB, width: 2, dash: 'dot' }
         });
     }
 
-    const fromZero = document.getElementById('elapsed-from-zero')?.checked ?? true;
     const layout = {
         xaxis: { title: `${esc(nameB)} elapsed (h)`,
                  rangemode: fromZero ? 'tozero' : 'normal' },
         yaxis: { title: `${esc(nameA)} elapsed (h)`,
                  rangemode: fromZero ? 'tozero' : 'normal' },
-        showlegend: !hideLegend,
+        showlegend: !hideElapsedLegend,
         legend: { orientation: 'h', y: -0.2 },
-        margin: { t: 20, b: hideLegend ? 70 : 100, l: 80, r: 20 },
+        margin: { t: 20, b: hideElapsedLegend ? 70 : 100, l: 80, r: 20 },
         hovermode: 'closest'
     };
 
@@ -839,11 +840,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     persistControl('recent-months');
     persistControl('common-races-only');
     persistControl('elapsed-from-zero');
+    persistControl('elapsed-hide-legend');
     persistControl('design-search');
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine        = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear')  .addEventListener('change', e => { showTrendLinear   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding') .addEventListener('change', e => { showTrendSliding  = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('hide-legend')        .addEventListener('change', e => { hideLegend        = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
+    document.getElementById('hide-legend')        .addEventListener('change', e => { hideLegend        = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('elapsed-hide-legend').addEventListener('change', e => { hideElapsedLegend = e.target.checked; loadElapsedCharts(); });
     const recentSel = document.getElementById('recent-months');
     recentMonths = parseInt(recentSel.value, 10) || 0;
     recentSel.addEventListener('change', e => {

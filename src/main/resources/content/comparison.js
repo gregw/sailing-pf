@@ -31,6 +31,7 @@ let showRfLine = _persistedBool('show-rf-line', true);
 let showPfLine = _persistedBool('show-pf-line', true);
 let trendMode = _persistedStr('trend-mode', 'linear');   // 'none' | 'linear' | 'average'
 let hideLegend = _persistedBool('hide-legend', false);
+let hideElapsedLegend = _persistedBool('elapsed-hide-legend', false);
 let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
 let showCommonRacesOnly = _persistedBool('common-races-only', false);
 let slidingAverageCount = 8;
@@ -1267,6 +1268,7 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         customdata
     });
 
+    const fromZero = document.getElementById('elapsed-from-zero')?.checked ?? true;
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
     const xPad = (xMax - xMin) * 0.05 || xMin * 0.05;
 
@@ -1274,17 +1276,17 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
     const fit = linearFitElapsed(xs, ys);
     lastElapsedFit = fit;
     if (fit) {
-        const x0 = 0, x1 = xMax + xPad;
+        const x0 = fromZero ? 0 : Math.max(0, xMin - xPad), x1 = xMax + xPad;
         traces.push({
             x: [x0, x1],
-            y: [0, fit.slope * x1],
+            y: [fit.slope * x0, fit.slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `Best fit (slope ${fit.slope.toFixed(4)})`,
+            name: `Best fit (slope ${fit.slope.toFixed(4)}: ${esc(fasterText(fit.slope, nameA, nameB))})`,
             line: { color: colorA, width: 2 }
         });
     }
 
-    const x0 = 0, x1 = xMax + xPad;
+    const x0 = fromZero ? 0 : Math.max(0, xMin - xPad), x1 = xMax + xPad;
 
     // Expected RF ratio line (through origin) — each boat under its own variant.
     const rfA = rfVariantFor(data.boatA, variantA);
@@ -1293,7 +1295,7 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         const slope = rfB.value / rfA.value;
         traces.push({
             x: [x0, x1],
-            y: [0, slope * x1],
+            y: [slope * x0, slope * x1],
             type: 'scatter', mode: 'lines',
             name: `RF ratio (${rfB.value.toFixed(4)} / ${rfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: '#c47900', width: 2, dash: 'dot' }
@@ -1307,7 +1309,7 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
         const slope = pfB.value / pfA.value;
         traces.push({
             x: [x0, x1],
-            y: [0, slope * x1],
+            y: [slope * x0, slope * x1],
             type: 'scatter', mode: 'lines',
             name: `PF ratio (${pfB.value.toFixed(4)} / ${pfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: colorB, width: 2, dash: 'dash' }
@@ -1317,15 +1319,14 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
     const yMin = Math.min(...ys), yMax = Math.max(...ys);
     const yPad = (yMax - yMin) * 0.05 || yMin * 0.05;
 
-    const fromZero = document.getElementById('elapsed-from-zero')?.checked ?? true;
     const layout = {
         xaxis: { title: `${esc(nameB)} elapsed (h)`,
                  rangemode: fromZero ? 'tozero' : 'normal' },
         yaxis: { title: `${esc(nameA)} elapsed (h)`,
                  rangemode: fromZero ? 'tozero' : 'normal' },
-        showlegend: !hideLegend,
+        showlegend: !hideElapsedLegend,
         legend: { orientation: 'h', y: -0.2 },
-        margin: { t: 20, b: hideLegend ? 70 : 100, l: 80, r: 20 },
+        margin: { t: 20, b: hideElapsedLegend ? 70 : 100, l: 80, r: 20 },
         hovermode: 'closest'
     };
     // Keep zoom across calculator edits; reset for other variants, from-0 or time window.
@@ -1397,12 +1398,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     persistControl('common-races-only');
     persistControl('bcfc-y-from-zero');
     persistControl('elapsed-from-zero');
+    persistControl('elapsed-hide-legend');
     persistControl('boat-search');
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-pf-line')      .addEventListener('change', e => { showPfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('trend-mode').addEventListener('change', e => { trendMode = e.target.value; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('level-lines-btn').addEventListener('click', onLevelLines);
-    document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
+    document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('elapsed-hide-legend').addEventListener('change', e => { hideElapsedLegend = e.target.checked; loadElapsedCharts(); });
     const recentSel = document.getElementById('recent-months');
     recentMonths = parseInt(recentSel.value, 10) || 0;
     recentSel.addEventListener('change', e => {
