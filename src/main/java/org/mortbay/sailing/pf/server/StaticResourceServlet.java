@@ -10,8 +10,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,6 +47,14 @@ public class StaticResourceServlet extends HttpServlet
     private static final Parser MD_PARSER = Parser.builder().extensions(MD_EXTENSIONS).build();
     private static final HtmlRenderer MD_RENDERER = HtmlRenderer.builder().extensions(MD_EXTENSIONS).build();
 
+    /**
+     * The only files served from {@link #filesystemContentRoot} (the project directory) — the
+     * project documents a page may include, e.g. the release notes on the home page. Anything
+     * else under that directory (sources, build files, install scripts, a local pf-data with its
+     * secrets) must never be served.
+     */
+    private static final Set<String> FILESYSTEM_FILES = Set.of("RELEASE_NOTES.md", "README.md", "LICENSE.md");
+
     private final Path filesystemContentRoot;
 
     public StaticResourceServlet()
@@ -58,15 +68,19 @@ public class StaticResourceServlet extends HttpServlet
     }
 
     /**
-     * Opens a content resource by filename, falling back to the filesystem root if not on classpath.
+     * Opens a content resource by filename: from the classpath's {@code /content/}, or else one
+     * of the {@link #FILESYSTEM_FILES} in the project directory. Returns null for anything else,
+     * including any name with a {@code ..} segment and directories.
      */
     private InputStream openContentResource(String filename) throws IOException
     {
+        if (filename.isEmpty() || filename.endsWith("/") || Arrays.asList(filename.split("[/\\\\]")).contains(".."))
+            return null;
         InputStream in = getClass().getResourceAsStream("/content/" + filename);
-        if (in != null || filesystemContentRoot == null)
+        if (in != null || filesystemContentRoot == null || !FILESYSTEM_FILES.contains(filename))
             return in;
         Path target = filesystemContentRoot.resolve(filename).normalize();
-        if (!target.startsWith(filesystemContentRoot.normalize()))
+        if (!target.startsWith(filesystemContentRoot.normalize()) || !Files.isRegularFile(target))
             return null;
         try
         {

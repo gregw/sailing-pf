@@ -616,11 +616,7 @@ public void stop()
             }
             case "sailsys" ->
             {
-                SailSysImporter.RunResult result = new SailSysImporter(store, httpClient)
-                    .withCache(dataRoot.resolve("cache/sailsys/races"),
-                        sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
-                        sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs, sailsysRecentRaceDays)
-                    .run(recentRaceReimportDays, clubIds);
+                SailSysImporter.RunResult result = sailSysImporter().run(recentRaceReimportDays, clubIds);
                 run.putCount("sailsys.clubs", result.clubs());
                 run.putCount("sailsys.series", result.series());
                 run.putCount("sailsys.racesImported", result.racesImported());
@@ -633,6 +629,15 @@ public void stop()
             }
             default -> throw new IllegalArgumentException("Importer is not club-scoped: " + name);
         }
+    }
+
+    /** A SailSys importer with this server's response cache and throttle settings. */
+    private SailSysImporter sailSysImporter()
+    {
+        return new SailSysImporter(store, httpClient)
+            .withCache(dataRoot.resolve("cache/sailsys/races"),
+                sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
+                sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs, sailsysRecentRaceDays);
     }
 
     public ClubImportRun clubImportRun(String id)
@@ -958,6 +963,8 @@ public void stop()
             case "orc" -> new OrcImporter(store, httpClient).run(dataRoot.resolve("cache/orc"), orcListMaxAgeDays);
             case "ams" -> new AmsImporter(store, httpClient).run();
             case "topyacht" -> new TopYachtImporter(store, httpClient).run(recentRaceReimportDays);
+            // Every club that has opted in (null = no club restriction), as for TopYacht.
+            case "sailsys"  -> sailSysImporter().run(recentRaceReimportDays, null);
             case "bwps"     -> new BwpsImporter(store, httpClient).run(recentRaceReimportDays, bwpsMinYear);
             case "analysis" ->
             {
