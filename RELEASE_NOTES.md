@@ -5,6 +5,7 @@
 - **Series type**: Each series now has a forced type — Spin, NS (non-spinnaker), 2H (two-handed), Mixed or Unknown, that can override any 
   (not infrequently) incorrect data from the source data.
 - **Series/Compare Optimiser**: Added an optimiser for allocated handicaps in the calculators on the series and compare pages.
+- **Equalise**: With several allocated handicap columns, one click scales each to the same average as the ticked column, keeping its ratios.
 
 ### August 2026
 

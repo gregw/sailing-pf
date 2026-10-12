@@ -409,6 +409,20 @@ const HandicapCalc = (function () {
     // Merges two sets' remembered entry lists ({boatId?, sailno, name, handicap, …}) into one:
     // a boat in both gets the average of its two handicaps (rounded to 4 dp), a boat in only
     // one keeps its entry. Boats are matched by boatId, else by sail number + name.
+    // The factor that, multiplying every value in `values` (Map boatId → handicap), makes their
+    // mean over the boats also in `refValues` equal refValues' mean over those boats; null when
+    // the two share no boats.
+    function equalisingFactor(refValues, values) {
+        let refSum = 0, sum = 0;
+        values.forEach((v, boatId) => {
+            const r = refValues.get(boatId);
+            if (r == null) return;
+            refSum += r;
+            sum += v;
+        });
+        return sum > 0 && refSum > 0 ? refSum / sum : null;
+    }
+
     function mergeEntryLists(a, b) {
         const key = e => e.boatId
             || `${stripPrefix(normaliseSailNumber(e.sailno || ''))}|${normaliseDesignName(e.name || '')}`;
@@ -747,6 +761,18 @@ const HandicapCalc = (function () {
                 addBtn.style.cssText = 'font-size:0.85rem;padding:0 6px;cursor:pointer;line-height:1.4;';
                 addBtn.addEventListener('click', addSet);
                 addTh.appendChild(addBtn);
+            }
+            if (sets.length > 1) {
+                const ref = equaliseReference();
+                const eqBtn = document.createElement('button');
+                eqBtn.type = 'button';
+                eqBtn.textContent = 'Equalise';
+                eqBtn.title = `Scale each other allocated column, keeping the ratios between its handicaps, `
+                    + `so its average equals ${sets[ref].name}'s — averaged over the boats shown that `
+                    + `have values in both`;
+                eqBtn.style.cssText = 'display:block;margin-top:2px;font-size:0.75rem;padding:0 4px;cursor:pointer;line-height:1.3;';
+                eqBtn.addEventListener('click', equaliseSets);
+                addTh.appendChild(eqBtn);
             }
             hdrTr.appendChild(addTh);
 
@@ -1759,6 +1785,35 @@ const HandicapCalc = (function () {
         // remembered entries for boats not currently in the table (other divisions / races),
         // so the ratios between all of them stay the same.
         function scaleSet(setIdx, factor) {
+            scaleSetValues(setIdx, factor);
+            recalc();
+        }
+
+        // The column Equalise matches the others to: the ticked allocated set, else the first.
+        function equaliseReference() {
+            const idx = activeSetIdx();
+            return idx >= 0 ? idx : 0;
+        }
+
+        // Scale every other set (as − / + do, so its ratios are unchanged) so that its mean,
+        // over the boats shown with a value in both it and the reference set, equals the
+        // reference set's mean over those same boats. Sets sharing no boats are left alone.
+        function equaliseSets() {
+            const ref = equaliseReference();
+            const refValues = getSetValues(ref);
+            let changed = false;
+            sets.forEach((_, i) => {
+                if (i === ref) return;
+                const factor = equalisingFactor(refValues, getSetValues(i));
+                if (factor != null) {
+                    scaleSetValues(i, factor);
+                    changed = true;
+                }
+            });
+            if (changed) recalc();
+        }
+
+        function scaleSetValues(setIdx, factor) {
             const remembered = cfg.sessionKey ? readSession() : null;
             if (remembered && remembered.sets && remembered.sets[setIdx]) {
                 (remembered.sets[setIdx].entries || []).forEach(e => {
@@ -1774,7 +1829,6 @@ const HandicapCalc = (function () {
                 const v = parseFloat(inp.value);
                 if (!isNaN(v)) inp.value = (v * factor).toFixed(4);
             });
-            recalc();
         }
 
         // Public: if the ticked column is an allocated set with no values for the boats now in
@@ -1990,6 +2044,7 @@ const HandicapCalc = (function () {
         minChangeToZeroLinear,
         minChangeToEqualLevels,
         mergeEntryLists,
+        equalisingFactor,
     };
 })();
 

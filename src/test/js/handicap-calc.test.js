@@ -246,3 +246,15 @@ test('formatStatus: reports rows skipped for a variant mismatch', () => {
     assert.match(r.msg, /2 skipped because their Spin\/NS\/2H variant differs/);
     assert.equal(r.ok, false);
 });
+
+test('equalisingFactor: matches the means over the shared boats only', () => {
+    const ref = new Map([['a', 1.0], ['b', 1.2], ['c', 0.5]]);
+    const vals = new Map([['a', 0.9], ['b', 1.1], ['d', 2.0]]);   // c, d not shared
+    const f = HandicapCalc.equalisingFactor(ref, vals);
+    assert.ok(Math.abs(f - 2.2 / 2.0) < 1e-12);
+    assert.ok(Math.abs((0.9 * f + 1.1 * f) / 2 - (1.0 + 1.2) / 2) < 1e-12);
+});
+
+test('equalisingFactor: null when no boats are shared', () => {
+    assert.equal(HandicapCalc.equalisingFactor(new Map([['a', 1]]), new Map([['b', 1]])), null);
+});
