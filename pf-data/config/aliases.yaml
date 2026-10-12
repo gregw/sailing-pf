@@ -3322,3 +3322,13 @@ boats:
     aliases:
     - sailNumber: "M434"
       name: "carpediem"
+  "4660-rocknrollv":
+    canonicalName: "ROCK N ROLL V"
+    aliases:
+    - sailNumber: "4660"
+      name: "rocknroll"
+  B34-martiniracing34:
+    canonicalName: "MARTINI RACING 34"
+    aliases:
+    - sailNumber: "B34"
+      name: "martiniracing"

@@ -5895,3 +5895,5 @@ series:
   reason: "multihull"
 - pattern: "^\\QFriday Twilights - Single Race Demo\\E$"
   reason: "demo"
+- pattern: "^\\QXXX DO NOT USE Friday Twilight Spinnaker Series 2025/26 \\E$"
+  reason: "XX Do not use"
