@@ -372,6 +372,29 @@ function onDivChartYFromZeroChange(cb) {
     reRenderActiveDivisionChart();
 }
 
+// ---- Division-chart "Invert axes" (shared across races + series tabs) ----
+// Ticked (the default): both axes reversed, so faster boats are on the right and better
+// (shorter) times at the top.
+const DIV_CHART_INVERT_KEY = 'pf.divChart.invertAxes';
+const DIV_INVERT_CHECKBOX_IDS = ['race-invert-axes', 'series-invert-axes'];
+
+function getDivChartInvert() {
+    const v = sessionStorage.getItem(DIV_CHART_INVERT_KEY);
+    return v === null ? true : v === 'true';    // default: ticked
+}
+function onDivChartInvertChange(cb) {
+    sessionStorage.setItem(DIV_CHART_INVERT_KEY, String(!!cb.checked));
+    DIV_INVERT_CHECKBOX_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = !!cb.checked;
+    });
+    reRenderActiveDivisionChart();
+}
+/** Plotly autorange for a division-chart axis: reversed when inverting. */
+function divChartAutorange() {
+    return getDivChartInvert() ? 'reversed' : true;
+}
+
 function setBoatVariant(v) {
     boatVariant = v;
     sessionStorage.setItem(BOAT_VARIANT_KEY, v);
@@ -727,6 +750,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const yFrom = getDivChartYFromZero();
     DIV_X_CHECKBOX_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.checked = xFrom; });
     DIV_Y_CHECKBOX_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.checked = yFrom; });
+    const invert = getDivChartInvert();
+    DIV_INVERT_CHECKBOX_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.checked = invert; });
 
     // Race-division-chart toggles.
     const elapsedCb = document.getElementById('race-show-elapsed');
@@ -3031,7 +3056,10 @@ function renderDivisionChart(data) {
                 const ys = [];
                 if (showPfLine && pfCorr[i] != null) ys.push(pfCorr[i]);
                 return {
-                    x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0, text: f.name, textangle: -90,
+                    // Above the boat's top-most point on screen: the largest time, or the
+                    // smallest when the y axis is inverted.
+                    x: xs[i], y: ys.length > 0 ? (getDivChartInvert() ? Math.min(...ys) : Math.max(...ys)) : 0,
+                    text: f.name, textangle: -90,
                     xanchor: 'center', yanchor: 'bottom', yshift: 6,
                     showarrow: false, cliponaxis: false, font: {size: 11}
                 };
@@ -3173,7 +3201,10 @@ function renderDivisionChart(data) {
                 if (showPfLine && pfCorr[i] != null) ys.push(pfCorr[i]);
                 if (showRfLine && rfCorr[i] != null) ys.push(rfCorr[i]);
                 return {
-                    x: xs[i], y: ys.length > 0 ? Math.max(...ys) : 0, text: f.name, textangle: -90,
+                    // Above the boat's top-most point on screen: the largest time, or the
+                    // smallest when the y axis is inverted.
+                    x: xs[i], y: ys.length > 0 ? (getDivChartInvert() ? Math.min(...ys) : Math.max(...ys)) : 0,
+                    text: f.name, textangle: -90,
                     xanchor: 'center', yanchor: 'bottom', yshift: 6,
                     showarrow: false, cliponaxis: false, font: {size: 11}
                 };
@@ -3199,10 +3230,12 @@ function renderDivisionChart(data) {
     const layout = {
         xaxis: {
             title: xAxisTitle,
-            rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
+            rangemode: getDivChartXFromZero() ? 'tozero' : 'normal',
+            autorange: divChartAutorange()
         },
         yaxis: { title: 'Time (min)', tickformat: '.1f',
-                 rangemode: getDivChartYFromZero() ? 'tozero' : 'normal' },
+                 rangemode: getDivChartYFromZero() ? 'tozero' : 'normal',
+                 autorange: divChartAutorange() },
         ...legendLayoutSettings(),
         margin: {t: 30, b: 50, l: 60, r: 20},
         hovermode: 'closest',
@@ -3826,11 +3859,13 @@ function renderSeriesChartForDivision(divName, opts) {
             title: speedFactorAxisTitle(useCommon
                 ? (divXFactor === 'Allocated' ? '1/Allocated Handicap' : '1/' + divXFactor)
                 : (showRfLine && anyRfData ? '1/PF, 1/RF' : '1/PF')),
-            rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
+            rangemode: getDivChartXFromZero() ? 'tozero' : 'normal',
+            autorange: divChartAutorange()
         },
         yaxis: {
             title: 'PF Corrected Time (min)', tickformat: '.1f',
-            rangemode: getDivChartYFromZero() ? 'tozero' : 'normal'
+            rangemode: getDivChartYFromZero() ? 'tozero' : 'normal',
+            autorange: divChartAutorange()
         },
         ...legendLayoutSettings(),
         margin: {t: 30, b: 50, l: 60, r: 20},

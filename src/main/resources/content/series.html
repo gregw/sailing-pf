@@ -142,6 +142,9 @@
             <label title="Start the PF axis at zero">
                 <input type="checkbox" id="series-x-from-zero" onchange="onDivChartXFromZeroChange(this)"> From 0.0F
             </label>
+            <label title="Reverse both axes so the faster boats are on the right and better (shorter) times at the top">
+                <input type="checkbox" id="series-invert-axes" checked onchange="onDivChartInvertChange(this)"> Invert axes
+            </label>
             <label title="Least-squares trend line for every race line shown; the races' own lines fade so the trends stand out">
                 <input type="checkbox" id="series-show-trend" onchange="onSeriesTrendChange(this)"> Linear trend
             </label>
