@@ -30,9 +30,9 @@ public enum EntryVariant
     /**
      * Decides a finisher's variant, in order:
      * <ol>
-     *   <li>a boat whose design has no spinnaker (e.g. cat-rigged) is never upgraded by a
-     *       {@link SeriesType#SPIN} or {@link SeriesType#TWO_HANDED} series — its spin and
-     *       non-spin handicaps are the same;</li>
+     *   <li>a boat whose design cannot fly a spinnaker (e.g. cat-rigged) is always
+     *       non-spinnaker, whatever its series, division or own flag — two-handed included,
+     *       since two-handed is a spinnaker handicap;</li>
      *   <li>a {@link SeriesType#NON_SPIN} series makes everyone non-spinnaker;</li>
      *   <li>a two-handed division name makes its finishers two-handed — even in a
      *       {@link SeriesType#SPIN} series, since two-handed is a spinnaker handicap;</li>
@@ -50,8 +50,8 @@ public enum EntryVariant
      */
     public static EntryVariant of(SeriesType raceType, Division div, Finisher f, boolean noSpinDesign)
     {
-        if (noSpinDesign && (raceType == SeriesType.SPIN || raceType == SeriesType.TWO_HANDED))
-            raceType = null;
+        if (noSpinDesign)
+            return NON_SPIN;
         if (raceType == SeriesType.NON_SPIN)
             return NON_SPIN;
         String divName = div.name();
@@ -67,14 +67,15 @@ public enum EntryVariant
     }
 
     /**
-     * True if {@link #of} decides this finisher's variant from the race — its series type or
-     * its division name — rather than from the finisher's own spinnaker flag, which sources
-     * such as SailSys take from the boat's certificate, not the race rules.
+     * True if {@link #of} decides this finisher's variant from the design (no spinnaker) or
+     * the race — its series type or its division name — rather than from the finisher's own
+     * spinnaker flag, which sources such as SailSys take from the boat's certificate, not the
+     * race rules.
      */
     public static boolean isExplicit(SeriesType raceType, Division div, Finisher f, boolean noSpinDesign)
     {
-        if (noSpinDesign && (raceType == SeriesType.SPIN || raceType == SeriesType.TWO_HANDED))
-            raceType = null;
+        if (noSpinDesign)
+            return true;
         if (raceType == SeriesType.NON_SPIN || raceType == SeriesType.SPIN)
             return true;
         String divName = div.name();

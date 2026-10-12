@@ -516,7 +516,10 @@ public class AnalysisCache implements DataStore.InvalidationListener
             if (boat.designId() != null && store.isDesignNoSpinnaker(boat.designId())
                 && (pf.spin() != null || pf.nonSpin() != null))
             {
-                Factor combined = pf.spin() == null ? pf.nonSpin()
+                // Its entries are all non-spinnaker (EntryVariant.of), so a spin slot with no
+                // races holds only its RF -- take the race-derived non-spin PF as it is.
+                Factor combined = pf.spin() == null || pf.spinRaceCount() == 0 && pf.nonSpinRaceCount() > 0
+                    ? pf.nonSpin()
                     : pf.nonSpin() == null ? pf.spin()
                     : Factor.aggregate(pf.spin(), pf.nonSpin());
                 // Pick the larger-magnitude (more recent / data-driven) delta and combine race counts.

@@ -6,6 +6,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mortbay.sailing.pf.data.EntryVariant.NON_SPIN;
 import static org.mortbay.sailing.pf.data.EntryVariant.SPIN;
 import static org.mortbay.sailing.pf.data.EntryVariant.TWO_HANDED;
@@ -64,12 +65,15 @@ class EntryVariantTest
     }
 
     @Test
-    void noSpinDesignIsNotUpgradedBySpinOrTwoHandedSeries()
+    void noSpinDesignIsAlwaysNonSpin()
     {
         assertEquals(NON_SPIN, EntryVariant.of(SeriesType.SPIN, OPEN, NS_ENTRY, true));
-        assertEquals(NON_SPIN, EntryVariant.of(SeriesType.TWO_HANDED, OPEN, NS_ENTRY, true));
-        assertEquals(SPIN, EntryVariant.of(SeriesType.TWO_HANDED, OPEN, SPIN_ENTRY, true));
+        assertEquals(NON_SPIN, EntryVariant.of(SeriesType.SPIN, OPEN, SPIN_ENTRY, true));
+        assertEquals(NON_SPIN, EntryVariant.of(SeriesType.TWO_HANDED, OPEN, SPIN_ENTRY, true));
         assertEquals(NON_SPIN, EntryVariant.of(SeriesType.NON_SPIN, OPEN, SPIN_ENTRY, true));
+        assertEquals(NON_SPIN, EntryVariant.of(null, OPEN, SPIN_ENTRY, true), "spin flag, unknown series");
+        assertEquals(NON_SPIN, EntryVariant.of(SeriesType.SPIN, TWO_HANDED_DIV, SPIN_ENTRY, true));
+        assertTrue(EntryVariant.isExplicit(null, OPEN, SPIN_ENTRY, true), "decided by the design");
     }
 
     @Test
