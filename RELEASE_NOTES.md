@@ -13,6 +13,7 @@
 - **Boat comparison**: Boats ticked in the handicap calculator are highlighted in the BCF chart (hover highlighting is paused while any are ticked), and "Common races only" is now a selector: All races, Common races, or Common divisions (only results where the boats raced in the same division, as the head to head chart uses).
 - **Series Optimise is fairer**: It now tilts all handicaps together (each scaled by a power of itself) to level the trend slope, so boats with the same handicap change by the same percentage however many races they sailed, and the order of handicaps is kept.
 - **Use Best Fit fix**: On the comparison pages, Use Best Fit now rebalances just the two boats to the best-fit ratio while keeping their average handicap, instead of resetting both from their PFs.
+- **Compare Optimise uses the zoom**: Optimise on the boat comparison page levels the lines over the period zoomed to on the chart (or the whole chart), judging every boat at the same date; boats with too few results in that period keep their handicap.
 
 ### August 2026
 

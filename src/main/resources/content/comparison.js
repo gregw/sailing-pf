@@ -380,6 +380,9 @@ function renderBcfChart(data) {
     const divisor = computeBcfDivisor(data);
     // Each boat's trend-line level (its average over the period shown), for Optimise.
     const lineLevels = new Map();
+    // What Optimise needs to re-level each line over whatever date range is shown when it is
+    // clicked: boatId → {name, entries (as plotted), seed (the average's seed)}.
+    const levelInputs = new Map();
 
     let minDate = null, maxDate = null;
     data.boats.forEach(b => {
@@ -481,6 +484,7 @@ function renderBcfChart(data) {
                 // highlights its dots (see highlightBoatInChart), not just at its two ends.
                 const dense = t ? densifyTrend(t, 40) : null;
                 if (dense) lineLevels.set(boat.id, (dense.y[0] + dense.y[dense.y.length - 1]) / 2);
+                if (dense) levelInputs.set(boat.id, {name, entries, seed: null});
                 if (dense) traces.push({
                     x: dense.x, y: dense.y, type: 'scatter', mode: 'lines',
                     name: `${name} linear trend`,
@@ -500,6 +504,7 @@ function renderBcfChart(data) {
                     ? `best ${best} of ${slidingAverageCount} avg`
                     : `${slidingAverageCount}-finish avg`;
                 if (s) lineLevels.set(boat.id, s.y.reduce((a, y) => a + y, 0) / s.y.length);
+                if (s) levelInputs.set(boat.id, {name, entries, seed: pfSeed});
                 if (s) traces.push({
                     x: s.x, y: s.y, type: 'scatter', mode: 'lines',
                     name: `${name} ${avgLabel}`,
@@ -514,7 +519,7 @@ function renderBcfChart(data) {
 
     // Optimise needs an allocated-set divisor (the only editable one) and 2+ lines.
     lastLevelLines = divisor && divisor.setIdx != null && lineLevels.size >= 2
-        ? {setIdx: divisor.setIdx, levels: lineLevels} : null;
+        ? {setIdx: divisor.setIdx, inputs: levelInputs, mode: trendMode, span: lineX} : null;
     const levelBtn = document.getElementById('level-lines-btn');
     if (levelBtn) levelBtn.disabled = !lastLevelLines;
 
@@ -567,15 +572,66 @@ function renderBcfChart(data) {
     chartDiv.on('plotly_unhover', () => setTrendHighlight(null));
 }
 
-let lastLevelLines = null;   // {setIdx, levels: Map boatId → line level} from the last BCF draw
+// From the last BCF draw: {setIdx, inputs: Map boatId → {name, entries, seed}, mode, span}.
+let lastLevelLines = null;
+
+// The date range the BCF chart shows, as [from, to] in ms: the user's zoom, else `span` (the
+// dates of all the dots). Plotly gives a zoomed range as "YYYY-MM-DD hh:mm:ss.sss", in UTC.
+function shownDateRange(gd, span) {
+    const xa = gd && gd.layout && gd.layout.xaxis;
+    const toMs = v => {
+        const s = String(v);
+        return Date.parse(s.length <= 10 ? s : s.replace(' ', 'T') + 'Z');
+    };
+    if (xa && !xa.autorange && Array.isArray(xa.range) && xa.range.length === 2)
+        return xa.range.map(toMs);
+    return span.map(toMs);
+}
+
+// A boat's line level over [from, to] (ms), from its results inside it; null with too few.
+// Linear: its trend fitted to those results, read at the middle of the range (so every boat is
+// judged at the same date). Average: the mean of its sliding average over the range (computed
+// over all its results, so the window at the start of the range still has its earlier races).
+function lineLevelIn(input, mode, from, to) {
+    const inRange = e => {
+        const t = Date.parse(e.date);
+        return t >= from && t <= to;
+    };
+    const shown = input.entries.filter(inRange);
+    if (mode === 'linear') {
+        const t = shown.length >= 3 ? weightedOlsTrend(shown) : null;
+        if (!t) return null;
+        const d0 = Date.parse(t.x[0]), d1 = Date.parse(t.x[1]);
+        return t.y[0] + ((from + to) / 2 - d0) / (d1 - d0) * (t.y[1] - t.y[0]);
+    }
+    if (shown.length < 2) return null;
+    const s = Trends.slidingAverage(input.entries, slidingAverageCount, slidingAverageDrops, input.seed);
+    const ys = s ? s.y.filter((y, i) => inRange({date: s.x[i]})) : [];
+    return ys.length ? ys.reduce((a, y) => a + y, 0) / ys.length : null;
+}
 
 // Optimise (level lines): with an allocated set as the divisor each boat's line is its BCFs / its
 // handicap, so its level scales as 1/handicap. Sets the handicaps — by the smallest relative
-// change — so every line has the same average level over the period shown.
+// change — so every line has the same level over the period shown (the chart's zoom, if any).
+// Boats with too few results in that period keep their handicap.
 function onLevelLines() {
     const status = document.getElementById('level-lines-status');
     if (!lastLevelLines || !pfCalcController) return;
-    const {setIdx, levels} = lastLevelLines;
+    const {setIdx, inputs, mode, span} = lastLevelLines;
+    const [from, to] = shownDateRange(document.getElementById('comparison-chart'), span);
+    const levels = new Map(), skipped = [];
+    inputs.forEach((input, b) => {
+        const l = lineLevelIn(input, mode, from, to);
+        if (l != null && isFinite(l) && l > 0) levels.set(b, l);
+        else skipped.push(input.name);
+    });
+    const day = ms => new Date(ms).toISOString().slice(0, 10);
+    const period = ` (${day(from)} to ${day(to)})`;
+    const skippedNote = skipped.length ? ` Too few results in the period, unchanged: ${skipped.join(', ')}.` : '';
+    if (levels.size < 2) {
+        if (status) status.textContent = `Fewer than two boats have enough results${period}.${skippedNote}`;
+        return;
+    }
     const h0 = pfCalcController.getAllSets()[setIdx].values;
     const h = HandicapCalc.minChangeToEqualLevels(h0, levels);
     if (!h) {
@@ -590,7 +646,7 @@ function onLevelLines() {
         maxPct = Math.max(maxPct, pct);
     });
     pfCalcController.setSetValues(setIdx, h);
-    if (status) status.textContent = `Adjusted ${changed} handicap${changed === 1 ? '' : 's'}, by at most ${maxPct.toFixed(2)}%.`;
+    if (status) status.textContent = `Adjusted ${changed} handicap${changed === 1 ? '' : 's'}, by at most ${maxPct.toFixed(2)}%${period}.${skippedNote}`;
 }
 
 // Carries the user's zoom/pan over to a chart's next redraw: if the chart's previous draw
