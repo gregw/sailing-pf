@@ -58,8 +58,12 @@
                 <option value="60">Last 60 months</option>
             </select>
       </label>
-      <label title="Only plot races in which all selected boats competed">
-        <input type="checkbox" id="common-races-only"> Common races only
+      <label title="Only plot races in which all selected boats competed, or only divisions in which they all raced together">
+        <select id="common-races">
+          <option value="all" selected>All races</option>
+          <option value="races">Common races</option>
+          <option value="divisions">Common divisions</option>
+        </select>
       </label>
         <label title="Start Y axis at 0">
             <input type="checkbox" id="bcfc-y-from-zero"> From 0.0000

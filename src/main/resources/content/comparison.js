@@ -33,7 +33,7 @@ let trendMode = _persistedStr('trend-mode', 'linear');   // 'none' | 'linear' | 
 let hideLegend = _persistedBool('hide-legend', false);
 let hideElapsedLegend = _persistedBool('elapsed-hide-legend', false);
 let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
-let showCommonRacesOnly = _persistedBool('common-races-only', false);
+let commonRaces = _persistedStr('common-races', 'all');   // 'all' | 'races' | 'divisions'
 let slidingAverageCount = 8;
 let slidingAverageDrops = 0;
 let candidateBoats  = [];
@@ -365,12 +365,14 @@ function renderBcfChart(data) {
     const filteredPerBoat = new Map(
         data.boats.map(b => [b.id, filterEntries(b.entries, boatVariantFor(b.id))]));
 
-    // If "common races only", further restrict each boat to the intersection of raceIds
-    if (showCommonRacesOnly && data.boats.length >= 2) {
-        const sets = data.boats.map(b => new Set(filteredPerBoat.get(b.id).map(e => e.raceId)));
+    // "Common races" / "Common divisions": restrict each boat to the races (or the divisions of
+    // races) that every boat sailed.
+    if (commonRaces !== 'all' && data.boats.length >= 2) {
+        const keyOf = commonRaces === 'divisions' ? e => `${e.raceId}|${e.division}` : e => e.raceId;
+        const sets = data.boats.map(b => new Set(filteredPerBoat.get(b.id).map(keyOf)));
         const common = sets.reduce((acc, s) => new Set([...acc].filter(id => s.has(id))));
         data.boats.forEach(b =>
-            filteredPerBoat.set(b.id, filteredPerBoat.get(b.id).filter(e => common.has(e.raceId))));
+            filteredPerBoat.set(b.id, filteredPerBoat.get(b.id).filter(e => common.has(keyOf(e)))));
     }
 
     // When a divisor is active, dots are plotted as BCF / divisor (mirrors
@@ -529,11 +531,13 @@ function renderBcfChart(data) {
     // Keep the user's zoom across calculator edits; reset it when the axes mean something
     // different: another divisor, Y-from-0, time window, common-races filter or set of boats.
     keepZoom('comparison-chart', layout, [divisor ? divisor.label : 'BCF', yFromZero, recentMonths,
-        showCommonRacesOnly, data.boats.map(b => b.id).join(',')].join('|'));
+        commonRaces, data.boats.map(b => b.id).join(',')].join('|'));
 
     const chartDiv = document.getElementById('comparison-chart');
     Plotly.react('comparison-chart', traces, layout, { responsive: true });
     chartDiv._trendHighlight = null;   // the redraw replaced the dots
+    if (pfCalcController) chartHighlight.ticked = pfCalcController.getCompareSelection();
+    highlightBoatInChart(chartDiv, currentChartHighlight());
 
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_click');
     chartDiv.on('plotly_click', (eventData) => {
@@ -544,14 +548,16 @@ function renderBcfChart(data) {
         if (raceId) showRaceDivisionInline(raceId, divisionName || '', seriesId || null);
     });
 
-    // Hovering a linear trend line highlights that boat's dots and dims the others.
+    // Hovering a trend line highlights that boat's dots and dims the others -- unless boats are
+    // ticked in the calculator, which then stay highlighted.
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_hover');
     chartDiv.removeAllListeners && chartDiv.removeAllListeners('plotly_unhover');
     // plotly_hover fires on every mouse move, so only restyle when the hovered boat changes.
     const setTrendHighlight = boatId => {
+        if (chartHighlight.ticked && chartHighlight.ticked.size) boatId = null;
         if (chartDiv._trendHighlight === boatId) return;
         chartDiv._trendHighlight = boatId;
-        highlightBoatInChart(chartDiv, boatId);
+        highlightBoatInChart(chartDiv, boatId ?? currentChartHighlight());
     };
     chartDiv.on('plotly_hover', (eventData) => {
         const pt = eventData.points && eventData.points[0];
@@ -642,7 +648,10 @@ function pfCalc() {
         // The PF / RF / per-set "show" tickbox picks the BCF chart's divisor, so start with
         // none ticked (no divisor).
         startUnticked: true,
-        onCompareSelectionChange: () => loadElapsedCharts(),
+        onCompareSelectionChange: (ids) => {
+            setChartHighlight('ticked', ids);   // the ticked boats stand out in the charts
+            loadElapsedCharts();
+        },
         onChange: () => {
             // Re-render the BCF chart so a divisor toggle (or its clearing) is reflected.
             // Calls the BCF-only renderer — calling renderChart here would re-enter
@@ -1395,7 +1404,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     persistControl('trend-mode');
     persistControl('hide-legend');
     persistControl('recent-months');
-    persistControl('common-races-only');
+    persistControl('common-races');
     persistControl('bcfc-y-from-zero');
     persistControl('elapsed-from-zero');
     persistControl('elapsed-hide-legend');
@@ -1413,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (lastChartData) renderChart(lastChartData);
         loadElapsedCharts();
     });
-    document.getElementById('common-races-only') .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('common-races')      .addEventListener('change', e => { commonRaces = e.target.value; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('bcfc-y-from-zero').addEventListener('change', () => {
         if (lastChartData) renderChart(lastChartData);
         if (inlineDivisionData) renderInlineDivisionChart();

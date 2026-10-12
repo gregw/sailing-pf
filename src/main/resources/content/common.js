@@ -399,9 +399,9 @@ function initChartResize(chartId, defaultHeight) {
 }
 
 /**
- * Highlights one boat in a Plotly chart: its markers fully opaque with a dark outline and its
+ * Highlights one boat (or a Set of boats) in a Plotly chart: its markers fully opaque with a dark outline and its
  * own lines (a trend or average whose trace has {@code meta.boatId}) drawn thicker, while every
- * other boat's markers and lines are dimmed; boatId null restores them. A marker belongs to a
+ * other boat's markers and lines are dimmed; boatId null (or an empty Set) restores them. A marker belongs to a
  * boat through {@code customdata[i].boatId}, or the whole trace through {@code meta.boatId};
  * anything with neither is left alone, as are lines joining several boats. Styles the rendered
  * SVG directly rather than restyling, because a restyle redraws the chart and drops any hover
@@ -409,6 +409,7 @@ function initChartResize(chartId, defaultHeight) {
  */
 function highlightBoatInChart(gd, boatId) {
     if (!gd) return;
+    const ids = boatId == null ? null : boatId instanceof Set ? (boatId.size ? boatId : null) : new Set([boatId]);
     gd.querySelectorAll('.scatterlayer .trace').forEach(g => {
         const cd = g.__data__;
         const trace = cd && cd[0] && cd[0].trace;
@@ -419,11 +420,11 @@ function highlightBoatInChart(gd, boatId) {
             const i = p.__data__ && p.__data__.i;
             const pointBoat = (custom && custom[i] && custom[i].boatId) || traceBoat;
             if (pointBoat)
-                styleHighlight(p, boatId == null ? null : pointBoat === boatId, false);
+                styleHighlight(p, ids == null ? null : ids.has(pointBoat), false);
         });
         if (traceBoat)
             g.querySelectorAll('.lines path').forEach(l =>
-                styleHighlight(l, boatId == null ? null : traceBoat === boatId, true));
+                styleHighlight(l, ids == null ? null : ids.has(traceBoat), true));
     });
 }
 
@@ -458,22 +459,29 @@ function styleHighlight(el, on, isLine) {
     }
 }
 
-// The boat highlighted in the page's charts comes from two sources: hovering a boat in the
-// handicap calculator, and the focus being in one of its handicap inputs. Hover wins while it
-// lasts; otherwise the focused input's boat stays highlighted.
-const chartHighlight = {hover: null, focus: null};
+// The boat highlighted in the page's charts comes from three sources: hovering a boat in the
+// handicap calculator, the focus being in one of its handicap inputs, and the boats ticked in
+// its compare column (a Set). The focused input's boat wins, then the ticked boats; hover
+// highlights only while no boat is ticked.
+const chartHighlight = {hover: null, focus: null, ticked: null};
+
+/** The boat id, or Set of ids, the charts should highlight now; null for none. */
+function currentChartHighlight() {
+    const ticked = chartHighlight.ticked && chartHighlight.ticked.size ? chartHighlight.ticked : null;
+    return chartHighlight.focus ?? ticked ?? chartHighlight.hover;
+}
 
 /** Sets one source of the charts' highlighted boat (null clears it) and re-applies. */
 function setChartHighlight(source, boatId) {
     chartHighlight[source] = boatId;
-    const id = chartHighlight.hover ?? chartHighlight.focus;
+    const id = currentChartHighlight();
     document.querySelectorAll('.js-plotly-plot').forEach(gd => {
         // Typing a handicap redraws the charts, which drops the styling: re-apply it after
         // every redraw. (Re-registered each time so a chart only ever has one such listener.)
         if (gd.on && gd.removeListener) {
             if (gd._pfAfterplot) gd.removeListener('plotly_afterplot', gd._pfAfterplot);
             gd._pfAfterplot = () => {
-                const cur = chartHighlight.hover ?? chartHighlight.focus;
+                const cur = currentChartHighlight();
                 if (cur != null) highlightBoatInChart(gd, cur);
             };
             gd.on('plotly_afterplot', gd._pfAfterplot);

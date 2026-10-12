@@ -10,6 +10,7 @@
 - **Equalise**: With several allocated handicap columns, one click scales each to the same average as the ticked column, keeping its ratios.
 - **Mobile menu**: On phones the page menu folds into a ☰ button that opens a full-width list of pages.
 - **Head to head chart**: The elapsed time chart has its own Hide legend box, "From 0" now really zooms in on the races when unticked, and the best fit says which boat is faster and by how much.
+- **Boat comparison**: Boats ticked in the handicap calculator are highlighted in the BCF chart (hover highlighting is paused while any are ticked), and "Common races only" is now a selector: All races, Common races, or Common divisions (only results where the boats raced in the same division, as the head to head chart uses).
 
 ### August 2026
 
