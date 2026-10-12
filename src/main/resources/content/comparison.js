@@ -1183,7 +1183,7 @@ async function loadElapsedCharts() {
         chartDiv.style.cssText = 'width:100%;height:500px;';
         wrapper.appendChild(chartDiv);
         // "Use Best Fit" — pushes the best-fit slope into the focused-set handicaps
-        // for boats A and B (geometric-mean-balanced against the other anchors).
+        // for boats A and B (keeping the pair's average when both have one).
         bestFitBtn = document.createElement('button');
         bestFitBtn.id = 'elapsed-use-best-fit';
         bestFitBtn.type = 'button';
@@ -1205,7 +1205,7 @@ async function loadElapsedCharts() {
             bestFitBtn.textContent = `Use Best Fit (handicap ratio ${ratio.toFixed(4)})`;
             bestFitBtn.title = `Set ${itemA.label} and ${itemB.label} handicaps so their ratio equals `
                 + `${ratio.toFixed(4)} (best-fit elapsed-time slope ${slope.toFixed(4)}), `
-                + `balanced against other handicaps in the focused column.`;
+                + `keeping the average of the two handicaps (when both are set).`;
             bestFitBtn.dataset.idA = idA;
             bestFitBtn.dataset.idB = idB;
             bestFitBtn.dataset.ratio = String(ratio);

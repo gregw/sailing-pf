@@ -1679,11 +1679,26 @@ const HandicapCalc = (function () {
         }
 
         // Public: set boatA and boatB's focused-set handicaps so their ratio matches
-        // `ratio = hcapA/hcapB` while staying as close as possible (in log space) to the
-        // consensus scale of the other anchors. With no other anchors the boats anchor
-        // to their own PF values (R = 1). Returns true if both inputs were written.
-        // Designs anchor on RF instead of PF (they have no PF).
+        // `ratio = hcapA/hcapB`. When both already have a handicap, the pair keeps its average,
+        // so only the two are rebalanced and the rest of the fleet is unaffected. Otherwise
+        // they stay as close as possible (in log space) to the consensus scale of the other
+        // anchors; with no other anchors the boats anchor to their own PF values (R = 1).
+        // Returns true if both inputs were written. Designs anchor on RF (they have no PF).
         function applyPairwiseFit(idA, idB, ratio) {
+            if (!isFinite(ratio) || ratio <= 0) return false;
+            const inpA = focusedInputFor(idA);
+            const inpB = focusedInputFor(idB);
+            const a0 = inpA ? parseFloat(inpA.value) : NaN;
+            const b0 = inpB ? parseFloat(inpB.value) : NaN;
+            if (a0 > 0 && b0 > 0) {
+                // hcapA + hcapB = a0 + b0 with hcapA = ratio·hcapB.
+                const hcapB = (a0 + b0) / (1 + ratio);
+                inpA.value = (ratio * hcapB).toFixed(4);
+                inpB.value = hcapB.toFixed(4);
+                recalc();
+                return true;
+            }
+
             const fKey = isDesign ? 'rf' : 'pf';
             const wKey = isDesign ? 'rfWeight' : 'pfWeight';
             const boatA = calcBoats.find(b => b.id === idA);
@@ -1691,7 +1706,6 @@ const HandicapCalc = (function () {
             if (!boatA || !boatB) return false;
             if (boatA[fKey] == null || boatA[fKey] === 0) return false;
             if (boatB[fKey] == null || boatB[fKey] === 0) return false;
-            if (!isFinite(ratio) || ratio <= 0) return false;
 
             // R = weighted mean of (entered / factor) over focused-set anchors that aren't A or B.
             let R = 1, wSum = 0, num = 0;
@@ -1714,8 +1728,6 @@ const HandicapCalc = (function () {
             const sqrtQ = Math.sqrt(q);
             const hcapA = boatA[fKey] * R * sqrtQ;
             const hcapB = boatB[fKey] * R / sqrtQ;
-            const inpA = focusedInputFor(idA);
-            const inpB = focusedInputFor(idB);
             if (inpA) inpA.value = hcapA.toFixed(4);
             if (inpB) inpB.value = hcapB.toFixed(4);
             recalc();
