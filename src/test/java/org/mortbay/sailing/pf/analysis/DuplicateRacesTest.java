@@ -177,6 +177,9 @@ class DuplicateRacesTest
         DuplicateRaces dups = DuplicateRaces.find(store);
         assertEquals(2, dups.errors(), "a and b");
         assertEquals(0, dups.referenceOnlyCount(), "both copies count");
+        String log = Files.readString(tempDir.resolve("log/duplicates.log"));
+        assertTrue(log.contains("ERROR boat a is"), log);
+        assertTrue(log.contains("ERROR boat b is"), log);
     }
 
     @Test
@@ -207,6 +210,7 @@ class DuplicateRacesTest
 
         DuplicateRaces dups = DuplicateRaces.find(store);
         assertEquals(1, dups.warnings());
+        assertTrue(Files.readString(tempDir.resolve("log/duplicates.log")).contains("WARN boat a is"));
         Race odd = store.races().get("odd");
         Division d = odd.divisions().getFirst();
         assertEquals(EntryVariant.SPIN, dups.variant(store, odd, 0, d, d.finishers().getFirst()));

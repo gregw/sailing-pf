@@ -1,6 +1,10 @@
 package org.mortbay.sailing.pf.analysis;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,7 +48,9 @@ import org.slf4j.LoggerFactory;
  * the most boats of the same variant in the boat's division decides, with a warning. Every
  * copy of the boat then takes the decided variant.
  *
- * <p>Worked out from the races as stored on each analysis run; nothing is written back.
+ * <p>Worked out from the races as stored on each analysis run; nothing is written back to the
+ * races. The per-boat variant errors and warnings go to {@code <dataRoot>/log/duplicates.log},
+ * rewritten on each run; the main log gets a one-line summary.
  */
 public final class DuplicateRaces
 {
@@ -177,6 +183,7 @@ public final class DuplicateRaces
         Map<String, List<String>> sameRaceAs = new HashMap<>();
         int errors = 0;
         int[] warnings = {0};
+        List<String> details = new ArrayList<>();   // the variant errors and warnings, for duplicates.log
         for (List<Race> group : groupsByRoot.values())
         {
             group.sort(Comparator.comparing(Race::id));
@@ -209,7 +216,7 @@ public final class DuplicateRaces
                 List<Copy> copies = e.getValue();
                 if (copies.stream().map(c -> c.race().id()).distinct().count() < 2) continue;
 
-                EntryVariant decided = decideVariant(store, e.getKey(), copies, warnings);
+                EntryVariant decided = decideVariant(store, e.getKey(), copies, warnings, details);
                 if (decided == null)
                 {
                     errors++;
@@ -232,10 +239,43 @@ public final class DuplicateRaces
 
         DuplicateRaces result = new DuplicateRaces(Map.copyOf(countedIn), Map.copyOf(variants),
             Map.copyOf(sameRaceAs), groupsByRoot.size(), errors, warnings[0]);
-        LOG.info("Duplicate races: {} groups covering {} races; {} results reference-only, "
-                + "{} variant overrides, {} variant errors, {} variant warnings",
+        String summary = String.format("Duplicate races: %d groups covering %d races; %d results reference-only, "
+                + "%d variant overrides, %d variant errors, %d variant warnings",
             result.groups, parent.size(), countedIn.size(), variants.size(), errors, warnings[0]);
+        Path logFile = writeLog(store, summary, details);
+        String where = logFile == null ? "" : " (details in " + logFile + ")";
+        if (errors > 0)
+            LOG.error("{}{}", summary, where);
+        else
+            LOG.info("{}{}", summary, where);
         return result;
+    }
+
+    /**
+     * Rewrites {@code <dataRoot>/log/duplicates.log} with the summary and one line per variant
+     * error or warning. Returns the file, or null if it could not be written (a warning is
+     * logged; the analysis carries on).
+     */
+    private static Path writeLog(DataStore store, String summary, List<String> details)
+    {
+        if (store.dataRoot() == null)
+            return null;
+        try
+        {
+            Path logDir = store.dataRoot().resolve("log");
+            Files.createDirectories(logDir);
+            Path file = logDir.resolve("duplicates.log");
+            StringBuilder sb = new StringBuilder();
+            sb.append(Instant.now()).append(' ').append(summary).append('\n');
+            details.forEach(d -> sb.append(d).append('\n'));
+            Files.writeString(file, sb.toString());
+            return file;
+        }
+        catch (IOException e)
+        {
+            LOG.warn("Failed to write duplicates.log: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -243,14 +283,15 @@ public final class DuplicateRaces
      * decide it from the race and disagree. Counts a warning when none decides it from the
      * race and their own flags disagree.
      */
-    private static EntryVariant decideVariant(DataStore store, String boatId, List<Copy> copies, int[] warnings)
+    private static EntryVariant decideVariant(DataStore store, String boatId, List<Copy> copies, int[] warnings,
+                                              List<String> details)
     {
         List<EntryVariant> explicit = copies.stream().filter(Copy::explicit).map(Copy::variant)
             .distinct().toList();
         if (explicit.size() > 1)
         {
-            LOG.error("Duplicate races: boat {} is {} -- the races disagree on its variant; "
-                + "counting each copy separately", boatId, describe(copies));
+            details.add("ERROR boat " + boatId + " is " + describe(copies)
+                + " -- the races disagree on its variant; counting each copy separately");
             return null;
         }
         if (explicit.size() == 1)
@@ -265,8 +306,9 @@ public final class DuplicateRaces
             .thenComparingInt(Copy::divisionSize)
             .thenComparing(c -> c.race().id(), Comparator.reverseOrder())).orElseThrow();
         warnings[0]++;
-        LOG.warn("Duplicate races: boat {} is {} -- none set by its series or division; "
-            + "taking {} from {}", boatId, describe(copies), best.variant().code(), best.race().id());
+        details.add("WARN boat " + boatId + " is " + describe(copies)
+            + " -- none set by its series or division; taking " + best.variant().code()
+            + " from " + best.race().id());
         return best.variant();
     }
 
