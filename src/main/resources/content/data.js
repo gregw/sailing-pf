@@ -693,9 +693,11 @@ function renderTable(entity, items, append) {
         cb.checked = state.selected[entity].has(item.id);
         cb.onclick = (e) => { e.stopPropagation(); toggleSelect(entity, item, cb.checked); };
         tdCb.appendChild(cb);
-        if (entity === 'clubs' && item.currentFeed === false) {
+        if (entity === 'clubs') {
+            // Left-aligned so the tick boxes line up whether or not a ⚠ follows
+            tdCb.style.textAlign = 'left';
             tdCb.style.whiteSpace = 'nowrap';
-            tdCb.appendChild(noFeedAlert(item, cb));
+            if (item.currentFeed === false) tdCb.appendChild(noFeedAlert(item, cb));
         }
         tr.appendChild(tdCb);
         tr.onclick = () => {
@@ -1077,6 +1079,10 @@ function toggleSelect(entity, item, checked) {
     // action bar is the new focus for the user until they click another row.
     const panel = document.getElementById('detail-' + entity);
     if (panel) panel.classList.remove('visible');
+    // The club edit form is for one club: any other selection cancels it
+    if (entity === 'clubs' && editingClubId != null
+        && !(state.selected.clubs.size === 1 && state.selected.clubs.has(editingClubId)))
+        hideEditClubPanel();
     updateMergeBar(entity);
 }
 

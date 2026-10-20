@@ -77,5 +77,15 @@ class ClubCurrentFeedTest
     {
         assertTrue(club(topyacht("https://topyacht.net.au/results/ex/2025/club/index.htm"), null)
             .hasCurrentFeed(2026, true));
+        SailSysEvent series = new SailSysEvent("series-3386", null, null, 3386);
+        assertTrue(club(null, List.of(series)).hasCurrentFeed(2026, true));
+    }
+
+    @Test
+    void feedRaceThisYearWithoutConfiguredFeedIsHistoric()
+    {
+        // e.g. races left by the old SailSys platform scan, with no feed in clubs.yaml now
+        assertFalse(club(null, null).hasCurrentFeed(2026, true));
+        assertFalse(club(List.of(), List.of()).hasCurrentFeed(2026, true));
     }
 }
