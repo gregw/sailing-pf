@@ -5,18 +5,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Set;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
-import org.mortbay.sailing.pf.data.Boat;
-import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,22 +33,10 @@ public class OrcImporter
 
     private static final Logger LOG = LoggerFactory.getLogger(OrcImporter.class);
 
-    static final String SOURCE = "ORC";
-
     private static final String LIST_URL =
         "https://data.orc.org/public/WPub.dll?action=activecerts&CountryId=AUS";
     private static final String CERT_URL_PREFIX =
         "https://data.orc.org/public/WPub.dll/CC/";
-
-    // CertType values indicating non-spinnaker
-    private static final Set<String> NON_SPIN_CERT_TYPES = Set.of("10", "11");
-
-    // CertType values indicating double-handed
-    private static final Set<String> DH_CERT_TYPES = Set.of("8", "9");
-
-    // CertType values for international certificates; all others are club.
-    // 1 = IRC+ORC intl, 2 = ORC intl, 8 = DH intl, 10 = NS intl
-    private static final Set<String> INTL_CERT_TYPES = Set.of("1", "2", "8", "10");
 
     // Matches the GPH table cell: <td ... filecode="GPH">521.7</td>
     // This attribute is present on all ORC cert page variants (club, NS, international, DH).
@@ -111,6 +93,7 @@ public class OrcImporter
         LOG.info("Processing {} certificate entries", certNodes.getLength());
 
         Path certsDir = cacheDir != null ? cacheDir.resolve("certs") : null;
+        Set<String> imported = OrcCertRow.importedDxtIds(store);
 
         for (int i = 0; i < certNodes.getLength(); i++)
         {
@@ -125,10 +108,7 @@ public class OrcImporter
                 ImporterLog.warn(LOG,"Skipping cert with missing dxtID");
                 continue;
             }
-            final String finalDxtId = dxtId;
-            if (store.boats().values().stream()
-                .flatMap(b -> b.certificates().stream())
-                .anyMatch(c -> finalDxtId.equals(c.certificateNumber())))
+            if (imported.contains(dxtId))
             {
                 LOG.debug("Skipping already-imported dxtID={}", dxtId);
                 continue;
@@ -222,8 +202,8 @@ public class OrcImporter
 
     /**
      * Process one ROW element using the already-fetched cert HTML page.
-     * Validates required fields, parses GPH, then creates or updates Design, Boat and Certificate
-     * in the store.
+     * Parses GPH, then creates or updates Design, Boat and Certificate in the store
+     * (see {@link OrcCertRow#importInto}).
      */
     void processCertElement(Element el, String certHtml)
     {
@@ -232,91 +212,10 @@ public class OrcImporter
             dxtId = getDxtID(el);
         if (dxtId == null || dxtId.isBlank())
             return;
-        String yachtName = child(el, "YachtName");
-        String sailNo = child(el, "SailNo");
-        String countryId = child(el, "CountryId");
-        String vppYearStr = child(el, "VPPYear");
-        String certType = child(el, "CertType");
-        String expiryStr = child(el, "Expiry");
-        String className = child(el, "Class");
-        String familyName = child(el, "FamilyName");
-        LOG.info("Process {} {} {} {} {} {} {} {}", dxtId, yachtName, sailNo, vppYearStr, certType, expiryStr, className, familyName);
-
-        if (yachtName == null || sailNo == null || vppYearStr == null)
-        {
-            ImporterLog.warn(LOG,"Skipping cert dxtID={}: missing required fields", dxtId);
-            return;
-        }
-
-        int year;
-        try
-        {
-            year = Integer.parseInt(vppYearStr.trim());
-        }
-        catch (NumberFormatException e)
-        {
-            ImporterLog.warn(LOG,"Skipping cert dxtID={}: invalid VPPYear={}", dxtId, vppYearStr);
-            return;
-        }
-
-        double gph = parseGph(certHtml, dxtId);
-        if (Double.isNaN(gph))
-        {
-            ImporterLog.warn(LOG,"Skipping cert dxtID={}: GPH not found in cert HTML", dxtId);
-            return;
-        }
-        if (gph < 250 || gph > 950)
-        {
-            ImporterLog.warn(LOG,"Skipping cert dxtID={}: implausible GPH={} (expected 250-950, regex mismatch?)", dxtId, gph);
-            return;
-        }
-        double tcf = 600.0 / gph;
-
-        boolean nonSpinnaker = (familyName != null && familyName.contains("Non Spinnaker"))
-            || NON_SPIN_CERT_TYPES.contains(certType == null ? "" : certType.trim());
-        boolean twoHanded = (familyName != null && familyName.contains("Double Handed"))
-            || DH_CERT_TYPES.contains(certType == null ? "" : certType.trim());
-
-        LocalDate expiry = null;
-        if (expiryStr != null && !expiryStr.isBlank())
-        {
-            try
-            {
-                expiry = LocalDate.parse(expiryStr.trim());
-            }
-            catch (Exception e)
-            {
-                LOG.debug("Cannot parse expiry date for dxtID={}: {}", dxtId, expiryStr);
-            }
-        }
-
-        // Find-or-create Boat (design resolved inside findOrCreateBoat)
-        Boat boat = store.findOrCreateBoat(sailNo, yachtName.trim(), className, null, SOURCE);
-
-        // Upsert certificate: remove old cert with same dxtId first, then add new one
-        final String finalDxtId = dxtId;
-        List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
-        updatedCerts.removeIf(c -> finalDxtId.equals(c.certificateNumber()));
-
-        // International cert types: 1 (IRC+ORC), 2 (ORC), 8 (DH intl), 10 (NS intl); all others are club
-        boolean club = certType == null || !INTL_CERT_TYPES.contains(certType.trim());
-        Certificate cert = new Certificate("ORC",
-            year, tcf, nonSpinnaker, twoHanded, club, false, dxtId, expiry);
-        updatedCerts.add(cert);
-        updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
-
-        store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubIds(),
-            List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
-    }
-
-    private static List<String> addSource(List<String> existing, String source)
-    {
-        if (existing.contains(source))
-            return existing;
-        List<String> updated = new ArrayList<>(existing);
-        updated.add(source);
-        return List.copyOf(updated);
+        OrcCertRow row = new OrcCertRow(dxtId,
+            child(el, "YachtName"), child(el, "SailNo"), child(el, "VPPYear"),
+            child(el, "CertType"), child(el, "Expiry"), child(el, "Class"), child(el, "FamilyName"));
+        row.importInto(store, parseGph(certHtml, dxtId));
     }
 
     /**

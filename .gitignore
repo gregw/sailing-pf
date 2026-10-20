@@ -4,6 +4,8 @@ pf-data/*
 !pf-data/config
 # holds the OAuth client secret — see pf-data/config/auth.yaml.example
 pf-data/config/auth.yaml
+# ORC API key — see OrcApiImporter
+pf-data/config/orc-api-key
 .claude/*
 ~.claude/claude-questions.txt
 

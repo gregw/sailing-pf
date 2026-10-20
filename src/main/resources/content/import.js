@@ -6,6 +6,7 @@ const DAY_LABELS = {
 const DISPLAY_NAMES = {
     'sailsys':          'Import SailSys Races',
     'orc':              'Import ORC Certificates',
+    'orc-api':          'Import ORC Certificates (API)',
     'ams':              'Import AMS Certificates',
     'topyacht':         'Import TopYacht Races',
     'bwps':             'Import BWPS Races',
@@ -97,7 +98,8 @@ function buildTable(entries) {
 function taskTip(name) {
     const tips = {
         'sailsys':            'Imports the SailSys events configured on each club (clubs page → Edit → SailSys events).',
-        'orc':                'Downloads ORC certificate data from data.orc.org.',
+        'orc':                'Downloads ORC certificate data from data.orc.org (WPub.dll, retired 31 Jan 2027).',
+        'orc-api':            'Downloads ORC certificate data from the ORC API (sas.orc.org). Needs config/orc-api-key or ORC_API_KEY.',
         'ams':                'Scrapes AMS certificate data from raceyachts.org.',
         'topyacht':           'Scrapes race results from the TopYacht events configured on each club.',
         'bwps':               'Imports BWPS (BlueSail) race results from the CYCA.',
@@ -112,6 +114,20 @@ function taskTip(name) {
     return tips[name] || name;
 }
 
+// Only one ORC importer may be in the schedule or run at startup.
+const EXCLUSIVE_ORC = ['orc', 'orc-api'];
+
+/** Ticking either box of an ORC importer unticks both boxes of the other ORC importer. */
+function exclusiveOrc(cb) {
+    const name = cb.closest('tr').dataset.name;
+    if (!cb.checked || !EXCLUSIVE_ORC.includes(name)) return;
+    for (const other of EXCLUSIVE_ORC) {
+        if (other === name) continue;
+        const row = document.querySelector(`#importers-body tr[data-name="${other}"]`);
+        if (row) row.querySelectorAll('input[type="checkbox"]').forEach(box => box.checked = false);
+    }
+}
+
 function buildRow(entry) {
     const tr = document.createElement('tr');
     tr.id = 'row-' + entry.name + '-' + entry.mode;
@@ -120,8 +136,17 @@ function buildRow(entry) {
     const isRunning = entry.status === 'running';
     const key = entry.name + '-' + entry.mode;
     const progressField = '';
-    const runStopBtns = `<button onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
+    // A task that cannot run here (e.g. orc-api without a key) is greyed out with the reason
+    const unavailable = entry.unavailable;
+    if (unavailable) {
+        tr.style.color = '#999';
+        tr.title = unavailable;
+    }
+    const runStopBtns = unavailable
+        ? `<button class="perma-disabled" disabled title="${esc(unavailable)}">Run</button>`
+        : `<button onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
                title="Run this task now">Run</button>`;
+    const boxState = unavailable ? 'disabled' : '';
     tr.innerHTML = `
       <td class="order-col">
         <button class="order-btn" title="Move up in run order"
@@ -135,11 +160,11 @@ function buildRow(entry) {
       <td style="white-space:nowrap;font-family:monospace;font-size:0.9em;color:#555">${esc(formatLastRun(entry.lastRun))}</td>
       <td style="text-align:center">${runStopBtns}</td>
       <td style="text-align:center"><input type="checkbox" id="sched-${esc(key)}"
-               title="Include in the automatic scheduled run"
-               ${entry.includeInSchedule ? 'checked' : ''}></td>
+               title="Include in the automatic scheduled run" onchange="exclusiveOrc(this)"
+               ${entry.includeInSchedule ? 'checked' : ''} ${boxState}></td>
       <td style="text-align:center"><input type="checkbox" id="start-${esc(key)}-startup"
-               title="Run this task automatically when the server starts"
-               ${entry.runAtStartup ? 'checked' : ''}></td>`;
+               title="Run this task automatically when the server starts" onchange="exclusiveOrc(this)"
+               ${entry.runAtStartup ? 'checked' : ''} ${boxState}></td>`;
     return tr;
 }
 
@@ -172,6 +197,8 @@ async function runImporter(name, mode) {
     const data = await resp.json().catch(() => ({}));
     if (resp.status === 409) {
         alert('An import is already running');
+    } else if (resp.status === 400) {
+        alert('Cannot run: ' + (data.error || 'task unavailable'));
     } else if (resp.status === 202) {
         setBadge(name, mode, 'running');
         setAllRunButtonsDisabled(true);

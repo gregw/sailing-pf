@@ -3415,6 +3415,7 @@ public class AdminApiServlet extends HttpServlet
             row.put("mode", e.mode());
             row.put("includeInSchedule", e.includeInSchedule());
             row.put("runAtStartup", e.runAtStartup());
+            row.put("unavailable", _taskService.unavailableReason(e.name()));
             row.put("status", isRunning ? "running" : "idle");
             row.put("lastRun", lastRun != null ? lastRun.toString() : null);
             entries.add(row);
@@ -3485,6 +3486,13 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
+        String unavailable = _taskService.unavailableReason(name);
+        if (unavailable != null)
+        {
+            resp.setStatus(400);
+            writeJson(resp, Map.of("error", unavailable));
+            return;
+        }
         boolean accepted = _taskService.submit(name, mode, 1);
         if (accepted)
         {
