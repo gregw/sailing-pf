@@ -85,6 +85,16 @@ public class SailSysImporter
     private static final String API_SERIES_SUFFIX = "/display/races";
     private static final int SAVE_INTERVAL  = 500;
 
+    /** The SailSys API address an event is imported from: the club profile or the series race list. */
+    public static String eventUrl(SailSysEvent event)
+    {
+        if (event.clubId() != null)
+            return API_CLUB_PROFILE_BASE + event.clubId() + API_CLUB_PROFILE_SUFFIX;
+        if (event.seriesId() != null)
+            return API_SERIES_BASE + event.seriesId() + API_SERIES_SUFFIX;
+        return null;
+    }
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final DataStore  store;

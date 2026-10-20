@@ -822,6 +822,10 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
         setupRaceDivisionChart(id, data);
     }
 
+    if (entity === 'clubs' && panel) {
+        panel.innerHTML = renderClubDetail(data);
+    }
+
     if (entity === 'boats') {
         document.getElementById('ref-factors-boats').innerHTML = '';
         const pfDiv = document.getElementById('pf-detail-boats');
@@ -853,6 +857,44 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
             panel.scrollIntoView({behavior: 'smooth', block: 'start'});
         }
     }
+}
+
+/**
+ * The clubs page detail: short name linked to the club's web site (its id is the domain),
+ * full name, state, email as mailto links, and the result URLs its races are imported from.
+ */
+function renderClubDetail(club) {
+    const attr = s => esc(s).replace(/"/g, '&quot;');
+    // Only http(s) links: the URLs come from clubs.yaml, which edit requests feed into
+    const link = (url, text) => /^https?:\/\//i.test(url)
+        ? `<a href="${attr(url)}" target="_blank" rel="noopener">${esc(text || url)}</a>`
+        : esc(text || url);
+    const site = 'https://' + club.id;
+    const emails = (club.email || '').split(/[,;\s]+/).filter(Boolean)
+        .map(e => `<a href="mailto:${attr(e)}">${esc(e)}</a>`).join(', ');
+
+    const feeds = [];
+    for (const g of club.topyachtGroups || []) {
+        if (!g.urls || g.urls.length === 0) continue;
+        feeds.push(`<li>TopYacht — ${esc(g.name || g.prefix || 'event')}<ul>`
+            + g.urls.map(u => `<li>${link(u)}</li>`).join('') + '</ul></li>');
+    }
+    for (const e of club.sailsysEvents || []) {
+        if (!e.url) continue;
+        const what = e.clubId != null ? 'club ' + e.clubId + ' (current series)' : 'series ' + e.seriesId;
+        feeds.push(`<li>SailSys — ${esc(e.name || what)}<ul><li>${link(e.url)}</li></ul></li>`);
+    }
+
+    return `<h3>${link(site, club.shortName || club.id)}${club.longName ? ' — ' + esc(club.longName) : ''}</h3>
+        <dl>
+            <dt>Web site</dt><dd>${link(site, club.id)}</dd>
+            <dt>Full name</dt><dd>${esc(club.longName) || '—'}</dd>
+            <dt>State</dt><dd>${esc(club.state) || '—'}</dd>
+            <dt>Email</dt><dd>${emails || '—'}</dd>
+            <dt>Results feeds</dt><dd>${feeds.length
+                ? '<ul class="club-feeds">' + feeds.join('') + '</ul>'
+                : 'None configured: data is historic only.'}</dd>
+        </dl>`;
 }
 
 function renderBoatAliases(aliases) {

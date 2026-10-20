@@ -16,6 +16,7 @@ import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.Series;
 import org.mortbay.sailing.pf.store.DataStore;
 
@@ -46,6 +47,15 @@ class SailSysImporterTest
     }
 
     // --- processRaceJson ---
+
+    @Test
+    void eventUrlNamesTheApiAddressImportedFrom()
+    {
+        assertEquals("https://api.sailsys.com.au/api/v1/clubs/41/profile",
+            SailSysImporter.eventUrl(SailSysEvent.ofClub(41, null)));
+        assertEquals("https://api.sailsys.com.au/api/v1/series/3386/display/races",
+            SailSysImporter.eventUrl(SailSysEvent.ofSeries(3386, null)));
+    }
 
     @Test
     void notFoundResponseReturnsFalseAndCreatesNoRace()

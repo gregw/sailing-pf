@@ -48,6 +48,7 @@ import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.data.Series;
 import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
+import org.mortbay.sailing.pf.importer.SailSysImporter;
 import org.mortbay.sailing.pf.importer.TopYachtPrefix;
 import org.mortbay.sailing.pf.store.Aliases;
 import org.mortbay.sailing.pf.store.DataStore;
@@ -1326,6 +1327,7 @@ public class AdminApiServlet extends HttpServlet
             m.put("name", e.name());
             m.put("clubId", e.clubId());
             m.put("seriesId", e.seriesId());
+            m.put("url", SailSysImporter.eventUrl(e));
             out.add(m);
         }
         return out;
