@@ -86,15 +86,27 @@ function openClubTab(item) {
 
 /** Shared Club action column used on boats / series / races tabs. */
 /**
- * ⚠ shown beside a club with no current results feed (no SailSys or TopYacht for this year);
- * the hover tip explains (see Club.hasCurrentFeed). Uses the info-btn tooltip.
+ * ⚠ shown after the tick box of a club with no current results feed (no SailSys or TopYacht
+ * for this year — see Club.hasCurrentFeed). The hover tip explains (info-btn tooltip);
+ * clicking it selects just this club and opens its Edit / Request edit form.
  */
-function noFeedAlert() {
+function noFeedAlert(item, cb) {
     const year = new Date().getFullYear();
-    const tip = `No current results feed: this club has no SailSys or TopYacht feed for ${year}, `
-        + 'so its data is historic only. To make it live, select the club and request an edit '
-        + 'adding its SailSys or TopYacht feed.';
-    return `<span class="info-btn feed-alert" data-tip="${tip}">⚠</span>`;
+    const span = document.createElement('span');
+    span.className = 'info-btn feed-alert';
+    span.textContent = '⚠';
+    span.dataset.tip = `No current results feed: this club has no SailSys or TopYacht feed for ${year}, `
+        + 'so its data is historic only. Click to request an edit adding its SailSys or TopYacht '
+        + 'feed to make it live.';
+    span.onclick = (e) => {
+        e.stopPropagation();
+        clearSelection('clubs');
+        cb.checked = true;
+        toggleSelect('clubs', item, true);
+        showEditClubPanel();
+        document.getElementById('edit-panel-clubs').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    };
+    return span;
 }
 
 function clubColumn(anchor, sortKey) {
@@ -246,9 +258,7 @@ const COLUMNS = {
     ],
     clubs: [
         { label: 'ID',        key: 'id',        anchor: 'col-club-id',    tip: 'Club identifier (website domain).', cls: 'id-col' },
-        { label: 'Short',     sortKey: 'shortName', anchor: 'col-club-short',
-          tip: 'Short name used in source data. ⚠ = no current results feed: the club\'s data is historic only.',
-          render: item => esc(item.shortName) + (item.currentFeed === false ? noFeedAlert() : '') },
+        { label: 'Short',     key: 'shortName', anchor: 'col-club-short', tip: 'Short name used in source data.' },
         { label: 'Name',      key: 'longName',  anchor: 'col-club-name',  tip: 'Full club name.' },
         { label: 'State',     key: 'state',     anchor: 'col-club-state', tip: 'Australian state or territory.' },
         { label: 'Boats',     type: 'action', sortKey: 'boats', anchor: 'col-club-boats',
@@ -683,6 +693,10 @@ function renderTable(entity, items, append) {
         cb.checked = state.selected[entity].has(item.id);
         cb.onclick = (e) => { e.stopPropagation(); toggleSelect(entity, item, cb.checked); };
         tdCb.appendChild(cb);
+        if (entity === 'clubs' && item.currentFeed === false) {
+            tdCb.style.whiteSpace = 'nowrap';
+            tdCb.appendChild(noFeedAlert(item, cb));
+        }
         tr.appendChild(tdCb);
         tr.onclick = () => {
             if (entity === 'races') state.currentRaceIdx = globalIdx;
