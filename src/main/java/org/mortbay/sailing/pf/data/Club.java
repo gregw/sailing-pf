@@ -3,6 +3,7 @@ package org.mortbay.sailing.pf.data;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -36,6 +37,25 @@ public record Club(
     {
         return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups,
             sailsysEvents, series, t);
+    }
+
+    /**
+     * Whether this club has a results feed that is still live in {@code year}: a SailSys club
+     * entry (which always lists the club's current series), a TopYacht URL naming the year
+     * (e.g. {@code /2026/}, {@code 2025-2026} or {@code 2025-26}), or — {@code feedRacedInYear} — a race that
+     * year imported from SailSys or TopYacht. Without one, the club's data is historic only.
+     */
+    public boolean hasCurrentFeed(int year, boolean feedRacedInYear)
+    {
+        if (feedRacedInYear)
+            return true;
+        if (sailsysEvents != null && sailsysEvents.stream().anyMatch(e -> e.clubId() != null))
+            return true;
+        String shortSeason = (year - 1) + "-" + String.format("%02d", year % 100);
+        Pattern yearToken = Pattern.compile("(?<!\\d)(" + year + "|" + shortSeason + ")(?!\\d)");
+        return topyachtGroups != null && topyachtGroups.stream()
+            .flatMap(g -> g.urls().stream())
+            .anyMatch(u -> yearToken.matcher(u).find());
     }
 
     //mode/ loadedAt is loading metadata, not domain data — exclude from equality

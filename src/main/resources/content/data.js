@@ -85,6 +85,18 @@ function openClubTab(item) {
 }
 
 /** Shared Club action column used on boats / series / races tabs. */
+/**
+ * ⚠ shown beside a club with no current results feed (no SailSys or TopYacht for this year);
+ * the hover tip explains (see Club.hasCurrentFeed). Uses the info-btn tooltip.
+ */
+function noFeedAlert() {
+    const year = new Date().getFullYear();
+    const tip = `No current results feed: this club has no SailSys or TopYacht feed for ${year}, `
+        + 'so its data is historic only. To make it live, select the club and request an edit '
+        + 'adding its SailSys or TopYacht feed.';
+    return `<span class="info-btn feed-alert" data-tip="${tip}">⚠</span>`;
+}
+
 function clubColumn(anchor, sortKey) {
     return {
         label: 'Club', type: 'action', anchor, sortKey,
@@ -234,7 +246,9 @@ const COLUMNS = {
     ],
     clubs: [
         { label: 'ID',        key: 'id',        anchor: 'col-club-id',    tip: 'Club identifier (website domain).', cls: 'id-col' },
-        { label: 'Short',     key: 'shortName', anchor: 'col-club-short', tip: 'Short name used in source data.' },
+        { label: 'Short',     sortKey: 'shortName', anchor: 'col-club-short',
+          tip: 'Short name used in source data. ⚠ = no current results feed: the club\'s data is historic only.',
+          render: item => esc(item.shortName) + (item.currentFeed === false ? noFeedAlert() : '') },
         { label: 'Name',      key: 'longName',  anchor: 'col-club-name',  tip: 'Full club name.' },
         { label: 'State',     key: 'state',     anchor: 'col-club-state', tip: 'Australian state or territory.' },
         { label: 'Boats',     type: 'action', sortKey: 'boats', anchor: 'col-club-boats',

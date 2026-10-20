@@ -408,6 +408,12 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
 .info-btn:hover::after {
     display: block;
 }
+/* Club with no current results feed (data.js noFeedAlert) */
+.feed-alert {
+    color: #c77700;
+    font-size: 0.95em;
+}
+
 /* Longer, multi-line tips: line breaks (&#10;) in data-tip are kept. */
 .info-btn-wide::after {
     width: 380px;

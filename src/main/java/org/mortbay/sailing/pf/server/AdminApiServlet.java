@@ -911,6 +911,16 @@ public class AdminApiServlet extends HttpServlet
             Map<String, Club> all = new LinkedHashMap<>(store.clubSeed());
             all.putAll(store.clubs());  // persisted overrides seed
 
+            // Clubs with a race this year from a feed (SailSys, TopYacht) — see Club.hasCurrentFeed
+            int year = LocalDate.now().getYear();
+            Set<String> fedThisYear = store.races().values().stream()
+                .filter(r -> r.date() != null && r.date().getYear() == year)
+                .filter(r -> r.source() != null
+                    && (r.source().startsWith("SailSys") || r.source().startsWith("TopYacht")))
+                .map(Race::clubId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
             List<Map<String, Object>> rows = all.values().stream()
                 .filter(c -> filterId == null || filterId.equals(c.id()))
                 .filter(c -> showExcluded || !c.excluded())
@@ -942,6 +952,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("series", seriesCount > 0 ? seriesCount : null);
                     row.put("races", raceCount);
                     row.put("excluded", c.excluded());
+                    row.put("currentFeed", c.hasCurrentFeed(year, fedThisYear.contains(c.id())));
                     return row;
                 })
                 .collect(Collectors.toList());
