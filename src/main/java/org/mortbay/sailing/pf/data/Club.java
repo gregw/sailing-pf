@@ -42,18 +42,19 @@ public record Club(
     /**
      * Whether this club has a results feed that is still live in {@code year}: a SailSys club
      * entry (which always lists the club's current series), a TopYacht URL naming the year
-     * (e.g. {@code /2026/}, {@code 2025-2026} or {@code 2025-26}), or — {@code feedRacedInYear} — a race that
-     * year imported from SailSys or TopYacht while a SailSys or TopYacht entry is still configured
-     * (races left by a since-removed feed, or the old SailSys platform scan, do not count).
+     * (e.g. {@code /2026/}, {@code 2025-2026} or {@code 2025-26}), or a race that year imported
+     * from a source the club still has configured — {@code sailsysRacedInYear} counts only with a
+     * SailSys entry, {@code topyachtRacedInYear} only with a TopYacht URL (so races left by a
+     * since-removed feed, or the old SailSys platform scan, do not vouch for another feed).
      * Without one, the club's data is historic only.
      */
-    public boolean hasCurrentFeed(int year, boolean feedRacedInYear)
+    public boolean hasCurrentFeed(int year, boolean sailsysRacedInYear, boolean topyachtRacedInYear)
     {
-        boolean hasFeed = (sailsysEvents != null && !sailsysEvents.isEmpty())
-            || (topyachtGroups != null && topyachtGroups.stream().anyMatch(g -> !g.urls().isEmpty()));
-        if (!hasFeed)
+        boolean hasSailsys = sailsysEvents != null && !sailsysEvents.isEmpty();
+        boolean hasTopyacht = topyachtGroups != null && topyachtGroups.stream().anyMatch(g -> !g.urls().isEmpty());
+        if (!hasSailsys && !hasTopyacht)
             return false;
-        if (feedRacedInYear)
+        if ((hasSailsys && sailsysRacedInYear) || (hasTopyacht && topyachtRacedInYear))
             return true;
         if (sailsysEvents != null && sailsysEvents.stream().anyMatch(e -> e.clubId() != null))
             return true;

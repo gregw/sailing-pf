@@ -912,15 +912,10 @@ public class AdminApiServlet extends HttpServlet
             Map<String, Club> all = new LinkedHashMap<>(store.clubSeed());
             all.putAll(store.clubs());  // persisted overrides seed
 
-            // Clubs with a race this year from a feed (SailSys, TopYacht) — see Club.hasCurrentFeed
+            // Clubs with a race this year from each feed (SailSys, TopYacht) — see Club.hasCurrentFeed
             int year = LocalDate.now().getYear();
-            Set<String> fedThisYear = store.races().values().stream()
-                .filter(r -> r.date() != null && r.date().getYear() == year)
-                .filter(r -> r.source() != null
-                    && (r.source().startsWith("SailSys") || r.source().startsWith("TopYacht")))
-                .map(Race::clubId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+            Set<String> sailsysThisYear = clubsRacedInYear(year, "SailSys");
+            Set<String> topyachtThisYear = clubsRacedInYear(year, "TopYacht");
 
             List<Map<String, Object>> rows = all.values().stream()
                 .filter(c -> filterId == null || filterId.equals(c.id()))
@@ -953,7 +948,8 @@ public class AdminApiServlet extends HttpServlet
                     row.put("series", seriesCount > 0 ? seriesCount : null);
                     row.put("races", raceCount);
                     row.put("excluded", c.excluded());
-                    row.put("currentFeed", c.hasCurrentFeed(year, fedThisYear.contains(c.id())));
+                    row.put("currentFeed", c.hasCurrentFeed(year,
+                        sailsysThisYear.contains(c.id()), topyachtThisYear.contains(c.id())));
                     return row;
                 })
                 .collect(Collectors.toList());
@@ -1374,6 +1370,21 @@ public class AdminApiServlet extends HttpServlet
         {
             return null;
         }
+    }
+
+    /**
+     * Ids of clubs with a race in {@code year} imported from the feed whose source ids start with
+     * {@code sourcePrefix} (a merged race lists several comma-separated source ids).
+     */
+    private Set<String> clubsRacedInYear(int year, String sourcePrefix)
+    {
+        return store.races().values().stream()
+            .filter(r -> r.date() != null && r.date().getYear() == year)
+            .filter(r -> r.source() != null
+                && Arrays.stream(r.source().split(",")).anyMatch(s -> s.trim().startsWith(sourcePrefix)))
+            .map(Race::clubId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
     }
 
     private static List<Map<String, Object>> topyachtGroupMaps(List<TopYachtGroup> groups)
