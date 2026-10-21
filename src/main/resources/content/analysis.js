@@ -674,6 +674,46 @@ function renderPfQuality(q) {
       </table>`;
 }
 
+async function loadPfCompare() {
+    try {
+        const resp = await fetch('/api/pf/compare');
+        if (!resp.ok) return;
+        renderPfCompare(await resp.json());
+    } catch (e) { /* ignore */ }
+}
+
+function renderPfCompare(c) {
+    if (!c.als && !c.sa) return;
+    document.getElementById('pf-compare').style.display = '';
+    const cols = [['ALS (PF Optimise)', c.als], ['Annealing (PF Anneal)', c.sa]];
+    const pct = v => v == null ? '?' : (100 * v).toFixed(2) + '%';
+    // Lower is better: mark the lower of the two when both have run
+    const best = key => c.als && c.sa ? (c.als[key] <= c.sa[key] ? 0 : 1) : -1;
+    const row = (label, tip, key, f) => {
+        const b = best(key);
+        return `<tr><td style="padding:2px 1em"><b>${label}</b> ${tip}</td>` + cols.map(([, s], i) =>
+            `<td style="padding:2px 1em;${i === b ? 'font-weight:bold;color:#2e7d32' : ''}">${s ? f(s[key]) : '\u2014'}</td>`).join('') + '</tr>';
+    };
+    const sa = c.sa && c.sa.stats;
+    const saRun = sa
+        ? `${sa.stages} stages, ${sa.moves} moves (${(100 * sa.acceptedMoves / Math.max(1, sa.moves)).toFixed(0)}% accepted), `
+          + `${sa.boatVariantsPerMove}/${sa.boatVariantsActive} PFs per move, best at stage ${sa.bestStage}, ${sa.stopReason}, ${(sa.elapsedMillis / 1000).toFixed(1)} s`
+        : '\u2014';
+    document.getElementById('pf-compare-content').innerHTML = `
+      <table style="border-collapse:collapse;font-size:0.95em">
+        <tr><td></td>${cols.map(([h]) => `<th style="padding:2px 1em;text-align:left">${h}</th>`).join('')}</tr>
+        ${row('Corrected-time spread', infoBtn('pf-compare-spread', 'Weighted RMS spread of log corrected times about each division\'s mean: the typical gap between a boat\'s corrected time and the division average. Lower is better.'), 'rmsSpread', pct)}
+        ${row('Weighted variance', infoBtn('pf-compare-variance', 'Variance term divided by the total entry weight.'), 'weightedVariance', fmt)}
+        ${row('Energy', infoBtn('pf-compare-energy', 'Variance term + RF term: the objective PF Anneal minimises.'), 'energy', fmt)}
+        ${row('Variance term', '', 'varianceTerm', fmt)}
+        ${row('RF term', infoBtn('pf-compare-rf', 'λ × Σ RF weight × (log PF − log RF)²: how far the PFs moved from the reference factors.'), 'rfTerm', fmt)}
+        ${row('Median |residual|', '', 'medianAbsResidual', pct)}
+        ${row('P95 |residual|', '', 'pct95AbsResidual', pct)}
+        <tr><td style="padding:2px 1em"><b>Scale</b></td>${cols.map(([, s]) => `<td style="padding:2px 1em">${s ? `${s.boatsWithPf} boats, ${s.divisions} divisions, ${s.entries} entries` : '\u2014'}</td>`).join('')}</tr>
+        <tr><td style="padding:2px 1em"><b>Annealing run</b></td><td></td><td style="padding:2px 1em">${saRun}</td></tr>
+      </table>`;
+}
+
 function fmt(v) {
     if (v == null) return '?';
     if (Math.abs(v) < 0.001) return v.toExponential(1);
@@ -698,6 +738,7 @@ function fmt(v) {
 })();
 loadNetwork();
 loadPfQuality();
+loadPfCompare();
 
 document.addEventListener('DOMContentLoaded', () => {
     initChartResize('network-plot', 1000);

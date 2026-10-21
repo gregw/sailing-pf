@@ -29,6 +29,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.eclipse.jetty.client.HttpClient;
 import org.mortbay.sailing.pf.analysis.ConversionGraph;
+import org.mortbay.sailing.pf.analysis.PfAnnealConfig;
 import org.mortbay.sailing.pf.analysis.PfConfig;
 import org.mortbay.sailing.pf.importer.AmsImporter;
 import org.mortbay.sailing.pf.importer.BwpsImporter;
@@ -69,6 +70,7 @@ public class TaskService
         CONFIG_COMMENTS.put("orcListMaxAgeDays:",           "# --- ORC importer ---");
         CONFIG_COMMENTS.put("minAnalysisR2:",               "# --- Analysis ---");
         CONFIG_COMMENTS.put("pfLambda:",                   "# --- PF optimiser ---");
+        CONFIG_COMMENTS.put("pfAnneal:",                   "# --- PF annealer (pf-anneal task) ---");
         CONFIG_COMMENTS.put("slidingAverageCount:",         "# --- Sliding average / consistency ---");
         CONFIG_COMMENTS.put("diversityNonSpinWeight:",      "# --- Diversity weights (multi-variant PF) ---");
         CONFIG_COMMENTS.put("adminPort:",                   "# --- Server ports ---");
@@ -278,6 +280,7 @@ public class TaskService
                                Double pfDubiousFactor,               // null → default 1.5
                                Double pfMaxFactor,                   // null → default 2.0
                                Double pfAgeHalfLifeYears,            // null → default 2.0; 0 = no age decay
+                               PfAnnealConfig pfAnneal,              // null → PfAnnealConfig.DEFAULT
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -301,6 +304,7 @@ public class TaskService
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
         new ImporterEntry("pf-optimise",       "run",  false, false),
+        new ImporterEntry("pf-anneal",         "run",  false, false),
         new ImporterEntry("save-database", "run", false, false),
         new ImporterEntry("clear-cache-orc", "run", false, false),
         new ImporterEntry("clear-cache-sailsys", "run", false, false)
@@ -341,6 +345,7 @@ public class TaskService
     private volatile double pfDubiousFactor = 1.5;
     private volatile double pfMaxFactor = 2.0;
     private volatile double pfAgeHalfLifeYears = 2.0;
+    private volatile PfAnnealConfig pfAnneal = PfAnnealConfig.DEFAULT;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -439,6 +444,8 @@ public class TaskService
                 pfMaxFactor = config.pfMaxFactor();
             if (config.pfAgeHalfLifeYears() != null)
                 pfAgeHalfLifeYears = config.pfAgeHalfLifeYears();
+            if (config.pfAnneal() != null)
+                pfAnneal = config.pfAnneal();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -1084,6 +1091,13 @@ public void stop()
                 else
                     LOG.warn("PF optimise requested but cache is not configured");
             }
+            case "pf-anneal" ->
+            {
+                if (cache != null)
+                    cache.refreshPfAnneal(pfConfig(), pfAnnealConfig(), stopRequested::get);
+                else
+                    LOG.warn("PF anneal requested but cache is not configured");
+            }
             case "save-database" ->
             {
                 store.save();
@@ -1126,6 +1140,11 @@ public void stop()
             pfNoRaceFallbackWeight,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
             pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears);
+    }
+
+    private PfAnnealConfig pfAnnealConfig()
+    {
+        return pfAnneal;
     }
 
     /**
@@ -1222,7 +1241,7 @@ public void stop()
                     pfCrossVariantLambda, pfGraphCrossVariantLambda,
                     pfNoRaceFallbackWeight,
                     pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-                    pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears,
+                    pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears, pfAnneal,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,

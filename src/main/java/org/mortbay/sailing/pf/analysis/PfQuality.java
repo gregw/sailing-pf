@@ -25,5 +25,6 @@ public record PfQuality(
     List<Double> outerDeltaTrace,   // maxWeightChange at end of each outer cycle, in order
     double finalMaxPfDelta,         // final max |Δlog(PF)| between outer cycles (PF stability metric)
     List<Double> outerPfDeltaTrace, // maxPfDelta at end of each outer cycle, in order
-    PfConfig config                // config used for this run
+    PfConfig config,               // config used for this run
+    PfScore score                  // weighted corrected-time variance of the result — compares optimisers
 ) {}

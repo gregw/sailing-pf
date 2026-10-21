@@ -33,7 +33,10 @@ import org.mortbay.sailing.pf.analysis.DivisionPf;
 import org.mortbay.sailing.pf.analysis.DuplicateRaces;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
 import org.mortbay.sailing.pf.analysis.PerformanceProfile;
+import org.mortbay.sailing.pf.analysis.PfAnnealStats;
+import org.mortbay.sailing.pf.analysis.PfAnnealer;
 import org.mortbay.sailing.pf.analysis.PfQuality;
+import org.mortbay.sailing.pf.analysis.PfScore;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Club;
@@ -125,6 +128,8 @@ public class AdminApiServlet extends HttpServlet
             handleSeries(path.substring("/series".length()), req, resp);
         else if ("/pf/quality".equals(path))
             handlePfQuality(resp);
+        else if ("/pf/compare".equals(path))
+            handlePfCompare(resp);
         else if ("/comparison/candidates".equals(path))
             handleComparisonCandidates(req, resp);
         else if ("/comparison/chart".equals(path))
@@ -3401,6 +3406,62 @@ public class AdminApiServlet extends HttpServlet
         cfg.put("maxFactor", q.config().maxFactor());
         result.put("config", cfg);
         writeJson(resp, result);
+    }
+
+    /**
+     * GET /api/pf/compare — scores of the last ALS ({@code pf-optimise}) and simulated-annealing
+     * ({@code pf-anneal}) runs side by side. Both are {@link org.mortbay.sailing.pf.analysis.PfScore}s
+     * of the same objective — weighted variance of log corrected times within divisions plus the
+     * pull toward RF — so the lower {@code weightedVariance} / {@code energy} fits the races better.
+     * Either key is absent until that optimiser has run; {@code sa} also carries the annealing stats.
+     */
+    private void handlePfCompare(HttpServletResponse resp) throws IOException
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        PfQuality als = cache.pfQuality();
+        if (als != null && als.score() != null)
+            result.put("als", pfScoreJson(als));
+        PfAnnealer.Result sa = cache.pfAnneal();
+        if (sa != null && sa.pfResult().quality() != null)
+        {
+            Map<String, Object> m = pfScoreJson(sa.pfResult().quality());
+            PfAnnealStats st = sa.stats();
+            Map<String, Object> stats = new LinkedHashMap<>();
+            stats.put("stages", st.stages());
+            stats.put("moves", st.moves());
+            stats.put("acceptedMoves", st.acceptedMoves());
+            stats.put("boatVariantsActive", st.boatVariantsActive());
+            stats.put("boatVariantsPerMove", st.boatVariantsPerMove());
+            stats.put("initialTemperature", st.initialTemperature());
+            stats.put("finalTemperature", st.finalTemperature());
+            stats.put("bestStage", st.bestStage());
+            stats.put("stopReason", st.stopReason());
+            stats.put("elapsedMillis", st.elapsedMillis());
+            stats.put("energyTrace", st.energyTrace());
+            stats.put("acceptanceTrace", st.acceptanceTrace());
+            stats.put("config", st.config());
+            m.put("stats", stats);
+            result.put("sa", m);
+        }
+        writeJson(resp, result);
+    }
+
+    private static Map<String, Object> pfScoreJson(PfQuality q)
+    {
+        PfScore sc = q.score();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("boatsWithPf", q.boatsWithPf());
+        m.put("entries", sc.entries());
+        m.put("divisions", sc.divisions());
+        m.put("energy", sc.energy());
+        m.put("varianceTerm", sc.varianceTerm());
+        m.put("rfTerm", sc.rfTerm());
+        m.put("totalWeight", sc.totalWeight());
+        m.put("weightedVariance", sc.weightedVariance());
+        m.put("rmsSpread", sc.rmsSpread());
+        m.put("medianAbsResidual", sc.medianAbsResidual());
+        m.put("pct95AbsResidual", sc.pct95AbsResidual());
+        return m;
     }
 
     /**

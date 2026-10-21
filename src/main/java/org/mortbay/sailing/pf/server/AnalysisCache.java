@@ -23,6 +23,8 @@ import org.mortbay.sailing.pf.analysis.PerformanceProfileBuilder;
 import org.mortbay.sailing.pf.analysis.PfConfig;
 import org.mortbay.sailing.pf.analysis.PfOptimiser;
 import org.mortbay.sailing.pf.analysis.PfQuality;
+import org.mortbay.sailing.pf.analysis.PfAnnealConfig;
+import org.mortbay.sailing.pf.analysis.PfAnnealer;
 import org.mortbay.sailing.pf.analysis.PfResult;
 import org.mortbay.sailing.pf.analysis.RaceDerived;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
@@ -67,6 +69,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile Map<String, List<EntryResidual>> residualsByBoatId = Map.of();
     private volatile Map<String, PerformanceProfile> profilesByBoatId = Map.of();
     private volatile PfQuality lastPfQuality;  // null until first run
+    private volatile PfAnnealer.Result lastAnneal; // null until first pf-anneal run; never merged into the live PFs
     private volatile double diversityNonSpinWeight   = 0.8;
     private volatile double diversitySpinWeight      = 1.0;
     private volatile double diversityTwoHandedWeight = 1.2;
@@ -485,6 +488,31 @@ public class AnalysisCache implements DataStore.InvalidationListener
         LOG.info("AnalysisCache: PF merged — {} boats, {} races, {} inner iters, {} outer iters",
             result.boatPfs().size(), result.divisionPfsByRaceId().size(),
             result.innerIterations(), result.outerIterations());
+    }
+
+    /**
+     * Runs the simulated-annealing PF optimiser for comparison with {@link #refreshPf}. Its
+     * result is kept aside ({@link #pfAnneal()}) and never merged: the live PFs stay ALS.
+     */
+    public void refreshPfAnneal(PfConfig config, PfAnnealConfig annealConfig,
+                                java.util.function.Supplier<Boolean> stopCheck)
+    {
+        LOG.info("AnalysisCache: running PF annealer...");
+        ConversionGraph graph = ConversionGraph.from(comparisons, minAnalysisR2, minAnalysisPairs);
+        PfAnnealer.Result result = new PfAnnealer().anneal(store, boatDerived, config, annealConfig, stopCheck,
+            graph, targetYear, refreshDuplicates());
+        if (result.pfResult().boatPfs().isEmpty())
+        {
+            LOG.info("AnalysisCache: PF annealer returned no results (stopped or no data)");
+            return;
+        }
+        lastAnneal = result;
+    }
+
+    /** The last simulated-annealing PF run, or null if none has completed. */
+    public PfAnnealer.Result pfAnneal()
+    {
+        return lastAnneal;
     }
 
     /**

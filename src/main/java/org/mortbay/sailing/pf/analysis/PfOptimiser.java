@@ -1,20 +1,18 @@
 package org.mortbay.sailing.pf.analysis;
 
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
+import org.mortbay.sailing.pf.analysis.PfProblem.DivisionKey;
+import org.mortbay.sailing.pf.analysis.PfProblem.Entry;
+
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.EntryVariant;
 import org.mortbay.sailing.pf.data.Factor;
-import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
@@ -45,27 +43,11 @@ public class PfOptimiser
     //          how does path confidence compound through multi-hop conversions, and should
     //          Factor weight represent path confidence or data reliability?
 
-    // --- Working data structures ---
+    // --- Working data structures (see PfProblem) ---
 
-    private record DivisionKey(String raceId, int divisionIndex) {}
-
-    private record Entry(
-        int boatOrdinal,        // index into logPf arrays
-        int divOrdinal,         // index into logT array
-        double logElapsed,      // log(elapsedTime.toNanos())
-        int variant,            // 0=spin, 1=nonSpin, 2=twoHanded
-        double refWeight,       // RF weight for the relevant variant
-        String boatId,          // for output assembly
-        String raceId,          // for output assembly
-        String divisionName,    // for output assembly
-        LocalDate raceDate,     // for output assembly
-        boolean counted         // false: reference-only copy of a duplicate race (DuplicateRaces) —
-                                // sets its division's T₀ but is not counted in the boat's PF
-    ) {}
-
-    private static final int SPIN = 0;
-    private static final int NON_SPIN = 1;
-    private static final int TWO_HANDED = 2;
+    private static final int SPIN = PfProblem.SPIN;
+    private static final int NON_SPIN = PfProblem.NON_SPIN;
+    private static final int TWO_HANDED = PfProblem.TWO_HANDED;
 
     /**
      * Log-linear approximation of the conversion graph's cross-variant edge for one
@@ -79,14 +61,14 @@ public class PfOptimiser
      *        - Be consistent with "conversion graphs produce Factors" principle
      *        - Allow Factor.inverse() method instead of needing inverse logic here
      */
-    private record VariantConverter(double slope, double intercept, double weight) {}
+    record VariantConverter(double slope, double intercept, double weight) {}
 
     /**
      * Probes the conversion graph at two seed factors per ordered variant pair and fits
      * a log-linear converter: {@code log(predicted_v) = slope × log(source_v2) + intercept}.
      * Returns null entries for pairs the graph cannot reach (e.g. missing twoHanded path).
      */
-    private static VariantConverter[][] buildVariantConverters(ConversionGraph graph, int targetYear)
+    static VariantConverter[][] buildVariantConverters(ConversionGraph graph, int targetYear)
     {
         ConversionNode[] node = new ConversionNode[]{
             new ConversionNode("IRC", targetYear, false, false), // SPIN
@@ -171,85 +153,12 @@ public class PfOptimiser
         DuplicateRaces duplicates)
     {
         // --- Setup: build working data structures ---
-        Map<String, Integer> boatOrdinals = new HashMap<>();
-        Map<DivisionKey, Integer> divOrdinals = new HashMap<>();
-        List<Entry> entries = new ArrayList<>();
+        PfProblem problem = PfProblem.build(store, boatDerivedMap, config, duplicates);
+        List<Entry> entries = problem.entries;
+        int nBoats = problem.nBoats;
+        int nDivs = problem.nDivs;
 
-        // Track which boats have entries or RFs per variant
-        Map<String, double[]> boatLogRf = new HashMap<>();  // boatId → [spin, nonSpin, twoHanded] log(RF)
-        Map<String, double[]> boatRfWeight = new HashMap<>(); // boatId → [spin, nonSpin, twoHanded] RF weight
-
-        // Enumerate all non-excluded races
-        for (Race race : store.races().values())
-        {
-            if (store.isRaceExcluded(race.id())) continue;
-            if (store.isClubExcluded(race.clubId())) continue;
-            if (race.divisions() == null) continue;
-
-            for (int di = 0; di < race.divisions().size(); di++)
-            {
-                Division div = race.divisions().get(di);
-                if (div.finishers() == null || div.finishers().size() < 2) continue;
-
-                List<Entry> divEntries = new ArrayList<>();
-                for (Finisher f : div.finishers())
-                {
-                    if (f.elapsedTime() == null) continue;
-                    if (store.isBoatExcluded(f.boatId())) continue;
-
-                    BoatDerived bd = boatDerivedMap.get(f.boatId());
-                    if (bd != null && bd.boat().designId() != null
-                            && store.isDesignExcluded(bd.boat().designId())) continue;
-                    if (bd == null || bd.referenceFactors() == null) continue;
-
-                    ReferenceFactors rf = bd.referenceFactors();
-                    // The series type overrides per-entry flags (SailSys takes them from the
-                    // boat's certificate, not the race rules) — see EntryVariant.of — and a
-                    // duplicate race's copies agree on one variant (DuplicateRaces).
-                    int variant = variantIndex(duplicates.variant(store, race, di, div, f));
-                    Factor rfFactor = variantFactor(rf, variant);
-                    // Allow rfFactor.weight() == 0: the Step-B formula degenerates cleanly to a
-                    // pure race-derived PF (no regularisation toward RF) when rfW = 0, so these
-                    // boats still contribute to division time calibration and receive an PF.
-                    if (rfFactor == null) continue;
-
-                    // Ensure boat has an ordinal
-                    int boatOrd = boatOrdinals.computeIfAbsent(f.boatId(), k -> boatOrdinals.size());
-
-                    // Store RF values per boat
-                    boatLogRf.computeIfAbsent(f.boatId(), k -> new double[]{Double.NaN, Double.NaN, Double.NaN});
-                    boatRfWeight.computeIfAbsent(f.boatId(), k -> new double[3]);
-                    boatLogRf.get(f.boatId())[variant] = Math.log(rfFactor.value());
-                    boatRfWeight.get(f.boatId())[variant] = rfFactor.weight();
-
-                    divEntries.add(new Entry(
-                        boatOrd, -1, // divOrdinal set below
-                        Math.log(f.elapsedTime().toNanos()),
-                        variant, rfFactor.weight(),
-                        f.boatId(), race.id(), div.name(), race.date(),
-                        !duplicates.isReferenceOnly(race.id(), di, f.boatId())));
-                }
-
-                // Skip divisions with <2 qualifying entries, or whose every result counts in
-                // another copy of the race (it could not change any PF).
-                if (divEntries.size() < 2) continue;
-                if (divEntries.stream().noneMatch(Entry::counted)) continue;
-
-                DivisionKey dk = new DivisionKey(race.id(), di);
-                int divOrd = divOrdinals.computeIfAbsent(dk, k -> divOrdinals.size());
-
-                // Fix up divOrdinal in entries
-                for (Entry e : divEntries)
-                    entries.add(new Entry(e.boatOrdinal(), divOrd, e.logElapsed(),
-                        e.variant(), e.refWeight(), e.boatId(), e.raceId(), e.divisionName(), e.raceDate(),
-                        e.counted()));
-            }
-        }
-
-        int nBoats = boatOrdinals.size();
-        int nDivs = divOrdinals.size();
-
-        if (nBoats == 0 || nDivs == 0 || entries.isEmpty())
+        if (problem.isEmpty())
         {
             LOG.warn("PF optimiser: no qualifying data (boats={}, divs={}, entries={})", nBoats, nDivs, entries.size());
             return new PfResult(Map.of(), Map.of(), Map.of(), 0, 0, config, null);
@@ -257,65 +166,25 @@ public class PfOptimiser
 
         LOG.info("PF optimiser: {} boats, {} divisions, {} entries", nBoats, nDivs, entries.size());
 
-        // Build reverse map: ordinal → boatId
-        String[] ordinalToBoatId = new String[nBoats];
-        for (var e : boatOrdinals.entrySet())
-            ordinalToBoatId[e.getValue()] = e.getKey();
+        String[] ordinalToBoatId = problem.ordinalToBoatId;
+        DivisionKey[] ordinalToDivKey = problem.ordinalToDivKey;
+        Map<String, double[]> boatLogRf = problem.boatLogRf;
+        Map<String, double[]> boatRfWeight = problem.boatRfWeight;
+        int[][] entryCount = problem.entryCount;
+        List<List<Integer>> divEntryIndexes = problem.divEntryIndexes;
+        List<Integer>[][] boatVariantEntries = problem.boatVariantEntries;
 
-        // Build reverse map: ordinal → DivisionKey
-        DivisionKey[] ordinalToDivKey = new DivisionKey[nDivs];
-        for (var e : divOrdinals.entrySet())
-            ordinalToDivKey[e.getValue()] = e.getKey();
-
-        // Working arrays — 3 variants per boat
-        double[][] logPf = new double[3][nBoats];   // [variant][boatOrd]
+        // Working arrays — 3 variants per boat, initialised from RF values
+        double[][] logPf = problem.initialLogPf();   // [variant][boatOrd]
         double[] logT = new double[nDivs];
         double[] entryWeights = new double[entries.size()];
         Arrays.fill(entryWeights, 1.0);
 
-        // Initialise logPf from RF values
-        for (int b = 0; b < nBoats; b++)
-        {
-            String boatId = ordinalToBoatId[b];
-            double[] lr = boatLogRf.get(boatId);
-            for (int v = 0; v < 3; v++)
-                logPf[v][b] = Double.isNaN(lr[v]) ? 0.0 : lr[v];
-        }
-
-        // Per-boat per-variant counts of counted entries (reference-only ones are not the
-        // boat's results — they count in another copy of the race)
-        int[][] entryCount = new int[3][nBoats];
-        for (Entry e : entries)
-            if (e.counted())
-                entryCount[e.variant()][e.boatOrdinal()]++;
-
-        // Build per-division entry index for fast iteration
-        List<List<Integer>> divEntryIndexes = new ArrayList<>();
-        for (int d = 0; d < nDivs; d++)
-            divEntryIndexes.add(new ArrayList<>());
-        for (int i = 0; i < entries.size(); i++)
-            divEntryIndexes.get(entries.get(i).divOrdinal()).add(i);
-
-        // Build per-boat-variant index of counted entries: Step B, confidence and residuals
-        // read it, so a reference-only entry reaches only its division's T₀ (Step A).
-        @SuppressWarnings("unchecked")
-        List<Integer>[][] boatVariantEntries = new List[3][nBoats];
-        for (int v = 0; v < 3; v++)
-            for (int b = 0; b < nBoats; b++)
-                boatVariantEntries[v][b] = new ArrayList<>();
-        for (int i = 0; i < entries.size(); i++)
-        {
-            Entry e = entries.get(i);
-            if (e.counted())
-                boatVariantEntries[e.variant()][e.boatOrdinal()].add(i);
-        }
-
         // Age decay per entry: older results count less in the boat's own PF (Step B and its
-        // confidence), measured back from the boat's latest race in that variant — see
-        // PfConfig.ageHalfLifeYears. The division par times (Step A) are not decayed: each
-        // boat's decay depends on its own latest race, so it would let the most-retired boat in
-        // an old race dominate that race's par time.
-        double[] ageDecay = computeAgeDecay(entries, boatVariantEntries, config);
+        // confidence). The division par times (Step A) are not decayed: each boat's decay
+        // depends on its own latest race, so it would let the most-retired boat in an old race
+        // dominate that race's par time.
+        double[] ageDecay = problem.ageDecay;
 
         // --- Build per-variant-pair graph-converter cache ---
         // For each ordered (v2 → v) pair we probe convertViaGraph at two seed values and fit
@@ -564,35 +433,14 @@ public class PfOptimiser
             divEntryIndexes, boatVariantEntries, nBoats, nDivs, totalInner, outerIter,
             innerConverged, outerConverged, finalMaxDelta, finalMaxWeightChange,
             List.copyOf(outerDeltaTrace), finalMaxPfDelta, List.copyOf(outerPfDeltaTrace),
-            store, boatDerivedMap, varConv);
-    }
-
-    private static int variantIndex(EntryVariant variant)
-    {
-        return switch (variant)
-        {
-            case SPIN -> SPIN;
-            case NON_SPIN -> NON_SPIN;
-            case TWO_HANDED -> TWO_HANDED;
-        };
-    }
-
-    private static Factor variantFactor(ReferenceFactors rf, int variant)
-    {
-        return switch (variant)
-        {
-            case SPIN -> rf.spin();
-            case NON_SPIN -> rf.nonSpin();
-            case TWO_HANDED -> rf.twoHanded();
-            default -> null;
-        };
+            store, boatDerivedMap, varConv, PfScore.of(problem, logPf, config));
     }
 
     /**
      * Compute T₀ per division as weighted median of corrected times in log space,
      * and compute IQR in log space.
      */
-    private void computeT0(List<Entry> entries, List<List<Integer>> divEntryIndexes,
+    static void computeT0(List<Entry> entries, List<List<Integer>> divEntryIndexes,
                            double[][] logPf, double[] entryWeights,
                            double[] logT, double[] divIqrLog)
     {
@@ -644,18 +492,27 @@ public class PfOptimiser
         {
             Entry e = entries.get(i);
             double residual = e.logElapsed() + logPf[e.variant()][e.boatOrdinal()] - logT[e.divOrdinal()];
-            double iqr = divIqrLog[e.divOrdinal()];
-            if (iqr <= 0) iqr = 0.01; // prevent division by zero
-
-            double effectiveDeviation = residual < 0
-                ? Math.abs(residual) * config.asymmetryFactor()
-                : Math.abs(residual);
-
-            double scale = config.outlierK() * iqr;
-            double ratio = effectiveDeviation / scale;
-            double w = e.refWeight() / (1.0 + ratio * ratio);
+            double w = e.refWeight() * outlierWeight(residual, divIqrLog[e.divOrdinal()], config);
             entryWeights[i] = w * fastBoatMultiplier(logPf[e.variant()][e.boatOrdinal()], config);
         }
+    }
+
+    /**
+     * Cauchy (Lorentzian) down-weight of a residual, scaled by {@code outlierK} × its division's
+     * IQR, with fast residuals (negative — the boat beat its handicap) inflated by
+     * {@code asymmetryFactor}. 1 for a residual of 0, falling toward 0 for outliers.
+     */
+    static double outlierWeight(double residual, double iqr, PfConfig config)
+    {
+        if (iqr <= 0) iqr = 0.01; // prevent division by zero
+
+        double effectiveDeviation = residual < 0
+            ? Math.abs(residual) * config.asymmetryFactor()
+            : Math.abs(residual);
+
+        double scale = config.outlierK() * iqr;
+        double ratio = effectiveDeviation / scale;
+        return 1.0 / (1.0 + ratio * ratio);
     }
 
     /**
@@ -664,7 +521,7 @@ public class PfOptimiser
      * unaffected; boats at or above {@code maxFactor} are fully excluded. Reflects that very fast
      * boats sit at the tail of the handicap distribution and contaminate the back-calculated analysis.
      */
-    private static double fastBoatMultiplier(double logPfVal, PfConfig config)
+    static double fastBoatMultiplier(double logPfVal, PfConfig config)
     {
         if (Double.isNaN(logPfVal))
             return 1.0;
@@ -748,43 +605,7 @@ public class PfOptimiser
         LOG.info(sb2.toString());
     }
 
-    /**
-     * The age-decay multiplier of each entry: {@link PfConfig#ageDecay} of the entry's age in
-     * years before its boat's most recent race in the same variant (1 when decay is off or the
-     * date is unknown).
-     */
-    static double[] computeAgeDecay(List<Entry> entries, List<Integer>[][] boatVariantEntries,
-                                    PfConfig config)
-    {
-        double[] decay = new double[entries.size()];
-        Arrays.fill(decay, 1.0);
-        if (config.ageHalfLifeYears() <= 0)
-            return decay;
-        for (List<Integer>[] byBoat : boatVariantEntries)
-        {
-            for (List<Integer> idxs : byBoat)
-            {
-                LocalDate latest = null;
-                for (int idx : idxs)
-                {
-                    LocalDate d = entries.get(idx).raceDate();
-                    if (d != null && (latest == null || d.isAfter(latest)))
-                        latest = d;
-                }
-                if (latest == null)
-                    continue;
-                for (int idx : idxs)
-                {
-                    LocalDate d = entries.get(idx).raceDate();
-                    if (d != null)
-                        decay[idx] = config.ageDecay(ChronoUnit.DAYS.between(d, latest) / 365.25);
-                }
-            }
-        }
-        return decay;
-    }
-
-    private PfResult assembleResult(PfConfig config,
+    PfResult assembleResult(PfConfig config,
                                      String[] ordinalToBoatId, DivisionKey[] ordinalToDivKey,
                                     Map<String, double[]> boatLogRf,
                                      double[][] logPf, double[] logT, double[] divIqrLog,
@@ -799,7 +620,7 @@ public class PfOptimiser
                                      List<Double> outerDeltaTrace,
                                     double finalMaxPfDelta, List<Double> outerPfDeltaTrace,
                                     DataStore store, Map<String, BoatDerived> boatDerivedMap,
-                                    VariantConverter[][] varConv)
+                                    VariantConverter[][] varConv, PfScore score)
     {
         // Boat PFs
         Map<String, BoatPf> boatPfs = new LinkedHashMap<>();
@@ -820,7 +641,7 @@ public class PfOptimiser
             for (int v = 0; v < 3; v++)
             {
                 raceCounts[v] = entryCount[v][b];
-                Factor rfFactor = rf != null ? variantFactor(rf, v) : null;
+                Factor rfFactor = rf != null ? PfProblem.variantFactor(rf, v) : null;
 
                 if (raceCounts[v] > 0)
                 {
@@ -1014,7 +835,7 @@ public class PfOptimiser
             downWeightedEntries, highDispersionDivisions,
             medianBoatConfidence, outerDeltaTrace,
             finalMaxPfDelta, outerPfDeltaTrace,
-            config);
+            config, score);
 
         LOG.info("PF optimiser: complete. {} boats with PF, {} races with division PF",
             boatPfs.size(), divisionPfsByRaceId.size());
