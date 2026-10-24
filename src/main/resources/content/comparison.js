@@ -25,11 +25,11 @@ function _persistedStr(key, dflt) {
 }
 
 let selectedItems   = [];   // {type:'boat', id, label, color}
-let allAvailable = _persistedBool('all-available', false);
+let allAvailable = _persistedBool('all-available', true);
 let showErrorBars    = false;
-let showRfLine = _persistedBool('show-rf-line', true);
-let showPfLine = _persistedBool('show-pf-line', true);
-let trendMode = _persistedStr('trend-mode', 'linear');   // 'none' | 'linear' | 'average'
+let showRfLine = _persistedBool('show-rf-line', false);
+let showPfLine = _persistedBool('show-pf-line', false);
+let trendMode = _persistedStr('trend-mode', 'average');   // 'none' | 'linear' | 'average'
 let hideLegend = _persistedBool('hide-legend', false);
 let hideElapsedLegend = _persistedBool('elapsed-hide-legend', false);
 let recentMonths = parseInt(_persistedStr('recent-months', '0'), 10) || 0;
