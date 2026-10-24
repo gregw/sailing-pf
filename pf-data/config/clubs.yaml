@@ -42,7 +42,10 @@ clubs:
     - "CYCA/SDYC"
     topyacht:
     - "https://cyca.com.au/results/2019/bwps_1920/index.htm"
-    sailsys: null
+    sailsys:
+      club-3:
+        name: "Current series"
+        club: 3
     boats:
     - "1-back2black-reichelpughgp42"
     seriesTypes:
@@ -633,7 +636,8 @@ clubs:
     topyacht: null
     sailsys: null
     boats: null
-    seriesTypes: null
+    seriesTypes:
+      gossail.com.au/2025-26-ilca-club-championship: "ns"
   orcv.org.au:
     shortName: "ORCV"
     state: "VIC"
@@ -835,7 +839,10 @@ clubs:
     - "https://www.topyacht.net.au/results/2024/abrw/index.htm"
     sailsys: null
     boats: null
-    seriesTypes: null
+    seriesTypes:
+      whitsundaysailingclub.com.au/2024-twilight-series: "ns"
+      whitsundaysailingclub.com.au/2025-twilight-series: "ns"
+      whitsundaysailingclub.com.au/2026-twilight-series: "ns"
   adelaidesailingclub.com.au:
     shortName: "ASC"
     state: "SA"
@@ -1018,7 +1025,15 @@ clubs:
     - "https://gfs.org.au/handicapper/results/2023/2023_club_series/index.htm"
     sailsys: null
     boats: null
-    seriesTypes: null
+    seriesTypes:
+      gfs.org.au/club-series-twilight-autumn-series-2021-2022: "ns"
+      gfs.org.au/club-series-twilight-season-20-21: "ns"
+      gfs.org.au/club-series-twilight-spring-autumn-season-2022-2023: "ns"
+      gfs.org.au/club-series-twilight-summer-series-2022-2023: "ns"
+      gfs.org.au/club-series-twlight-overall-spring-autumn-series-2024-2025: "ns"
+      gfs.org.au/gfs-twilight-series-2021-2022: "ns"
+      gfs.org.au/twilight-autumn-2020: "ns"
+      gfs.org.au/twilight-series-2025-26-summer: "ns"
   pmyc.asn.au:
     shortName: "PMYC"
     state: "VIC"
@@ -1136,7 +1151,9 @@ clubs:
     email: null
     aliases: []
     topyacht: null
-    sailsys: null
+    sailsys:
+      club-27:
+        club: 27
     boats: null
     seriesTypes: null
   wyc.org.au:

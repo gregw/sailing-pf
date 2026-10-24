@@ -4,9 +4,13 @@
 
 # --- Server Import and Analysis tasks ---
 importers:
-- name: "orc"
+- name: "orc-api"
   mode: "api"
   includeInSchedule: true
+  runAtStartup: false
+- name: "orc"
+  mode: "api"
+  includeInSchedule: false
   runAtStartup: false
 - name: "ams"
   mode: "api"
@@ -97,6 +101,7 @@ pfOuterPfConvergenceThreshold: 0.006
 pfLogOuterDiagnostics: false
 pfDubiousFactor: 1.7
 pfMaxFactor: 2.5
+pfAgeHalfLifeYears: 2.0
 
 # --- Sliding average / consistency ---
 slidingAverageCount: 8
@@ -111,18 +116,20 @@ consistencyDropInterval: 11
 # --- Server ports ---
 adminPort: 8888
 userPort: 8081
+natGatewayIp: null
 lastRunTimes:
-  sailsys/club: "2026-10-09T00:45:50.072868953Z"
-  orc/api: "2026-10-11T15:00:00.000506988Z"
-  save-database/run: "2026-10-10T00:29:25.265402139Z"
-  topyacht/api: "2026-10-11T15:00:22.798607350Z"
-  build-indexes/run: "2026-10-10T00:29:10.274323650Z"
+  sailsys/club: "2026-10-21T03:13:48.412875935Z"
+  orc/api: "2026-10-18T15:00:00.000198489Z"
+  save-database/run: "2026-10-21T03:15:13.281087794Z"
+  topyacht/api: "2026-10-20T15:00:18.643511394Z"
+  build-indexes/run: "2026-10-21T03:15:01.981617613Z"
   sailsys-races/run: "2026-07-02T01:36:41.866834308Z"
-  topyacht/club: "2026-10-09T00:45:46.296701096Z"
-  bwps/api: "2026-10-11T15:00:10.899747980Z"
-  analysis/run: "2026-10-10T00:29:12.430395253Z"
-  pf-optimise/run: "2026-10-10T00:29:17.329019787Z"
-  sailsys/api: "2026-10-11T15:06:49.330593430Z"
-  reference-factors/run: "2026-10-10T00:29:15.361387974Z"
-  ams/api: "2026-10-11T15:00:09.100199872Z"
+  topyacht/club: "2026-10-21T03:13:48.411738690Z"
+  orc-api/api: "2026-10-20T15:00:00.009995055Z"
+  bwps/api: "2026-10-20T15:00:02.671922799Z"
+  analysis/run: "2026-10-21T03:15:02.497973786Z"
+  pf-optimise/run: "2026-10-21T03:15:07.519432826Z"
+  sailsys/api: "2026-10-20T15:15:55.989586697Z"
+  reference-factors/run: "2026-10-21T03:15:05.041336612Z"
+  ams/api: "2026-10-20T15:00:00.434212095Z"
 

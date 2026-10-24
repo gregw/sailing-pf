@@ -678,11 +678,13 @@ designs:
     aliases:
     - "ILCA 7 ILCA 7"
     - "ilca7ilca7"
+    - "ILCA 7"
   laser:
     canonicalName: "Laser"
     aliases:
     - "Laser Laser"
     - "laserlaser"
+    - "Laser"
   nacra16sq:
     canonicalName: "Nacra 16sq"
     aliases:
@@ -931,6 +933,32 @@ designs:
     aliases:
     - "Cape 35 IMS"
     - "cape35ims"
+  ilca:
+    canonicalName: "ILCA"
+    aliases:
+    - "ILCA"
+    - "Laser"
+    - "Laser Laser"
+  ilca4:
+    canonicalName: "ILCA 4"
+    aliases:
+    - "ILCA 4"
+  ilca6:
+    canonicalName: "ILCA 6"
+    aliases:
+    - "ILCA 6"
+  ilcadevoti:
+    canonicalName: "ILCA Devoti"
+    aliases:
+    - "ILCA Devoti"
+  laserradial:
+    canonicalName: "Laser Radial"
+    aliases:
+    - "Laser Radial"
+  laser47:
+    canonicalName: "Laser 4.7"
+    aliases:
+    - "Laser 4.7"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -3332,3 +3360,8 @@ boats:
     aliases:
     - sailNumber: "B34"
       name: "martiniracing"
+  "6210-coconuttelegraphx":
+    canonicalName: "Coconut Telegraph X"
+    aliases:
+    - sailNumber: "6210"
+      name: "coconuttelegraph"

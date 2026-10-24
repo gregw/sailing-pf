@@ -373,6 +373,14 @@ ignored:
 - "radford"
 noSpinnaker:
 - "radford12catrig"
+- "ilca"
+- "ilca4"
+- "ilca6"
+- "ilca7"
+- "ilcadevoti"
+- "laser"
+- "laserradial"
+- "laser47"
 boatDesignOverrides:
 - designId: "sydney36mkii"
   canonicalName: "Sydney 36 MkII"
