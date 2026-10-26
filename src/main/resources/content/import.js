@@ -5,7 +5,6 @@ const DAY_LABELS = {
 };
 const DISPLAY_NAMES = {
     'sailsys':          'Import SailSys Races',
-    'orc':              'Import ORC Certificates',
     'orc-api':          'Import ORC Certificates (API)',
     'ams':              'Import AMS Certificates',
     'topyacht':         'Import TopYacht Races',
@@ -98,7 +97,6 @@ function buildTable(entries) {
 function taskTip(name) {
     const tips = {
         'sailsys':            'Imports the SailSys events configured on each club (clubs page → Edit → SailSys events).',
-        'orc':                'Downloads ORC certificate data from data.orc.org (WPub.dll, retired 31 Jan 2027).',
         'orc-api':            'Downloads ORC certificate data from the ORC API (sas.orc.org). Needs config/orc-api-key or ORC_API_KEY.',
         'ams':                'Scrapes AMS certificate data from raceyachts.org.',
         'topyacht':           'Scrapes race results from the TopYacht events configured on each club.',
@@ -112,20 +110,6 @@ function taskTip(name) {
         'clear-cache-sailsys': 'Deletes all files in the SailSys HTTP cache directory (cache/sailsys).',
     };
     return tips[name] || name;
-}
-
-// Only one ORC importer may be in the schedule or run at startup.
-const EXCLUSIVE_ORC = ['orc', 'orc-api'];
-
-/** Ticking either box of an ORC importer unticks both boxes of the other ORC importer. */
-function exclusiveOrc(cb) {
-    const name = cb.closest('tr').dataset.name;
-    if (!cb.checked || !EXCLUSIVE_ORC.includes(name)) return;
-    for (const other of EXCLUSIVE_ORC) {
-        if (other === name) continue;
-        const row = document.querySelector(`#importers-body tr[data-name="${other}"]`);
-        if (row) row.querySelectorAll('input[type="checkbox"]').forEach(box => box.checked = false);
-    }
 }
 
 function buildRow(entry) {
@@ -160,10 +144,10 @@ function buildRow(entry) {
       <td style="white-space:nowrap;font-family:monospace;font-size:0.9em;color:#555">${esc(formatLastRun(entry.lastRun))}</td>
       <td style="text-align:center">${runStopBtns}</td>
       <td style="text-align:center"><input type="checkbox" id="sched-${esc(key)}"
-               title="Include in the automatic scheduled run" onchange="exclusiveOrc(this)"
+               title="Include in the automatic scheduled run"
                ${entry.includeInSchedule ? 'checked' : ''} ${boxState}></td>
       <td style="text-align:center"><input type="checkbox" id="start-${esc(key)}-startup"
-               title="Run this task automatically when the server starts" onchange="exclusiveOrc(this)"
+               title="Run this task automatically when the server starts"
                ${entry.runAtStartup ? 'checked' : ''} ${boxState}></td>`;
     return tr;
 }

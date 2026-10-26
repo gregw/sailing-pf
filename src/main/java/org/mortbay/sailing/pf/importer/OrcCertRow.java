@@ -15,9 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * One row of the ORC active-certificates list, as returned by both the legacy
- * WPub.dll XML feed ({@link OrcImporter}) and the ORC API JSON feed ({@link OrcApiImporter}).
- * The two feeds carry the same fields; only the GPH source differs (HTML cert page vs JSON).
+ * One row of the ORC active-certificates list, as returned by the ORC API JSON feed
+ * ({@link OrcApiImporter}); the GPH comes from the certificate's own JSON.
  * <p>
  * All fields are raw strings (null when absent or blank); validation happens in
  * {@link #importInto(DataStore, double)}.

@@ -136,8 +136,8 @@ class OrcApiImporterTest {
     }
 
     @Test
-    void processRowUpsertSharesDxtIdWithLegacyImporter() throws Exception {
-        // A cert already imported by OrcImporter (same dxtID) is replaced, not duplicated
+    void processRowUpsertReplacesCertWithSameDxtId() throws Exception {
+        // A cert already imported (same dxtID, e.g. by the retired legacy importer) is replaced, not duplicated
         new OrcCertRow("2006", "Pilot", "AUS300", "2024", "3", null, "J/24", null, null).importInto(store, 600.0);
         importer.processRow(row(2006, "R2006", "Pilot", "AUS300", 2024, 3, "", "J/24", ""), certJson(601));
         assertEquals(1, store.boats().values().iterator().next().certificates().size());

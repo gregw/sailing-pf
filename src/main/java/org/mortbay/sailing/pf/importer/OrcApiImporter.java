@@ -22,8 +22,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Fetches the ORC Australian certificate list from the ORC API (sas.orc.org) and persists
- * Boat, Design and Certificate records via DataStore. Replaces {@link OrcImporter}, whose
- * WPub.dll feed stops serving on 31 January 2027.
+ * Boat, Design and Certificate records via DataStore. (It replaced the legacy WPub.dll
+ * importer, whose feed stops serving on 31 January 2027.)
  * <p>
  * List: {@code GET /api/{key}/activecerts?CountryId=AUS} (JSON, rows in {@code data.rows}).
  * Per cert: {@code GET /api/{key}/DownBoatRMS_byrefno?RefNo={RefNo}&ext=json} (GPH in {@code rms[0].GPH}).
@@ -33,8 +33,8 @@ import org.slf4j.LoggerFactory;
  * It is read from the {@code ORC_API_KEY} environment variable, else from
  * {@code config/orc-api-key} (gitignored) — see {@link #loadApiKey}.
  * <p>
- * Certificates are keyed by dxtID exactly as {@link OrcImporter} does, so the two importers
- * recognise each other's certificates and never duplicate them.
+ * Certificates are keyed by dxtID, as the legacy importer also did, so certificates it
+ * imported are recognised and never duplicated.
  */
 public class OrcApiImporter
 {

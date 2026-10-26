@@ -34,7 +34,6 @@ import org.mortbay.sailing.pf.importer.AmsImporter;
 import org.mortbay.sailing.pf.importer.BwpsImporter;
 import org.mortbay.sailing.pf.importer.ImporterLog;
 import org.mortbay.sailing.pf.importer.OrcApiImporter;
-import org.mortbay.sailing.pf.importer.OrcImporter;
 import org.mortbay.sailing.pf.importer.SailSysImporter;
 import org.mortbay.sailing.pf.importer.TopYachtImporter;
 import org.mortbay.sailing.pf.store.DataStore;
@@ -292,7 +291,6 @@ public class TaskService
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
         new ImporterEntry("sailsys",            "api",  false, false),
-        new ImporterEntry("orc",                "api",  false, false),
         new ImporterEntry("orc-api",            "api",  false, false),
         new ImporterEntry("ams",                "api",  false, false),
         new ImporterEntry("topyacht",           "api",  false, false),
@@ -305,9 +303,6 @@ public class TaskService
         new ImporterEntry("clear-cache-orc", "run", false, false),
         new ImporterEntry("clear-cache-sailsys", "run", false, false)
     );
-
-    /** The ORC importers: at most one may be in the schedule or run at startup. */
-    static final Set<String> EXCLUSIVE_ORC = Set.of("orc", "orc-api");
 
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
     private GlobalSchedule globalSchedule = new GlobalSchedule(List.of(), LocalTime.of(3, 0));
@@ -398,7 +393,7 @@ public class TaskService
                     if (!present)
                         importerEntries.add(def);
                 }
-                importerEntries = checkEntries(importerEntries, false);
+                importerEntries = checkEntries(importerEntries);
             }
             if (config.schedule() != null)
                 globalSchedule = config.schedule();
@@ -670,7 +665,7 @@ public void stop()
                                        Double pfMaxFactor,
                                        Double pfAgeHalfLifeYears)
     {
-        importerEntries = checkEntries(entries, true);
+        importerEntries = checkEntries(entries);
         globalSchedule = schedule;
         this.targetIrcYear = targetIrcYear;
         this.outlierSigma = outlierSigma;
@@ -749,14 +744,11 @@ public void stop()
 
     /**
      * Clears the schedule and startup flags of tasks that cannot run here (see
-     * {@link #unavailableReason}), and allows at most one of the {@link #EXCLUSIVE_ORC} importers
-     * to be in the schedule or run at startup. On a clash, {@code strict} throws (a change from
-     * the UI); otherwise (admin.yaml at startup) the first in run order keeps its flags.
+     * {@link #unavailableReason}).
      */
-    List<ImporterEntry> checkEntries(List<ImporterEntry> entries, boolean strict)
+    List<ImporterEntry> checkEntries(List<ImporterEntry> entries)
     {
         List<ImporterEntry> checked = new ArrayList<>();
-        String flaggedOrc = null;
         for (ImporterEntry e : entries)
         {
             boolean schedule = e.includeInSchedule();
@@ -768,31 +760,10 @@ public void stop()
                 schedule = false;
                 startup = false;
             }
-            if (EXCLUSIVE_ORC.contains(e.name()) && (schedule || startup))
-            {
-                if (flaggedOrc == null)
-                    flaggedOrc = e.name();
-                else
-                {
-                    orcClash(strict, flaggedOrc, e.name());
-                    schedule = false;
-                    startup = false;
-                }
-            }
             checked.add(schedule == e.includeInSchedule() && startup == e.runAtStartup()
                 ? e : new ImporterEntry(e.name(), e.mode(), schedule, startup));
         }
         return checked;
-    }
-
-    /** Reports a second ORC importer flagged: throws if strict, else warns that the first is kept. */
-    private static void orcClash(boolean strict, String first, String second)
-    {
-        String message = "Only one ORC importer may be in the schedule or run at startup: "
-            + first + " and " + second;
-        if (strict)
-            throw new IllegalArgumentException(message);
-        LOG.warn("{} -- keeping {}", message, first);
     }
 
     public Map<String, Instant> lastRunTimes()
@@ -1025,7 +996,7 @@ public void stop()
     }
 
     private static final java.util.Set<String> IMPORTER_NAMES = java.util.Set.of(
-        "sailsys", "orc", "orc-api", "ams", "topyacht", "bwps");
+        "sailsys", "orc-api", "ams", "topyacht", "bwps");
 
     private void runImporter(String name, String mode, int startId) throws Exception
     {
@@ -1048,7 +1019,6 @@ public void stop()
     {
         switch (name)
         {
-            case "orc" -> new OrcImporter(store, httpClient).run(dataRoot.resolve("cache/orc"), orcListMaxAgeDays);
             case "orc-api" -> new OrcApiImporter(store, httpClient, OrcApiImporter.loadApiKey(dataRoot.resolve("config")))
                 .run(dataRoot.resolve("cache/orc/api"), orcListMaxAgeDays);
             case "ams" -> new AmsImporter(store, httpClient).run();

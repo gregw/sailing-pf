@@ -8,10 +8,6 @@ importers:
   mode: "api"
   includeInSchedule: true
   runAtStartup: false
-- name: "orc"
-  mode: "api"
-  includeInSchedule: false
-  runAtStartup: false
 - name: "ams"
   mode: "api"
   includeInSchedule: true

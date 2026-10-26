@@ -12,17 +12,15 @@ import org.mortbay.sailing.pf.importer.OrcApiImporter;
 import org.mortbay.sailing.pf.server.TaskService.ImporterEntry;
 import org.mortbay.sailing.pf.store.DataStore;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Tests for the task entry rules: {@code orc-api} is unavailable without an API key, and at
- * most one of the {@code orc} / {@code orc-api} importers may be in the schedule or run at startup.
+ * Tests for the task entry rules: {@code orc-api} is unavailable without an API key, and the
+ * retired legacy {@code orc} importer is dropped from admin.yaml.
  */
 class TaskServiceOrcEntriesTest
 {
@@ -65,7 +63,6 @@ class TaskServiceOrcEntriesTest
     void orcApiUnavailableWithoutKey()
     {
         assertNotNull(taskService.unavailableReason("orc-api"));
-        assertNull(taskService.unavailableReason("orc"));
     }
 
     @Test
@@ -80,7 +77,7 @@ class TaskServiceOrcEntriesTest
     {
         List<ImporterEntry> checked = taskService.checkEntries(List.of(
             new ImporterEntry("orc-api", "api", true, true),
-            new ImporterEntry("ams", "api", true, true)), true);
+            new ImporterEntry("ams", "api", true, true)));
         assertFalse(entry(checked, "orc-api").includeInSchedule());
         assertFalse(entry(checked, "orc-api").runAtStartup());
         assertTrue(entry(checked, "ams").includeInSchedule());
@@ -88,57 +85,19 @@ class TaskServiceOrcEntriesTest
     }
 
     @Test
-    void bothOrcImportersInScheduleRejected() throws Exception
+    void retiredLegacyOrcImporterIsDroppedFromAdminYaml() throws Exception
     {
-        writeKey();
-        List<ImporterEntry> entries = List.of(
-            new ImporterEntry("orc", "api", true, false),
-            new ImporterEntry("orc-api", "api", true, false));
-        assertThrows(IllegalArgumentException.class, () -> taskService.checkEntries(entries, true));
-    }
-
-    @Test
-    void bothOrcImportersAtStartupRejected() throws Exception
-    {
-        writeKey();
-        List<ImporterEntry> entries = List.of(
-            new ImporterEntry("orc", "api", false, true),
-            new ImporterEntry("orc-api", "api", false, true));
-        assertThrows(IllegalArgumentException.class, () -> taskService.checkEntries(entries, true));
-    }
-
-    @Test
-    void orcInScheduleAndOrcApiAtStartupRejected() throws Exception
-    {
-        writeKey();
-        List<ImporterEntry> entries = List.of(
-            new ImporterEntry("orc", "api", true, false),
-            new ImporterEntry("orc-api", "api", false, true));
-        assertThrows(IllegalArgumentException.class, () -> taskService.checkEntries(entries, true));
-    }
-
-    @Test
-    void oneOrcImporterInBothColumnsAllowed() throws Exception
-    {
-        writeKey();
-        List<ImporterEntry> checked = taskService.checkEntries(List.of(
-            new ImporterEntry("orc", "api", false, false),
-            new ImporterEntry("orc-api", "api", true, true)), true);
-        assertTrue(entry(checked, "orc-api").includeInSchedule());
-        assertTrue(entry(checked, "orc-api").runAtStartup());
-    }
-
-    @Test
-    void clashFromConfigFileKeepsFirst() throws Exception
-    {
-        writeKey();
-        List<ImporterEntry> checked = taskService.checkEntries(List.of(
-            new ImporterEntry("orc-api", "api", false, true),
-            new ImporterEntry("orc", "api", true, false)), false);
-        assertEquals(List.of(false, true),
-            List.of(entry(checked, "orc-api").includeInSchedule(), entry(checked, "orc-api").runAtStartup()));
-        assertEquals(List.of(false, false),
-            List.of(entry(checked, "orc").includeInSchedule(), entry(checked, "orc").runAtStartup()));
+        Files.createDirectories(tempDir.resolve("config"));
+        Files.writeString(tempDir.resolve("config/admin.yaml"), """
+            importers:
+              - name: orc
+                mode: api
+                includeInSchedule: true
+                runAtStartup: false
+            """);
+        taskService.start();
+        assertTrue(taskService.importerEntries().stream().noneMatch(e -> e.name().equals("orc")));
+        assertTrue(taskService.importerEntries().stream().anyMatch(e -> e.name().equals("orc-api")));
     }
 
     @Test
