@@ -138,7 +138,7 @@ class OrcApiImporterTest {
     @Test
     void processRowUpsertSharesDxtIdWithLegacyImporter() throws Exception {
         // A cert already imported by OrcImporter (same dxtID) is replaced, not duplicated
-        new OrcCertRow("2006", "Pilot", "AUS300", "2024", "3", null, "J/24", null).importInto(store, 600.0);
+        new OrcCertRow("2006", "Pilot", "AUS300", "2024", "3", null, "J/24", null, null).importInto(store, 600.0);
         importer.processRow(row(2006, "R2006", "Pilot", "AUS300", 2024, 3, "", "J/24", ""), certJson(601));
         assertEquals(1, store.boats().values().iterator().next().certificates().size());
         assertTrue(OrcCertRow.importedDxtIds(store).contains("2006"));
@@ -163,6 +163,22 @@ class OrcApiImporterTest {
     }
 
     /** An activecerts row; numeric fields are JSON numbers as the API returns them; empty strings are omitted. */
+    @Test
+    void processRowKeepsTheAgeYear() throws Exception {
+        var r = (com.fasterxml.jackson.databind.node.ObjectNode) row(2010, "R2010", "Old Salt", "AUS10", 2026, 3, "", "J/24", "");
+        r.put("Age", 1997);
+        importer.processRow(r, certJson(612.3));
+        assertEquals(1997, boatNamed("Old Salt").certificates().getFirst().ageYear());
+    }
+
+    @Test
+    void backfillSetsTheAgeOfAnAlreadyImportedCertificate() throws Exception {
+        importer.processRow(row(2011, "R2011", "Young Gun", "AUS11", 2026, 3, "", "J/24", ""), certJson(612.3));
+        assertNull(boatNamed("Young Gun").certificates().getFirst().ageYear());
+        OrcCertRow.backfillAge(store, "2011", "2019");
+        assertEquals(2019, boatNamed("Young Gun").certificates().getFirst().ageYear());
+    }
+
     private JsonNode row(int dxtId, String refNo, String yachtName, String sailNo, int vppYear,
                          int certType, String expiry, String className, String familyName) throws Exception {
         var node = MAPPER.createObjectNode()

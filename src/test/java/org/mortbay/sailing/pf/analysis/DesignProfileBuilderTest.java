@@ -52,13 +52,15 @@ class DesignProfileBuilderTest
         pfs.put(id, new BoatPf(new Factor(Math.exp(delta), 1.0), null, null, 0, 0, 0, nRaces, 0, 0));
     }
 
+    private final Map<String, DesignProfileBuilder.DesignYear> designYears = new HashMap<>();
+
     private Map<String, DesignProfile> build(String... modified)
     {
         List<String> mod = List.of(modified);
         Map<String, ReferenceFactors> designRfs = new HashMap<>();
         for (Boat b : boats.values())
             designRfs.put(b.designId(), new ReferenceFactors(new Factor(1.0, 1.0), null, null, 0, 0, 0));
-        return new DesignProfileBuilder().buildAll(residuals, boats, pfs, designRfs, mod::contains);
+        return new DesignProfileBuilder().buildAll(residuals, boats, pfs, designRfs, mod::contains, designYears);
     }
 
     @Test
@@ -87,14 +89,16 @@ class DesignProfileBuilderTest
     @Test
     void spokesRankDesignsAndTheScoreIsTheHexagonArea()
     {
-        // alpha: 4 boats at 4 clubs, 6 races each, PFs matching RF, all certified, and placing
+        // alpha: 4 boats at 4 clubs, 6 races each, PFs matching RF, a 2015 design, and placing
         // ahead of beta on PF-corrected time in the races they share
         for (int i = 0; i < 4; i++)
             boat("a" + i, "alpha", "c" + i, 6, 0.0, true, "race-", -0.01);
-        // beta: 3 boats at 1 club, 3 races each, PF/RF spread, none certified
+        // beta: 3 boats at 1 club, 3 races each, PF/RF spread, a 1985 design
         boat("b0", "beta", "c0", 3, -0.05, false, "race-", 0.01);
         boat("b1", "beta", "c0", 3, 0.0, false, "race-", 0.01);
         boat("b2", "beta", "c0", 3, 0.05, false, "race-", 0.01);
+        designYears.put("alpha", new DesignProfileBuilder.DesignYear(2015, "ORC", 4));
+        designYears.put("beta", new DesignProfileBuilder.DesignYear(1985, "manual", 0));
         Map<String, DesignProfile> profiles = build();
         DesignProfile a = profiles.get("alpha");
         DesignProfile b = profiles.get("beta");
@@ -103,19 +107,56 @@ class DesignProfileBuilderTest
         assertEquals(1.0, a.frequency());
         assertEquals(1.0, a.results());
         assertEquals(1.0, a.consistency());
-        assertEquals(1.0, a.certified());
+        assertEquals(1.0, a.modern());
         assertTrue(b.consistency() < a.consistency());
-        assertEquals(0.0, b.certified(), 1e-12);
+        assertEquals(0.0, b.modern(), 1e-12);
         assertEquals(0.0, b.results(), 1e-12);
 
         for (DesignProfile p : profiles.values())
         {
-            double[] r = {p.quantity(), p.ubiquity(), p.frequency(), p.results(), p.consistency(), p.certified()};
+            double[] r = {p.quantity(), p.ubiquity(), p.frequency(), p.results(), p.consistency(), p.modern()};
             double sum = 0;
             for (int i = 0; i < r.length; i++)
                 sum += r[i] * r[(i + 1) % r.length];
             assertEquals(sum / r.length, p.overallScore(), 1e-12);
         }
         assertTrue(a.overallScore() > b.overallScore());
+    }
+
+    @Test
+    void aDesignWithNoYearScoresNeutralOnModern()
+    {
+        for (int i = 0; i < 3; i++)
+            boat("a" + i, "alpha", "c1", 5, 0.0, false);
+        for (int i = 0; i < 3; i++)
+            boat("b" + i, "beta", "c1", 5, 0.0, false);
+        designYears.put("alpha", new DesignProfileBuilder.DesignYear(2015, "ORC", 3));
+        assertEquals(0.5, build().get("beta").modern(), 1e-12);
+    }
+
+    /** A boat of {@code design} with ORC certificates of the given (certificate year, age year) pairs. */
+    private void orcBoat(String id, String design, int... yearAge)
+    {
+        List<Certificate> certs = new ArrayList<>();
+        for (int i = 0; i < yearAge.length; i += 2)
+            certs.add(new Certificate("ORC", yearAge[i], 1.0, false, false, false, false, id + i, null, yearAge[i + 1]));
+        boats.put(id, new Boat(id, id, id, design, List.of(), certs, List.of("test"), null, null));
+    }
+
+    @Test
+    void designYearIsTheMedianOrcAgeOfTheBoatsLatestCertificates()
+    {
+        orcBoat("a0", "alpha", 2025, 1997);
+        orcBoat("a1", "alpha", 2024, 1985, 2026, 1996);   // latest certificate's age counts
+        orcBoat("a2", "alpha", 2026, 1990);
+        orcBoat("a3", "alpha", 2026, 1971);                // modified: left out
+        orcBoat("b0", "beta", 2026, 2001);
+        boats.put("c0", new Boat("c0", "c0", "c0", "gamma", List.of(), List.of(), List.of("test"), null, null));
+
+        Map<String, DesignProfileBuilder.DesignYear> years = DesignProfileBuilder.designYears(
+            boats, "a3"::equals, id -> "beta".equals(id) ? 2005 : null);
+        assertEquals(new DesignProfileBuilder.DesignYear(1996, "ORC", 3), years.get("alpha"));
+        assertEquals(new DesignProfileBuilder.DesignYear(2005, "manual", 0), years.get("beta"), "manual wins");
+        assertNull(years.get("gamma"), "no ORC age and no manual year");
     }
 }

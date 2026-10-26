@@ -892,7 +892,25 @@ public class AdminApiServlet extends HttpServlet
         result.put("flags", designFlags(id, null));
         DesignProfile profile = cache.profilesByDesignId().get(id);
         result.put("profile", profile != null ? designProfileMap(profile) : null);
+        // The design year shown with the profile: as of the last PF run, or the manual year
+        DesignProfileBuilder.DesignYear year = profile != null ? profile.designYear() : null;
+        Integer manual = store.designYearOverride(id);
+        if (manual != null)
+            year = new DesignProfileBuilder.DesignYear(manual, "manual", 0);
+        result.put("designYear", year == null ? null
+            : Map.of("year", year.year(), "source", year.source(), "boats", year.boats()));
         writeJson(resp, result);
+    }
+
+    /** A manual design year from an edit request: a year 1850–2100, or null (blank clears it). */
+    private static Integer parseDesignYear(Object v)
+    {
+        if (v == null || v.toString().isBlank())
+            return null;
+        int year = (int) Double.parseDouble(v.toString().trim());
+        if (year < 1850 || year > 2100)
+            throw new IllegalArgumentException("designYear must be a year between 1850 and 2100");
+        return year;
     }
 
     private Map<String, Object> designProfileMap(DesignProfile p)
@@ -903,7 +921,7 @@ public class AdminApiServlet extends HttpServlet
         m.put("frequency",    p.frequency());
         m.put("results",      p.results());
         m.put("consistency",  p.consistency());
-        m.put("certified",    p.certified());
+        m.put("modern",       p.modern());
         m.put("overallScore", p.overallScore());
         m.put("activeBoats",  p.activeBoats());
         return m;
@@ -2079,6 +2097,9 @@ public class AdminApiServlet extends HttpServlet
                 ? Boolean.TRUE.equals(body.get("noSpinnaker")) : null;
             Boolean newOneDesign = body.containsKey("oneDesign")
                 ? Boolean.TRUE.equals(body.get("oneDesign")) : null;
+            // Optional: manual design year; blank/null clears it. Absent → unchanged.
+            boolean yearGiven = body.containsKey("designYear");
+            Integer newYear = yearGiven ? parseDesignYear(body.get("designYear")) : null;
 
             if (oldId == null || oldId.isBlank())
             {
@@ -2110,7 +2131,8 @@ public class AdminApiServlet extends HttpServlet
             boolean nameChanged = !newName.equalsIgnoreCase(old.canonicalName());
             boolean noSpinChanged = newNoSpinnaker != null && newNoSpinnaker != old.noSpinnaker();
             boolean oneDesignChanged = newOneDesign != null && newOneDesign != store.isDesignOneDesign(oldId);
-            if (!idChanged && !nameChanged && !noSpinChanged && !oneDesignChanged)
+            boolean yearChanged = yearGiven && !Objects.equals(newYear, store.designYearOverride(oldId));
+            if (!idChanged && !nameChanged && !noSpinChanged && !oneDesignChanged && !yearChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true, "newDesignId", oldId));
                 return;
@@ -2177,6 +2199,12 @@ public class AdminApiServlet extends HttpServlet
                 store.setDesignOneDesign(oldId, false);
             if (oneDesign != store.isDesignOneDesign(newId))
                 store.setDesignOneDesign(newId, oneDesign);
+            // The manual year too moves to the new id on a rename
+            Integer year = yearGiven ? newYear : store.designYearOverride(oldId);
+            if (idChanged && store.designYearOverride(oldId) != null)
+                store.setDesignYear(oldId, null);
+            if (!Objects.equals(year, store.designYearOverride(newId)))
+                store.setDesignYear(newId, year);
 
             store.save();
             if (cache != null)
@@ -2186,6 +2214,7 @@ public class AdminApiServlet extends HttpServlet
                 "idChanged", idChanged, "nameChanged", nameChanged,
                 "noSpinChanged", noSpinChanged,
                 "oneDesignChanged", oneDesignChanged,
+                "yearChanged", yearChanged,
                 "updatedBoats", updatedBoats,
                 "updatedRaces", updatedRaces,
                 "updatedFinishers", updatedFinishers));
@@ -2943,6 +2972,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("ignored",       store.isDesignIgnored(d.id()));
                 row.put("noSpinnaker", store.isDesignNoSpinnaker(d.id()));
                 row.put("oneDesign",   store.isDesignOneDesign(d.id()));
+                row.put("designYear",  store.designYearOverride(d.id()));
                 row.put("flags",       designFlags(d.id(), null));
                 DesignProfile dp = cache.profilesByDesignId().get(d.id());
                 row.put("profile",     dp != null ? dp.overallScore() : null);

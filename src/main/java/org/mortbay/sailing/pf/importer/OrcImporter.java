@@ -111,6 +111,7 @@ public class OrcImporter
             if (imported.contains(dxtId))
             {
                 LOG.debug("Skipping already-imported dxtID={}", dxtId);
+                OrcCertRow.backfillAge(store, dxtId, child(el, "Age"));
                 continue;
             }
 
@@ -214,7 +215,8 @@ public class OrcImporter
             return;
         OrcCertRow row = new OrcCertRow(dxtId,
             child(el, "YachtName"), child(el, "SailNo"), child(el, "VPPYear"),
-            child(el, "CertType"), child(el, "Expiry"), child(el, "Class"), child(el, "FamilyName"));
+            child(el, "CertType"), child(el, "Expiry"), child(el, "Class"), child(el, "FamilyName"),
+            child(el, "Age"));
         row.importInto(store, parseGph(certHtml, dxtId));
     }
 

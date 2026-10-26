@@ -99,6 +99,11 @@
             <label style="font-size:0.9rem;color:#555;"><input type="checkbox" id="edit-design-one-design">
                 Boats of this design are identical — every boat not ticked Modified takes the
                 design RF (built from its certificates). PFs still differ boat to boat.</label>
+            <label for="edit-design-year">Design year:</label>
+            <label style="font-size:0.9rem;color:#555;"><input type="number" id="edit-design-year" min="1850" max="2100"
+                style="width:6em;font-family:monospace;padding:3px 6px;">
+                The year the design first came out, for the design profile's Modern spoke. Leave blank
+                to use the median ORC certificate age date of its boats.</label>
         </div>
         <div id="edit-design-email-row" style="display:none; margin-bottom:0.5rem;">
             <label for="edit-email-designs" style="font-size:0.9rem;">Your email (optional): </label>

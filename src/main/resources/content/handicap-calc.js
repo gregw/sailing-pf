@@ -481,6 +481,12 @@ const HandicapCalc = (function () {
         const isDesign = cfg.entityKind === 'design';
         let calcBoats = [];
         let calcSort = {col: isDesign ? 'rf' : 'pf', dir: 'desc'};
+        /** Header click: a new column sorts descending first (highest at the top); a second click reverses. */
+        function sortCalcBy(col) {
+            if (calcSort.col === col) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
+            else calcSort = {col, dir: 'desc'};
+            render();
+        }
         // Per-boat variant override: boatId → 'spin'|'nonSpin'|'twoHanded'
         const boatVariants = new Map();
 
@@ -842,11 +848,7 @@ const HandicapCalc = (function () {
             th.textContent = c.label + arrow;
             th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${c.align};cursor:pointer;user-select:none;`
                 + (isActive ? 'font-weight:bold;' : '');
-            th.addEventListener('click', () => {
-                if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-                else calcSort = {col: c.key, dir: c.key === 'name' ? 'asc' : 'desc'};
-                render();
-            });
+            th.addEventListener('click', () => sortCalcBy(c.key));
             return th;
         }
 
@@ -880,11 +882,7 @@ const HandicapCalc = (function () {
             lbl.textContent = c.label + arrow;
             lbl.style.cssText = 'cursor:pointer;user-select:none;'
                 + (isActive ? 'font-weight:bold;' : '');
-            lbl.addEventListener('click', () => {
-                if (calcSort.col === c.key) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-                else calcSort = {col: c.key, dir: c.key === 'name' ? 'asc' : 'desc'};
-                render();
-            });
+            lbl.addEventListener('click', () => sortCalcBy(c.key));
             wrap.appendChild(lbl);
 
             th.appendChild(wrap);
@@ -972,11 +970,7 @@ const HandicapCalc = (function () {
             sortLbl.textContent = 'Enter handicap' + arrow;
             sortLbl.style.cssText = 'cursor:pointer;user-select:none;font-size:0.75rem;'
                 + (isActive ? 'font-weight:bold;' : '');
-            sortLbl.addEventListener('click', () => {
-                if (calcSort.col === sortKey) calcSort.dir = (calcSort.dir === 'asc' ? 'desc' : 'asc');
-                else calcSort = {col: sortKey, dir: 'desc'};
-                render();
-            });
+            sortLbl.addEventListener('click', () => sortCalcBy(sortKey));
             wrap.appendChild(sortLbl);
 
             th.appendChild(wrap);

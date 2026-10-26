@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.mortbay.sailing.pf.data.Boat;
@@ -22,10 +23,10 @@ import org.mortbay.sailing.pf.data.Factor;
  * {@link PerformanceProfile}); boats flagged modified from their design are left out.
  * <p>
  * Spoke definitions, in hexagon order (Quantity → Ubiquity → Frequency → Results →
- * Consistency → Certified, then back to Quantity). Adjacent spokes multiply in the
- * polygon area ({@link PerformanceProfileBuilder#polygonArea}), so many boats count for more
- * spread over many clubs, good placings count for more over many races, and boats that sail to
- * their rating count for more when it is measured:
+ * Consistency → Modern, then back to Quantity). Adjacent spokes multiply in the polygon area
+ * ({@link PerformanceProfileBuilder#polygonArea}), so many boats count for more spread over many
+ * clubs, good placings count for more over many races, and a modern design counts for more
+ * with many boats:
  * <ul>
  *   <li><b>Quantity</b> — active boats</li>
  *   <li><b>Ubiquity</b> — effective number of clubs, {@code 1 / Σ share²} over the active
@@ -40,9 +41,8 @@ import org.mortbay.sailing.pf.data.Factor;
  *       each boat in the variant it raced most: low = the boats sail to the design's rating.
  *       Against the design RF, not each boat's own: a boat without a certificate gets its RF
  *       from its own results, so its PF ≈ RF by construction. Lower raw = better rank</li>
- *   <li><b>Certified</b> — share of the active boats with a measurement certificate from the
- *       last {@value #CERT_YEARS} years: the design RF rests on measurement rather than only on
- *       race results</li>
+ *   <li><b>Modern</b> — the design's year ({@link #designYears}): newer = better, so that all
+ *       else being equal a newer design scores higher. A design with no year scores 0.5</li>
  * </ul>
  */
 public class DesignProfileBuilder
@@ -52,8 +52,55 @@ public class DesignProfileBuilder
     /** A boat is active with at least this many distinct races in the window. */
     private static final int MIN_BOAT_RACES = 3;
     private static final int RECENT_DAYS = 365;
-    /** A certificate counts for Certified if it is from the current year or this many before. */
-    private static final int CERT_YEARS = 3;
+
+    /**
+     * A design's year and where it came from: {@code "manual"} (design.yaml) or
+     * {@code "ORC"} (the median age date of its ORC-certificated boats).
+     */
+    public record DesignYear(int year, String source, int boats) {}
+
+    /**
+     * Each design's year: the manual year if set, otherwise the median ORC age year
+     * ({@link Certificate#ageYear}) over the design's boats, from each boat's latest ORC
+     * certificate with one, leaving out boats flagged modified. For a production design the ORC
+     * age date is usually the series year, so most boats of a class share it; the median
+     * ignores the odd hull or launch date.
+     *
+     * @param manual the design's manual year, or null
+     */
+    public static Map<String, DesignYear> designYears(Map<String, Boat> boats, Predicate<String> modified,
+                                                      Function<String, Integer> manual)
+    {
+        Map<String, List<Integer>> ages = new HashMap<>();
+        for (Boat boat : boats.values())
+        {
+            if (boat.designId() == null || modified.test(boat.id()))
+                continue;
+            Certificate latest = null;
+            for (Certificate c : boat.certificates())
+                if (c.ageYear() != null && (latest == null || c.year() > latest.year()))
+                    latest = c;
+            if (latest != null)
+                ages.computeIfAbsent(boat.designId(), k -> new ArrayList<>()).add(latest.ageYear());
+        }
+        Map<String, DesignYear> years = new HashMap<>();
+        ages.forEach((designId, list) ->
+        {
+            List<Integer> sorted = list.stream().sorted().toList();
+            years.put(designId, new DesignYear(sorted.get(sorted.size() / 2), "ORC", sorted.size()));
+        });
+        Set<String> designIds = new HashSet<>(years.keySet());
+        for (Boat boat : boats.values())
+            if (boat.designId() != null)
+                designIds.add(boat.designId());
+        for (String designId : designIds)
+        {
+            Integer year = manual.apply(designId);
+            if (year != null)
+                years.put(designId, new DesignYear(year, "manual", 0));
+        }
+        return years;
+    }
 
     /**
      * @param residualsByBoatId PF residuals keyed by boatId
@@ -61,15 +108,16 @@ public class DesignProfileBuilder
      * @param pfByBoatId        each boat's PF; a boat without one is left out of Consistency
      * @param designRfs         each design's RF (for Consistency's log(PF / design RF))
      * @param modified          true for a boat flagged modified from its design
+     * @param designYears       each design's year (see {@link #designYears}), for Modern
      */
     public Map<String, DesignProfile> buildAll(Map<String, List<EntryResidual>> residualsByBoatId,
                                                Map<String, Boat> boats,
                                                Map<String, BoatPf> pfByBoatId,
                                                Map<String, ReferenceFactors> designRfs,
-                                               Predicate<String> modified)
+                                               Predicate<String> modified,
+                                               Map<String, DesignYear> designYears)
     {
         LocalDate cutoff = LocalDate.now().minusDays(RECENT_DAYS);
-        int currentYear = LocalDate.now().getYear();
 
         // Active boats per design, with each boat's races in the window
         Map<String, Map<String, Set<String>>> racesByBoatByDesign = new LinkedHashMap<>();
@@ -96,7 +144,7 @@ public class DesignProfileBuilder
             PerformanceProfileBuilder.residualsByRaceDiv(residualsByBoatId, cutoff);
 
         // Raw metrics: [0] quantity, [1] ubiquity, [2] frequency, [3] results (NaN if no boat
-        // placed), [4] consistency (lower = better), [5] certified
+        // placed), [4] consistency (lower = better), [5] modern: the design year (NaN if unknown)
         Map<String, double[]> raw = new LinkedHashMap<>();
         for (Map.Entry<String, Map<String, Set<String>>> d : racesByBoatByDesign.entrySet())
         {
@@ -105,7 +153,6 @@ public class DesignProfileBuilder
             int n = racesByBoat.size();
 
             Map<String, Integer> boatsPerClub = new HashMap<>();
-            int certified = 0;
             int raceCount = 0;
             List<Double> logPfOverRf = new ArrayList<>();
             double placingSum = 0;
@@ -115,8 +162,6 @@ public class DesignProfileBuilder
                 Boat boat = boats.get(b.getKey());
                 if (boat.primaryClubId() != null)
                     boatsPerClub.merge(boat.primaryClubId(), 1, Integer::sum);
-                if (hasRecentCertificate(boat, currentYear))
-                    certified++;
                 raceCount += b.getValue().size();
                 Double delta = mainVariantLogPfOverRf(pfByBoatId.get(boat.id()), designRfs.get(designId));
                 if (delta != null)
@@ -138,7 +183,7 @@ public class DesignProfileBuilder
                 (double) raceCount / n,
                 placed == 0 ? Double.NaN : placingSum / placed,
                 logPfOverRf.size() < 2 ? Double.NaN : rms(logPfOverRf),
-                (double) certified / n});
+                designYears.containsKey(designId) ? designYears.get(designId).year() : Double.NaN});
         }
 
         double[] quantity    = PerformanceProfileBuilder.percentileRanks(raw, 0, true);
@@ -146,16 +191,19 @@ public class DesignProfileBuilder
         double[] frequency   = PerformanceProfileBuilder.percentileRanks(raw, 2, true);
         double[] results     = PerformanceProfileBuilder.validRanks(raw, 3, true);
         double[] consistency = PerformanceProfileBuilder.validRanks(raw, 4, false);
-        double[] certifiedR  = PerformanceProfileBuilder.percentileRanks(raw, 5, true);
+        double[] modern      = PerformanceProfileBuilder.validRanks(raw, 5, true);
 
         String[] ids = raw.keySet().toArray(new String[0]);
         Map<String, DesignProfile> profiles = new LinkedHashMap<>();
         for (int i = 0; i < ids.length; i++)
         {
+            if (Double.isNaN(raw.get(ids[i])[5]))
+                modern[i] = 0.5;   // no design year: neutral rather than penalised
             double score = PerformanceProfileBuilder.polygonArea(new double[]{
-                quantity[i], ubiquity[i], frequency[i], results[i], consistency[i], certifiedR[i]});
+                quantity[i], ubiquity[i], frequency[i], results[i], consistency[i], modern[i]});
             profiles.put(ids[i], new DesignProfile(quantity[i], ubiquity[i], frequency[i],
-                results[i], consistency[i], certifiedR[i], score, (int) raw.get(ids[i])[0]));
+                results[i], consistency[i], modern[i], score, (int) raw.get(ids[i])[0],
+                designYears.get(ids[i])));
         }
         return Map.copyOf(profiles);
     }
@@ -202,14 +250,6 @@ public class DesignProfileBuilder
         if (boatPf == null || rf == null || boatPf.value() <= 0 || rf.value() <= 0)
             return null;
         return Math.log(boatPf.value() / rf.value());
-    }
-
-    private static boolean hasRecentCertificate(Boat boat, int currentYear)
-    {
-        for (Certificate c : boat.certificates())
-            if (c.year() >= currentYear - CERT_YEARS && !c.isRaceDerivedOrc())
-                return true;
-        return false;
     }
 
     private static double rms(List<Double> xs)

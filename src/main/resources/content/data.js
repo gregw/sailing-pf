@@ -250,7 +250,7 @@ const COLUMNS = {
                 ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
         { label: 'DP', key: 'profile', sortKey: 'profile', anchor: 'col-design-profile',
-            tip: 'Design profile score — percentile polygon area, among designs with at least 3 active boats, across Quantity, Ubiquity, Frequency, Results, Consistency and Certified spokes (last 12 months).',
+            tip: 'Design profile score — percentile polygon area, among designs with at least 3 active boats, across Quantity, Ubiquity, Frequency, Results, Consistency and Modern spokes (last 12 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
@@ -643,12 +643,13 @@ function renderHeaders(entity) {
     thead.innerHTML = html;
 }
 
+/** Header click: a new column sorts descending first (highest at the top); a second click reverses. */
 function sortBy(entity, key) {
     if (state.sort[entity] === key) {
         state.dir[entity] = state.dir[entity] === 'asc' ? 'desc' : 'asc';
     } else {
         state.sort[entity] = key;
-        state.dir[entity]  = 'asc';
+        state.dir[entity]  = 'desc';
     }
     const container = document.querySelector('#panel-' + entity + ' .table-scroll');
     if (container) container.scrollTop = 0;
@@ -1093,10 +1094,14 @@ function renderDesignProfile(dp) {
     if (!dp) return '';
     const name = esc((dp.designName || dp.designId) + (dp.flags || ''));
     const heading = `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${name} — Design Profile ${infoBtn('chart-design-profile', DESIGN_PROFILE_TIP)}</div>`;
+    const y = dp.designYear;
+    const yearLine = '<div style="color:#555;font-size:0.85rem;">Design year: ' + (y
+        ? y.year + (y.source === 'manual' ? ' (set manually)' : ` (median ORC age date of ${y.boats} boat${y.boats !== 1 ? 's' : ''})`)
+        : 'unknown — set it on the edit form') + '</div>';
     if (!dp.profile)
-        return heading + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 12 months.</div>';
+        return heading + yearLine + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 12 months.</div>';
     const p = dp.profile;
-    return heading
+    return heading + yearLine
         + `<div style="display:inline-block;vertical-align:top;text-align:left;">`
         + `  <div id="dp-profile-chart"></div>`
         + `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">DP: ${p.overallScore.toFixed(3)} — ${p.activeBoats} active boats</div>`
@@ -1106,7 +1111,7 @@ function renderDesignProfile(dp) {
 const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 12 months; boats ticked modified left out). '
     + 'Quantity: active boats. Ubiquity: effective number of clubs (10 boats at one club = 1, evenly over five clubs = 5). '
     + 'Frequency: races per active boat. Results: the boats\' average finishing place on PF-corrected time. '
-    + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Certified: share of active boats with a measurement certificate from the last 3 years.';
+    + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Modern: the design year — newer scores higher; a design with no year scores 0.5. The year is set on the design edit form, or else is the median ORC certificate age date of its boats.';
 
 /** Radar chart of a boat (PP_SPOKES) or design (DP_SPOKES) profile, in the spokes' area order. */
 function renderProfileChart(profile, containerId, spokes) {
@@ -2111,6 +2116,8 @@ function showEditDesignPanel() {
     if (nsBox) nsBox.checked = !!item.noSpinnaker;
     const odBox = document.getElementById('edit-design-one-design');
     if (odBox) odBox.checked = !!item.oneDesign;
+    const yearInput = document.getElementById('edit-design-year');
+    if (yearInput) yearInput.value = item.designYear != null ? item.designYear : '';
     const boats = item.boats != null ? item.boats : 0;
     const warn = document.getElementById('edit-design-warning');
     warn.textContent = boats > 0
@@ -2136,6 +2143,8 @@ function buildDesignEditBody() {
     const body = {designId: editingDesignId, newId, canonicalName: newName};
     if (nsBox) body.noSpinnaker = !!nsBox.checked;
     if (odBox) body.oneDesign = !!odBox.checked;
+    const yearInput = document.getElementById('edit-design-year');
+    if (yearInput) body.designYear = yearInput.value.trim();
     return body;
 }
 
@@ -2155,6 +2164,7 @@ async function saveDesignEdit() {
     let msg = result.noop ? 'No change.' : 'Saved.';
     if (result.idChanged)   msg += ' ID → ' + result.newDesignId + '.';
     if (result.nameChanged) msg += ' Name updated.';
+    if (result.yearChanged) msg += ' Design year updated (the profile updates on the next PF run).';
     if (result.updatedBoats > 0)
         msg += ' ' + result.updatedBoats + ' boat' + (result.updatedBoats !== 1 ? 's' : '') + ' re-keyed.';
     if (result.updatedRaces > 0)

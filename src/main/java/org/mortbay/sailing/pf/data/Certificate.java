@@ -5,6 +5,7 @@ import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -37,9 +38,25 @@ public record Certificate(
     boolean club,            // true for club-level certs (ORC club, potentially IRC club); carries configurable weight penalty
     boolean windwardLeeward, // true for ORC WL (windward/leeward) course-specific certs; carries 0.8× weight penalty
     String certificateNumber, // dxtID for ORC; cert number for AMS
-    LocalDate expiryDate     // null for AMS
+    LocalDate expiryDate,    // null for AMS
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    Integer ageYear          // ORC age date year (usually the design's series year); null if unknown
 )
 {
+    /** A certificate without an age year (all but ORC certificates). */
+    public Certificate(String system, int year, double value, boolean nonSpinnaker, boolean twoHanded,
+                       boolean club, boolean windwardLeeward, String certificateNumber, LocalDate expiryDate)
+    {
+        this(system, year, value, nonSpinnaker, twoHanded, club, windwardLeeward, certificateNumber, expiryDate, null);
+    }
+
+    /** This certificate with the given age year. */
+    public Certificate withAgeYear(Integer age)
+    {
+        return new Certificate(system, year, value, nonSpinnaker, twoHanded, club, windwardLeeward,
+            certificateNumber, expiryDate, age);
+    }
+
     /**
      * Jackson deserialisation factory. Reads both {@code club} and legacy {@code orcClub}
      * field names for backward compatibility with older JSON files.
@@ -55,13 +72,14 @@ public record Certificate(
         @JsonProperty("orcClub")           Boolean orcClub,
         @JsonProperty("windwardLeeward")   Boolean windwardLeeward,
         @JsonProperty("certificateNumber") String certificateNumber,
-        @JsonProperty("expiryDate")        LocalDate expiryDate)
+        @JsonProperty("expiryDate")        LocalDate expiryDate,
+        @JsonProperty("ageYear")           Integer ageYear)
     {
         // Accept either "club" or legacy "orcClub" field
         boolean isClub = (club != null && club) || (orcClub != null && orcClub);
         return new Certificate(system, year, value, nonSpinnaker, twoHanded,
             isClub, windwardLeeward != null && windwardLeeward,
-            certificateNumber, expiryDate);
+            certificateNumber, expiryDate, ageYear);
     }
 
     /** Certificate-number prefix of ORC handicaps copied from race results by a results importer. */
@@ -92,6 +110,7 @@ public record Certificate(
             ", windwardLeeward=" + windwardLeeward +
             ", certificateNumber='" + certificateNumber + '\'' +
             ", expiryDate=" + expiryDate +
+            ", ageYear=" + ageYear +
             '}';
     }
 }

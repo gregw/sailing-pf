@@ -153,6 +153,7 @@ public class OrcApiImporter
             if (imported.contains(dxtId))
             {
                 LOG.debug("Skipping already-imported dxtID={}", dxtId);
+                OrcCertRow.backfillAge(store, dxtId, text(row, "Age"));
                 continue;
             }
             // RefNo names the cache file, so only plain identifiers are accepted
@@ -328,7 +329,8 @@ public class OrcApiImporter
             return;
         OrcCertRow cert = new OrcCertRow(dxtId,
             text(row, "YachtName"), text(row, "SailNo"), text(row, "VPPYear"),
-            text(row, "CertType"), text(row, "Expiry"), text(row, "Class"), text(row, "FamilyName"));
+            text(row, "CertType"), text(row, "Expiry"), text(row, "Class"), text(row, "FamilyName"),
+            text(row, "Age"));
         cert.importInto(store, parseGph(certJson, text(row, "RefNo")));
     }
 

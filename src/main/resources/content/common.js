@@ -125,7 +125,7 @@ const PP_SPOKES = [
 
 /**
  * Design profile spokes, in the order of the polygon-area calculation (DesignProfileBuilder):
- * adjacent spokes multiply, and Certified wraps round to Quantity.
+ * adjacent spokes multiply, and Modern wraps round to Quantity.
  */
 const DP_SPOKES = [
     {key: 'quantity',    label: 'Quantity'},
@@ -133,7 +133,7 @@ const DP_SPOKES = [
     {key: 'frequency',   label: 'Frequency'},
     {key: 'results',     label: 'Results'},
     {key: 'consistency', label: 'Consistency'},
-    {key: 'certified',   label: 'Certified'},
+    {key: 'modern',      label: 'Modern'},
 ];
 
 /**

@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * {@link #importInto(DataStore, double)}.
  */
 record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
-                  String certType, String expiry, String className, String familyName)
+                  String certType, String expiry, String className, String familyName, String age)
 {
     private static final Logger LOG = LoggerFactory.getLogger(OrcCertRow.class);
 
@@ -47,6 +47,51 @@ record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
             .map(Certificate::certificateNumber)
             .filter(n -> n != null)
             .collect(Collectors.toSet());
+    }
+
+    /**
+     * Sets the age year on an already-imported certificate that lacks one (certificates imported
+     * before the age was kept). The importers skip already-imported dxtIDs, so this is how they
+     * catch up, from the list row alone.
+     */
+    static void backfillAge(DataStore store, String dxtId, String age)
+    {
+        Integer ageYear = parseAge(age);
+        if (ageYear == null)
+            return;
+        for (Boat boat : store.boats().values())
+        {
+            boolean changed = false;
+            List<Certificate> certs = new ArrayList<>(boat.certificates());
+            for (int i = 0; i < certs.size(); i++)
+            {
+                Certificate c = certs.get(i);
+                if (dxtId.equals(c.certificateNumber()) && c.ageYear() == null)
+                {
+                    certs.set(i, c.withAgeYear(ageYear));
+                    changed = true;
+                }
+            }
+            if (changed)
+                store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
+                    boat.clubIds(), List.copyOf(certs), boat.sources(), boat.lastUpdated(), null));
+        }
+    }
+
+    /** The ORC age date's year (e.g. 1997), or null if absent or implausible. */
+    static Integer parseAge(String age)
+    {
+        if (age == null)
+            return null;
+        try
+        {
+            int y = Integer.parseInt(age.trim().substring(0, Math.min(4, age.trim().length())));
+            return y >= 1850 && y <= 2100 ? y : null;
+        }
+        catch (NumberFormatException e)
+        {
+            return null;
+        }
     }
 
     /**
@@ -104,7 +149,7 @@ record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.removeIf(c -> dxtId.equals(c.certificateNumber()));
         updatedCerts.add(new Certificate("ORC",
-            year, tcf, nonSpinnaker, twoHanded, club, false, dxtId, expiryDate));
+            year, tcf, nonSpinnaker, twoHanded, club, false, dxtId, expiryDate, parseAge(age)));
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),

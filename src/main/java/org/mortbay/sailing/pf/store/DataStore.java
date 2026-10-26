@@ -1706,6 +1706,28 @@ public class DataStore
     }
 
     /**
+     * The design's manual year ({@code designYears:} in {@code design.yaml}), or null if none is
+     * set. Overrides the year taken from ORC certificate age dates for the design profile.
+     */
+    public Integer designYearOverride(String designId)
+    {
+        if (designId == null || designId.isBlank())
+            return null;
+        return designCatalogue.designYear(designId);
+    }
+
+    /** Sets (or with {@code year} null, clears) the design's manual year. */
+    public void setDesignYear(String id, Integer year)
+    {
+        requireStarted();
+        Designs.setDesignYear(configDir, id, year);
+        reloadDesignCatalogue();
+        InvalidationListener l = invalidationListener;
+        if (l != null)
+            l.onDesignChanged(id);
+    }
+
+    /**
      * True if the boat is flagged as modified from its design ({@code modifiedBoats:} in
      * {@code design.yaml}, by sail number + name): it keeps its own reference factor, is not
      * pulled toward the design's, and does not count toward the design's.

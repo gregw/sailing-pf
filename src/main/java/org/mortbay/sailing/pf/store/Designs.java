@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -285,6 +286,43 @@ class Designs
         }
     }
 
+    /**
+     * Reads {@code design.yaml}, sets (or with {@code year} null, removes) the design's manual
+     * year in {@code designYears:}, and writes the file back.
+     */
+    static void setDesignYear(Path configDir, String designId, Integer year)
+    {
+        if (designId == null || designId.isBlank()) return;
+        Path file = configDir.resolve(FILENAME);
+        CatalogueFile catalogue = null;
+        if (Files.exists(file))
+        {
+            try { catalogue = YAML_MAPPER.readValue(file.toFile(), CatalogueFile.class); }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for design year update: {}", file, e.getMessage());
+                return;
+            }
+        }
+        if (catalogue == null) catalogue = new CatalogueFile();
+        if (catalogue.designYears == null) catalogue.designYears = new LinkedHashMap<>();
+        String norm = IdGenerator.normaliseDesignName(designId);
+        catalogue.designYears.keySet().removeIf(k -> IdGenerator.normaliseDesignName(k).equals(norm));
+        if (year != null)
+            catalogue.designYears.put(norm, year);
+
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), catalogue);
+            LOG.info("Updated {} — design {} year {}", file, designId, year);
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+        }
+    }
+
     /** "normSail|normName" key, as used for boat design overrides and modified boats. */
     static String boatKey(String sailNumber, String name)
     {
@@ -362,6 +400,8 @@ class Designs
         public List<String> ignored;
         public List<String> noSpinnaker;
         public List<String> oneDesign;
+        /** Manual design year (the design's first year), overriding the ORC age dates. */
+        public Map<String, Integer> designYears;
         public List<BoatEntry> modifiedBoats;
         public List<DesignOverride> boatDesignOverrides;
     }
@@ -393,6 +433,8 @@ class Designs
         private final Set<String> oneDesignIds;
         /** "normSail|normName" of boats ticked as modified from their design */
         private final Set<String> modifiedBoatKeys;
+        /** normDesignId → manual design year */
+        private final Map<String, Integer> designYears;
         /** "normSail|normName" → list of override entries (possibly date-ranged) */
         private final Map<String, List<OverrideEntry>> overridesByKey;
         /** normDesignId → canonical name to use when creating the design (explicit canonicalName or raw designId) */
@@ -407,6 +449,7 @@ class Designs
                 noSpinnakerIds = Set.of();
                 oneDesignIds = Set.of();
                 modifiedBoatKeys = Set.of();
+                designYears = Map.of();
                 overridesByKey = Map.of();
                 overrideDesigns = Map.of();
                 return;
@@ -478,6 +521,15 @@ class Designs
             if (!mod.isEmpty())
                 LOG.info("Loaded design catalogue: {} modified boat(s)", mod.size());
 
+            Map<String, Integer> years = new HashMap<>();
+            if (file.designYears != null)
+                file.designYears.forEach((id, y) ->
+                {
+                    if (id != null && y != null)
+                        years.put(IdGenerator.normaliseDesignName(id), y);
+                });
+            designYears = Collections.unmodifiableMap(years);
+
             Map<String, List<OverrideEntry>> overrides = new HashMap<>();
             Map<String, String> designs = new HashMap<>();
             if (file.boatDesignOverrides != null)
@@ -545,6 +597,12 @@ class Designs
             if (normalisedDesignId == null)
                 return false;
             return oneDesignIds.contains(normalisedDesignId);
+        }
+
+        /** The design's manual year, or null if none is set. */
+        Integer designYear(String normalisedDesignId)
+        {
+            return normalisedDesignId == null ? null : designYears.get(normalisedDesignId);
         }
 
         boolean isModifiedBoat(String sailNumber, String name)

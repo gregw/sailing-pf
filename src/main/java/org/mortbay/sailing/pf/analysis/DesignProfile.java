@@ -14,7 +14,8 @@ public record DesignProfile(
     double frequency,     // percentile rank by mean distinct races per active boat
     double results,       // percentile rank by the boats' mean PF-corrected placing percentile
     double consistency,   // percentile rank by RMS of log(PF / design RF) across active boats; lower = better
-    double certified,     // percentile rank by share of active boats with a recent measurement certificate
+    double modern,        // percentile rank by design year (newer = better); 0.5 if the year is unknown
     double overallScore,  // normalised polygon area [0,1]
-    int activeBoats       // the design's active boats (raw Quantity)
+    int activeBoats,      // the design's active boats (raw Quantity)
+    DesignProfileBuilder.DesignYear designYear   // nullable: the design's year and its source
 ) {}
