@@ -449,8 +449,8 @@ function loadPersistedSearches() {
 
 const state = {
     pages:    { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
-    sort:     { boats: 'id', designs: 'id', clubs: 'shortName', races: 'date', series: 'firstDate' },
-    dir:      { boats: 'asc', designs: 'asc', clubs: 'asc', races: 'desc', series: 'desc' },
+    sort:     { boats: 'profile', designs: 'profile', clubs: 'shortName', races: 'date', series: 'firstDate' },
+    dir:      { boats: 'desc', designs: 'desc', clubs: 'asc', races: 'desc', series: 'desc' },
     pageSize: 50,
     hasMore:  { boats: false, designs: false, clubs: false, races: false, series: false },
     loading:  { boats: false, designs: false, clubs: false, races: false, series: false },
