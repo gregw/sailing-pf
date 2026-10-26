@@ -182,6 +182,7 @@ const COLUMNS = {
               item.designExcluded ? 'excluded-link' : '',
               item.designIgnored  ? 'ignored-link'  : ''
           ].filter(Boolean).join(' '),
+          designProfile: item => item.designId,
           action: item => {
               if (!item.designId) return;
               gotoEntity('designs', {q: item.designId});
@@ -248,6 +249,9 @@ const COLUMNS = {
             render: v => v && v.value != null
                 ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
+        { label: 'DP', key: 'profile', sortKey: 'profile', anchor: 'col-design-profile',
+            tip: 'Design profile score — percentile polygon area, among designs with at least 3 active boats, across Quantity, Ubiquity, Frequency, Results, Consistency and Certified spokes (last 12 months).',
+          render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
           render: item => item.boats ? String(item.boats) : '',
@@ -726,6 +730,9 @@ function renderTable(entity, items, append) {
                             e.stopPropagation();
                             col.action(item);
                         };
+                        // col.designProfile(item) names a design whose profile shows on hover
+                        const hoverDesignId = col.designProfile ? col.designProfile(item) : null;
+                        if (hoverDesignId) attachDesignProfileHover(btn, hoverDesignId);
                         td.appendChild(btn);
                     } else {
                         td.textContent = text || '';
@@ -825,6 +832,16 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
 
     if (entity === 'clubs' && panel) {
         panel.innerHTML = renderClubDetail(data);
+    }
+
+    if (entity === 'designs') {
+        const dpDiv = document.getElementById('dp-detail-designs');
+        if (dpDiv) {
+            const dp = await fetchJson('/api/designs/' + encodeURIComponent(id) + '/profile');
+            dpDiv.innerHTML = renderDesignProfile(dp);
+            if (dp && dp.profile)
+                setTimeout(() => renderProfileChart(dp.profile, 'dp-profile-chart', DP_SPOKES), 0);
+        }
     }
 
     if (entity === 'boats') {
@@ -963,7 +980,7 @@ function renderBoatPf(data) {
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
         html += `</div>`;
-        setTimeout(() => renderProfileChart(data.profile), 0);
+        setTimeout(() => renderProfileChart(data.profile, 'pf-profile-chart', PP_SPOKES), 0);
     }
     html += `<div class="division-nav" id="boat-nav" style="margin:0.75rem 0;">
       <button id="boat-prev-btn" onclick="prevBoat()" disabled>&#8592; Prev</button>
@@ -1071,13 +1088,33 @@ function renderResidualChart(residuals) {
     });
 }
 
-function renderProfileChart(profile) {
-    const container = document.getElementById('pf-profile-chart');
+/** The design profile section of the designs page detail: heading, radar chart and DP score. */
+function renderDesignProfile(dp) {
+    if (!dp) return '';
+    const name = esc((dp.designName || dp.designId) + (dp.flags || ''));
+    const heading = `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${name} — Design Profile ${infoBtn('chart-design-profile', DESIGN_PROFILE_TIP)}</div>`;
+    if (!dp.profile)
+        return heading + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 12 months.</div>';
+    const p = dp.profile;
+    return heading
+        + `<div style="display:inline-block;vertical-align:top;text-align:left;">`
+        + `  <div id="dp-profile-chart"></div>`
+        + `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">DP: ${p.overallScore.toFixed(3)} — ${p.activeBoats} active boats</div>`
+        + `</div>`;
+}
+
+const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 12 months; boats ticked modified left out). '
+    + 'Quantity: active boats. Ubiquity: effective number of clubs (10 boats at one club = 1, evenly over five clubs = 5). '
+    + 'Frequency: races per active boat. Results: the boats\' average finishing place on PF-corrected time. '
+    + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Certified: share of active boats with a measurement certificate from the last 3 years.';
+
+/** Radar chart of a boat (PP_SPOKES) or design (DP_SPOKES) profile, in the spokes' area order. */
+function renderProfileChart(profile, containerId, spokes) {
+    const container = document.getElementById(containerId);
     if (!container || typeof Plotly === 'undefined') return;
 
-    // Spoke order matches polygon area calculation (PP_SPOKES, common.js)
-    const labels = PP_SPOKES.map(s => s.label);
-    const values = PP_SPOKES.map(s => profile[s.key] ?? 0);
+    const labels = spokes.map(s => s.label);
+    const values = spokes.map(s => profile[s.key] ?? 0);
 
     // Close the polygon
     const theta = [...labels, labels[0]];

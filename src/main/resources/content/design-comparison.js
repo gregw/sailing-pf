@@ -109,6 +109,7 @@ function renderDesignList() {
         div.className = 'selector-item' + (d.id === focusedDesignId ? ' focused' : '');
         div.textContent = (d.canonicalName || d.id) + (d.flags || '');
         div.title = d.id;
+        attachDesignProfileHover(div, d.id);
         div.addEventListener('click', () => {
             focusedDesignId = d.id;
             renderDesignList();
@@ -173,6 +174,7 @@ function renderChips() {
         chip.style.borderColor = item.color;
         chip.style.color = item.color;
         chip.innerHTML = `${esc(item.label)} <button class="chip-close" onclick="removeItem(${idx})" title="Remove">×</button>`;
+        attachDesignProfileHover(chip, item.id, item.color);
         container.appendChild(chip);
     });
     if (selectedItems.length > 0) {

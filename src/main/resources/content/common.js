@@ -123,6 +123,29 @@ const PP_SPOKES = [
     {key: 'results',     label: 'Results'},
 ];
 
+/**
+ * Design profile spokes, in the order of the polygon-area calculation (DesignProfileBuilder):
+ * adjacent spokes multiply, and Certified wraps round to Quantity.
+ */
+const DP_SPOKES = [
+    {key: 'quantity',    label: 'Quantity'},
+    {key: 'ubiquity',    label: 'Ubiquity'},
+    {key: 'frequency',   label: 'Frequency'},
+    {key: 'results',     label: 'Results'},
+    {key: 'consistency', label: 'Consistency'},
+    {key: 'certified',   label: 'Certified'},
+];
+
+/**
+ * Shows the design's design profile (DP) in a popup while {@code el} is hovered
+ * (HandicapCalc's profile popup; a no-op on pages without handicap-calc.js).
+ */
+function attachDesignProfileHover(el, designId, color) {
+    if (!window.HandicapCalc || !window.HandicapCalc.showDesignProfilePopup) return;
+    el.addEventListener('mouseenter', () => window.HandicapCalc.showDesignProfilePopup(el, designId, color));
+    el.addEventListener('mouseleave', () => window.HandicapCalc.hidePentagonPopup());
+}
+
 // ---- Target IRC year ----
 //
 // PF and RF are on the IRC scale of the configured target year. Tips say so through the

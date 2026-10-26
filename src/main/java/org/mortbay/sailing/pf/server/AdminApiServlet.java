@@ -29,6 +29,8 @@ import org.eclipse.jetty.client.HttpClient;
 import org.mortbay.sailing.pf.analysis.BoatDerived;
 import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
+import org.mortbay.sailing.pf.analysis.DesignProfile;
+import org.mortbay.sailing.pf.analysis.DesignProfileBuilder;
 import org.mortbay.sailing.pf.analysis.DivisionPf;
 import org.mortbay.sailing.pf.analysis.DuplicateRaces;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
@@ -109,6 +111,8 @@ public class AdminApiServlet extends HttpServlet
             handleBoatAliases(path.replaceAll("^/boats/|/aliases$", ""), resp);
         else if (path.startsWith("/boats"))
             handleBoats(path.substring("/boats".length()), req, resp);
+        else if (path.matches("/designs/[^/]+/profile"))
+            handleDesignProfile(path.replaceAll("^/designs/|/profile$", ""), resp);
         else if (path.startsWith("/designs"))
             handleDesigns(path.substring("/designs".length()), req, resp);
         else if (path.matches("/clubs/import/[^/]+/log"))
@@ -806,7 +810,7 @@ public class AdminApiServlet extends HttpServlet
 
     /**
      * GET /api/boats/{id}/profile — returns just the fleet-relative performance profile
-     * (five 0..1 scores plus overall) for a boat, or {@code profile: null} if no profile has
+     * (six 0..1 scores plus overall) for a boat, or {@code profile: null} if no profile has
      * been computed yet. Lighter than {@code /pf} because it skips factors and residuals;
      * intended for hover-popup consumers that only need the radar values. Returns 404 if the
      * boat ID is unknown.
@@ -865,6 +869,43 @@ public class AdminApiServlet extends HttpServlet
         m.put("weight", f.weight());
         m.put("referenceDelta", referenceDelta);
         m.put("raceCount", raceCount);
+        return m;
+    }
+
+    /**
+     * GET /api/designs/{id}/profile — the design profile (six 0..1 scores plus overall and the
+     * active boat count) for a design, or {@code profile: null} if it has fewer than
+     * {@value DesignProfileBuilder#MIN_ACTIVE_BOATS} active boats or no PF run has happened.
+     * Returns 404 if the design ID is unknown.
+     */
+    private void handleDesignProfile(String id, HttpServletResponse resp) throws IOException
+    {
+        Design design = store.designs().get(id);
+        if (design == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("designId", id);
+        result.put("designName", design.canonicalName());
+        result.put("flags", designFlags(id, null));
+        DesignProfile profile = cache.profilesByDesignId().get(id);
+        result.put("profile", profile != null ? designProfileMap(profile) : null);
+        writeJson(resp, result);
+    }
+
+    private Map<String, Object> designProfileMap(DesignProfile p)
+    {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("quantity",     p.quantity());
+        m.put("ubiquity",     p.ubiquity());
+        m.put("frequency",    p.frequency());
+        m.put("results",      p.results());
+        m.put("consistency",  p.consistency());
+        m.put("certified",    p.certified());
+        m.put("overallScore", p.overallScore());
+        m.put("activeBoats",  p.activeBoats());
         return m;
     }
 
@@ -2880,6 +2921,8 @@ public class AdminApiServlet extends HttpServlet
                         Comparator.<Double>naturalOrder());
                     case "boats"         -> Comparator.comparingInt(
                                                (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return dd2 != null ? dd2.boatIds().size() : 0; });
+                    case "profile"       -> Comparator.comparingDouble(
+                                               (Design d2) -> { DesignProfile p2 = cache.profilesByDesignId().get(d2.id()); return p2 != null ? p2.overallScore() : 0.0; });
                     default              -> Comparator.comparing(Design::id, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
@@ -2901,6 +2944,8 @@ public class AdminApiServlet extends HttpServlet
                 row.put("noSpinnaker", store.isDesignNoSpinnaker(d.id()));
                 row.put("oneDesign",   store.isDesignOneDesign(d.id()));
                 row.put("flags",       designFlags(d.id(), null));
+                DesignProfile dp = cache.profilesByDesignId().get(d.id());
+                row.put("profile",     dp != null ? dp.overallScore() : null);
                 return row;
             }).collect(Collectors.toList());
 

@@ -1,6 +1,7 @@
 package org.mortbay.sailing.pf.server;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,6 +15,8 @@ import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.ComparisonResult;
 import org.mortbay.sailing.pf.analysis.ConversionGraph;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
+import org.mortbay.sailing.pf.analysis.DesignProfile;
+import org.mortbay.sailing.pf.analysis.DesignProfileBuilder;
 import org.mortbay.sailing.pf.analysis.DivisionPf;
 import org.mortbay.sailing.pf.analysis.EntryResidual;
 import org.mortbay.sailing.pf.analysis.HandicapAnalyser;
@@ -66,6 +69,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile Map<String, RaceDerived> raceDerived = Map.of();
     private volatile Map<String, List<EntryResidual>> residualsByBoatId = Map.of();
     private volatile Map<String, PerformanceProfile> profilesByBoatId = Map.of();
+    private volatile Map<String, DesignProfile> profilesByDesignId = Map.of();
     private volatile PfQuality lastPfQuality;  // null until first run
     private volatile double diversityNonSpinWeight   = 0.8;
     private volatile double diversitySpinWeight      = 1.0;
@@ -397,6 +401,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         this.raceDerived = Map.of();
         this.residualsByBoatId = Map.of();
         this.profilesByBoatId = Map.of();
+        this.profilesByDesignId = Map.of();
     }
 
     // --- Accessors ---
@@ -444,6 +449,11 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public Map<String, PerformanceProfile> profilesByBoatId()
     {
         return profilesByBoatId;
+    }
+
+    public Map<String, DesignProfile> profilesByDesignId()
+    {
+        return profilesByDesignId;
     }
 
     public PfQuality pfQuality()
@@ -558,8 +568,9 @@ public class AnalysisCache implements DataStore.InvalidationListener
     }
 
     /**
-     * Computes fleet-relative performance profiles for all boats using the last 12 months
-     * of residual data. Called automatically after each PF run.
+     * Computes fleet-relative performance profiles for all boats, and design profiles for
+     * all designs, using the last 12 months of residual data. Called automatically after
+     * each PF run.
      */
     private void refreshProfiles()
     {
@@ -568,5 +579,17 @@ public class AnalysisCache implements DataStore.InvalidationListener
                 consistencyDropInterval)
             .buildAll(residualsByBoatId, store.races());
         LOG.info("AnalysisCache: computed performance profiles for {} boats", profilesByBoatId.size());
+
+        Map<String, BoatPf> pfByBoatId = new HashMap<>();
+        for (BoatDerived bd : boatDerived.values())
+            if (bd.pf() != null)
+                pfByBoatId.put(bd.boat().id(), bd.pf());
+        Map<String, ReferenceFactors> designRfs = new HashMap<>();
+        for (DesignDerived dd : designDerived.values())
+            if (dd.referenceFactors() != null)
+                designRfs.put(dd.design().id(), dd.referenceFactors());
+        this.profilesByDesignId = new DesignProfileBuilder()
+            .buildAll(residualsByBoatId, store.boats(), pfByBoatId, designRfs, store::isBoatModified);
+        LOG.info("AnalysisCache: computed design profiles for {} designs", profilesByDesignId.size());
     }
 }

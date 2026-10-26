@@ -136,13 +136,18 @@ const HandicapCalc = (function () {
         return SET_PALETTE[idx % SET_PALETTE.length];
     }
 
-    // --- PP pentagon hover popup ---------------------------------------------------
-    // Cache: boatId → Promise<profile|null>. null means fetched but no profile available.
+    // --- PP / DP profile hover popup ---------------------------------------------------
+    // A boat's performance profile (PP) or a design's design profile (DP).
+    const PROFILE_KINDS = {
+        boat:   {url: id => `/api/boats/${encodeURIComponent(id)}/profile`,   spokes: () => PP_SPOKES, label: 'PP'},
+        design: {url: id => `/api/designs/${encodeURIComponent(id)}/profile`, spokes: () => DP_SPOKES, label: 'DP'},
+    };
+    // Cache: "kind:id" → Promise<profile|null>. null means fetched but no profile available.
     const profileCache = new Map();
     let popupEl = null;
     let popupShowTimer = null;
     let popupHideTimer = null;
-    let popupBoatId = null;
+    let popupBoatId = null;   // "kind:id" of the popup being shown
 
     function ensurePopup() {
         if (popupEl) return popupEl;
@@ -161,13 +166,14 @@ const HandicapCalc = (function () {
         return popupEl;
     }
 
-    function fetchProfile(boatId) {
-        if (profileCache.has(boatId)) return profileCache.get(boatId);
-        const p = fetch(`/api/boats/${encodeURIComponent(boatId)}/profile`)
+    function fetchProfile(id, kind = 'boat') {
+        const key = kind + ':' + id;
+        if (profileCache.has(key)) return profileCache.get(key);
+        const p = fetch(PROFILE_KINDS[kind].url(id))
             .then(r => r.ok ? r.json() : null)
             .then(j => (j && j.profile) ? j.profile : null)
             .catch(() => null);
-        profileCache.set(boatId, p);
+        profileCache.set(key, p);
         return p;
     }
 
@@ -187,10 +193,10 @@ const HandicapCalc = (function () {
         popupEl.style.top = top + 'px';
     }
 
-    function renderMiniPentagon(container, profile, color) {
+    function renderMiniPentagon(container, profile, color, spokes = PP_SPOKES) {
         if (typeof Plotly === 'undefined') return;
-        const labels = PP_SPOKES.map(s => s.label);
-        const values = PP_SPOKES.map(s => profile[s.key] ?? 0);
+        const labels = spokes.map(s => s.label);
+        const values = spokes.map(s => profile[s.key] ?? 0);
         const theta = [...labels, labels[0]];
         const r = [...values, values[0]];
         const lineColor = color || 'rgba(31,119,180,0.85)';
@@ -217,14 +223,16 @@ const HandicapCalc = (function () {
     }
 
     // Two-stage popup: when `text` is supplied it is rendered immediately, the
-    // popup is shown, and a 250 ms timer fetches the performance profile. When
-    // the profile resolves the pentagon + PP score are appended to the same
-    // popup. Without `text` the popup stays hidden until the profile resolves
-    // (legacy behaviour for the calculator boat-name link).
+    // popup is shown, and a 250 ms timer fetches the profile (opts.kind: 'boat', the
+    // default, or 'design'). When the profile resolves the radar + PP/DP score are
+    // appended to the same popup. Without `text` the popup stays hidden until the
+    // profile resolves (legacy behaviour for the calculator boat-name link).
     function schedulePopup(rect, boatId, color, opts) {
         clearTimeout(popupHideTimer);
         clearTimeout(popupShowTimer);
-        popupBoatId = boatId;
+        const kind = (opts && opts.kind) || 'boat';
+        const popupKey = kind + ':' + boatId;
+        popupBoatId = popupKey;
         const text = opts && opts.text;
         const onResolve = opts && opts.onResolve;
 
@@ -240,8 +248,8 @@ const HandicapCalc = (function () {
         }
 
         popupShowTimer = setTimeout(async () => {
-            const profile = await fetchProfile(boatId);
-            if (popupBoatId !== boatId) return; // user moved on
+            const profile = await fetchProfile(boatId, kind);
+            if (popupBoatId !== popupKey) return; // user moved on
             if (onResolve) onResolve(profile);
             if (!profile) return; // popup may already be showing text-only — leave it.
             const chart = document.createElement('div');
@@ -250,10 +258,10 @@ const HandicapCalc = (function () {
             const overall = profile.overallScore != null ? profile.overallScore.toFixed(3) : '—';
             const score = document.createElement('div');
             score.style.cssText = 'text-align:center;font-size:0.75rem;color:#555;padding:0 4px 2px;';
-            score.textContent = `PP: ${overall}`;
+            score.textContent = `${PROFILE_KINDS[kind].label}: ${overall}`;
             el.appendChild(score);
             el.style.display = 'block';
-            renderMiniPentagon(chart, profile, color);
+            renderMiniPentagon(chart, profile, color, PROFILE_KINDS[kind].spokes());
             // Re-clamp now that the popup is taller — keeps it on-screen.
             positionPopupAtRect(rect);
         }, 250);
@@ -272,6 +280,11 @@ const HandicapCalc = (function () {
 
     function showPentagonPopupAt(x, y, boatId, color, text) {
         schedulePopup({left: x, right: x, top: y, bottom: y}, boatId, color, {text});
+    }
+
+    /** Hover popup with a design's design profile, anchored to {@code el}. */
+    function showDesignProfilePopup(el, designId, color, text) {
+        schedulePopup(el.getBoundingClientRect(), designId, color, {kind: 'design', text});
     }
 
     function hidePentagonPopup() {
@@ -1089,10 +1102,12 @@ const HandicapCalc = (function () {
             const tdName = document.createElement('td');
             tdName.style.cssText = `color:${color};font-weight:bold;`;
 
-            // Designs have no sail number, no boat-detail page, and no performance profile —
-            // render the name as plain text and skip the link / popup wiring.
+            // Designs have no sail number and no boat-detail page — render the name as plain
+            // text; hovering it shows the design profile.
             if (isDesign) {
                 tdName.textContent = b.boatName || b.name;
+                tdName.addEventListener('mouseenter', () => showDesignProfilePopup(tdName, b.id, color));
+                tdName.addEventListener('mouseleave', hidePentagonPopup);
                 const cells = [tdName, makeVariantCell(b)];
                 if (compareEnabled) cells.unshift(makeCompareCell(b));
                 return cells;
@@ -1107,7 +1122,7 @@ const HandicapCalc = (function () {
             link.textContent = b.boatName || b.name;
             link.style.cssText = 'color:inherit;text-decoration:none;';
             link.title = 'Click to view boat details — hover for performance profile';
-            const cached = profileCache.get(b.id);
+            const cached = profileCache.get('boat:' + b.id);
             if (cached) cached.then(p => {
                 if (p === null) link.title = 'Click to view boat details — no performance profile available';
             });
@@ -2063,7 +2078,7 @@ const HandicapCalc = (function () {
     return {
         create,
         normaliseSailNumber, stripPrefix, normaliseDesignName, sailnoMatch,
-        showPentagonPopupAt, hidePentagonPopup,
+        showPentagonPopupAt, hidePentagonPopup, showDesignProfilePopup,
         decideVariantAction,
         formatStatus,
         normaliseVariant,

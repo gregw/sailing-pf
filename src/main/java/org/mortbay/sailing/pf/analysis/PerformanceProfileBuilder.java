@@ -135,12 +135,7 @@ public class PerformanceProfileBuilder
         // Every boat's residual in each race-division of the window, for Chaotic's spread of
         // the *other* boats (leave-one-out, so a boat's own error never excuses itself) and
         // Results' PF-corrected placings.
-        Map<String, List<Double>> residualsByRaceDiv = new HashMap<>();
-        for (List<EntryResidual> residuals : residualsByBoatId.values())
-            for (EntryResidual r : residuals)
-                if (!r.raceDate().isBefore(cutoff))
-                    residualsByRaceDiv.computeIfAbsent(raceDivKey(r), k -> new ArrayList<>())
-                        .add(r.residual());
+        Map<String, List<Double>> residualsByRaceDiv = residualsByRaceDiv(residualsByBoatId, cutoff);
 
         // --- Pre-compute per-race-division median elapsed time (seconds) ---
         // Used to weight the Frequency spoke by race duration (dampened power law).
@@ -349,7 +344,7 @@ public class PerformanceProfileBuilder
      * Returns percentile rank scores in insertion order of {@code raw}.
      * {@code idx} is the metric index. {@code higherIsBetter}: true = higher raw value = better rank.
      */
-    private static double[] percentileRanks(Map<String, double[]> raw, int idx, boolean higherIsBetter)
+    static double[] percentileRanks(Map<String, double[]> raw, int idx, boolean higherIsBetter)
     {
         String[] ids = raw.keySet().toArray(new String[0]);
         int n = ids.length;
@@ -378,7 +373,7 @@ public class PerformanceProfileBuilder
      * higher = better placings). Boats with NaN get score 0; the rest are ranked among
      * themselves.
      */
-    private static double[] validRanks(Map<String, double[]> raw, int idx, boolean higherIsBetter)
+    static double[] validRanks(Map<String, double[]> raw, int idx, boolean higherIsBetter)
     {
         String[] ids = raw.keySet().toArray(new String[0]);
         int n = ids.length;
@@ -442,6 +437,18 @@ public class PerformanceProfileBuilder
     }
 
     // --- Results raw metric ---
+
+    /** Every boat's residual in each race-division ("raceId|division") on or after {@code cutoff}. */
+    static Map<String, List<Double>> residualsByRaceDiv(Map<String, List<EntryResidual>> residualsByBoatId,
+                                                        LocalDate cutoff)
+    {
+        Map<String, List<Double>> byRaceDiv = new HashMap<>();
+        for (List<EntryResidual> residuals : residualsByBoatId.values())
+            for (EntryResidual r : residuals)
+                if (!r.raceDate().isBefore(cutoff))
+                    byRaceDiv.computeIfAbsent(raceDivKey(r), k -> new ArrayList<>()).add(r.residual());
+        return byRaceDiv;
+    }
 
     /**
      * The boat's mean finishing percentile on PF-corrected time: in each race's division the
@@ -579,7 +586,7 @@ public class PerformanceProfileBuilder
      * Normalised area of the radar polygon with {@code n} equally-spaced spokes.
      * Returns 0 if any spoke is 0 (collapsed triangle), 1 if all spokes are 1.
      */
-    private static double polygonArea(double[] r)
+    static double polygonArea(double[] r)
     {
         int n = r.length;
         double sinStep = Math.sin(2 * Math.PI / n);
