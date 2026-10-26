@@ -693,6 +693,9 @@ window.pfAuth = { authenticated: false, signedIn: false, email: null };
     window.pfAuth = { authenticated: !!data.authenticated, signedIn: !!data.signedIn,
                       email: data.email || null, adminConnector: !!data.adminConnector };
     const nav = document.querySelector('.site-nav');
+    // Tasks and Analysis are only offered to someone signed in (or on the admin connector)
+    if (data.signedIn || data.authenticated)
+        document.querySelectorAll('.site-nav .nav-signed-in').forEach(el => el.style.display = '');
     if (nav) {
         const widget = document.createElement('span');
         widget.className = 'nav-auth';
