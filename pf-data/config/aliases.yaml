@@ -3,6 +3,7 @@ designs:
     canonicalName: "Sydney 36 CR"
     aliases:
     - "Sydney 36 OD"
+    - "Sydney 36 CR"
   customplym61:
     canonicalName: "Custom Plym 61"
     aliases:
@@ -47,6 +48,9 @@ designs:
     canonicalName: "Archambault Grand Surprise"
     aliases:
     - "Archambault 32"
+    - "Archambault Grand Suprise"
+    - "archambaultgrandsuprise"
+    - "Archambault Grand Surprise"
   beneteaufirst50:
     canonicalName: "Beneteau First 50"
     aliases:
@@ -101,6 +105,7 @@ designs:
     canonicalName: "SYDNEY 38"
     aliases:
     - "Sydney Yachts Sydney 38"
+    - "SYDNEY 38"
   yngling:
     canonicalName: "Yngling"
     aliases:
@@ -134,10 +139,12 @@ designs:
     canonicalName: "J Boats J/70"
     aliases:
     - "J70"
+    - "J Boats J/70"
   jboatsj99:
     canonicalName: "J Boats J/99"
     aliases:
     - "J99"
+    - "J Boats J/99"
   jboatsj100:
     canonicalName: "J Boats J/100"
     aliases:
@@ -177,6 +184,7 @@ designs:
     aliases:
     - "Adams 10 Adams 10 racing"
     - "Adams X"
+    - "Adams 10"
   openbic:
     canonicalName: "O'Pen Bic"
     aliases:
@@ -208,6 +216,7 @@ designs:
     - "Mumm36"
     - "Farr Mumm 36"
     - "farrmumm36"
+    - "FARR 36"
   sydney36:
     canonicalName: "Sydney 36"
     aliases:
@@ -293,6 +302,7 @@ designs:
     - "ETCHELLS 22"
     - "etchells22"
     - "Etchella"
+    - "Etchells"
   expressmultihullsgbesportsdeck:
     canonicalName: "Express Multihulls GBE Sportsdeck"
     aliases:
@@ -305,6 +315,9 @@ designs:
     - "farrmumm30"
     - "FARR 30 OD"
     - "farr30od"
+    - "Farr 30"
+    - "Mod Farr 30"
+    - "modfarr30"
   jeanneausunodyssey440:
     canonicalName: "Jeanneau Sun Odyssey 440"
     aliases:
@@ -652,6 +665,7 @@ designs:
     aliases:
     - "FARR 40 OD"
     - "farr40od"
+    - "Farr 40"
   sydney32:
     canonicalName: "Sydney 32"
     aliases:
@@ -741,6 +755,7 @@ designs:
     - "J 24"
     - "j24"
     - "JBoats J 24"
+    - "J Boats J/24"
   jboats44:
     canonicalName: "J Boats J/44"
     aliases:
@@ -852,6 +867,7 @@ designs:
     aliases:
     - "S 80"
     - "s80"
+    - "Swarbrick S80"
   "23ftgaffcutterwithlongkeel":
     canonicalName: "23ft Gaff Cutter with long keel"
     aliases:
@@ -959,6 +975,22 @@ designs:
     canonicalName: "Laser 4.7"
     aliases:
     - "Laser 4.7"
+  young88:
+    canonicalName: "YOUNG 88"
+    aliases:
+    - "YOUNG 88"
+    - "Young 88 (mod)"
+    - "young88mod"
+  jboatj80:
+    canonicalName: "J Boat J/80"
+    aliases:
+    - "J Boat J/80"
+  fareast28r:
+    canonicalName: "FAREAST 28R"
+    aliases:
+    - "Fareast 28"
+    - "fareast28"
+    - "FAREAST 28R"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -1600,6 +1632,8 @@ boats:
       name: "corum"
     - sailNumber: "1088"
       name: "nortonwhitecorum"
+    - sailNumber: "HKG1088"
+      name: "corum"
   "1255-melody":
     canonicalName: "Melody"
     aliases:
@@ -3365,3 +3399,23 @@ boats:
     aliases:
     - sailNumber: "6210"
       name: "coconuttelegraph"
+  GBR5790R-enigma:
+    canonicalName: "Enigma"
+    aliases:
+    - sailNumber: "GBR5790"
+      name: "enigma"
+  "2776-zinzin2":
+    canonicalName: "Zin Zin 2"
+    aliases:
+    - sailNumber: "2776"
+      name: "zinzinii"
+  "374-wildling3":
+    canonicalName: "Wildling 3"
+    aliases:
+    - sailNumber: "374"
+      name: "wilding3"
+  "178-chickenlips":
+    canonicalName: "Chicken Lips"
+    aliases:
+    - sailNumber: "73"
+      name: "chickenlips"

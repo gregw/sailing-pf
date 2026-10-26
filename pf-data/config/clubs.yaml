@@ -376,6 +376,7 @@ clubs:
     - "YC868-velocity-beneteaufirst317"
     - "MYC12-santoy-radford12catrig"
     - "1255-melody-swansondart"
+    - "MYC32-esprit-archambaultgrandsurprise"
     seriesTypes:
       myc.org.au/2020-2021-twilight-female-helm-series: "ns"
       myc.org.au/2020-2021-twilight-series: "ns"
@@ -444,7 +445,7 @@ clubs:
     topyacht: null
     sailsys: null
     boats:
-    - "581-corum-farr36modified"
+    - "581-corum-farr36"
     seriesTypes: null
   ransa.com.au:
     shortName: "RANSA"
@@ -776,7 +777,8 @@ clubs:
     - "WMYC"
     topyacht: null
     sailsys: null
-    boats: null
+    boats:
+    - "N16-bazinga-archambaultgrandsurprise"
     seriesTypes: null
   qcyc.com.au:
     shortName: "QCYC"
