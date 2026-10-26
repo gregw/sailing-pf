@@ -24,7 +24,10 @@ import org.mortbay.sailing.pf.data.Race;
  * percentile rank within the active fleet (boats with ≥1 finish in the window),
  * normalised to [0, 1] — 1.0 = best in fleet, 0.0 = worst.
  * <p>
- * Spoke definitions (pentagon order: Frequency → Consistency → Diversity → Chaotic → Stability):
+ * Spoke definitions, in pentagon order (Frequency → Diversity → Consistency → Chaotic → Stability).
+ * Adjacent spokes multiply in the polygon area, so the order pairs Frequency with Diversity
+ * (racing often counts for more against many opponents) and Consistency with Chaotic (being
+ * inconsistent counts for less when it is only in disorderly races):
  * <ul>
  *   <li><b>Frequency</b> — duration-weighted distinct race count in last 12m, multiplied by a
  *       small year-spread bonus (boats racing across many months score slightly higher than
@@ -302,7 +305,7 @@ public class PerformanceProfileBuilder
         if (raw.isEmpty()) return Map.of();
 
         // --- Step 2: percentile rank each metric, build profiles ---
-        // Spoke order for polygon area: Frequency, Consistency, Diversity, Chaotic, Stability
+        // Spoke order for polygon area: Frequency, Diversity, Consistency, Chaotic, Stability
         double[] freqScores  = percentileRanks(raw, 0, true);
         double[] divScores   = percentileRanks(raw, 1, true);
         double[] consScores  = percentileRanks(raw, 2, false);
@@ -319,7 +322,7 @@ public class PerformanceProfileBuilder
             double div   = divScores[i];
             double nc    = ncScores[i];
             double stab  = stabScores[i];
-            double score = polygonArea(new double[]{freq, cons, div, nc, stab});
+            double score = polygonArea(new double[]{freq, div, cons, nc, stab});
             profiles.put(ids[i], new PerformanceProfile(freq, div, cons, stab, nc, score));
         }
         return Map.copyOf(profiles);

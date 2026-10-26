@@ -205,7 +205,7 @@ const COLUMNS = {
                   : '<span style="color:#bbb">—</span>';
           } },
         { label: 'PP', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
-            tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, Chaotic and Stability spokes (last 12 months).',
+            tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Diversity, Consistency, Chaotic and Stability spokes (last 12 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         boatsClubColumn(),
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
@@ -958,7 +958,7 @@ function renderBoatPf(data) {
 
     if (data.profile) {
         const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. Chaotic: whether the boat\'s errors come in orderly races, where the rest of the fleet finished close to its handicaps (its own), or in disorderly races (excusable), regardless of how big they are. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Diversity: distinct opponents raced. Consistency: how tight the residuals are. Chaotic: whether the boat\'s errors come in orderly races, where the rest of the fleet finished close to its handicaps (its own), or in disorderly races (excusable), regardless of how big they are. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
         html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
@@ -1075,9 +1075,9 @@ function renderProfileChart(profile) {
     const container = document.getElementById('pf-profile-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
-    // Spoke order matches polygon area calculation: Frequency, Consistency, Diversity, Chaotic, Stability
-    const labels = ['Frequency', 'Consistency', 'Diversity', 'Chaotic', 'Stability'];
-    const keys = ['frequency', 'consistency', 'diversity', 'chaotic', 'stability'];
+    // Spoke order matches polygon area calculation: Frequency, Diversity, Consistency, Chaotic, Stability
+    const labels = ['Frequency', 'Diversity', 'Consistency', 'Chaotic', 'Stability'];
+    const keys = ['frequency', 'diversity', 'consistency', 'chaotic', 'stability'];
     const values = keys.map(k => profile[k] ?? 0);
 
     // Close the polygon

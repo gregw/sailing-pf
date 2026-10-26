@@ -14,6 +14,13 @@
 - **Series Optimise is fairer**: It now tilts all handicaps together (each scaled by a power of itself) to level the trend slope, so boats with the same handicap change by the same percentage however many races they sailed, and the order of handicaps is kept.
 - **Use Best Fit fix**: On the comparison pages, Use Best Fit now rebalances just the two boats to the best-fit ratio while keeping their average handicap, instead of resetting both from their PFs.
 - **Compare Optimise uses the zoom**: Optimise on the boat comparison page levels the lines over the period zoomed to on the chart (or the whole chart), judging every boat at the same date; boats with too few results in that period keep their handicap.
+- **ORC from certificates only**: ORC handicaps read from race results are no longer used — clubs score ORC with many different ratings (time on time, triple number, GPH), which spread the RFs of identical boats. Only official ORC certificates are used.
+- **One design**: A design can be ticked as one design; every boat of it then shares the design's RF, built from its boats' certificates (PFs still differ boat to boat).
+- **Modified boats**: A boat can be ticked as modified from its design; it keeps its own RF and does not count toward the design's. "… Modified" designs have been folded into their base design with the boat ticked modified.
+- **Design flags shown**: (OD), (no spin) and (modified) now follow design names wherever they are shown.
+- **Performance profile**: Diversity and Consistency have swapped spokes, so racing often counts for more against many opponents, and inconsistency counts for less when it is only in disorderly races.
+- **Boat comparison defaults**: "All available" ticked, PF and RF lines off, and an average trend.
+- **Clubs**: The no-current-feed ⚠ now only trusts races from a feed the club still has configured.
 
 ### August 2026
 
