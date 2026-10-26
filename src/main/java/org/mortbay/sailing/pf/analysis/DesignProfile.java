@@ -3,7 +3,7 @@ package org.mortbay.sailing.pf.analysis;
 /**
  * Six-spoke design profile for one design, all scores in [0, 1].
  * Scores are percentile ranks across all designs with at least
- * {@value DesignProfileBuilder#MIN_ACTIVE_BOATS} active boats, using the last 12 months of data.
+ * {@value DesignProfileBuilder#MIN_ACTIVE_BOATS} active boats, using the last 24 months of data.
  * 1.0 means best among designs on that spoke; 0.0 means worst.
  * <p>
  * Computed by {@link DesignProfileBuilder#buildAll} after each PF run.

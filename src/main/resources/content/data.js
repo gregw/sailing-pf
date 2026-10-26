@@ -254,7 +254,7 @@ const COLUMNS = {
           render: item => item.year != null ? String(item.year) : '',
           title: item => item.yearSource || null },
         { label: 'DP', key: 'profile', sortKey: 'profile', anchor: 'col-design-profile',
-            tip: 'Design profile score — percentile polygon area, among designs with at least 3 active boats, across Quantity, Ubiquity, Frequency, Results, Consistency and Modern spokes (last 12 months).',
+            tip: 'Design profile score — percentile polygon area, among designs with at least 3 active boats, across Quantity, Ubiquity, Frequency, Results, Consistency and Modern spokes (last 24 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
@@ -463,8 +463,10 @@ const state = {
     filter: { boats: null, designs: null, clubs: null, races: null, series: null },
     raceItems:       [],   // current page's race rows for prev/next navigation
     currentRaceIdx:  -1,   // index into raceItems of the currently shown race
-    boatItems:       [],   // current page's boat rows for prev/next navigation
-    currentBoatIdx:  -1,   // index into boatItems of the currently shown boat
+    // Prev/Next through the loaded rows (boats and designs pages): entity → rows, and the
+    // index of the row whose detail is shown
+    navItems: {boats: [], designs: []},
+    navIdx:   {boats: -1, designs: -1},
     lastDetailBoat:  null, // most recently loaded boat detail (for edit panel)
 };
 
@@ -669,9 +671,9 @@ function renderTable(entity, items, append) {
         if (append) state.raceItems = state.raceItems.concat(items);
         else state.raceItems = items;
     }
-    if (entity === 'boats') {
-        if (append) state.boatItems = state.boatItems.concat(items);
-        else state.boatItems = items;
+    if (entity in state.navItems) {
+        if (append) state.navItems[entity] = state.navItems[entity].concat(items);
+        else state.navItems[entity] = items;
     }
 
     const baseIdx = append ? tbody.children.length : 0;
@@ -712,7 +714,7 @@ function renderTable(entity, items, append) {
         tr.appendChild(tdCb);
         tr.onclick = () => {
             if (entity === 'races') state.currentRaceIdx = globalIdx;
-            if (entity === 'boats') { state.currentBoatIdx = globalIdx; }
+            if (entity in state.navIdx) state.navIdx[entity] = globalIdx;
             loadDetail(entity, item.id, item);
         };
         cols.forEach(col => {
@@ -862,9 +864,8 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
 
         // Store loaded boat data for possible reuse (edit flow is selection-driven now)
         state.lastDetailBoat = data;
-
-        updateBoatNav();
     }
+    if (entity in state.navIdx) updateEntityNav(entity, id);
 
     const jd = document.getElementById('json-raw-' + entity);
     if (jd) jd.innerHTML = renderRawJson(data);
@@ -873,9 +874,10 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
     if (scroll) {
         if (entity === 'races') {
             document.getElementById('division-section-races').scrollIntoView({behavior: 'smooth', block: 'start'});
-        } else if (entity === 'boats') {
-            const heading = document.getElementById('pf-boat-heading');
-            if (heading) window.scrollTo(0, heading.getBoundingClientRect().top + window.scrollY);
+        } else if (entity in state.navIdx) {
+            // Prev / Next at the top of the page, with the detail below
+            const nav = document.getElementById('nav-' + entity);
+            if (nav) window.scrollTo(0, nav.getBoundingClientRect().top + window.scrollY);
         } else if (panel) {
             panel.scrollIntoView({behavior: 'smooth', block: 'start'});
         }
@@ -987,11 +989,6 @@ function renderBoatPf(data) {
         html += `</div>`;
         setTimeout(() => renderProfileChart(data.profile, 'pf-profile-chart', PP_SPOKES), 0);
     }
-    html += `<div class="division-nav" id="boat-nav" style="margin:0.75rem 0;">
-      <button id="boat-prev-btn" onclick="prevBoat()" disabled>&#8592; Prev</button>
-      <button id="boat-next-btn" onclick="nextBoat()" disabled>Next &#8594;</button>
-      <span id="boat-nav-label" style="flex:1;text-align:center;font-weight:bold;font-size:1rem;"></span>
-    </div>`;
 
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
@@ -1103,7 +1100,7 @@ function renderDesignProfile(dp) {
         ? y.year + (y.source === 'manual' ? ' (set manually)' : ` (median ORC age date of ${y.boats} boat${y.boats !== 1 ? 's' : ''})`)
         : 'unknown — set it on the edit form') + '</div>';
     if (!dp.profile)
-        return heading + yearLine + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 12 months.</div>';
+        return heading + yearLine + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 24 months.</div>';
     const p = dp.profile;
     return heading + yearLine
         + `<div style="display:inline-block;vertical-align:top;text-align:left;">`
@@ -1112,7 +1109,7 @@ function renderDesignProfile(dp) {
         + `</div>`;
 }
 
-const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 12 months; boats ticked modified left out). '
+const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 24 months; boats ticked modified left out). '
     + 'Quantity: active boats. Ubiquity: effective number of clubs (10 boats at one club = 1, evenly over five clubs = 5). '
     + 'Frequency: races per active boat. Results: the boats\' average finishing place on PF-corrected time. '
     + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Modern: the design year — newer scores higher; a design with no year scores 0.5. The year is set on the design edit form, or else is the median ORC certificate age date of its boats.';
@@ -2767,35 +2764,35 @@ function nextRace() {
     }
 }
 
-function updateBoatNav() {
-    const idx = state.currentBoatIdx;
-    const n   = state.boatItems.length;
-    const prevBtn = document.getElementById('boat-prev-btn');
-    const nextBtn = document.getElementById('boat-next-btn');
-    const label   = document.getElementById('boat-nav-label');
-    if (!prevBtn) return;
-    prevBtn.disabled = idx <= 0;
-    nextBtn.disabled = idx < 0 || idx >= n - 1;
-    if (idx >= 0 && idx < n) {
-        const boat = state.boatItems[idx];
-        label.textContent = `${boat.name || boat.id}  (${idx + 1} / ${n})`;
+/**
+ * Shows the Prev / Next bar under the table (boats and designs pages) for the row whose
+ * detail is open, labelled with its name and position in the loaded rows.
+ */
+function updateEntityNav(entity, id) {
+    const items = state.navItems[entity];
+    // Opened other than by a row click (e.g. a share link): find the row by id
+    if (!items[state.navIdx[entity]] || items[state.navIdx[entity]].id !== id)
+        state.navIdx[entity] = items.findIndex(it => it.id === id);
+    const idx = state.navIdx[entity];
+    const nav = document.getElementById('nav-' + entity);
+    if (!nav) return;
+    nav.style.display = '';
+    document.getElementById('nav-prev-' + entity).disabled = idx <= 0;
+    document.getElementById('nav-next-' + entity).disabled = idx < 0 || idx >= items.length - 1;
+    if (idx >= 0 && idx < items.length) {
+        const item = items[idx];
+        const name = entity === 'designs' ? (item.canonicalName || item.id) + (item.flags || '') : (item.name || item.id);
+        document.getElementById('nav-label-' + entity).textContent = `${name}  (${idx + 1} / ${items.length})`;
     }
 }
 
-function prevBoat() {
-    if (state.currentBoatIdx > 0) {
-        state.currentBoatIdx--;
-        const b = state.boatItems[state.currentBoatIdx];
-        loadDetail('boats', b.id, b);
-    }
-}
-
-function nextBoat() {
-    if (state.currentBoatIdx < state.boatItems.length - 1) {
-        state.currentBoatIdx++;
-        const b = state.boatItems[state.currentBoatIdx];
-        loadDetail('boats', b.id, b);
-    }
+/** Opens the detail of the previous (step −1) or next (+1) loaded row. */
+function stepEntity(entity, step) {
+    const idx = state.navIdx[entity] + step;
+    if (idx < 0 || idx >= state.navItems[entity].length) return;
+    state.navIdx[entity] = idx;
+    const item = state.navItems[entity][idx];
+    loadDetail(entity, item.id, item);
 }
 
 function onRaceDivisionChange() {
