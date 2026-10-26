@@ -3064,6 +3064,22 @@ public class DataStore
             }
         }
 
+        // Race-derived ORC removal: ORC handicaps copied from race results by earlier importer
+        // versions are on many different ORC ratings, not 600/GPH; only official ORC certs are kept.
+        {
+            List<Boat> withRaceOrc = boats.values().stream()
+                .filter(b -> b.certificates().stream().anyMatch(Certificate::isRaceDerivedOrc))
+                .toList();
+            if (!withRaceOrc.isEmpty())
+            {
+                LOG.info("Removing race-derived ORC certificates from {} boat(s)", withRaceOrc.size());
+                for (Boat b : withRaceOrc)
+                    putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(), b.clubIds(),
+                        b.certificates().stream().filter(c -> !c.isRaceDerivedOrc()).toList(),
+                        b.sources(), Instant.now(), null));
+            }
+        }
+
         // Design alias correction: boats whose stored designId is an alias name (not the
         // canonical ID) are updated. This fixes boats created before a design alias was added.
         {

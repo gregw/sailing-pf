@@ -1046,13 +1046,16 @@ public class BwpsImporter
 
     /**
      * Checks if the boat already holds a matching certificate.  If not, creates an
-     * inferred certificate and adds it to the boat.
+     * inferred certificate and adds it to the boat.  ORC handicaps are not kept
+     * (see {@link Certificate#isRaceDerivedOrc()}).
      *
-     * @return the certificateNumber of the matching or newly created certificate
+     * @return the certificateNumber of the matching or newly created certificate, or null for ORC
      */
     private String inferCertificate(Boat boat, String system, int year, double tcf,
                                     boolean twoHanded, String source)
     {
+        if ("ORC".equalsIgnoreCase(system))
+            return null;
         for (Certificate cert : boat.certificates())
         {
             if (cert.system().equalsIgnoreCase(system)

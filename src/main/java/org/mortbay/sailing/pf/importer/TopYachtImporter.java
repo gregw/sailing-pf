@@ -1173,14 +1173,15 @@ public class TopYachtImporter
     /**
      * Checks if the boat already has a certificate matching the given system, year, and
      * TCF value. If not, creates an inferred certificate and adds it to the boat.
+     * ORC handicaps are not kept (see {@link Certificate#isRaceDerivedOrc()}).
      *
      * @return the {@code certificateNumber} of the matching or newly created certificate,
-     *         or {@code null} if {@code ahcValue} cannot be parsed as a number.
+     *         or {@code null} if {@code ahcValue} cannot be parsed as a number or is ORC.
      */
     private String inferCertificate(Boat boat, String system, int year, String ahcValue,
                                     boolean nonSpinnaker, boolean twoHanded, boolean windwardLeeward)
     {
-        if (ahcValue == null)
+        if (ahcValue == null || "ORC".equalsIgnoreCase(system))
             return null;
         double tcf;
         try

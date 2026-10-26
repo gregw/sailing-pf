@@ -1,8 +1,10 @@
 package org.mortbay.sailing.pf.data;
 
 import java.time.LocalDate;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -17,6 +19,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * AMS — TCF (time correction factor), same scale as IRC TCC
  * <p>
  * twoHanded is set for AMS two-handed and ORC Double Handed (DH) certificates; false for IRC.
+ * <p>
+ * ORC certificates come only from the ORC importers (numbered by ORC dxtID). ORC handicaps
+ * read from race results are not kept: clubs score ORC with many different ratings (time on
+ * time inshore/coastal/offshore, triple number, GPH), so they are not on the 600/GPH scale.
+ * See {@link #isRaceDerivedOrc()}.
  * <p>
  * Not a Loadable — Certificate is embedded in its owning Boat file; dirty semantics
  * are inherited from the Boat.
@@ -55,6 +62,21 @@ public record Certificate(
         return new Certificate(system, year, value, nonSpinnaker, twoHanded,
             isClub, windwardLeeward != null && windwardLeeward,
             certificateNumber, expiryDate);
+    }
+
+    /** Certificate-number prefix of ORC handicaps copied from race results by a results importer. */
+    private static final Pattern RACE_DERIVED_ORC = Pattern.compile("^(orc-inferred-|ty-orc|[a-z]+-orc-)");
+
+    /**
+     * True for an ORC "certificate" inferred from a race result (SailSys {@code orc-inferred-…},
+     * TopYacht {@code ty-orc…}, BWPS/RSHYR {@code <source>-orc-…}) rather than an official ORC
+     * certificate. These are not on the 600/GPH scale and are dropped at load.
+     */
+    @JsonIgnore
+    public boolean isRaceDerivedOrc()
+    {
+        return "ORC".equalsIgnoreCase(system) && certificateNumber != null
+            && RACE_DERIVED_ORC.matcher(certificateNumber).find();
     }
 
     @Override

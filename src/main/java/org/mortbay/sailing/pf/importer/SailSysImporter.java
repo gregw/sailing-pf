@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * All data needed to create a boat (name, sail number, make, model, club) is present
  * in the race JSON; no separate boat-API fetches are required.
  * <p>
- * For races with measurement-based handicap systems (IRC, ORC*, AMS) the importer:
+ * For races with measurement-based handicap systems (IRC, AMS) the importer:
  * <ul>
  *   <li>Finds all measurement systems in {@code data.handicappings} (any entry that is
  *       not PHS, TPR, YRD, or other performance-based system).</li>
@@ -51,9 +51,10 @@ import org.slf4j.LoggerFactory;
  *       -- this is the value actually used for scoring, not the current stored certificate
  *       value which may be from a later year.</li>
  *   <li>Creates an inferred certificate linked to the race finisher.  When a certificate
- *       already exists on the boat with the same system, year (±1), value, nonSpinnaker,
- *       twoHanded, and club flags, that certificate's number is reused rather than
- *       duplicating.</li>
+ *       already exists on the boat with the same system, year (±1), value, nonSpinnaker
+ *       and twoHanded flags, that certificate's number is reused rather than
+ *       duplicating.  ORC handicaps are skipped: clubs score ORC with many different
+ *       ratings, so official ORC certificates come only from the ORC importers.</li>
  *   <li>Races with multiple measurement systems (e.g. IRC + ORC) produce separate
  *       divisions per system (e.g. "Division 1 IRC", "Division 1 ORC").</li>
  * </ul>
@@ -793,12 +794,12 @@ public class SailSysImporter
             String certNumber = null;
             for (HandicappingSummary sys : measurementSystems)
             {
-                if (sys.id == null) continue;
+                if (sys.id == null || isOrc(sys.shortName)) continue;
                 Double value = extractHandicapValue(entry.calculations, sys.id);
                 if (value != null)
                 {
                     certNumber = resolveCertificate(boat, normalizeSystem(sys.shortName),
-                        value, raceDate.getYear(), nonSpinnaker, false, isClubCert(sys.shortName));
+                        value, raceDate.getYear(), nonSpinnaker, false);
                     break; // use first matching system
                 }
             }
@@ -852,13 +853,12 @@ public class SailSysImporter
                 boolean nonSpinnaker = entry.nonSpinnaker != null && entry.nonSpinnaker;
                 for (HandicappingSummary sys : measurementSystems)
                 {
-                    if (sys.id == null) continue;
+                    if (sys.id == null || isOrc(sys.shortName)) continue;
                     Double value = extractHandicapValue(entry.calculations, sys.id);
                     if (value != null)
                     {
                         resolveCertificate(boat, normalizeSystem(sys.shortName),
-                            value, raceDate.getYear(), nonSpinnaker, false,
-                            isClubCert(sys.shortName));
+                            value, raceDate.getYear(), nonSpinnaker, false);
                         break;
                     }
                 }
@@ -1030,12 +1030,11 @@ public class SailSysImporter
     /**
      * Finds or creates a certificate on the given boat.
      * <p>
-     * Matching criteria: system + year (±1) + value (±0.001) + nonSpinnaker + twoHanded
-     * + club flag.  If a match is found, that certificate number is returned without
+     * Matching criteria: system + year (±1) + value (±0.001) + nonSpinnaker + twoHanded.  If a match is found, that certificate number is returned without
      * creating a duplicate.  Otherwise an inferred certificate is created and added.
      */
     private String resolveCertificate(Boat boat, String system, double value, int year,
-                                      boolean nonSpinnaker, boolean twoHanded, boolean clubCert)
+                                      boolean nonSpinnaker, boolean twoHanded)
     {
         // Always read the freshest version of the boat in case another cert was just added
         Boat current = store.boats().get(boat.id());
@@ -1047,19 +1046,17 @@ public class SailSysImporter
                     && Math.abs(c.year() - year) <= 1
                     && Math.abs(c.value() - value) < 0.001
                     && c.nonSpinnaker() == nonSpinnaker
-                    && c.twoHanded() == twoHanded
-                    && c.club() == clubCert)
+                    && c.twoHanded() == twoHanded)
                 return c.certificateNumber();
         }
 
         // Create inferred certificate
-        String certNum = String.format("%s-inferred-%d-%.4f%s%s%s",
+        String certNum = String.format("%s-inferred-%d-%.4f%s%s",
             system.toLowerCase(), year, value,
             nonSpinnaker ? "-ns" : "",
-            twoHanded    ? "-dh" : "",
-            clubCert     ? "-c"  : "");
+            twoHanded    ? "-dh" : "");
         Certificate cert = new Certificate(system, year, value,
-            nonSpinnaker, twoHanded, false, clubCert, certNum, null);
+            nonSpinnaker, twoHanded, false, false, certNum, null);
 
         List<Certificate> certs = new ArrayList<>(current.certificates());
         certs.add(cert);
@@ -1145,12 +1142,12 @@ public class SailSysImporter
     }
 
     /**
-     * Returns true for ORC Club ({@code ORCc}) certificates, which carry a configurable
-     * weight penalty in the analysis.
+     * Returns true for any ORC system ({@code ORC}, {@code ORCc}, …). ORC race handicaps are
+     * not kept: clubs score with many different ORC ratings, not the certificate's 600/GPH.
      */
-    private static boolean isClubCert(String shortName)
+    private static boolean isOrc(String shortName)
     {
-        return "ORCc".equalsIgnoreCase(shortName);
+        return "ORC".equals(normalizeSystem(shortName));
     }
 
     /**

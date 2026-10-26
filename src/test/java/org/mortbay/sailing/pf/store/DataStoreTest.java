@@ -113,6 +113,32 @@ class DataStoreTest {
     }
 
     @Test
+    void startupDropsRaceDerivedOrcCertificates(@TempDir Path tempDir)
+    {
+        Certificate official = new Certificate("ORC", 2025, 1.0625, false, false, false, false, "249100", null);
+        Certificate irc = new Certificate("IRC", 2025, 1.098, false, false, false, false, "irc-inferred-2025-1.0980", null);
+        List<Certificate> raceOrc = List.of(
+            new Certificate("ORC", 2026, 1.1845, false, false, false, false, "orc-inferred-2026-1.1845", null),
+            new Certificate("ORC", 2025, 1.1800, false, false, false, true, "ty-orc-wl-2025-1.1800", null),
+            new Certificate("ORC", 2024, 1.1700, false, false, false, false, "bwps-orc-2024-1.1700", null));
+        List<Certificate> all = new java.util.ArrayList<>(List.of(official, irc));
+        all.addAll(raceOrc);
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(new Boat("5656-mondo", "5656", "Mondo", null, List.of(), List.copyOf(all),
+            List.of("test"), null, null));
+        store.stop();
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(List.of(official, irc), store2.boats().get("5656-mondo").certificates());
+        assertTrue(raceOrc.stream().allMatch(Certificate::isRaceDerivedOrc));
+        assertFalse(official.isRaceDerivedOrc());
+        assertFalse(irc.isRaceDerivedOrc());
+    }
+
+    @Test
     void roundTripCatalogue(@TempDir Path tempDir) throws IOException
     {
         writeClubsYaml(tempDir,

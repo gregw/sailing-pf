@@ -154,8 +154,8 @@ class SailSysImporterTest
     @Test
     void sameRaceFromTwoSeriesMergesFinishersAndSeries()
     {
-        // Simulates race 34328 (PHS series, 3 boats) then race 40906 (ORC series, 2 boats
-        // overlapping + 1 ORC-only boat not in PHS).  Same club, date, number → same raceId.
+        // Simulates race 34328 (PHS series, 3 boats) then race 40906 (IRC series, 2 boats
+        // overlapping + 1 IRC-only boat not in PHS).  Same club, date, number → same raceId.
         Club sps = new Club("sailportstephens.com.au", "SPS", "Sail Port Stephens", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
         store.putClub(sps);
 
@@ -183,21 +183,21 @@ class SailSysImporterTest
         Race afterFirst = store.races().values().iterator().next();
         assertEquals(3, afterFirst.divisions().getFirst().finishers().size());
 
-        // Second import: ORC series with 2 overlapping boats (A, B have ORC data) + 1 new (D)
+        // Second import: IRC series with 2 overlapping boats (A, B have IRC data) + 1 new (D)
         String orcJson = """
             {"result":"success","data":{
               "id":40906,"status":4,"dateTime":"2026-04-13T00:00:00.000","lastProcessedTime":"2026-04-13T15:00:00.000",
               "number":1,"name":null,"offsetPursuitRace":false,
               "club":{"shortName":"SPS","longName":"Sail Port Stephens"},
-              "series":{"name":"ORC Series"},
-              "handicappings":[{"id":34,"shortName":"ORC"}],
+              "series":{"name":"IRC Series"},
+              "handicappings":[{"id":34,"shortName":"IRC"}],
               "competitors":[{"parent":{"name":"Division 1"},"items":[
                 {"boat":{"name":"Boat A","sailNumber":"100"},"elapsedTime":"1:10:00","nonSpinnaker":false,
-                 "calculations":[{"handicapDefinitionId":34,"handicapCreatedFrom":1.245}]},
+                 "calculations":[{"handicapDefinitionId":34,"handicapCreatedFrom":1.045}]},
                 {"boat":{"name":"Boat B","sailNumber":"200"},"elapsedTime":"1:15:00","nonSpinnaker":false,
-                 "calculations":[{"handicapDefinitionId":34,"handicapCreatedFrom":1.512}]},
+                 "calculations":[{"handicapDefinitionId":34,"handicapCreatedFrom":1.012}]},
                 {"boat":{"name":"Boat D","sailNumber":"400"},"elapsedTime":"1:25:00","nonSpinnaker":false,
-                 "calculations":[{"handicapDefinitionId":34,"handicapCreatedFrom":1.100}]}
+                 "calculations":[{"handicapDefinitionId":34,"handicapCreatedFrom":0.990}]}
               ]}]
             }}
             """;
@@ -214,25 +214,25 @@ class SailSysImporterTest
         // Finishers merged: original 3 + 1 new (Boat D) = 4
         assertEquals(1, merged.divisions().size());
         List<Finisher> finishers = merged.divisions().getFirst().finishers();
-        assertEquals(4, finishers.size(), "3 from PHS + 1 new from ORC");
+        assertEquals(4, finishers.size(), "3 from PHS + 1 new from IRC");
 
         // Boats A and B should now have cert numbers (upgraded from PHS-only)
         Finisher boatA = finishers.stream().filter(f -> f.boatId().contains("100")).findFirst().orElseThrow();
-        assertNotNull(boatA.certificateNumber(), "Boat A should have ORC cert after merge");
+        assertNotNull(boatA.certificateNumber(), "Boat A should have IRC cert after merge");
 
         Finisher boatB = finishers.stream().filter(f -> f.boatId().contains("200")).findFirst().orElseThrow();
-        assertNotNull(boatB.certificateNumber(), "Boat B should have ORC cert after merge");
+        assertNotNull(boatB.certificateNumber(), "Boat B should have IRC cert after merge");
 
-        // Boat C has no ORC data — still null cert
+        // Boat C has no IRC data — still null cert
         Finisher boatC = finishers.stream().filter(f -> f.boatId().contains("300")).findFirst().orElseThrow();
-        assertNull(boatC.certificateNumber(), "Boat C had no ORC data — cert remains null");
+        assertNull(boatC.certificateNumber(), "Boat C had no IRC data — cert remains null");
 
-        // Boat D is new from ORC import
+        // Boat D is new from IRC import
         Finisher boatD = finishers.stream().filter(f -> f.boatId().contains("400")).findFirst().orElseThrow();
-        assertNotNull(boatD.certificateNumber(), "Boat D should have ORC cert");
+        assertNotNull(boatD.certificateNumber(), "Boat D should have IRC cert");
 
         // Verify cert data present on merged finishers
-        assertTrue(boatA.certificateNumber().startsWith("orc-inferred-"));
+        assertTrue(boatA.certificateNumber().startsWith("irc-inferred-"));
     }
 
     @Test
@@ -264,6 +264,29 @@ class SailSysImporterTest
         assertEquals("IRC", cert.system());
         assertEquals(1.071, cert.value());
         assertEquals(finisher.certificateNumber(), cert.certificateNumber());
+    }
+
+    @Test
+    void orcRaceImportsFinishersWithoutCertificate()
+    {
+        // ORC handicaps used for race scoring are not kept as certificates: clubs score ORC with
+        // many different ratings, so only official certs from the ORC importers are used
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, null, List.of(), List.of(), List.of(), List.of(), null);
+        store.putClub(myc);
+
+        assertTrue(importer.processRaceJson(raceJson(2, 4, "2020-09-13T00:00:00.000",
+            "2020-09-13T15:00:00.000", 1, "MYC", "Manly Yacht Club",
+            "Club Championship", "ORCc", false,
+            List.of(entry("Raging Bull", "AUS1234", "1:09:42", false, 1.184)))));
+
+        Race race = store.races().values().iterator().next();
+        Finisher finisher = race.divisions().getFirst().finishers().getFirst();
+        assertNull(finisher.certificateNumber(), "ORC race handicap is not a certificate");
+
+        Boat boat = store.boats().values().stream()
+            .filter(b -> "1234".equals(b.sailNumber()))
+            .findFirst().orElseThrow();
+        assertTrue(boat.certificates().isEmpty());
     }
 
     @Test
