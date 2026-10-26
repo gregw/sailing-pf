@@ -176,8 +176,10 @@ const COLUMNS = {
         { label: 'Sail',   key: 'sailNumber', anchor: 'col-boat-sail', tip: 'Sail number as recorded in source data (SailSys / TopYacht).' },
         { label: 'Name',   key: 'name',   anchor: 'col-boat-name',     tip: 'Boat name as recorded in source data.', cls: 'id-col' },
         { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design', cls: 'id-col',
-          tip: 'Design (class) identifier; click to search for this design in the designs tab.',
-          render:   item => item.designId || '',
+          tip: 'Design (class) identifier; click to search for this design in the designs tab. "(OD)" marks a one-design class; "(modified)" a boat modified from its design.',
+          render:   item => (item.designId || '')
+              + (item.designId && item.modified ? ' (modified)'
+                 : item.designOneDesign ? ' (OD)' : ''),
           btnClass: item => [
               item.designExcluded ? 'excluded-link' : '',
               item.designIgnored  ? 'ignored-link'  : ''
@@ -1881,6 +1883,7 @@ function showEditPanel() {
                                                     : ('Request edit for Boat ' + item.id);
     document.getElementById('edit-boat-sail').value = item.sailNumber || '';
     document.getElementById('edit-boat-name').value = item.name || '';
+    document.getElementById('edit-boat-modified').checked = !!item.modified;
     const initialClubIds = Array.isArray(item.clubIds)
         ? [...item.clubIds]
         : (item.clubId ? [item.clubId] : []);
@@ -1997,6 +2000,7 @@ async function saveBoatEdit() {
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
+        modified: document.getElementById('edit-boat-modified').checked,
         clubIds: getEditingBoatClubIds()
     };
 
@@ -2032,6 +2036,7 @@ async function requestBoatEdit() {
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
+        modified: document.getElementById('edit-boat-modified').checked,
         clubIds: getEditingBoatClubIds(),
         ...(email && { email }),
         ...(message && { message })
@@ -2069,6 +2074,8 @@ function showEditDesignPanel() {
     document.getElementById('edit-design-name').value = item.canonicalName || '';
     const nsBox = document.getElementById('edit-design-no-spinnaker');
     if (nsBox) nsBox.checked = !!item.noSpinnaker;
+    const odBox = document.getElementById('edit-design-one-design');
+    if (odBox) odBox.checked = !!item.oneDesign;
     const boats = item.boats != null ? item.boats : 0;
     const warn = document.getElementById('edit-design-warning');
     warn.textContent = boats > 0
@@ -2090,8 +2097,10 @@ function buildDesignEditBody() {
     const newId = document.getElementById('edit-design-id').value.trim();
     const newName = document.getElementById('edit-design-name').value.trim();
     const nsBox = document.getElementById('edit-design-no-spinnaker');
+    const odBox = document.getElementById('edit-design-one-design');
     const body = {designId: editingDesignId, newId, canonicalName: newName};
     if (nsBox) body.noSpinnaker = !!nsBox.checked;
+    if (odBox) body.oneDesign = !!odBox.checked;
     return body;
 }
 

@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  *       (peachteatsvelocity, nortonwhitecorum, 4436/JAUS44361/JAUS4788 okavangodelta,
  *       MYC12 santoy radford12).</li>
  *   <li>Phase 2 — Admin operations: rename one boat (Velocity), merge duplicates
- *       (Corum, Okavango), add design overrides (Corum → farr36modified,
+ *       (Corum, Okavango), add design overrides (Corum → mumm36,
  *       Santoy → radford12catrig), and mark the Corum canonical noclub.</li>
  *   <li>Phase 3 — Stop / start. The startup repair passes must heal anything that
  *       the admin operations did not directly migrate (notably the design override
@@ -79,7 +79,7 @@ class DataStoreLifecycleTest
     //
     // Canonical IDs we expect AFTER admin operations + startup repair:
     private static final String VELOCITY_CANON = "YC868-velocity-beneteaufirst317";
-    private static final String CORUM_CANON = "1088-corum-farr36modified";          // override target
+    private static final String CORUM_CANON = "1088-corum-mumm36";                  // override target
     private static final String OKAVANGO_CANON = "4788-okavangodelta-jboatsj24";
     private static final String SANTOY_CANON = "MYC12-santoy-radford12catrig";       // override target
 
@@ -172,10 +172,10 @@ class DataStoreLifecycleTest
                 List.of(new Aliases.SailNumberName("1088", "nortonwhitecorum")));
             store.reloadAliases();
         }
-        // Force a design override 1088 Corum → farr36modified. After the next restart,
-        // the new "Design override correction" pass should migrate 1088-corum-farr36
-        // → 1088-corum-farr36modified.
-        store.addDesignOverride("1088", "Corum", "farr36modified", "Farr 36 Modified");
+        // Force a design override 1088 Corum → mumm36. After the next restart, the
+        // "Design override correction" pass should migrate 1088-corum-farrmumm36
+        // → 1088-corum-mumm36. (Not a "… Modified" design: those fold to their base design.)
+        store.addDesignOverride("1088", "Corum", "mumm36", "Mumm 36");
 
         // (c) Okavango: figure out what sail-number variants the importer actually created,
         // then merge them all into the canonical (which already exists from Phase 1, created
@@ -310,7 +310,7 @@ class DataStoreLifecycleTest
         // Design assertions on canonicals
         assertEquals("beneteaufirst317", store.boats().get(VELOCITY_CANON).designId(),
             phase + ": Velocity designId");
-        assertEquals("farr36modified", store.boats().get(CORUM_CANON).designId(),
+        assertEquals("mumm36", store.boats().get(CORUM_CANON).designId(),
             phase + ": Corum designId (override must be applied)");
         assertEquals("jboatsj24", store.boats().get(OKAVANGO_CANON).designId(),
             phase + ": Okavango designId (raw because no design alias is seeded in this test)");

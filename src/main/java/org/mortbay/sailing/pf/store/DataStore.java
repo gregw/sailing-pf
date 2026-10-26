@@ -381,9 +381,35 @@ public class DataStore
      * @param rawDesign raw design/class name string (nullable); resolved internally
      * @param date      the date of the event this boat is in (or null if not known).
      * @param source    importer source tag, e.g. "SailSys"
+     * A boat that resolves to a "… Modified" design is folded into the base design and ticked
+     * modified (see {@link #baseOfModifiedDesign}).
+     *
      * @return the found or created Boat
      */
     public Boat findOrCreateBoat(String rawSailNo, String rawName, String rawDesign, LocalDate date, String source)
+    {
+        // A "… Modified" design name resolves to its base design, so the boat is found or
+        // created there (rather than created under the modified design and merged back)
+        boolean modified = false;
+        String resolved = isNotBlank(rawDesign) ? resolveDesignId(rawDesign) : null;
+        if (isModifiedDesignId(resolved))
+        {
+            Design d = designs.get(resolved);
+            String seedName = aliases.designCanonicalName(resolved);
+            String baseName = withoutModified(d != null ? d.canonicalName() : seedName != null ? seedName : rawDesign);
+            if (baseName != null && !isModifiedDesignId(resolveDesignId(baseName)))
+            {
+                rawDesign = baseName;
+                modified = true;
+            }
+        }
+        Boat boat = findOrCreateBoatUnfolded(rawSailNo, rawName, rawDesign, date, source);
+        if (modified && boat != null && markModified(boat))
+            reloadDesignCatalogue();
+        return foldModifiedDesign(boat);
+    }
+
+    private Boat findOrCreateBoatUnfolded(String rawSailNo, String rawName, String rawDesign, LocalDate date, String source)
     {
         // Build enriched source entry for traceability
         String sourceDesign = buildSourceEntry(source, rawDesign);
@@ -816,6 +842,120 @@ public class DataStore
                 return override;
         }
         return resolveDesignId(className);
+    }
+
+    /** The word "modified" (optionally followed by digits, as in "Modified2") in a design name. */
+    private static final Pattern MODIFIED_WORD = Pattern.compile("(?i)\\bmodified\\d*\\b");
+
+    /** True for the id of a "… Modified" design (one whose id contains "modified"). */
+    static boolean isModifiedDesignId(String designId)
+    {
+        return designId != null && designId.contains("modified");
+    }
+
+    /**
+     * For a "… Modified" design, the id of the base design its boats are modified examples of:
+     * the design named by its canonical name without "Modified" ("Farr 40 Modified" → Farr 40,
+     * "Magic Modified 25" → Magic 25), found via the usual name/alias lookup or created.
+     * Null when the design is not a modified one or yields no usable base design.
+     */
+    public String baseOfModifiedDesign(String designId)
+    {
+        requireStarted();
+        if (!isModifiedDesignId(designId))
+            return null;
+        Design d = designs.get(designId);
+        String name = withoutModified(d != null ? d.canonicalName() : designId);
+        if (name == null)
+            return null;
+        Design base = findOrCreateDesign(name);
+        if (base == null)
+            return null;
+        // A held design that is itself an alias (e.g. s80 → swarbricks80) resolves to its canonical
+        String canonical = aliases.resolveDesignAlias(base.id());
+        String baseId = canonical != null && designs.containsKey(canonical) ? canonical : base.id();
+        return isModifiedDesignId(baseId) ? null : baseId;
+    }
+
+    /**
+     * A design name without the word "Modified" ("Mount Gay (Modified) 30" → "Mount Gay 30"),
+     * or null if nothing is left.
+     */
+    private static String withoutModified(String designName)
+    {
+        if (designName == null)
+            return null;
+        String name = MODIFIED_WORD.matcher(designName).replaceAll(" ").replace("()", " ");
+        if (name.chars().filter(c -> c == '(').count() != name.chars().filter(c -> c == ')').count())
+            name = name.replace("(", " ").replace(")", " ");
+        name = name.replaceAll("\\s+", " ").trim();
+        return name.isEmpty() ? null : name;
+    }
+
+    /** Ticks the boat modified in design.yaml; true if it was not already (catalogue needs a reload). */
+    private boolean markModified(Boat b)
+    {
+        if (designCatalogue.isModifiedBoat(b.sailNumber(), b.name()))
+            return false;
+        Designs.setModifiedBoat(configDir, b.sailNumber(), b.name(), true);
+        return true;
+    }
+
+    /**
+     * Folds a boat of a "… Modified" design into the base design (see
+     * {@link #baseOfModifiedDesign}), ticking it modified, moves design overrides targeting
+     * the modified design to the base, and removes the modified design once no boat uses it. Returns the boat as it now is (possibly re-keyed or
+     * merged), or the boat unchanged when it is not of a modified design.
+     */
+    private Boat foldModifiedDesign(Boat b)
+    {
+        if (b == null || !isModifiedDesignId(b.designId()))
+            return b;
+        String modifiedDesignId = b.designId();
+        String base = baseOfModifiedDesign(modifiedDesignId);
+        if (base == null)
+            return b;
+        boolean catalogueChanged = Designs.retargetDesignOverrides(configDir, modifiedDesignId, base,
+            designs.get(base).canonicalName());
+        catalogueChanged |= markModified(b);
+        if (catalogueChanged)
+            reloadDesignCatalogue();
+        Boat folded = redesignBoat(b, base, "Modified-design fold");
+        if (boats.values().stream().noneMatch(o -> modifiedDesignId.equals(o.designId())))
+            removeDesign(modifiedDesignId);
+        return folded;
+    }
+
+    /**
+     * Moves a boat to {@code designId}: re-keys it to the id for that design (repointing race
+     * finishers and club config), or merges it into the boat already at that id.
+     *
+     * @return the boat now holding the record
+     */
+    private Boat redesignBoat(Boat b, String designId, String why)
+    {
+        String newBoatId = IdGenerator.generateBoatId(b.sailNumber(), b.name(), designs.get(designId));
+        if (newBoatId.equals(b.id()))
+        {
+            Boat updated = new Boat(b.id(), b.sailNumber(), b.name(), designId,
+                b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+            putBoat(updated);
+            return updated;
+        }
+        if (boats.containsKey(newBoatId))
+        {
+            LOG.info("{}: merging {} into {} (designId {} → {})", why, b.id(), newBoatId, b.designId(), designId);
+            mergeBoats(newBoatId, List.of(b.id()));
+            return boats.get(newBoatId);
+        }
+        LOG.info("{}: updating designId {} → {} for boat {}", why, b.designId(), designId, b.id());
+        Boat updated = new Boat(newBoatId, b.sailNumber(), b.name(), designId,
+            b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+        removeBoat(b.id());
+        putBoat(updated);
+        rewriteFinisherBoatId(b.id(), newBoatId);
+        ClubLoader.remapBoatId(configDir, b.id(), newBoatId);
+        return updated;
     }
 
     private Design findOrCreateDesign(String className)
@@ -1541,6 +1681,52 @@ public class DataStore
         InvalidationListener l = invalidationListener;
         if (l != null)
             l.onDesignChanged(id);
+    }
+
+    /**
+     * True if the design is flagged one-design ({@code oneDesign:} in {@code design.yaml}):
+     * its boats are identical, so each boat not flagged {@link #isBoatModified modified} takes
+     * the design's reference factor. Toggled via {@link #setDesignOneDesign(String, boolean)}.
+     */
+    public boolean isDesignOneDesign(String designId)
+    {
+        if (designId == null || designId.isBlank())
+            return false;
+        return designCatalogue.isOneDesign(designId);
+    }
+
+    public void setDesignOneDesign(String id, boolean flag)
+    {
+        requireStarted();
+        Designs.setFlag(configDir, id, Designs.Flag.ONE_DESIGN, flag);
+        reloadDesignCatalogue();
+        InvalidationListener l = invalidationListener;
+        if (l != null)
+            l.onDesignChanged(id);
+    }
+
+    /**
+     * True if the boat is flagged as modified from its design ({@code modifiedBoats:} in
+     * {@code design.yaml}, by sail number + name): it keeps its own reference factor, is not
+     * pulled toward the design's, and does not count toward the design's.
+     */
+    public boolean isBoatModified(String boatId)
+    {
+        Boat boat = boatId == null ? null : boats.get(boatId);
+        return boat != null && designCatalogue.isModifiedBoat(boat.sailNumber(), boat.name());
+    }
+
+    public void setBoatModified(String boatId, boolean flag)
+    {
+        requireStarted();
+        Boat boat = boats.get(boatId);
+        if (boat == null)
+            return;
+        Designs.setModifiedBoat(configDir, boat.sailNumber(), boat.name(), flag);
+        reloadDesignCatalogue();
+        InvalidationListener l = invalidationListener;
+        if (l != null)
+            l.onBoatChanged(boatId);
     }
 
     /**
@@ -3098,27 +3284,8 @@ public class DataStore
                 for (Map.Entry<String, String> e : designAliasUpdates)
                 {
                     Boat b = boats.get(e.getKey());
-                    if (b == null)
-                        continue;
-                    String canonDesignId = e.getValue();
-                    String canonBoatId = IdGenerator.generateBoatId(b.sailNumber(), b.name(), designs.get(canonDesignId));
-                    if (boats.containsKey(canonBoatId))
-                    {
-                        LOG.info("Design alias correction: merging {} into {} (designId {} → {})",
-                            b.id(), canonBoatId, b.designId(), canonDesignId);
-                        mergeBoats(canonBoatId, List.of(b.id()));
-                    }
-                    else
-                    {
-                        LOG.info("Design alias correction: updating designId {} → {} for boat {}",
-                            b.designId(), canonDesignId, b.id());
-                        Boat updated = new Boat(canonBoatId, b.sailNumber(), b.name(), canonDesignId,
-                            b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
-                        removeBoat(b.id());
-                        putBoat(updated);
-                        rewriteFinisherBoatId(b.id(), canonBoatId);
-                        ClubLoader.remapBoatId(configDir, b.id(), canonBoatId);
-                    }
+                    if (b != null)
+                        redesignBoat(b, e.getValue(), "Design alias correction");
                 }
             }
         }
@@ -3151,30 +3318,33 @@ public class DataStore
                 for (Map.Entry<String, String> e : designOverrideUpdates)
                 {
                     Boat b = boats.get(e.getKey());
-                    if (b == null)
-                        continue;
-                    String canonDesignId = e.getValue();
-                    String canonBoatId = IdGenerator.generateBoatId(
-                        b.sailNumber(), b.name(), designs.get(canonDesignId));
-                    if (boats.containsKey(canonBoatId))
-                    {
-                        LOG.info("Design override correction: merging {} into {} (designId {} → {})",
-                            b.id(), canonBoatId, b.designId(), canonDesignId);
-                        mergeBoats(canonBoatId, List.of(b.id()));
-                    }
-                    else
-                    {
-                        LOG.info("Design override correction: updating designId {} → {} for boat {}",
-                            b.designId(), canonDesignId, b.id());
-                        Boat updated = new Boat(canonBoatId, b.sailNumber(), b.name(), canonDesignId,
-                            b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
-                        removeBoat(b.id());
-                        putBoat(updated);
-                        rewriteFinisherBoatId(b.id(), canonBoatId);
-                        ClubLoader.remapBoatId(configDir, b.id(), canonBoatId);
-                    }
+                    if (b != null)
+                        redesignBoat(b, e.getValue(), "Design override correction");
                 }
             }
+        }
+
+        // Modified-design fold: a boat of a "… Modified" design becomes a boat of the base design
+        // ticked modified (modifiedBoats in design.yaml); design overrides targeting the modified
+        // design move to the base; the then-empty modified designs are removed. Runs after the
+        // override correction so a boat overridden to a modified design is folded too.
+        {
+            List<Boat> ofModified = boats.values().stream()
+                .filter(b -> isModifiedDesignId(b.designId()))
+                .toList();
+            if (!ofModified.isEmpty())
+                LOG.info("Folding {} boat(s) of modified designs into their base designs", ofModified.size());
+            for (Boat b : ofModified)
+                foldModifiedDesign(b);
+            Set<String> inUse = new HashSet<>();
+            for (Boat b : boats.values())
+                inUse.add(b.designId());
+            List<String> emptyModified = designs.keySet().stream()
+                .filter(id -> isModifiedDesignId(id) && !inUse.contains(id))
+                .toList();
+            if (!emptyModified.isEmpty())
+                LOG.info("Removing {} modified design(s) with no boats: {}", emptyModified.size(), emptyModified);
+            emptyModified.forEach(this::removeDesign);
         }
 
         // Auto-fix stale boats: if the alias seed maps a boat's name to a different canonical

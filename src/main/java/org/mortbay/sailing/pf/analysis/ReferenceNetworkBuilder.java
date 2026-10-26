@@ -55,7 +55,12 @@ import org.slf4j.LoggerFactory;
  * RF with the design's RF via {@link Factor#aggregate}. Boats with low-weight
  * inferred RFs are pulled toward the design norm; boats with high-weight direct
  * certificates are barely affected. When a boat has no RF for a variant but the design
- * does, the design factor is adopted directly.
+ * does, the design factor is adopted directly. Boats flagged modified in {@code design.yaml}
+ * are not pulled toward the design and do not count toward it.
+ *
+ * <h2>Step 15 — One-design</h2>
+ * For a design flagged {@code oneDesign} in {@code design.yaml}, every boat not flagged
+ * modified takes the final design RF, built from the design's certificate-based boats.
  *
  * <p>Each step's generation number is recorded on every {@link ReferenceFactors}
  * record it modifies; generation 0 = step 8 only.
@@ -218,6 +223,8 @@ public class ReferenceNetworkBuilder
 
         long withSpin = result.values().stream().filter(r -> r.spin() != null).count();
         LOG.info("ReferenceNetworkBuilder step 8: {} boats, {} with spin factor", result.size(), withSpin);
+        // Snapshot of the certificate-based factors, from which one-design design RFs are built
+        Map<String, ReferenceFactors> certFactors = Map.copyOf(result);
 
         // Steps 10–11: iterative race co-participation propagation.
         // Run for at least 2 generations before considering convergence, so that boats added in
@@ -247,13 +254,13 @@ public class ReferenceNetworkBuilder
 
         // Step 12: aggregate boat RFs to design level — applied once after propagation converges,
         // so the design factors reflect a stable, fully-propagated set of boat RFs.
-        Map<String, ReferenceFactors> designFactors = computeDesignFactors(result, boats, store.designs());
+        Map<String, ReferenceFactors> designFactors = computeDesignFactors(result, boats, store, certFactors);
         LOG.info("ReferenceNetworkBuilder step 12: {} designs with RF", designFactors.size());
 
         // Step 13: combine each boat's RF with its design RF — pulls low-weight outlier boats
         // toward the design norm; high-weight cert-based boats are barely affected.
         // Also adopts the design factor for boats that race propagation could not reach.
-        combineWithDesignFactors(result, designFactors, boats);
+        combineWithDesignFactors(result, designFactors, boats, store);
 
         // Step 14: cross-variant fill — for any boat that has one variant but is missing another,
         // derive the missing variant via the graph's cross-variant edges (e.g. NS → spin).
@@ -291,12 +298,18 @@ public class ReferenceNetworkBuilder
         // level. The design-level collapse mirrors step 14c: without it, the design-level blend
         // would re-introduce a spin/nonSpin split for noSpinnaker designs by aggregating each
         // variant with the conversion-graph prediction from the other variant.
-        Map<String, ReferenceFactors> finalDesignFactors = computeDesignFactors(result, boats, store.designs());
+        Map<String, ReferenceFactors> finalDesignFactors = computeDesignFactors(result, boats, store, certFactors);
         int designBlended = blendVariantsViaCrossVariantGraph(finalDesignFactors, graph, currentYear);
         int designCollapsed = collapseNoSpinnakerDesignVariants(finalDesignFactors, store);
         int designClamped = clampMonotonicityDesignLevel(finalDesignFactors, store);
         LOG.info("ReferenceNetworkBuilder design-level: blended={} collapsed={} clamped={}",
             designBlended, designCollapsed, designClamped);
+
+        // Step 15: one-design — every boat of a design flagged oneDesign in design.yaml, other
+        // than boats flagged modified, takes the final design RF: the boats are identical, so
+        // their reference factors are too (differences in how they sail belong in PF).
+        int oneDesign = applyOneDesign(result, finalDesignFactors, boats, store);
+        LOG.info("ReferenceNetworkBuilder step 15 one-design: {} boats", oneDesign);
 
         long withSpinFinal = result.values().stream().filter(r -> r.spin() != null).count();
         LOG.info("ReferenceNetworkBuilder complete: {} boats, {} with spin factor",
@@ -557,67 +570,126 @@ public class ReferenceNetworkBuilder
     /**
      * Aggregates per-boat reference factors up to design level.
      * Returns a map from designId to {@link ReferenceFactors},
-     * where each non-null factor is the log-space weighted mean of all contributing boats,
-     * capped at {@link #DESIGN_FACTOR_WEIGHT}. Generations are the ceiling of the
-     * average generation of contributing boats for each variant.
+     * where each non-null factor is the {@link Factor#aggregate} of all contributing boats.
+     * Generations are the ceiling of the average generation of contributing boats for each variant.
+     * <p>
+     * Boats flagged modified ({@link DataStore#isBoatModified}) do not contribute. For a
+     * one-design design ({@link DataStore#isDesignOneDesign}), only boats with a certificate-based
+     * factor for the variant in {@code certFactors} (the step-8 result) contribute when there are
+     * any, since that factor becomes every boat's RF.
      */
     private static Map<String, ReferenceFactors> computeDesignFactors(
-        Map<String, ReferenceFactors> brf, Map<String, Boat> boats, Map<String, Design> designs)
+        Map<String, ReferenceFactors> brf, Map<String, Boat> boats, DataStore store,
+        Map<String, ReferenceFactors> certFactors)
     {
-        Map<String, List<Factor>> spinByDesign    = new LinkedHashMap<>();
-        Map<String, List<Factor>> nonSpinByDesign = new LinkedHashMap<>();
-        Map<String, List<Factor>> twoHByDesign    = new LinkedHashMap<>();
-        Map<String, List<Integer>> spinGenByDesign    = new LinkedHashMap<>();
-        Map<String, List<Integer>> nonSpinGenByDesign = new LinkedHashMap<>();
-        Map<String, List<Integer>> twoHGenByDesign    = new LinkedHashMap<>();
-
+        // designId → variant (0 spin, 1 nonSpin, 2 twoHanded) → contributing boats
+        Map<String, List<List<String>>> members = new LinkedHashMap<>();
         for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
         {
             Boat boat = boats.get(e.getKey());
             if (boat == null || boat.designId() == null) continue;
-            String designId = boat.designId();
-            ReferenceFactors f = e.getValue();
-
-            if (f.spin() != null)
+            if (store.isBoatModified(boat.id())) continue;
+            List<List<String>> byVariant = members.computeIfAbsent(boat.designId(),
+                k -> List.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
+            for (int v = 0; v < 3; v++)
             {
-                spinByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.spin());
-                spinGenByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.spinGeneration());
-            }
-            if (f.nonSpin() != null)
-            {
-                nonSpinByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.nonSpin());
-                nonSpinGenByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.nonSpinGeneration());
-            }
-            if (f.twoHanded() != null)
-            {
-                twoHByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.twoHanded());
-                twoHGenByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.twoHandedGeneration());
+                if (variant(e.getValue(), v) != null)
+                    byVariant.get(v).add(e.getKey());
             }
         }
-
-        Set<String> allDesigns = new HashSet<>();
-        allDesigns.addAll(spinByDesign.keySet());
-        allDesigns.addAll(nonSpinByDesign.keySet());
-        allDesigns.addAll(twoHByDesign.keySet());
 
         // Filter out designs with "Modified" or "Custom" in the design id
-        allDesigns.removeIf(designId -> designId.toLowerCase().contains("modified") || designId.toLowerCase().contains("custom"));
+        members.keySet().removeIf(designId -> designId.toLowerCase().contains("modified") || designId.toLowerCase().contains("custom"));
 
         Map<String, ReferenceFactors> result = new LinkedHashMap<>();
-        for (String designId : allDesigns)
+        for (Map.Entry<String, List<List<String>>> d : members.entrySet())
         {
-            List<Factor> s  = spinByDesign.getOrDefault(designId, List.of());
-            List<Factor> ns = nonSpinByDesign.getOrDefault(designId, List.of());
-            List<Factor> th = twoHByDesign.getOrDefault(designId, List.of());
-            Factor spinF = !s.isEmpty()  ? Factor.aggregate(s.toArray(new Factor[0]))  : null;
-            Factor nsF   = !ns.isEmpty() ? Factor.aggregate(ns.toArray(new Factor[0])) : null;
-            Factor thF   = !th.isEmpty() ? Factor.aggregate(th.toArray(new Factor[0])) : null;
-            int spinGen = ceilAvgGen(spinGenByDesign.getOrDefault(designId, List.of()));
-            int nsGen   = ceilAvgGen(nonSpinGenByDesign.getOrDefault(designId, List.of()));
-            int thGen   = ceilAvgGen(twoHGenByDesign.getOrDefault(designId, List.of()));
-            result.put(designId, new ReferenceFactors(spinF, nsF, thF, spinGen, nsGen, thGen));
+            boolean od = store.isDesignOneDesign(d.getKey());
+            Factor[] factors = new Factor[3];
+            int[] gens = new int[3];
+            for (int v = 0; v < 3; v++)
+            {
+                int variant = v;
+                List<String> ids = d.getValue().get(v);
+                if (od)
+                {
+                    List<String> certified = ids.stream()
+                        .filter(id -> certFactors.get(id) != null && variant(certFactors.get(id), variant) != null)
+                        .toList();
+                    if (!certified.isEmpty())
+                        ids = certified;
+                }
+                if (ids.isEmpty()) continue;
+                factors[v] = Factor.aggregate(ids.stream().map(id -> variant(brf.get(id), variant)).toArray(Factor[]::new));
+                gens[v] = ceilAvgGen(ids.stream().map(id -> generation(brf.get(id), variant)).toList());
+            }
+            result.put(d.getKey(), new ReferenceFactors(factors[0], factors[1], factors[2], gens[0], gens[1], gens[2]));
         }
         return result;
+    }
+
+    /** The factor for variant 0 (spin), 1 (nonSpin) or 2 (twoHanded). */
+    private static Factor variant(ReferenceFactors f, int v)
+    {
+        return switch (v)
+        {
+            case 0 -> f.spin();
+            case 1 -> f.nonSpin();
+            default -> f.twoHanded();
+        };
+    }
+
+    /** The generation for variant 0 (spin), 1 (nonSpin) or 2 (twoHanded). */
+    private static int generation(ReferenceFactors f, int v)
+    {
+        return switch (v)
+        {
+            case 0 -> f.spinGeneration();
+            case 1 -> f.nonSpinGeneration();
+            default -> f.twoHandedGeneration();
+        };
+    }
+
+    // ==========================================================================
+    // Step 15: one-design
+    // ==========================================================================
+
+    /**
+     * For every boat of a one-design design that is not flagged modified, replaces each
+     * variant's RF with the design's (where the design has one), with the design's generation.
+     *
+     * @return the number of boats changed
+     */
+    private static int applyOneDesign(
+        Map<String, ReferenceFactors> brf,
+        Map<String, ReferenceFactors> designFactors,
+        Map<String, Boat> boats,
+        DataStore store)
+    {
+        int updated = 0;
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
+        {
+            Boat boat = boats.get(e.getKey());
+            if (boat == null || !store.isDesignOneDesign(boat.designId()) || store.isBoatModified(boat.id()))
+                continue;
+            ReferenceFactors df = designFactors.get(boat.designId());
+            if (df == null)
+                continue;
+            ReferenceFactors cur = e.getValue();
+            ReferenceFactors od = new ReferenceFactors(
+                df.spin()      != null ? df.spin()      : cur.spin(),
+                df.nonSpin()   != null ? df.nonSpin()   : cur.nonSpin(),
+                df.twoHanded() != null ? df.twoHanded() : cur.twoHanded(),
+                df.spin()      != null ? df.spinGeneration()      : cur.spinGeneration(),
+                df.nonSpin()   != null ? df.nonSpinGeneration()   : cur.nonSpinGeneration(),
+                df.twoHanded() != null ? df.twoHandedGeneration() : cur.twoHandedGeneration());
+            if (!od.equals(cur))
+            {
+                e.setValue(od);
+                updated++;
+            }
+        }
+        return updated;
     }
 
     /** Returns the ceiling of the average of a list of generation ints, or 0 if empty. */
@@ -787,12 +859,14 @@ public class ReferenceNetworkBuilder
      * accumulation increases confidence while disagreement penalises weight.
      * <p>
      * When the boat has no RF for a variant but the design does, the design factor is adopted
-     * directly (subsumes the former design-fallback step).
+     * directly (subsumes the former design-fallback step). A boat flagged modified is not pulled
+     * toward the design; it only adopts the design factor for a variant it has no RF for.
      */
     private static void combineWithDesignFactors(
         Map<String, ReferenceFactors> brf,
         Map<String, ReferenceFactors> designFactors,
-        Map<String, Boat> boats)
+        Map<String, Boat> boats,
+        DataStore store)
     {
         int updated = 0;
         for (Map.Entry<String, ReferenceFactors> e : new ArrayList<>(brf.entrySet()))
@@ -806,9 +880,13 @@ public class ReferenceNetworkBuilder
 
             ReferenceFactors current = e.getValue();
 
-            Factor newSpin    = aggregateFactors(current.spin(),      df.spin());
-            Factor newNonSpin = aggregateFactors(current.nonSpin(),   df.nonSpin());
-            Factor newTwoH    = aggregateFactors(current.twoHanded(), df.twoHanded());
+            boolean modified = store.isBoatModified(boatId);
+            Factor newSpin    = modified ? adoptIfMissing(current.spin(),      df.spin())
+                                         : aggregateFactors(current.spin(),      df.spin());
+            Factor newNonSpin = modified ? adoptIfMissing(current.nonSpin(),   df.nonSpin())
+                                         : aggregateFactors(current.nonSpin(),   df.nonSpin());
+            Factor newTwoH    = modified ? adoptIfMissing(current.twoHanded(), df.twoHanded())
+                                         : aggregateFactors(current.twoHanded(), df.twoHanded());
 
             boolean changed = newSpin    != current.spin()
                            || newNonSpin != current.nonSpin()
@@ -851,6 +929,12 @@ public class ReferenceNetworkBuilder
         if (boatFactor == null) return designFactor;
         if (designFactor == null) return boatFactor;
         return Factor.aggregate(boatFactor, designFactor);
+    }
+
+    /** The boat's own factor, or the design's when the boat has none (modified boats). */
+    private static Factor adoptIfMissing(Factor boatFactor, Factor designFactor)
+    {
+        return boatFactor != null ? boatFactor : designFactor;
     }
 
     // ==========================================================================

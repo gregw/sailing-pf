@@ -103,7 +103,7 @@ class Designs
 
     /** Enumerates the toggleable design-catalogue flag fields in {@code design.yaml}. */
     enum Flag
-    {EXCLUDED, IGNORED, NO_SPINNAKER}
+    {EXCLUDED, IGNORED, NO_SPINNAKER, ONE_DESIGN}
 
     /**
      * Reads {@code design.yaml}, toggles {@code designId} on or off the specified flag list,
@@ -131,6 +131,7 @@ class Designs
             case EXCLUDED -> catalogue.excluded;
             case IGNORED -> catalogue.ignored;
             case NO_SPINNAKER -> catalogue.noSpinnaker;
+            case ONE_DESIGN -> catalogue.oneDesign;
         };
         if (list == null)
         {
@@ -140,6 +141,7 @@ class Designs
                 case EXCLUDED -> catalogue.excluded = list;
                 case IGNORED -> catalogue.ignored = list;
                 case NO_SPINNAKER -> catalogue.noSpinnaker = list;
+                case ONE_DESIGN -> catalogue.oneDesign = list;
             }
         }
         // Compare by normalised id so "Foo 36", "foo36", "Foo-36" match a single entry.
@@ -164,6 +166,131 @@ class Designs
         {
             LOG.error("Failed to write {}: {}", file, e.getMessage());
         }
+    }
+
+    /**
+     * Reads {@code design.yaml}, adds or removes the boat (by sail number + name) on the
+     * {@code modifiedBoats:} list, and writes the file back. Keyed by sail + name rather than
+     * boat id so the flag survives a design change (which re-keys the boat id).
+     */
+    static void setModifiedBoat(Path configDir, String sailNumber, String name, boolean set)
+    {
+        if (sailNumber == null || name == null) return;
+        Path file = configDir.resolve(FILENAME);
+        CatalogueFile catalogue = null;
+        if (Files.exists(file))
+        {
+            try { catalogue = YAML_MAPPER.readValue(file.toFile(), CatalogueFile.class); }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for modified-boat update: {}", file, e.getMessage());
+                return;
+            }
+        }
+        if (catalogue == null) catalogue = new CatalogueFile();
+        if (catalogue.modifiedBoats == null) catalogue.modifiedBoats = new ArrayList<>();
+
+        String key = boatKey(sailNumber, name);
+        boolean present = catalogue.modifiedBoats.stream().anyMatch(b -> key.equals(boatKey(b.sailNumber, b.name)));
+        if (set && !present)
+        {
+            BoatEntry entry = new BoatEntry();
+            entry.sailNumber = sailNumber;
+            entry.name = name;
+            catalogue.modifiedBoats.add(entry);
+        }
+        else if (!set && present)
+            catalogue.modifiedBoats.removeIf(b -> key.equals(boatKey(b.sailNumber, b.name)));
+        else
+            return;  // already in the desired state
+
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), catalogue);
+            LOG.info("Updated {} — boat {}/{} modified {}", file, sailNumber, name, set ? "set" : "cleared");
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+        }
+    }
+
+    /**
+     * Moves every boat design override targeting {@code fromDesignId} to {@code toDesignId}
+     * (merging into an existing block for it), and writes the file back if anything changed.
+     *
+     * @return true if design.yaml was changed
+     */
+    static boolean retargetDesignOverrides(Path configDir, String fromDesignId, String toDesignId,
+                                           String toCanonicalName)
+    {
+        Path file = configDir.resolve(FILENAME);
+        if (!Files.exists(file))
+            return false;
+        CatalogueFile catalogue;
+        try { catalogue = YAML_MAPPER.readValue(file.toFile(), CatalogueFile.class); }
+        catch (Exception e)
+        {
+            LOG.error("Failed to read {} for override retarget: {}", file, e.getMessage());
+            return false;
+        }
+        if (catalogue == null || catalogue.boatDesignOverrides == null)
+            return false;
+        String from = IdGenerator.normaliseDesignName(fromDesignId);
+        List<DesignOverride> moving = catalogue.boatDesignOverrides.stream()
+            .filter(o -> o.designId != null && IdGenerator.normaliseDesignName(o.designId).equals(from))
+            .toList();
+        if (moving.isEmpty())
+            return false;
+
+        catalogue.boatDesignOverrides.removeAll(moving);
+        DesignOverride target = catalogue.boatDesignOverrides.stream()
+            .filter(o -> Objects.equals(o.designId, toDesignId))
+            .findFirst().orElse(null);
+        if (target == null)
+        {
+            target = new DesignOverride();
+            target.designId = toDesignId;
+            target.canonicalName = toCanonicalName;
+            target.boats = new ArrayList<>();
+            catalogue.boatDesignOverrides.add(target);
+        }
+        if (target.boats == null)
+            target.boats = new ArrayList<>();
+        for (DesignOverride o : moving)
+        {
+            if (o.boats == null)
+                continue;
+            for (BoatOverrideEntry b : o.boats)
+            {
+                String key = boatKey(b.sailNumber, b.name);
+                boolean dup = target.boats.stream().anyMatch(t -> Objects.equals(key, boatKey(t.sailNumber, t.name))
+                    && Objects.equals(t.from, b.from) && Objects.equals(t.until, b.until));
+                if (!dup)
+                    target.boats.add(b);
+            }
+        }
+
+        try
+        {
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), catalogue);
+            LOG.info("Updated {} — design overrides for {} moved to {}", file, fromDesignId, toDesignId);
+            return true;
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+            return false;
+        }
+    }
+
+    /** "normSail|normName" key, as used for boat design overrides and modified boats. */
+    static String boatKey(String sailNumber, String name)
+    {
+        if (sailNumber == null || name == null)
+            return null;
+        return IdGenerator.normaliseSailNumber(sailNumber) + "|" + IdGenerator.normaliseName(name);
     }
 
     static DesignCatalogue load(Path configDir)
@@ -215,6 +342,13 @@ class Designs
         public LocalDate until;
     }
 
+    /** A boat named by sail number + name (the {@code modifiedBoats:} list). */
+    static class BoatEntry
+    {
+        public String sailNumber;
+        public String name;
+    }
+
     static class DesignOverride
     {
         public String designId;
@@ -227,6 +361,8 @@ class Designs
         public List<String> excluded;
         public List<String> ignored;
         public List<String> noSpinnaker;
+        public List<String> oneDesign;
+        public List<BoatEntry> modifiedBoats;
         public List<DesignOverride> boatDesignOverrides;
     }
 
@@ -254,6 +390,9 @@ class Designs
         private final Set<String> excludedIds;
         private final Set<String> ignoredIds;
         private final Set<String> noSpinnakerIds;
+        private final Set<String> oneDesignIds;
+        /** "normSail|normName" of boats ticked as modified from their design */
+        private final Set<String> modifiedBoatKeys;
         /** "normSail|normName" → list of override entries (possibly date-ranged) */
         private final Map<String, List<OverrideEntry>> overridesByKey;
         /** normDesignId → canonical name to use when creating the design (explicit canonicalName or raw designId) */
@@ -266,6 +405,8 @@ class Designs
                 excludedIds = Set.of();
                 ignoredIds = Set.of();
                 noSpinnakerIds = Set.of();
+                oneDesignIds = Set.of();
+                modifiedBoatKeys = Set.of();
                 overridesByKey = Map.of();
                 overrideDesigns = Map.of();
                 return;
@@ -310,6 +451,33 @@ class Designs
             if (!nspin.isEmpty())
                 LOG.info("Loaded design catalogue: {} no-spinnaker design(s)", nspin.size());
 
+            Set<String> od = new HashSet<>();
+            if (file.oneDesign != null)
+            {
+                for (String name : file.oneDesign)
+                {
+                    if (name != null && !name.isBlank())
+                        od.add(IdGenerator.normaliseDesignName(name));
+                }
+            }
+            oneDesignIds = Collections.unmodifiableSet(od);
+            if (!od.isEmpty())
+                LOG.info("Loaded design catalogue: {} one-design design(s)", od.size());
+
+            Set<String> mod = new HashSet<>();
+            if (file.modifiedBoats != null)
+            {
+                for (BoatEntry b : file.modifiedBoats)
+                {
+                    String key = b == null ? null : boatKey(b.sailNumber, b.name);
+                    if (key != null)
+                        mod.add(key);
+                }
+            }
+            modifiedBoatKeys = Collections.unmodifiableSet(mod);
+            if (!mod.isEmpty())
+                LOG.info("Loaded design catalogue: {} modified boat(s)", mod.size());
+
             Map<String, List<OverrideEntry>> overrides = new HashMap<>();
             Map<String, String> designs = new HashMap<>();
             if (file.boatDesignOverrides != null)
@@ -326,8 +494,7 @@ class Designs
                     {
                         if (boat.sailNumber == null || boat.name == null)
                             continue;
-                        String key = IdGenerator.normaliseSailNumber(boat.sailNumber)
-                            + "|" + IdGenerator.normaliseName(boat.name);
+                        String key = boatKey(boat.sailNumber, boat.name);
                         overrides.computeIfAbsent(key, k -> new ArrayList<>())
                             .add(new OverrideEntry(normDesignId, canonName, boat.from, boat.until));
                     }
@@ -373,6 +540,19 @@ class Designs
             return noSpinnakerIds.contains(normalisedDesignId);
         }
 
+        boolean isOneDesign(String normalisedDesignId)
+        {
+            if (normalisedDesignId == null)
+                return false;
+            return oneDesignIds.contains(normalisedDesignId);
+        }
+
+        boolean isModifiedBoat(String sailNumber, String name)
+        {
+            String key = boatKey(sailNumber, name);
+            return key != null && modifiedBoatKeys.contains(key);
+        }
+
         /**
          * Returns the normalised override designId for the given sail number, boat name, and optional date.
          * If date is null, only undated overrides match.
@@ -397,7 +577,7 @@ class Designs
         {
             if (overridesByKey.isEmpty() || sailNumber == null || name == null)
                 return null;
-            String key = IdGenerator.normaliseSailNumber(sailNumber) + "|" + IdGenerator.normaliseName(name);
+            String key = boatKey(sailNumber, name);
             List<OverrideEntry> entries = overridesByKey.get(key);
             if (entries == null)
                 return null;

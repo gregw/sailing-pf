@@ -551,6 +551,8 @@ public class AdminApiServlet extends HttpServlet
                 row.put("designId",   b.designId());
                 row.put("designExcluded", b.designId() != null && store.isDesignExcluded(b.designId()));
                 row.put("designIgnored",  b.designId() != null && store.isDesignIgnored(b.designId()));
+                row.put("designOneDesign", b.designId() != null && store.isDesignOneDesign(b.designId()));
+                row.put("modified", store.isBoatModified(b.id()));
                 row.put("clubId", b.primaryClubId());
                 row.put("clubIds", b.clubIds());
                 putClubNaming(row, b.primaryClubId());
@@ -1813,6 +1815,8 @@ public class AdminApiServlet extends HttpServlet
             String newSailNumber = (String) body.get("sailNumber");
             String newName = (String) body.get("name");
             String newDesignId = body.containsKey("designId") ? (String) body.get("designId") : null;
+            // Optional: modified-from-design flag. Absent → unchanged (carried across a rename).
+            Boolean newModified = body.containsKey("modified") ? Boolean.TRUE.equals(body.get("modified")) : null;
 
             if (boatId == null || boatId.isBlank())
             {
@@ -1832,6 +1836,13 @@ public class AdminApiServlet extends HttpServlet
             String sail = (newSailNumber != null && !newSailNumber.isBlank()) ? newSailNumber.trim() : boat.sailNumber();
             String name = (newName != null && !newName.isBlank()) ? newName.trim() : boat.name();
             String designId = body.containsKey("designId") ? (newDesignId != null && !newDesignId.isBlank() ? newDesignId.trim() : null) : boat.designId();
+            // A "… Modified" design chosen for the boat becomes its base design, ticked modified
+            String baseDesignId = store.baseOfModifiedDesign(designId);
+            if (baseDesignId != null)
+            {
+                designId = baseDesignId;
+                newModified = true;
+            }
 
             // Resolve clubIds — accept either a `clubIds` array or the legacy single `clubId`.
             boolean clubIdsTouched = body.containsKey("clubIds") || body.containsKey("clubId");
@@ -1878,10 +1889,19 @@ public class AdminApiServlet extends HttpServlet
                 return;
             }
 
+            // The modified flag is keyed by sail + name: clear it under the old identity before
+            // the edit and set it under the new one after.
+            boolean wasModified = store.isBoatModified(boatId);
+            boolean modified = newModified != null ? newModified : wasModified;
+            if (wasModified)
+                store.setBoatModified(boatId, false);
+
             // Create updated boat record
             Boat updated = new Boat(newBoatId, sail, name, designId, clubIds,
                 boat.certificates(), boat.sources(), java.time.Instant.now(), null);
             store.putBoat(updated);
+            if (modified)
+                store.setBoatModified(newBoatId, true);
 
             int updatedRaces = 0;
             int updatedFinishers = 0;
@@ -1980,7 +2000,8 @@ public class AdminApiServlet extends HttpServlet
 
             writeJson(resp, Map.of("ok", true, "newBoatId", newBoatId,
                 "idChanged", idChanged, "updatedRaces", updatedRaces,
-                "updatedFinishers", updatedFinishers));
+                "updatedFinishers", updatedFinishers,
+                "modifiedChanged", modified != wasModified));
         }
         catch (Exception e)
         {
@@ -2014,6 +2035,8 @@ public class AdminApiServlet extends HttpServlet
             // Optional: explicit override of the noSpinnaker flag. Absent → unchanged.
             Boolean newNoSpinnaker = body.containsKey("noSpinnaker")
                 ? Boolean.TRUE.equals(body.get("noSpinnaker")) : null;
+            Boolean newOneDesign = body.containsKey("oneDesign")
+                ? Boolean.TRUE.equals(body.get("oneDesign")) : null;
 
             if (oldId == null || oldId.isBlank())
             {
@@ -2044,7 +2067,8 @@ public class AdminApiServlet extends HttpServlet
             boolean idChanged   = !newId.equalsIgnoreCase(oldId);
             boolean nameChanged = !newName.equalsIgnoreCase(old.canonicalName());
             boolean noSpinChanged = newNoSpinnaker != null && newNoSpinnaker != old.noSpinnaker();
-            if (!idChanged && !nameChanged && !noSpinChanged)
+            boolean oneDesignChanged = newOneDesign != null && newOneDesign != store.isDesignOneDesign(oldId);
+            if (!idChanged && !nameChanged && !noSpinChanged && !oneDesignChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true, "newDesignId", oldId));
                 return;
@@ -2105,6 +2129,12 @@ public class AdminApiServlet extends HttpServlet
             // in-memory design records.
             if (noSpinChanged)
                 store.setDesignNoSpinnaker(newId, newNoSpinnaker);
+            // oneDesign is YAML-managed too; after a rename the flag moves to the new id.
+            boolean oneDesign = newOneDesign != null ? newOneDesign : store.isDesignOneDesign(oldId);
+            if (idChanged && store.isDesignOneDesign(oldId))
+                store.setDesignOneDesign(oldId, false);
+            if (oneDesign != store.isDesignOneDesign(newId))
+                store.setDesignOneDesign(newId, oneDesign);
 
             store.save();
             if (cache != null)
@@ -2113,6 +2143,7 @@ public class AdminApiServlet extends HttpServlet
             writeJson(resp, Map.of("ok", true, "newDesignId", newId,
                 "idChanged", idChanged, "nameChanged", nameChanged,
                 "noSpinChanged", noSpinChanged,
+                "oneDesignChanged", oneDesignChanged,
                 "updatedBoats", updatedBoats,
                 "updatedRaces", updatedRaces,
                 "updatedFinishers", updatedFinishers));
@@ -2441,7 +2472,7 @@ public class AdminApiServlet extends HttpServlet
             List<Map<String, Object>> entries = new ArrayList<>();
             if (rf != null && dd.boatIds() != null)
             {
-                for (String memberId : dd.boatIds())
+                for (String memberId : designMembers(dd))
                 {
                     List<EntryResidual> residuals = cache.residualsByBoatId().get(memberId);
                     if (residuals == null) continue;
@@ -2862,6 +2893,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("excluded",      store.isDesignExcluded(d.id()));
                 row.put("ignored",       store.isDesignIgnored(d.id()));
                 row.put("noSpinnaker", store.isDesignNoSpinnaker(d.id()));
+                row.put("oneDesign",   store.isDesignOneDesign(d.id()));
                 return row;
             }).collect(Collectors.toList());
 
@@ -2888,6 +2920,7 @@ public class AdminApiServlet extends HttpServlet
             detail.put("sources", design.sources());
             detail.put("lastUpdated", design.lastUpdated());
             detail.put("noSpinnaker", design.noSpinnaker());
+            detail.put("oneDesign", store.isDesignOneDesign(design.id()));
             writeJson(resp, detail);
         }
     }
@@ -3773,6 +3806,19 @@ public class AdminApiServlet extends HttpServlet
      * and capped at 200. Each entry includes the design's spin and nonSpin RF.
      */
     /**
+     * The boats that represent a design on the design-comparison charts: its member boats,
+     * less those flagged modified from the design.
+     */
+    private Set<String> designMembers(DesignDerived dd)
+    {
+        if (dd.boatIds() == null)
+            return Set.of();
+        return dd.boatIds().stream()
+            .filter(id -> !store.isBoatModified(id))
+            .collect(Collectors.toSet());
+    }
+
+    /**
      * Returns the set of design ids that have co-raced (share a race division) with at
      * least one boat of the given anchor design. Returns null if the anchor design or
      * its member-boat set is unknown.
@@ -3884,8 +3930,8 @@ public class AdminApiServlet extends HttpServlet
         DesignDerived ddb = cache.designDerived().get(designBId);
         if (dda == null || ddb == null) { resp.sendError(404); return; }
 
-        Set<String> boatIdsA = dda.boatIds() != null ? dda.boatIds() : Set.of();
-        Set<String> boatIdsB = ddb.boatIds() != null ? ddb.boatIds() : Set.of();
+        Set<String> boatIdsA = designMembers(dda);
+        Set<String> boatIdsB = designMembers(ddb);
 
         // Index each member boat's residuals by "raceId|divisionName" so every finisher can
         // be tagged with the variant it sailed. The frontend medians only the finishes of

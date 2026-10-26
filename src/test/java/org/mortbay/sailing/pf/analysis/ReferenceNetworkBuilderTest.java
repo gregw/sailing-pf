@@ -106,6 +106,87 @@ class ReferenceNetworkBuilderTest
     }
 
     /**
+     * Seeds a "s38" design with two IRC-certificated boats (1.09, 1.10), a boat with no
+     * certificate whose RF comes from one race against a reference fleet, and a heavily
+     * modified boat with an IRC certificate of 1.20.
+     */
+    private static DataStore seedSydney38(Path tempDir, boolean oneDesign, boolean modified)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        for (int i = 1; i <= 4; i++)
+        {
+            store.putDesign(new Design("ref" + i, "Ref " + i, List.of(), List.of(), null, false, null));
+            store.putBoat(new Boat("REF" + i + "-ref-ref" + i, "REF" + i, "Ref", "ref" + i, null,
+                List.of(new Certificate("IRC", 2026, 1.0 + 0.02 * (i - 2), false, false, false, false, null, null)),
+                List.of(), null, null));
+        }
+        store.putDesign(new Design("s38", "S38", List.of(), List.of(), null, false, null));
+        store.putBoat(new Boat("A-a-s38", "A", "A", "s38", null,
+            List.of(new Certificate("IRC", 2026, 1.09, false, false, false, false, null, null)), List.of(), null, null));
+        store.putBoat(new Boat("B-b-s38", "B", "B", "s38", null,
+            List.of(new Certificate("IRC", 2026, 1.10, false, false, false, false, null, null)), List.of(), null, null));
+        store.putBoat(new Boat("C-c-s38", "C", "C", "s38", null, List.of(), List.of(), null, null));
+        store.putBoat(new Boat("M-m-s38", "M", "M", "s38", null,
+            List.of(new Certificate("IRC", 2026, 1.20, false, false, false, false, null, null)), List.of(), null, null));
+        // C sails slowly against the reference fleet: an implied RF well below 1.09
+        store.putRace(new Race("club-2026-01-01-0001", "club", List.of("club/s"),
+            LocalDate.of(2026, 1, 1), 1, null,
+            List.of(new Division("Spin", List.of(
+                new Finisher("C-c-s38", Duration.ofMinutes(62), false, null),
+                new Finisher("REF1-ref-ref1", Duration.ofMinutes(58), false, null),
+                new Finisher("REF2-ref-ref2", Duration.ofMinutes(60), false, null),
+                new Finisher("REF3-ref-ref3", Duration.ofMinutes(62), false, null),
+                new Finisher("REF4-ref-ref4", Duration.ofMinutes(64), false, null)
+            ))), null, null, null));
+        if (oneDesign)
+            store.setDesignOneDesign("s38", true);
+        if (modified)
+            store.setBoatModified("M-m-s38", true);
+        return store;
+    }
+
+    /**
+     * One-design: every boat not flagged modified gets the design RF, built from the
+     * certificate-based boats only; the modified boat keeps its own RF and does not count.
+     */
+    @Test
+    void oneDesignBoatsShareCertificateBasedDesignRf(@TempDir Path tempDir)
+    {
+        DataStore store = seedSydney38(tempDir, true, true);
+        ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder().build(store, 2026);
+
+        Factor design = built.designFactors().get("s38").spin();
+        assertTrue(design.value() > 1.089 && design.value() < 1.101,
+            "design RF from the 1.09 and 1.10 certificates only, was " + design.value());
+        for (String id : List.of("A-a-s38", "B-b-s38", "C-c-s38"))
+            assertEquals(design.value(), built.boatFactors().get(id).spin().value(), 1e-9, id);
+        assertTrue(built.boatFactors().get("M-m-s38").spin().value() > 1.19,
+            "modified boat keeps its own RF");
+    }
+
+    /**
+     * Without the one-design flag, boats keep distinct RFs; a modified boat is not pulled
+     * toward the design RF and does not pull the design RF toward itself.
+     */
+    @Test
+    void modifiedBoatIsNotPulledTowardDesign(@TempDir Path tempDir)
+    {
+        ReferenceNetworkBuilder.BuildResult plain =
+            new ReferenceNetworkBuilder().build(seedSydney38(tempDir.resolve("plain"), false, false), 2026);
+        ReferenceNetworkBuilder.BuildResult flagged =
+            new ReferenceNetworkBuilder().build(seedSydney38(tempDir.resolve("flagged"), false, true), 2026);
+
+        assertTrue(plain.boatFactors().get("C-c-s38").spin().value()
+            < plain.boatFactors().get("A-a-s38").spin().value(), "not one-design: RFs differ");
+        assertTrue(flagged.boatFactors().get("M-m-s38").spin().value()
+            > plain.boatFactors().get("M-m-s38").spin().value(), "modified boat not pulled toward design");
+        assertTrue(flagged.boatFactors().get("M-m-s38").spin().value() > 1.19);
+        assertTrue(flagged.designFactors().get("s38").spin().value()
+            < plain.designFactors().get("s38").spin().value(), "modified boat not in design RF");
+    }
+
+    /**
      * Monotonicity clamp: after all blending, the spin factor must be at least as large as
      * the nonSpin and twoH factors. We synthesise an inverted boat by hand and run the clamp
      * helper through the public {@code build} pathway with a boat whose nonSpin RF would

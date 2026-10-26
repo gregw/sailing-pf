@@ -113,6 +113,101 @@ class DataStoreTest {
     }
 
     @Test
+    void startupFoldsModifiedDesignIntoBaseDesignWithModifiedFlag(@TempDir Path tempDir) throws IOException
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putDesign(new Design("farr40", "Farr 40", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("farr40modified", "Farr 40 Modified", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("magicmodified25", "Magic Modified 25", List.of(), List.of(), null, false, null));
+        store.putBoat(new Boat("40-x-farr40modified", "40", "X", "farr40modified", List.of(), List.of(),
+            List.of("test"), null, null));
+        store.putBoat(new Boat("25-m-magicmodified25", "25", "M", "magicmodified25", List.of(), List.of(),
+            List.of("test"), null, null));
+        store.putRace(new Race("club-2026-01-01-0001", "club", List.of(), LocalDate.of(2026, 1, 1), 1, null,
+            List.of(new Division("D1", List.of(
+                new Finisher("40-x-farr40modified", Duration.ofMinutes(60), false, null)))),
+            null, null, null));
+        store.stop();
+        // A design override targeting the modified design moves to the base
+        Files.createDirectories(tempDir.resolve("config"));
+        Files.writeString(tempDir.resolve("config/design.yaml"), """
+            boatDesignOverrides:
+            - designId: "farr40modified"
+              canonicalName: "Farr 40 Modified"
+              boats:
+              - sailNumber: "40"
+                name: "X"
+            """);
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        Boat x = store2.boats().get("40-x-farr40");
+        assertNotNull(x, "boat re-keyed to the base design");
+        assertEquals("farr40", x.designId());
+        assertTrue(store2.isBoatModified("40-x-farr40"));
+        assertEquals("40-x-farr40", store2.races().get("club-2026-01-01-0001")
+            .divisions().getFirst().finishers().getFirst().boatId());
+        assertNull(store2.designs().get("farr40modified"), "empty modified design removed");
+
+        // "Magic Modified 25" → a new Magic 25 base design
+        assertEquals("magic25", store2.boats().get("25-m-magic25").designId());
+        assertNotNull(store2.designs().get("magic25"));
+        assertTrue(store2.isBoatModified("25-m-magic25"));
+
+        String yaml = Files.readString(tempDir.resolve("config/design.yaml"));
+        assertFalse(yaml.contains("farr40modified"), yaml);
+        assertTrue(yaml.contains("designId: \"farr40\""), yaml);
+        store2.stop();
+
+        // Restart is stable: the override now names the base design
+        DataStore store3 = new DataStore(tempDir);
+        store3.start();
+        assertEquals("farr40", store3.boats().get("40-x-farr40").designId());
+        assertTrue(store3.isBoatModified("40-x-farr40"));
+    }
+
+    @Test
+    void importOfModifiedDesignNameFoldsToBaseDesign(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putDesign(new Design("farr40", "Farr 40", List.of(), List.of(), null, false, null));
+
+        Boat b = store.findOrCreateBoat("AUS40", "Exile", "Farr 40 Modified");
+        assertEquals("farr40", b.designId());
+        assertTrue(store.isBoatModified(b.id()));
+        assertNull(store.designs().get("farr40modified"));
+        assertEquals(b, store.findOrCreateBoat("AUS40", "Exile", "Farr 40 Modified"), "re-import finds it");
+    }
+
+    @Test
+    void oneDesignAndModifiedFlagsPersistToDesignYaml(@TempDir Path tempDir) throws IOException
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putDesign(new Design("sydney38", "Sydney 38", List.of(), List.of(), null, false, null));
+        store.putBoat(new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", List.of(), List.of(),
+            List.of("test"), null, null));
+        store.setDesignOneDesign("sydney38", true);
+        store.setBoatModified("5656-mondo-sydney38", true);
+        store.stop();
+
+        String yaml = Files.readString(tempDir.resolve("config/design.yaml"));
+        assertTrue(yaml.contains("oneDesign:"), yaml);
+        assertTrue(yaml.contains("modifiedBoats:"), yaml);
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertTrue(store2.isDesignOneDesign("sydney38"));
+        assertTrue(store2.isBoatModified("5656-mondo-sydney38"));
+        store2.setBoatModified("5656-mondo-sydney38", false);
+        store2.setDesignOneDesign("sydney38", false);
+        assertFalse(store2.isBoatModified("5656-mondo-sydney38"));
+        assertFalse(store2.isDesignOneDesign("sydney38"));
+    }
+
+    @Test
     void startupDropsRaceDerivedOrcCertificates(@TempDir Path tempDir)
     {
         Certificate official = new Certificate("ORC", 2025, 1.0625, false, false, false, false, "249100", null);
