@@ -118,7 +118,7 @@ const PP_SPOKES = [
     {key: 'frequency',   label: 'Frequency'},
     {key: 'diversity',   label: 'Diversity'},
     {key: 'consistency', label: 'Consistency'},
-    {key: 'chaotic',     label: 'Chaotic'},
+    {key: 'chaotic',     label: 'NonChaotic'},
     {key: 'stability',   label: 'Stability'},
     {key: 'results',     label: 'Results'},
 ];
