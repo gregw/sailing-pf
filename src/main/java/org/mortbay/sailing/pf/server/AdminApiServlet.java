@@ -2445,6 +2445,8 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleComparisonChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
+        // Design comparison: whether a design's modified boats are among its members
+        boolean includeModified = "true".equals(req.getParameter("includeModified"));
         String boatIdsParam   = req.getParameter("boatIds");
         String designIdsParam = req.getParameter("designIds");
         List<String> boatIds   = (boatIdsParam   != null && !boatIdsParam.isBlank())
@@ -2543,7 +2545,7 @@ public class AdminApiServlet extends HttpServlet
             List<Map<String, Object>> entries = new ArrayList<>();
             if (rf != null && dd.boatIds() != null)
             {
-                for (String memberId : designMembers(dd))
+                for (String memberId : designMembers(dd, includeModified))
                 {
                     List<EntryResidual> residuals = cache.residualsByBoatId().get(memberId);
                     if (residuals == null) continue;
@@ -3912,14 +3914,15 @@ public class AdminApiServlet extends HttpServlet
 
     /**
      * The boats that represent a design on the design-comparison charts: its member boats,
-     * less those flagged modified from the design.
+     * less those flagged modified from the design unless {@code includeModified}
+     * (the page's "Include modified boats" tick box).
      */
-    private Set<String> designMembers(DesignDerived dd)
+    private Set<String> designMembers(DesignDerived dd, boolean includeModified)
     {
         if (dd.boatIds() == null)
             return Set.of();
         return dd.boatIds().stream()
-            .filter(id -> !store.isBoatModified(id))
+            .filter(id -> includeModified || !store.isBoatModified(id))
             .collect(Collectors.toSet());
     }
 
@@ -4036,8 +4039,9 @@ public class AdminApiServlet extends HttpServlet
         DesignDerived ddb = cache.designDerived().get(designBId);
         if (dda == null || ddb == null) { resp.sendError(404); return; }
 
-        Set<String> boatIdsA = designMembers(dda);
-        Set<String> boatIdsB = designMembers(ddb);
+        boolean includeModified = "true".equals(req.getParameter("includeModified"));
+        Set<String> boatIdsA = designMembers(dda, includeModified);
+        Set<String> boatIdsB = designMembers(ddb, includeModified);
 
         // Index each member boat's residuals by "raceId|divisionName" so every finisher can
         // be tagged with the variant it sailed. The frontend medians only the finishes of

@@ -40,6 +40,7 @@ function _persistedStr(key, dflt) {
 let selectedItems = [];   // {type:'design', id, label, color, initialVariant?}
 let allAvailable = _persistedBool('all-available', false);
 let showRfLine = _persistedBool('show-rf-line', true);
+let includeModified = _persistedBool('include-modified', false);
 let showTrendLinear = _persistedBool('show-trend-linear', true);
 let showTrendSliding = _persistedBool('show-trend-sliding', true);
 let hideLegend = _persistedBool('hide-legend', false);
@@ -291,6 +292,7 @@ async function loadChart() {
         return;
     }
     const params = new URLSearchParams({ designIds: designIds.join(',') });
+    if (includeModified) params.set('includeModified', 'true');
     const data = await fetchJson('/api/comparison/chart?' + params);
     if (!data) return;
     lastChartData = data;
@@ -592,12 +594,13 @@ async function loadElapsedCharts() {
 
     section.style.display = '';
 
-    const key = `${idA}|${idB}`;
+    const key = `${idA}|${idB}|${includeModified}`;
     let data;
     if (elapsedChartCache.key === key && elapsedChartCache.data) {
         data = elapsedChartCache.data;
     } else {
         const params = new URLSearchParams({designAId: idA, designBId: idB});
+        if (includeModified) params.set('includeModified', 'true');
         data = await fetchJson('/api/design-comparison/chart?' + params);
         if (!data) return;
         elapsedChartCache = {key, data};
@@ -836,6 +839,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadCandidates();
     });
     persistControl('show-rf-line');
+    persistControl('include-modified');
+    document.getElementById('include-modified').addEventListener('change', e => {
+        includeModified = e.target.checked;
+        loadChart();   // reloads the elapsed charts too
+    });
     persistControl('show-trend-linear');
     persistControl('show-trend-sliding');
     persistControl('hide-legend');
