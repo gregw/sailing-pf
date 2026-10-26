@@ -206,7 +206,7 @@ const COLUMNS = {
                   : '<span style="color:#bbb">—</span>';
           } },
         { label: 'PP', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
-            tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Diversity, Consistency, NonChaotic, Stability and Results spokes (last 12 months).',
+            tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Diversity, Consistency, NonChaotic, Stability and Results spokes (last 24 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         boatsClubColumn(),
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
@@ -982,7 +982,7 @@ function renderBoatPf(data) {
 
     if (data.profile) {
         const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: six fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Diversity: distinct opponents raced. Consistency: how tight the residuals are. NonChaotic: whether the boat\'s errors come in orderly races, where the rest of the fleet finished close to its handicaps (its own), or in disorderly races (excusable), regardless of how big they are. Stability: flatness of trend (level=best, declining=worst). Results: average finishing place on PF-corrected time in its divisions (independent of how often it races).')}</div>`;
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: six fleet-relative percentile scores based on the last 24 months. Frequency: how often the boat races. Diversity: distinct opponents raced. Consistency: how tight the residuals are. NonChaotic: whether the boat\'s errors come in orderly races, where the rest of the fleet finished close to its handicaps (its own), or in disorderly races (excusable), regardless of how big they are. Stability: flatness of trend (level=best, declining=worst). Results: average finishing place on PF-corrected time in its divisions (independent of how often it races).')}</div>`;
         html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;

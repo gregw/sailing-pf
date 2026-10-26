@@ -20,7 +20,7 @@ import org.mortbay.sailing.pf.data.Race;
 /**
  * Builds fleet-relative {@link PerformanceProfile}s for all boats in one pass.
  * <p>
- * All six spokes use the last 12 months of data. Each spoke value is the boat's
+ * All six spokes use the last 24 months of data. Each spoke value is the boat's
  * percentile rank within the active fleet (boats with ≥1 finish in the window),
  * normalised to [0, 1] — 1.0 = best in fleet, 0.0 = worst.
  * <p>
@@ -59,7 +59,10 @@ import org.mortbay.sailing.pf.data.Race;
  */
 public class PerformanceProfileBuilder
 {
-    private static final int RECENT_DAYS = 365;
+    /** The window: 24 months. */
+    private static final int RECENT_DAYS = 730;
+    /** Calendar months in the window, for the Frequency spoke's spread bonus. */
+    private static final int WINDOW_MONTHS = 24;
     private static final int MIN_CHAOTIC_PAIRS = 5;
     /** Chaotic ratio shrinkage: (n·ratio + K·median) / (n + K) — K pseudo-races at the fleet median. */
     private static final double CHAOTIC_SHRINK_K = 5.0;
@@ -75,7 +78,7 @@ public class PerformanceProfileBuilder
         Math.log(FREQUENCY_DURATION_SCALE) / Math.log(2.0);
     /**
      * Year-spread floor for the Frequency multiplier. A boat with all races in a single
-     * month gets this multiplier; a boat with races in 12 distinct months gets 1.0.
+     * month gets this multiplier; a boat with races in every month of the window gets 1.0.
      * Values in between interpolate linearly. Set close to 1.0 to keep the bonus small.
      */
     private static final double FREQUENCY_SPREAD_MIN = 0.85;
@@ -197,7 +200,7 @@ public class PerformanceProfileBuilder
             // Races at the fleet-median duration contribute 1.0 (unchanged from plain count);
             // longer races contribute slightly more, shorter ones slightly less.
             // A small year-spread bonus is then applied: a boat racing in many distinct months
-            // of the 12-month window scores slightly more than one concentrated in a few months,
+            // of the 24-month window scores slightly more than one concentrated in a few months,
             // rewarding year-round participation without overwhelming the duration-weighted count.
             Set<String> seenForFreq = new HashSet<>();
             Set<YearMonth> activeMonths = new HashSet<>();
@@ -211,9 +214,9 @@ public class PerformanceProfileBuilder
                     ? dm.get(r.divisionName()) : refDurSecs;
                 freq += Math.pow(durSecs / refDurSecs, FREQUENCY_DURATION_ALPHA);
             }
-            int monthsActive = Math.min(activeMonths.size(), 12);
+            int monthsActive = Math.min(activeMonths.size(), WINDOW_MONTHS);
             double spreadFactor = FREQUENCY_SPREAD_MIN
-                + (1.0 - FREQUENCY_SPREAD_MIN) * monthsActive / 12.0;
+                + (1.0 - FREQUENCY_SPREAD_MIN) * monthsActive / (double) WINDOW_MONTHS;
             freq *= spreadFactor;
 
             // Diversity: variant-weighted Σ(√encounters) across distinct (opponent, variant) pairs.

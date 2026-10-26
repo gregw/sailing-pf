@@ -19,7 +19,7 @@ import org.mortbay.sailing.pf.data.Factor;
  * Builds {@link DesignProfile}s: how well established and well measured a design is in the
  * results, as six percentile-ranked spokes over the designs with at least
  * {@value #MIN_ACTIVE_BOATS} active boats. An active boat has at least
- * {@value #MIN_BOAT_RACES} distinct races in the last 24 months (twice the window of a boat's
+ * {@value #MIN_BOAT_RACES} distinct races in the last 24 months (as for a boat's
  * {@link PerformanceProfile}); boats flagged modified from their design are left out.
  * <p>
  * Spoke definitions, in hexagon order (Quantity → Ubiquity → Frequency → Results →
@@ -51,7 +51,7 @@ public class DesignProfileBuilder
     public static final int MIN_ACTIVE_BOATS = 3;
     /** A boat is active with at least this many distinct races in the window. */
     private static final int MIN_BOAT_RACES = 3;
-    /** The window: 24 months, twice a boat profile's, as a design's boats race less often between them. */
+    /** The window: 24 months, as for a boat's profile. */
     private static final int RECENT_DAYS = 730;
 
     /**

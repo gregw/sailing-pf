@@ -21,6 +21,7 @@
 - **Design flags shown**: (OD), (no spin) and (modified) now follow design names wherever they are shown.
 - **Performance profile**: Diversity and Consistency have swapped spokes, so racing often counts for more against many opponents, and inconsistency counts for less when it is only in disorderly races.
 - **Results spoke**: The performance profile has a sixth spoke, Results — the boat's average finishing place on PF-corrected time in its divisions, independent of how often it races. It sits between Stability and Frequency.
+- **Profiles over 24 months**: Both the boat performance profile (PP) and the design profile (DP) now use the last 24 months of results.
 - **Design profile**: Designs with at least 3 active boats (over the last 24 months) have a design profile (DP) — Quantity, Ubiquity (effective number of clubs), Frequency, Results (the boats' PF-corrected placings), Consistency (how closely the boats' PFs match the design RF) and Modern (the design year, newer scoring higher — set on the design edit form, or else taken from the boats' ORC certificate age dates). Shown on the designs page (a DP column, and a chart when a design is clicked) and in a popup when hovering a design elsewhere.
 - **Prev / Next**: The boats and designs pages have Prev / Next buttons directly below the table; opening a row scrolls them to the top of the page with the details below.
 - **Boat comparison defaults**: "All available" ticked, PF and RF lines off, and an average trend.
