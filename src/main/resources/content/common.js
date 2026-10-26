@@ -110,6 +110,19 @@ function infoBtn(anchor, tip) {
     return `<a href="ui-tips.md#${anchor}" class="info-btn" data-tip="${attr(fillTargetYear(tip))}"${template} target="_blank" onclick="event.stopPropagation()">ⓘ</a>`;
 }
 
+/**
+ * Performance profile spokes, in the order of the polygon-area calculation
+ * (PerformanceProfileBuilder): adjacent spokes multiply, and Results wraps round to Frequency.
+ */
+const PP_SPOKES = [
+    {key: 'frequency',   label: 'Frequency'},
+    {key: 'diversity',   label: 'Diversity'},
+    {key: 'consistency', label: 'Consistency'},
+    {key: 'chaotic',     label: 'Chaotic'},
+    {key: 'stability',   label: 'Stability'},
+    {key: 'results',     label: 'Results'},
+];
+
 // ---- Target IRC year ----
 //
 // PF and RF are on the IRC scale of the configured target year. Tips say so through the

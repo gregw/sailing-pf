@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The Chaotic spoke's raw metric: the orderly-race share of a boat's error, independent of the
- * size of its errors (and so of Consistency).
+ * size of its errors (and so of Consistency); the Results spoke's mean PF-corrected placing;
+ * and the hexagon's spoke order in the overall score.
  */
 class PerformanceProfileBuilderTest
 {
@@ -109,5 +110,70 @@ class PerformanceProfileBuilderTest
         assertEquals((5 * 2.0 + 5 * median) / 10, raw.get("few")[4], 1e-12);
         assertEquals((100 * 0.6 + 5 * median) / 105, raw.get("a")[4], 1e-12);
         assertTrue(Double.isNaN(raw.get("none")[4]));
+    }
+
+    /** A boat with residual {@code mine} in each race, against {@code others} in every division. */
+    private static double results(int races, double mine, double... others)
+    {
+        Map<String, List<Double>> byRaceDiv = new HashMap<>();
+        List<EntryResidual> boat = new ArrayList<>();
+        for (int i = 0; i < races; i++)
+        {
+            List<Double> all = new ArrayList<>();
+            for (double o : others)
+                all.add(o);
+            all.add(mine);
+            byRaceDiv.put("race-" + i + "|Div", all);
+            boat.add(new EntryResidual("race-" + i, "Div", DAY, false, false, mine, 1.0));
+        }
+        return PerformanceProfileBuilder.computeResults(boat, byRaceDiv);
+    }
+
+    @Test
+    void resultsIsTheMeanPfCorrectedPlacing()
+    {
+        assertEquals(1.0, results(5, -0.1, 0.0, 0.05, 0.1, 0.2), 1e-12, "always first");
+        assertEquals(0.0, results(5, 0.3, 0.0, 0.05, 0.1, 0.2), 1e-12, "always last");
+        assertEquals(0.75, results(5, 0.01, 0.0, 0.05, 0.1, 0.2), 1e-12, "always 2nd of 5");
+        // Tied with one other boat for 2nd/3rd of 5: shares the places
+        assertEquals(0.625, results(5, 0.05, 0.0, 0.05, 0.1, 0.2), 1e-12, "tied");
+    }
+
+    @Test
+    void resultsDoesNotDependOnHowOftenTheBoatRaces()
+    {
+        assertEquals(results(5, 0.01, 0.0, 0.05, 0.1, 0.2), results(20, 0.01, 0.0, 0.05, 0.1, 0.2), 1e-12);
+    }
+
+    @Test
+    void resultsLeavesOutSmallDivisions()
+    {
+        assertTrue(Double.isNaN(results(5, 0.0, 0.1)), "two-boat divisions only");
+    }
+
+    @Test
+    void overallScoreIsTheHexagonAreaInSpokeOrder()
+    {
+        // Four boats, one division per race; boat i is i-th on corrected time in every race
+        Map<String, List<EntryResidual>> byBoat = new LinkedHashMap<>();
+        for (int b = 0; b < 4; b++)
+        {
+            List<EntryResidual> rs = new ArrayList<>();
+            for (int i = 0; i < 3 + b; i++)
+                rs.add(new EntryResidual("race-" + i, "Div", DAY.minusDays(i), false, false,
+                    0.01 * b + 0.001 * i * (b % 2 == 0 ? 1 : -1), 1.0));
+            byBoat.put("boat-" + b, rs);
+        }
+        Map<String, PerformanceProfile> profiles = new PerformanceProfileBuilder().buildAll(byBoat, Map.of());
+        assertEquals(1.0, profiles.get("boat-0").results(), 1e-12, "best placings rank first");
+        assertEquals(0.0, profiles.get("boat-3").results(), 1e-12, "worst placings rank last");
+        for (PerformanceProfile p : profiles.values())
+        {
+            double[] r = {p.frequency(), p.diversity(), p.consistency(), p.chaotic(), p.stability(), p.results()};
+            double sum = 0;
+            for (int i = 0; i < r.length; i++)
+                sum += r[i] * r[(i + 1) % r.length];
+            assertEquals(sum / r.length, p.overallScore(), 1e-12);
+        }
     }
 }

@@ -20,14 +20,15 @@ import org.mortbay.sailing.pf.data.Race;
 /**
  * Builds fleet-relative {@link PerformanceProfile}s for all boats in one pass.
  * <p>
- * All five spokes use the last 12 months of data. Each spoke value is the boat's
+ * All six spokes use the last 12 months of data. Each spoke value is the boat's
  * percentile rank within the active fleet (boats with ≥1 finish in the window),
  * normalised to [0, 1] — 1.0 = best in fleet, 0.0 = worst.
  * <p>
- * Spoke definitions, in pentagon order (Frequency → Diversity → Consistency → Chaotic → Stability).
- * Adjacent spokes multiply in the polygon area, so the order pairs Frequency with Diversity
- * (racing often counts for more against many opponents) and Consistency with Chaotic (being
- * inconsistent counts for less when it is only in disorderly races):
+ * Spoke definitions, in hexagon order (Frequency → Diversity → Consistency → Chaotic → Stability
+ * → Results, then back to Frequency). Adjacent spokes multiply in the polygon area, so the order
+ * pairs Frequency with Diversity (racing often counts for more against many opponents),
+ * Consistency with Chaotic (being inconsistent counts for less when it is only in disorderly
+ * races) and Results with Frequency (good results count for more over many races):
  * <ul>
  *   <li><b>Frequency</b> — duration-weighted distinct race count in last 12m, multiplied by a
  *       small year-spread bonus (boats racing across many months score slightly higher than
@@ -49,6 +50,11 @@ import org.mortbay.sailing.pf.data.Race;
  *   <li><b>Stability</b> — asymmetric slope penalty on weighted linear regression of residual vs date:
  *       level slope = best; improving (negative slope) = moderate penalty;
  *       declining (positive slope) = double penalty</li>
+ *   <li><b>Results</b> — mean finishing percentile on PF-corrected time in each race's division
+ *       (1 = first, 0 = last, ties shared). A mean, so independent of how often the boat races;
+ *       divisions with fewer than {@value #MIN_RESULTS_FINISHERS} boats with a PF are left out.
+ *       Although a boat's mean residual is near zero by construction, its placings are not: a
+ *       boat usually at or ahead of its PF, with the odd disaster, places well most of the time</li>
  * </ul>
  */
 public class PerformanceProfileBuilder
@@ -59,6 +65,8 @@ public class PerformanceProfileBuilder
     private static final double CHAOTIC_SHRINK_K = 5.0;
     /** A division's spread (for Chaotic) needs at least this many other boats' residuals. */
     private static final int MIN_SPREAD_OTHERS = 3;
+    /** A division counts toward Results only with at least this many boats with a residual. */
+    private static final int MIN_RESULTS_FINISHERS = 3;
 
     /** A race 2× longer than the fleet median counts this many times more in the Frequency spoke. */
     private static final double FREQUENCY_DURATION_SCALE = 1.2;
@@ -125,7 +133,8 @@ public class PerformanceProfileBuilder
         LocalDate cutoff = LocalDate.now().minusDays(RECENT_DAYS);
 
         // Every boat's residual in each race-division of the window, for Chaotic's spread of
-        // the *other* boats (leave-one-out, so a boat's own error never excuses itself).
+        // the *other* boats (leave-one-out, so a boat's own error never excuses itself) and
+        // Results' PF-corrected placings.
         Map<String, List<Double>> residualsByRaceDiv = new HashMap<>();
         for (List<EntryResidual> residuals : residualsByBoatId.values())
             for (EntryResidual r : residuals)
@@ -174,7 +183,8 @@ public class PerformanceProfileBuilder
         // [2] consistency (asymmetric mean r², lower = better),
         // [3] stability (slope penalty, lower = better),
         // [4] chaotic (orderly-weighted / plain mean r², shrunk to the fleet median; lower = better;
-        //     NaN if insufficient), [5] races used for chaotic
+        //     NaN if insufficient), [5] races used for chaotic,
+        // [6] results (mean PF-corrected placing percentile, higher = better; NaN if none)
         Map<String, double[]> raw = new LinkedHashMap<>();
 
         for (Map.Entry<String, List<EntryResidual>> entry : residualsByBoatId.entrySet())
@@ -299,19 +309,23 @@ public class PerformanceProfileBuilder
             // fleet's typical ratio is known. Lower = better.
             double[] chaotic = computeChaotic(recent, residualsByRaceDiv);
 
-            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, chaotic[0], chaotic[1]});
+            // Results: mean PF-corrected placing percentile; see computeResults.
+            double results = computeResults(recent, residualsByRaceDiv);
+
+            raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, chaotic[0], chaotic[1], results});
         }
 
         if (raw.isEmpty()) return Map.of();
 
         // --- Step 2: percentile rank each metric, build profiles ---
-        // Spoke order for polygon area: Frequency, Diversity, Consistency, Chaotic, Stability
+        // Spoke order for polygon area: Frequency, Diversity, Consistency, Chaotic, Stability, Results
         double[] freqScores  = percentileRanks(raw, 0, true);
         double[] divScores   = percentileRanks(raw, 1, true);
         double[] consScores  = percentileRanks(raw, 2, false);
         double[] stabScores  = percentileRanks(raw, 3, false);  // lower penalty = better
         shrinkChaotic(raw);
-        double[] ncScores = chaoticRanks(raw);
+        double[] ncScores = validRanks(raw, 4, false);
+        double[] resScores = validRanks(raw, 6, true);
 
         String[] ids = raw.keySet().toArray(new String[0]);
         Map<String, PerformanceProfile> profiles = new LinkedHashMap<>();
@@ -322,8 +336,9 @@ public class PerformanceProfileBuilder
             double div   = divScores[i];
             double nc    = ncScores[i];
             double stab  = stabScores[i];
-            double score = polygonArea(new double[]{freq, div, cons, nc, stab});
-            profiles.put(ids[i], new PerformanceProfile(freq, div, cons, stab, nc, score));
+            double res   = resScores[i];
+            double score = polygonArea(new double[]{freq, div, cons, nc, stab, res});
+            profiles.put(ids[i], new PerformanceProfile(freq, div, cons, stab, nc, res, score));
         }
         return Map.copyOf(profiles);
     }
@@ -358,28 +373,29 @@ public class PerformanceProfileBuilder
     }
 
     /**
-     * Percentile ranks for Chaotic (index 4). Boats with NaN penalty (insufficient
-     * paired observations) get score 0. Among boats with a valid penalty, lower penalty
-     * = better rank (errors in disorderly rather than orderly races).
+     * Percentile ranks for a metric that may be NaN (insufficient data): Chaotic (index 4,
+     * lower = better: errors in disorderly rather than orderly races) and Results (index 6,
+     * higher = better placings). Boats with NaN get score 0; the rest are ranked among
+     * themselves.
      */
-    private static double[] chaoticRanks(Map<String, double[]> raw)
+    private static double[] validRanks(Map<String, double[]> raw, int idx, boolean higherIsBetter)
     {
         String[] ids = raw.keySet().toArray(new String[0]);
         int n = ids.length;
         double[] scores = new double[n];  // default 0 for NaN
 
-        // Collect valid-data boats and sort ascending by penalty (lower = better).
+        // Collect valid-data boats and sort ascending by value.
         List<int[]> valid = new ArrayList<>();
         for (int i = 0; i < n; i++)
-            if (!Double.isNaN(raw.get(ids[i])[4]))
+            if (!Double.isNaN(raw.get(ids[i])[idx]))
                 valid.add(new int[]{i});
-        valid.sort((a, b) -> Double.compare(raw.get(ids[a[0]])[4], raw.get(ids[b[0]])[4]));
+        valid.sort((a, b) -> Double.compare(raw.get(ids[a[0]])[idx], raw.get(ids[b[0]])[idx]));
 
         int m = valid.size();
         for (int rank = 0; rank < m; rank++)
         {
             double frac = m == 1 ? 0.5 : (double) rank / (m - 1);
-            scores[valid.get(rank)[0]] = 1.0 - frac;  // lower penalty → higher score
+            scores[valid.get(rank)[0]] = higherIsBetter ? frac : 1.0 - frac;
         }
         return scores;
     }
@@ -423,6 +439,41 @@ public class PerformanceProfileBuilder
         double slope = num / den;
         // Declining: full penalty. Improving: half penalty.
         return slope > 0 ? slope : -slope * 0.5;
+    }
+
+    // --- Results raw metric ---
+
+    /**
+     * The boat's mean finishing percentile on PF-corrected time: in each race's division the
+     * boats are ordered by residual (the same order as PF-corrected time, as the division shares
+     * one reference time), and the boat scores {@code 1 − (ahead + tied/2) / (n − 1)} — 1 for
+     * first, 0 for last, a tie sharing the places. Divisions with fewer than
+     * {@value #MIN_RESULTS_FINISHERS} boats with a residual are left out.
+     *
+     * @return the mean percentile, or {@link Double#NaN} if no division qualified
+     */
+    static double computeResults(List<EntryResidual> recent, Map<String, List<Double>> residualsByRaceDiv)
+    {
+        double sum = 0;
+        int count = 0;
+        for (EntryResidual r : recent)
+        {
+            List<Double> all = residualsByRaceDiv.get(raceDivKey(r));
+            if (all == null || all.size() < MIN_RESULTS_FINISHERS)
+                continue;
+            int ahead = 0, tied = 0;
+            for (double other : all)
+            {
+                if (other < r.residual())
+                    ahead++;
+                else if (other == r.residual())
+                    tied++;
+            }
+            tied--;  // the boat itself
+            sum += 1.0 - (ahead + tied / 2.0) / (all.size() - 1);
+            count++;
+        }
+        return count == 0 ? Double.NaN : sum / count;
     }
 
     // --- Chaotic raw metric ---

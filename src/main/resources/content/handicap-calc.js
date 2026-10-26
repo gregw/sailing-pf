@@ -189,9 +189,8 @@ const HandicapCalc = (function () {
 
     function renderMiniPentagon(container, profile, color) {
         if (typeof Plotly === 'undefined') return;
-        const labels = ['Frequency', 'Diversity', 'Consistency', 'Chaotic', 'Stability'];
-        const keys = ['frequency', 'diversity', 'consistency', 'chaotic', 'stability'];
-        const values = keys.map(k => profile[k] ?? 0);
+        const labels = PP_SPOKES.map(s => s.label);
+        const values = PP_SPOKES.map(s => profile[s.key] ?? 0);
         const theta = [...labels, labels[0]];
         const r = [...values, values[0]];
         const lineColor = color || 'rgba(31,119,180,0.85)';

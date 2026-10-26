@@ -19,6 +19,7 @@
 - **Modified boats**: A boat can be ticked as modified from its design; it keeps its own RF and does not count toward the design's. "… Modified" designs have been folded into their base design with the boat ticked modified.
 - **Design flags shown**: (OD), (no spin) and (modified) now follow design names wherever they are shown.
 - **Performance profile**: Diversity and Consistency have swapped spokes, so racing often counts for more against many opponents, and inconsistency counts for less when it is only in disorderly races.
+- **Results spoke**: The performance profile has a sixth spoke, Results — the boat's average finishing place on PF-corrected time in its divisions, independent of how often it races. It sits between Stability and Frequency.
 - **Boat comparison defaults**: "All available" ticked, PF and RF lines off, and an average trend.
 - **Clubs**: The no-current-feed ⚠ now only trusts races from a feed the club still has configured.
 

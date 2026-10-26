@@ -1,7 +1,7 @@
 package org.mortbay.sailing.pf.analysis;
 
 /**
- * Five-spoke performance profile for one boat, all scores in [0, 1].
+ * Six-spoke performance profile for one boat, all scores in [0, 1].
  * Scores are fleet-relative percentile ranks computed across all active boats
  * using the last 12 months of data. A score of 1.0 means best in fleet on that spoke;
  * 0.0 means worst.
@@ -14,5 +14,6 @@ public record PerformanceProfile(
     double consistency,   // percentile rank by mean asymmetric r² (negative residuals weighted more); lower = better
     double stability,     // percentile rank by asymmetric slope penalty (level=best, declining=worst)
     double chaotic,       // percentile rank by orderly-race share of error (orderly-weighted / plain mean r²); lower = better
+    double results,       // percentile rank by mean PF-corrected placing percentile in its divisions; higher = better
     double overallScore   // normalised polygon area [0,1]
 ) {}
