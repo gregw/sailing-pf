@@ -904,10 +904,17 @@ function renderClubDetail(club) {
         feeds.push(`<li>TopYacht — ${esc(g.name || g.prefix || 'event')}<ul>`
             + g.urls.map(u => `<li>${link(u)}</li>`).join('') + '</ul></li>');
     }
+    // SailSys: link the public results pages on app.sailsys.com.au rather than the API. A series
+    // page needs the SailSys club id, taken from the club's SailSys club entry; without one the
+    // series falls back to its API URL.
+    const sailsysClubId = (club.sailsysEvents || []).map(e => e.clubId).find(id => id != null);
     for (const e of club.sailsysEvents || []) {
         if (!e.url) continue;
         const what = e.clubId != null ? 'club ' + e.clubId + ' (current series)' : 'series ' + e.seriesId;
-        feeds.push(`<li>SailSys — ${esc(e.name || what)}<ul><li>${link(e.url)}</li></ul></li>`);
+        const web = e.clubId != null ? `https://app.sailsys.com.au/club/${e.clubId}/profile`
+            : sailsysClubId != null ? `https://app.sailsys.com.au/club/${sailsysClubId}/results/series/${e.seriesId}/races`
+            : e.url;
+        feeds.push(`<li>SailSys — ${esc(e.name || what)}<ul><li>${link(web)}</li></ul></li>`);
     }
 
     return `<h3>${link(site, club.shortName || club.id)}${club.longName ? ' — ' + esc(club.longName) : ''}</h3>
