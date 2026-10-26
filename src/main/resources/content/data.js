@@ -249,6 +249,10 @@ const COLUMNS = {
             render: v => v && v.value != null
                 ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
+        { label: 'Year', type: 'action', sortKey: 'year', anchor: 'col-design-year',
+          tip: 'The design year: set on the design edit form, or else the median ORC certificate age date of the design\'s boats (hover for which). Used by the design profile\'s Modern spoke.',
+          render: item => item.year != null ? String(item.year) : '',
+          title: item => item.yearSource || null },
         { label: 'DP', key: 'profile', sortKey: 'profile', anchor: 'col-design-profile',
             tip: 'Design profile score — percentile polygon area, among designs with at least 3 active boats, across Quantity, Ubiquity, Frequency, Results, Consistency and Modern spokes (last 12 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },

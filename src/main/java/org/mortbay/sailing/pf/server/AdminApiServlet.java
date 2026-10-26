@@ -892,11 +892,7 @@ public class AdminApiServlet extends HttpServlet
         result.put("flags", designFlags(id, null));
         DesignProfile profile = cache.profilesByDesignId().get(id);
         result.put("profile", profile != null ? designProfileMap(profile) : null);
-        // The design year shown with the profile: as of the last PF run, or the manual year
-        DesignProfileBuilder.DesignYear year = profile != null ? profile.designYear() : null;
-        Integer manual = store.designYearOverride(id);
-        if (manual != null)
-            year = new DesignProfileBuilder.DesignYear(manual, "manual", 0);
+        DesignProfileBuilder.DesignYear year = cache.designYear(id);
         result.put("designYear", year == null ? null
             : Map.of("year", year.year(), "source", year.source(), "boats", year.boats()));
         writeJson(resp, result);
@@ -2952,6 +2948,8 @@ public class AdminApiServlet extends HttpServlet
                                                (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return dd2 != null ? dd2.boatIds().size() : 0; });
                     case "profile"       -> Comparator.comparingDouble(
                                                (Design d2) -> { DesignProfile p2 = cache.profilesByDesignId().get(d2.id()); return p2 != null ? p2.overallScore() : 0.0; });
+                    case "year"          -> Comparator.comparingInt(
+                                               (Design d2) -> { DesignProfileBuilder.DesignYear y2 = cache.designYear(d2.id()); return y2 != null ? y2.year() : 0; });
                     default              -> Comparator.comparing(Design::id, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
@@ -2972,7 +2970,11 @@ public class AdminApiServlet extends HttpServlet
                 row.put("ignored",       store.isDesignIgnored(d.id()));
                 row.put("noSpinnaker", store.isDesignNoSpinnaker(d.id()));
                 row.put("oneDesign",   store.isDesignOneDesign(d.id()));
-                row.put("designYear",  store.designYearOverride(d.id()));
+                row.put("designYear",  store.designYearOverride(d.id()));   // manual only (edit form)
+                DesignProfileBuilder.DesignYear year = cache.designYear(d.id());
+                row.put("year",        year != null ? year.year() : null);
+                row.put("yearSource",  year == null ? null : "manual".equals(year.source()) ? "set manually"
+                    : "median ORC age date of " + year.boats() + " boat" + (year.boats() != 1 ? "s" : ""));
                 row.put("flags",       designFlags(d.id(), null));
                 DesignProfile dp = cache.profilesByDesignId().get(d.id());
                 row.put("profile",     dp != null ? dp.overallScore() : null);

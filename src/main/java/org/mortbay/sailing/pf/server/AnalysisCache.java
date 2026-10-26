@@ -70,6 +70,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile Map<String, List<EntryResidual>> residualsByBoatId = Map.of();
     private volatile Map<String, PerformanceProfile> profilesByBoatId = Map.of();
     private volatile Map<String, DesignProfile> profilesByDesignId = Map.of();
+    /** Each design's year from its boats' ORC age dates, rebuilt with the indexes (see {@link #designYear}). */
+    private volatile Map<String, DesignProfileBuilder.DesignYear> orcDesignYears = Map.of();
     private volatile PfQuality lastPfQuality;  // null until first run
     private volatile double diversityNonSpinWeight   = 0.8;
     private volatile double diversitySpinWeight      = 1.0;
@@ -345,6 +347,9 @@ public class AnalysisCache implements DataStore.InvalidationListener
         }
         this.raceDerived = Map.copyOf(newRaces);
 
+        this.orcDesignYears = Map.copyOf(
+            DesignProfileBuilder.designYears(store.boats(), store::isBoatModified, id -> null));
+
         LOG.info("AnalysisCache indexes: {} designs, {} boats with derived, {} races",
             newDesigns.size(), newBoats.size(), newRaces.size());
     }
@@ -454,6 +459,18 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public Map<String, DesignProfile> profilesByDesignId()
     {
         return profilesByDesignId;
+    }
+
+    /**
+     * The design's year: the manual year (design.yaml) if set, otherwise the median ORC age
+     * date of its boats as of the last index rebuild; null if neither.
+     */
+    public DesignProfileBuilder.DesignYear designYear(String designId)
+    {
+        Integer manual = store.designYearOverride(designId);
+        if (manual != null)
+            return new DesignProfileBuilder.DesignYear(manual, "manual", 0);
+        return orcDesignYears.get(designId);
     }
 
     public PfQuality pfQuality()
@@ -591,6 +608,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
         this.profilesByDesignId = new DesignProfileBuilder()
             .buildAll(residualsByBoatId, store.boats(), pfByBoatId, designRfs, store::isBoatModified,
                 DesignProfileBuilder.designYears(store.boats(), store::isBoatModified, store::designYearOverride));
+        this.orcDesignYears = Map.copyOf(
+            DesignProfileBuilder.designYears(store.boats(), store::isBoatModified, id -> null));
         LOG.info("AnalysisCache: computed design profiles for {} designs", profilesByDesignId.size());
     }
 }
