@@ -606,7 +606,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
             if (dd.referenceFactors() != null)
                 designRfs.put(dd.design().id(), dd.referenceFactors());
         this.profilesByDesignId = new DesignProfileBuilder()
-            .buildAll(residualsByBoatId, store.boats(), pfByBoatId, designRfs, store::isBoatModified,
+            .buildAll(residualsByBoatId, store.boats(), pfByBoatId, designRfs,
                 DesignProfileBuilder.designYears(store.boats(), store::isBoatModified, store::designYearOverride));
         this.orcDesignYears = Map.copyOf(
             DesignProfileBuilder.designYears(store.boats(), store::isBoatModified, id -> null));

@@ -54,13 +54,12 @@ class DesignProfileBuilderTest
 
     private final Map<String, DesignProfileBuilder.DesignYear> designYears = new HashMap<>();
 
-    private Map<String, DesignProfile> build(String... modified)
+    private Map<String, DesignProfile> build()
     {
-        List<String> mod = List.of(modified);
         Map<String, ReferenceFactors> designRfs = new HashMap<>();
         for (Boat b : boats.values())
             designRfs.put(b.designId(), new ReferenceFactors(new Factor(1.0, 1.0), null, null, 0, 0, 0));
-        return new DesignProfileBuilder().buildAll(residuals, boats, pfs, designRfs, mod::contains, designYears);
+        return new DesignProfileBuilder().buildAll(residuals, boats, pfs, designRfs, designYears);
     }
 
     @Test
@@ -72,7 +71,7 @@ class DesignProfileBuilderTest
     }
 
     @Test
-    void designsNeedThreeActiveBoatsAndModifiedBoatsDoNotCount()
+    void designsNeedThreeActiveBoats()
     {
         for (int i = 0; i < 3; i++)
             boat("a" + i, "alpha", "c1", 5, 0.0, false);
@@ -82,8 +81,6 @@ class DesignProfileBuilderTest
         Map<String, DesignProfile> profiles = build();
         assertEquals(3, profiles.get("alpha").activeBoats());
         assertNull(profiles.get("beta"), "two active boats");
-
-        assertNull(build("a0").get("alpha"), "a modified boat does not count");
     }
 
     @Test

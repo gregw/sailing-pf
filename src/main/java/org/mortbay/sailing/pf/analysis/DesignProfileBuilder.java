@@ -20,7 +20,10 @@ import org.mortbay.sailing.pf.data.Factor;
  * results, as six percentile-ranked spokes over the designs with at least
  * {@value #MIN_ACTIVE_BOATS} active boats. An active boat has at least
  * {@value #MIN_BOAT_RACES} distinct races in the last 24 months (as for a boat's
- * {@link PerformanceProfile}); boats flagged modified from their design are left out.
+ * {@link PerformanceProfile}). Boats flagged modified from their design count like any other:
+ * they are part of the class's presence in the results, and in Consistency a class with many
+ * boats modified far from its rating is rightly less consistent (the design RF itself leaves
+ * them out).
  * <p>
  * Spoke definitions, in hexagon order (Quantity → Ubiquity → Frequency → Results →
  * Consistency → Modern, then back to Quantity). Adjacent spokes multiply in the polygon area
@@ -108,14 +111,12 @@ public class DesignProfileBuilder
      * @param boats             all boats, by id
      * @param pfByBoatId        each boat's PF; a boat without one is left out of Consistency
      * @param designRfs         each design's RF (for Consistency's log(PF / design RF))
-     * @param modified          true for a boat flagged modified from its design
      * @param designYears       each design's year (see {@link #designYears}), for Modern
      */
     public Map<String, DesignProfile> buildAll(Map<String, List<EntryResidual>> residualsByBoatId,
                                                Map<String, Boat> boats,
                                                Map<String, BoatPf> pfByBoatId,
                                                Map<String, ReferenceFactors> designRfs,
-                                               Predicate<String> modified,
                                                Map<String, DesignYear> designYears)
     {
         LocalDate cutoff = LocalDate.now().minusDays(RECENT_DAYS);
@@ -125,7 +126,7 @@ public class DesignProfileBuilder
         for (Map.Entry<String, List<EntryResidual>> e : residualsByBoatId.entrySet())
         {
             Boat boat = boats.get(e.getKey());
-            if (boat == null || boat.designId() == null || modified.test(boat.id()))
+            if (boat == null || boat.designId() == null)
                 continue;
             Set<String> raceIds = new HashSet<>();
             for (EntryResidual r : e.getValue())

@@ -1109,7 +1109,7 @@ function renderDesignProfile(dp) {
         + `</div>`;
 }
 
-const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 24 months; boats ticked modified left out). '
+const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 24 months, modified boats included). '
     + 'Quantity: active boats. Ubiquity: effective number of clubs (10 boats at one club = 1, evenly over five clubs = 5). '
     + 'Frequency: races per active boat. Results: the boats\' average finishing place on PF-corrected time. '
     + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Modern: the design year — newer scores higher; a design with no year scores 0.5. The year is set on the design edit form, or else is the median ORC certificate age date of its boats.';
