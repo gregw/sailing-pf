@@ -18,7 +18,7 @@
 //   getShowPf() / getShowRf()  — booleans set by tickboxes in the PF / RF column headers
 //   recalc()                   — force recalculation of scaled columns
 //
-// Boats passed to setBoats must have: { id, name, sailNumber, boatName, pf, rf, bestFit?, color?, pfWeight?, rfWeight? }.
+// Boats passed to setBoats must have: { id, name, sailNumber, boatName, pf, rf, bestFit?, color?, pfWeight?, rfWeight?, designName?, designFlags? }.
 // pf is required; rf and bestFit may be null. pfWeight/rfWeight (when present) weight each anchor's
 // contribution to the consensus scale factor used for predictions.
 //
@@ -1116,7 +1116,7 @@ const HandicapCalc = (function () {
 
             // Hover on either cell shows the performance profile popup.
             const designText = b.designName
-                ? `<span style="color:#555;font-style:italic">${b.designName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`
+                ? `<span style="color:#555;font-style:italic">${(b.designName + (b.designFlags || '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`
                 : null;
             // Hovering a boat shows its performance profile and highlights it in the page's
             // charts (highlightBoatInCharts, from common.js, when the page has it).

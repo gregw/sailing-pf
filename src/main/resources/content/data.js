@@ -176,10 +176,8 @@ const COLUMNS = {
         { label: 'Sail',   key: 'sailNumber', anchor: 'col-boat-sail', tip: 'Sail number as recorded in source data (SailSys / TopYacht).' },
         { label: 'Name',   key: 'name',   anchor: 'col-boat-name',     tip: 'Boat name as recorded in source data.', cls: 'id-col' },
         { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design', cls: 'id-col',
-          tip: 'Design (class) identifier; click to search for this design in the designs tab. "(OD)" marks a one-design class; "(modified)" a boat modified from its design.',
-          render:   item => (item.designId || '')
-              + (item.designId && item.modified ? ' (modified)'
-                 : item.designOneDesign ? ' (OD)' : ''),
+          tip: 'Design (class) identifier; click to search for this design in the designs tab. "(OD)" marks a one-design class, "(no spin)" a design that cannot fly a spinnaker, and "(modified)" a boat modified from its design.',
+          render:   item => item.designId ? item.designId + (item.designFlags || '') : '',
           btnClass: item => [
               item.designExcluded ? 'excluded-link' : '',
               item.designIgnored  ? 'ignored-link'  : ''
@@ -225,10 +223,11 @@ const COLUMNS = {
               const text = esc(item.id != null ? String(item.id) : '');
               return /modified|custom/i.test(item.id || '') ? `<span style="text-decoration:line-through">${text}</span>` : text;
           } },
-        { label: 'Name',   sortKey: 'canonicalName', anchor: 'col-design-name',   tip: 'Canonical design name used in all reports.',
+        { label: 'Name',   sortKey: 'canonicalName', anchor: 'col-design-name',   tip: 'Canonical design name used in all reports. "(OD)" marks a one-design class and "(no spin)" a design that cannot fly a spinnaker.',
           render: item => {
               const text = esc(item.canonicalName != null ? String(item.canonicalName) : '');
-              return /modified|custom/i.test(item.id || '') ? `<span style="text-decoration:line-through">${text}</span>` : text;
+              const flags = esc(item.flags || '');
+              return /modified|custom/i.test(item.id || '') ? `<span style="text-decoration:line-through">${text}</span>${flags}` : text + flags;
           } },
         {
             label: 'RF Spin', key: 'spinRef', anchor: 'col-design-rf-spin',
@@ -1263,7 +1262,7 @@ function showMergePanel(entity) {
         label.appendChild(radio);
         const desc = entity === 'boats'
             ? ' ' + esc(id) + '  —  sail: ' + esc(item.sailNumber || '') + '  name: ' + esc(item.name || '')
-            : ' ' + esc(id) + '  —  ' + esc(item.canonicalName || '');
+            : ' ' + esc(id) + '  —  ' + esc(item.canonicalName || '') + esc(item.flags || '');
         label.appendChild(document.createTextNode(desc));
         list.appendChild(label);
     });
@@ -1479,7 +1478,7 @@ function hideExcludePanel(entity) {
 function describeItem(entity, item) {
     switch (entity) {
         case 'boats':   return item.id + '  —  sail: ' + (item.sailNumber || '') + '  name: ' + (item.name || '');
-        case 'designs': return item.id + '  —  ' + (item.canonicalName || '');
+        case 'designs': return item.id + '  —  ' + (item.canonicalName || '') + (item.flags || '');
         case 'clubs':   return item.id + '  —  ' + (item.shortName || '') + (item.longName ? ' (' + item.longName + ')' : '');
         case 'series':  return item.id + '  —  ' + (item.name || '');
         case 'races':   return item.id + '  —  ' + (item.date || '') + '  ' + (item.name || '');
@@ -1635,7 +1634,7 @@ function showIgnorePanel(doIgnore) {
         line.style.fontFamily = 'monospace';
         line.style.fontSize   = '0.9rem';
         const boats = it.boats != null ? it.boats : 0;
-        line.textContent = it.id + '  —  ' + (it.canonicalName || '') + '   (' + boats + ' boat' + (boats !== 1 ? 's' : '') + ')';
+        line.textContent = it.id + '  —  ' + (it.canonicalName || '') + (it.flags || '') + '   (' + boats + ' boat' + (boats !== 1 ? 's' : '') + ')';
         list.appendChild(line);
     });
     if (doIgnore) {
@@ -1736,7 +1735,7 @@ async function loadEditChoices() {
             .map(d => {
                 const o = document.createElement('option');
                 o.value = d.id;
-                o.textContent = d.canonicalName || d.id;
+                o.textContent = (d.canonicalName || d.id) + (d.flags || '');
                 return o;
             });
         // Preserve current selection while replacing options
@@ -3414,6 +3413,7 @@ function applyRaceCalcDivision(divName) {
         sailNumber: b.sailNumber || null,
         boatName: b.name || null,
         designName: b.designName || null,
+        designFlags: b.designFlags || '',
         division: b.division || null,
         variant: b.variant || 'spin',
         pf: b.pf,
@@ -3430,6 +3430,7 @@ function applyRaceCalcDivision(divName) {
             label: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
             designId: b.designId || null,
             designName: b.designName || null,
+            designFlags: b.designFlags || '',
         })),
         id => raceCalc().getBoatVariant(id));
     // Re-render division chart so the allocated line picks up any applied entries.
@@ -3443,7 +3444,7 @@ const COMPARE_PALETTE = [
     '#16a085', '#d35400', '#2c3e50', '#f39c12', '#1abc9c'
 ];
 
-// rows: [{id, label, designId, designName}]
+// rows: [{id, label, designId, designName, designFlags}]
 // variantOf(boatId), when given, is read on click: Compare Boats then opens each boat in the
 // Spin/NS/2H variant it has here, so the handicaps carried over (saved with that variant)
 // are not filtered out there as a variant mismatch.
@@ -3472,7 +3473,7 @@ function renderCompareButtons(containerId, rows, variantOf) {
     const seenDesigns = new Map();
     rows.forEach(r => {
         if (r.designId && !seenDesigns.has(r.designId))
-            seenDesigns.set(r.designId, r.designName || r.designId);
+            seenDesigns.set(r.designId, (r.designName || r.designId) + (r.designFlags || ''));
     });
     if (seenDesigns.size > 0) {
         const designBtn = document.createElement('button');
@@ -3611,6 +3612,7 @@ function buildSeriesCalcBoats(data, divName) {
             boatName: first.name || null,
             designId: first.designId || null,
             designName: first.designName || null,
+            designFlags: first.designFlags || '',
             variant: dominantVariant,
             pf: best.pf,
             pfWeight: best.pfWeight,
@@ -3646,6 +3648,7 @@ function renderSeriesChartForDivision(divName, opts) {
                 label: b.name,
                 designId: b.designId,
                 designName: b.designName,
+                designFlags: b.designFlags,
             })),
             id => seriesPfCalc().getBoatVariant(id));
     }

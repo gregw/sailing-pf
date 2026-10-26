@@ -107,7 +107,7 @@ function renderDesignList() {
     candidateDesigns.forEach(d => {
         const div = document.createElement('div');
         div.className = 'selector-item' + (d.id === focusedDesignId ? ' focused' : '');
-        div.textContent = d.canonicalName || d.id;
+        div.textContent = (d.canonicalName || d.id) + (d.flags || '');
         div.title = d.id;
         div.addEventListener('click', () => {
             focusedDesignId = d.id;
@@ -132,7 +132,7 @@ function addDesign() {
     selectedItems.push({
         type:  'design',
         id:    d.id,
-        label: d.canonicalName || d.id,
+        label: (d.canonicalName || d.id) + (d.flags || ''),
         color: nextColor(),
         // Seed the calc's per-design variant for this new design from the table majority.
         initialVariant: majorityVariant()
@@ -344,7 +344,7 @@ function renderBcfChart(data) {
 
         const item  = selectedItems.find(i => i.id === design.id);
         const color = item ? item.color : '#888';
-        const name  = item ? item.label : (design.canonicalName || design.id);
+        const name  = item ? item.label : (design.canonicalName || design.id) + (design.flags || '');
 
         const variant = boatVariantFor(design.id);
         const rfFactor = rfVariantFor(design, variant);
@@ -519,7 +519,7 @@ function renderHandicapCalc(data) {
     const calcBoats = designs.map(d => {
         const item  = selectedItems.find(i => i.id === d.id);
         const color = item ? item.color : '#888';
-        const name  = item ? item.label : (d.canonicalName || d.id);
+        const name  = item ? item.label : (d.canonicalName || d.id) + (d.flags || '');
 
         // Per-design variant: a known design keeps the variant the calc already tracks;
         // a new design takes its seeded variant if any, else the table majority.
@@ -714,8 +714,8 @@ function renderElapsedChart(divId, data, colorA, colorB, variantA, variantB) {
     const xs = points.map(p => p.x / 3600);
     const ys = points.map(p => p.y / 3600);
 
-    const nameA = data.designA.canonicalName;
-    const nameB = data.designB.canonicalName;
+    const nameA = data.designA.canonicalName + (data.designA.flags || '');
+    const nameB = data.designB.canonicalName + (data.designB.flags || '');
 
     const texts = points.map(p =>
         `${esc(p.date || '')}<br>` +

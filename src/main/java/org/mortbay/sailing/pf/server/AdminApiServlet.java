@@ -551,7 +551,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("designId",   b.designId());
                 row.put("designExcluded", b.designId() != null && store.isDesignExcluded(b.designId()));
                 row.put("designIgnored",  b.designId() != null && store.isDesignIgnored(b.designId()));
-                row.put("designOneDesign", b.designId() != null && store.isDesignOneDesign(b.designId()));
+                row.put("designFlags", designFlags(b.designId(), b.id()));
                 row.put("modified", store.isBoatModified(b.id()));
                 row.put("clubId", b.primaryClubId());
                 row.put("clubIds", b.clubIds());
@@ -2327,6 +2327,7 @@ public class AdminApiServlet extends HttpServlet
                 m.put("name",       bd.boat().name());
                 m.put("sailNumber", bd.boat().sailNumber());
                 m.put("designId",   bd.boat().designId());
+                m.put("designFlags", designFlags(bd.boat().designId(), bd.boat().id()));
                 return m;
             })
             .collect(Collectors.toList());
@@ -2358,6 +2359,7 @@ public class AdminApiServlet extends HttpServlet
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("id",            dd.design().id());
                 m.put("canonicalName", dd.design().canonicalName());
+                m.put("flags",         designFlags(dd.design().id(), null));
                 return m;
             })
             .collect(Collectors.toList());
@@ -2399,6 +2401,7 @@ public class AdminApiServlet extends HttpServlet
             bm.put("sailNumber", bd.boat().sailNumber());
             bm.put("designId", designId);
             bm.put("designName", design != null ? design.canonicalName() : null);
+            bm.put("designFlags", designFlags(designId, boatId));
 
             ReferenceFactors rf = bd.referenceFactors();
             bm.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
@@ -2462,6 +2465,7 @@ public class AdminApiServlet extends HttpServlet
             Map<String, Object> dm = new LinkedHashMap<>();
             dm.put("id",            designId);
             dm.put("canonicalName", dd.design().canonicalName());
+            dm.put("flags",         designFlags(designId, null));
             ReferenceFactors rf = dd.referenceFactors();
             dm.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
             dm.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
@@ -2723,6 +2727,7 @@ public class AdminApiServlet extends HttpServlet
                     row.put("sailNumber", bd.boat().sailNumber());
                     row.put("designId", designId);
                     row.put("designName", design != null ? design.canonicalName() : null);
+                    row.put("designFlags", designFlags(designId, f.boatId()));
                     row.put("variant", fVariant);
                     row.put("pf", pfVal);
                     row.put("pfWeight", pfWeight);
@@ -2894,6 +2899,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("ignored",       store.isDesignIgnored(d.id()));
                 row.put("noSpinnaker", store.isDesignNoSpinnaker(d.id()));
                 row.put("oneDesign",   store.isDesignOneDesign(d.id()));
+                row.put("flags",       designFlags(d.id(), null));
                 return row;
             }).collect(Collectors.toList());
 
@@ -2921,6 +2927,7 @@ public class AdminApiServlet extends HttpServlet
             detail.put("lastUpdated", design.lastUpdated());
             detail.put("noSpinnaker", design.noSpinnaker());
             detail.put("oneDesign", store.isDesignOneDesign(design.id()));
+            detail.put("flags", designFlags(design.id(), null));
             writeJson(resp, detail);
         }
     }
@@ -3087,6 +3094,7 @@ public class AdminApiServlet extends HttpServlet
                     fm.put("sailNumber", bd.boat().sailNumber());
                     fm.put("designId", designId);
                     fm.put("designName", design != null ? design.canonicalName() : null);
+                    fm.put("designFlags", designFlags(designId, f.boatId()));
                     fm.put("variant", variant);
                     fm.put("elapsed", elapsedSec);
                     fm.put("pf", pfVal);
@@ -3806,6 +3814,25 @@ public class AdminApiServlet extends HttpServlet
      * and capped at 200. Each entry includes the design's spin and nonSpin RF.
      */
     /**
+     * The display suffix for a design's flags, shown after its name wherever it appears:
+     * {@code " (OD)"}, {@code " (no spin)"}, {@code " (OD, no spin)"}, or {@code ""}. With a
+     * {@code boatId}, a boat modified from its design shows "modified" in place of "OD".
+     */
+    private String designFlags(String designId, String boatId)
+    {
+        if (designId == null)
+            return "";
+        List<String> flags = new ArrayList<>();
+        if (boatId != null && store.isBoatModified(boatId))
+            flags.add("modified");
+        else if (store.isDesignOneDesign(designId))
+            flags.add("OD");
+        if (store.isDesignNoSpinnaker(designId))
+            flags.add("no spin");
+        return flags.isEmpty() ? "" : " (" + String.join(", ", flags) + ")";
+    }
+
+    /**
      * The boats that represent a design on the design-comparison charts: its member boats,
      * less those flagged modified from the design.
      */
@@ -3898,6 +3925,7 @@ public class AdminApiServlet extends HttpServlet
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("id",            dd.design().id());
                 m.put("canonicalName", dd.design().canonicalName());
+                m.put("flags",         designFlags(dd.design().id(), null));
                 ReferenceFactors rf = dd.referenceFactors();
                 m.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
                 m.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
@@ -4030,12 +4058,14 @@ public class AdminApiServlet extends HttpServlet
         Map<String, Object> designA = new LinkedHashMap<>();
         designA.put("id",            designAId);
         designA.put("canonicalName", dda.design().canonicalName());
+        designA.put("flags",         designFlags(designAId, null));
         designA.put("rfSpin",    rfA != null ? factorMap(rfA.spin())    : null);
         designA.put("rfNonSpin", rfA != null ? factorMap(rfA.nonSpin()) : null);
 
         Map<String, Object> designB = new LinkedHashMap<>();
         designB.put("id",            designBId);
         designB.put("canonicalName", ddb.design().canonicalName());
+        designB.put("flags",         designFlags(designBId, null));
         designB.put("rfSpin",    rfB != null ? factorMap(rfB.spin())    : null);
         designB.put("rfNonSpin", rfB != null ? factorMap(rfB.nonSpin()) : null);
 

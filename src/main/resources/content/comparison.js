@@ -829,6 +829,7 @@ function renderHandicapCalc(data) {
             sailNumber: b.sailNumber || null,
             boatName: b.name || null,
             designName: b.designName || null,
+            designFlags: b.designFlags || '',
             variant,
             forceVariant: !!item?.forceVariant,
             pfAll: {
