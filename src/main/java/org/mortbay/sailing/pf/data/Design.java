@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * A boat design (hull type).
@@ -17,6 +18,8 @@ public record Design(
     String canonicalName, // display name, e.g. "J/24", "Farr 40"
     List<String> aliases,  // alternate design names, e.g. "Mumm 30" for "Farr 30"
     List<String> sources,  // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    List<Link> links,      // external web pages about this design, e.g. sailboatdata.com, Wikipedia
     Instant lastUpdated,   // when this record was last written by an importer; nullable
     @JsonIgnore boolean noSpinnaker, // true when this design physically cannot fly a spinnaker
     // (e.g. cat-rigged): spin and nonSpin RF/PF are treated
@@ -30,12 +33,31 @@ public record Design(
     {
         if (sources == null)
             sources = List.of();
+        links = Link.normalise(links);
+    }
+
+    /**
+     * A design with no links. For new records only: a copy of an existing record must use the
+     * canonical constructor and carry its {@link #links()} across.
+     */
+    public Design(String id, String canonicalName, List<String> aliases, List<String> sources,
+                  Instant lastUpdated, boolean noSpinnaker, Instant loadedAt)
+    {
+        this(id, canonicalName, aliases, sources, List.of(), lastUpdated, noSpinnaker, loadedAt);
     }
 
     @Override
     public Design withLoadedAt(Instant t)
     {
-        return new Design(id, canonicalName, aliases, sources, lastUpdated, noSpinnaker, t);
+        return new Design(id, canonicalName, aliases, sources, links, lastUpdated, noSpinnaker, t);
+    }
+
+    /**
+     * Returns a copy of this Design with the given links.
+     */
+    public Design withLinks(List<Link> newLinks)
+    {
+        return new Design(id, canonicalName, aliases, sources, newLinks, lastUpdated, noSpinnaker, loadedAt);
     }
 
     /**
@@ -43,7 +65,7 @@ public record Design(
      */
     public Design withNoSpinnaker(boolean flag)
     {
-        return new Design(id, canonicalName, aliases, sources, lastUpdated, flag, loadedAt);
+        return new Design(id, canonicalName, aliases, sources, links, lastUpdated, flag, loadedAt);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality.
@@ -58,13 +80,14 @@ public record Design(
             return false;
         return Objects.equals(id, d.id) && Objects.equals(canonicalName, d.canonicalName)
             && Objects.equals(aliases, d.aliases)
-            && Objects.equals(sources, d.sources) && Objects.equals(lastUpdated, d.lastUpdated);
+            && Objects.equals(sources, d.sources) && Objects.equals(links, d.links)
+            && Objects.equals(lastUpdated, d.lastUpdated);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, canonicalName, aliases, sources, lastUpdated);
+        return Objects.hash(id, canonicalName, aliases, sources, links, lastUpdated);
     }
 
     @Override
@@ -75,6 +98,7 @@ public record Design(
             ", canonicalName='" + canonicalName + '\'' +
             ", aliases=" + aliases +
             ", sources=" + sources +
+            ", links=" + links +
             ", lastUpdated=" + lastUpdated +
             ", noSpinnaker=" + noSpinnaker +
             '}';

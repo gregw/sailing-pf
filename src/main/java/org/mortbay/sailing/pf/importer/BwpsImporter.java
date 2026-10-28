@@ -1006,7 +1006,7 @@ public class BwpsImporter
                 if (!store.isExplicitlyNoClub(boat.id()))
                 {
                     boat = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
-                        List.of(club.id()), boat.certificates(), addSource(boat.sources(), source),
+                        List.of(club.id()), boat.certificates(), addSource(boat.sources(), source), boat.links(),
                         Instant.now(), null);
                     store.putBoat(boat);
                     LOG.info("{}: club of {} set to {} from its yacht page", source, boat.id(), club.id());
@@ -1073,7 +1073,7 @@ public class BwpsImporter
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubIds(), List.copyOf(certs),
-            addSource(boat.sources(), source), Instant.now(), null));
+            addSource(boat.sources(), source), boat.links(), Instant.now(), null));
         LOG.debug("{}: inferred {} cert {} (TCF={} twoHanded={}) for boat {}",
             source, system, certNumber, tcf, twoHanded, boat.id());
         return certNumber;

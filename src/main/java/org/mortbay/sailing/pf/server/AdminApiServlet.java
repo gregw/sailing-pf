@@ -38,12 +38,14 @@ import org.mortbay.sailing.pf.analysis.PerformanceProfile;
 import org.mortbay.sailing.pf.analysis.PfQuality;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
 import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.EntryVariant;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Link;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.SeriesType;
@@ -559,6 +561,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("modified", store.isBoatModified(b.id()));
                 row.put("clubId", b.primaryClubId());
                 row.put("clubIds", b.clubIds());
+                row.put("links", b.links());
                 putClubNaming(row, b.primaryClubId());
                 row.put("clubNames", clubNamings(b.clubIds()));
                 row.put("clubExcluded", !b.clubIds().isEmpty()
@@ -743,6 +746,7 @@ public class AdminApiServlet extends HttpServlet
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("boatId", id);
         result.put("boatName", boat.name());
+        result.put("links", boatLinks(boat));
         result.put("currentYear", cache.targetYear());
 
         result.put("spin", pfVariantMap(pf != null ? pf.spin() : null,
@@ -860,6 +864,29 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, result);
     }
 
+    /**
+     * The links shown with a boat: its stored links, then one per official ORC certificate
+     * (newest first), derived from the certificate's dxtID rather than stored.
+     */
+    static List<Link> boatLinks(Boat boat)
+    {
+        List<Link> links = new ArrayList<>(boat.links());
+        boat.certificates().stream()
+            .filter(c -> c.publicUrl() != null)
+            .sorted(Comparator.comparingInt(Certificate::year).reversed())
+            .forEach(c -> links.add(new Link(c.publicUrl(), certificateLabel(c), "ORC")));
+        return Link.normalise(links);
+    }
+
+    /**
+     * E.g. "ORC 2025" or "ORC club 2025". One ORC certificate (dxtID) is stored as a row per
+     * variant (spin, non-spin, double handed, …), so the label names only the certificate.
+     */
+    private static String certificateLabel(Certificate c)
+    {
+        return c.system() + (c.club() ? " club " : " ") + c.year();
+    }
+
     private Map<String, Object> pfVariantMap(Factor f, double referenceDelta, int raceCount)
     {
         if (f == null) return null;
@@ -889,6 +916,7 @@ public class AdminApiServlet extends HttpServlet
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("designId", id);
         result.put("designName", design.canonicalName());
+        result.put("links", design.links());
         result.put("flags", designFlags(id, null));
         DesignProfile profile = cache.profilesByDesignId().get(id);
         result.put("profile", profile != null ? designProfileMap(profile) : null);
@@ -896,6 +924,37 @@ public class AdminApiServlet extends HttpServlet
         result.put("designYear", year == null ? null
             : Map.of("year", year.year(), "source", year.source(), "boats", year.boats()));
         writeJson(resp, result);
+    }
+
+    /**
+     * The links of an edit request: a JSON array of {@code {url, label}} objects in display order.
+     * A link whose URL is already in {@code existing} keeps its source; any other is {@code manual}.
+     * Blank URLs are skipped and duplicate URLs dropped.
+     *
+     * @throws IllegalArgumentException if a URL is not an absolute http(s) URL
+     */
+    static List<Link> parseLinks(Object raw, List<Link> existing)
+    {
+        if (!(raw instanceof List<?> list))
+            return List.of();
+        Map<String, Link> byUrl = new LinkedHashMap<>();
+        for (Link l : existing)
+            byUrl.put(l.url(), l);
+        List<Link> links = new ArrayList<>();
+        for (Object o : list)
+        {
+            if (!(o instanceof Map<?, ?> m))
+                continue;
+            String url = m.get("url") == null ? "" : m.get("url").toString().trim();
+            if (url.isEmpty())
+                continue;
+            if (!Link.isValidUrl(url))
+                throw new IllegalArgumentException("Not an http(s) URL: " + url);
+            String label = m.get("label") == null ? null : m.get("label").toString();
+            Link old = byUrl.get(url);
+            links.add(new Link(url, label, old != null ? old.source() : Link.MANUAL));
+        }
+        return Link.normalise(links);
     }
 
     /** A manual design year from an edit request: a year 1850–2100, or null (blank clears it). */
@@ -1932,6 +1991,8 @@ public class AdminApiServlet extends HttpServlet
                 clubIds = boat.clubIds();
             }
 
+            List<Link> links = body.containsKey("links") ? parseLinks(body.get("links"), boat.links()) : boat.links();
+
             // Compute the new boat ID
             Design design = designId != null ? store.designs().get(designId) : null;
             String newBoatId = IdGenerator.generateBoatId(sail, name, design);
@@ -1954,7 +2015,7 @@ public class AdminApiServlet extends HttpServlet
 
             // Create updated boat record
             Boat updated = new Boat(newBoatId, sail, name, designId, clubIds,
-                boat.certificates(), boat.sources(), java.time.Instant.now(), null);
+                boat.certificates(), boat.sources(), links, java.time.Instant.now(), null);
             store.putBoat(updated);
             if (modified)
                 store.setBoatModified(newBoatId, true);
@@ -2128,7 +2189,9 @@ public class AdminApiServlet extends HttpServlet
             boolean noSpinChanged = newNoSpinnaker != null && newNoSpinnaker != old.noSpinnaker();
             boolean oneDesignChanged = newOneDesign != null && newOneDesign != store.isDesignOneDesign(oldId);
             boolean yearChanged = yearGiven && !Objects.equals(newYear, store.designYearOverride(oldId));
-            if (!idChanged && !nameChanged && !noSpinChanged && !oneDesignChanged && !yearChanged)
+            List<Link> links = body.containsKey("links") ? parseLinks(body.get("links"), old.links()) : old.links();
+            boolean linksChanged = !links.equals(old.links());
+            if (!idChanged && !nameChanged && !noSpinChanged && !oneDesignChanged && !yearChanged && !linksChanged)
             {
                 writeJson(resp, Map.of("ok", true, "noop", true, "newDesignId", oldId));
                 return;
@@ -2157,7 +2220,7 @@ public class AdminApiServlet extends HttpServlet
             {
                 // Pre-create the renamed design at the new id, then let mergeDesigns move
                 // all boats and delete the old design record.
-                Design renamed = new Design(newId, newName, aliases, old.sources(),
+                Design renamed = new Design(newId, newName, aliases, old.sources(), links,
                     java.time.Instant.now(), old.noSpinnaker(), null);
                 store.putDesign(renamed);
 
@@ -2177,7 +2240,7 @@ public class AdminApiServlet extends HttpServlet
             else
             {
                 // Id unchanged — just swap the canonical name and add the old name as an alias.
-                Design renamed = new Design(oldId, newName, aliases, old.sources(),
+                Design renamed = new Design(oldId, newName, aliases, old.sources(), links,
                     java.time.Instant.now(), old.noSpinnaker(), null);
                 store.putDesign(renamed);
                 Aliases.appendDesignMergeAliases(store.configDir(), oldId, newName,
@@ -2206,14 +2269,15 @@ public class AdminApiServlet extends HttpServlet
             if (cache != null)
                 cache.refreshIndexes();
 
-            writeJson(resp, Map.of("ok", true, "newDesignId", newId,
-                "idChanged", idChanged, "nameChanged", nameChanged,
-                "noSpinChanged", noSpinChanged,
-                "oneDesignChanged", oneDesignChanged,
-                "yearChanged", yearChanged,
-                "updatedBoats", updatedBoats,
-                "updatedRaces", updatedRaces,
-                "updatedFinishers", updatedFinishers));
+            writeJson(resp, Map.ofEntries(Map.entry("ok", true), Map.entry("newDesignId", newId),
+                Map.entry("idChanged", idChanged), Map.entry("nameChanged", nameChanged),
+                Map.entry("noSpinChanged", noSpinChanged),
+                Map.entry("oneDesignChanged", oneDesignChanged),
+                Map.entry("yearChanged", yearChanged),
+                Map.entry("linksChanged", linksChanged),
+                Map.entry("updatedBoats", updatedBoats),
+                Map.entry("updatedRaces", updatedRaces),
+                Map.entry("updatedFinishers", updatedFinishers)));
         }
         catch (IllegalArgumentException e)
         {
@@ -2962,6 +3026,7 @@ public class AdminApiServlet extends HttpServlet
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id",            d.id());
                 row.put("canonicalName", d.canonicalName());
+                row.put("links",         d.links());
                 DesignDerived dd = cache.designDerived().get(d.id());
                 ReferenceFactors rf = (dd != null) ? dd.referenceFactors() : null;
                 row.put("spinRef", rf != null && rf.spin() != null ? factorMap(rf.spin()) : null);

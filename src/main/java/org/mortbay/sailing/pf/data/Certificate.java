@@ -97,6 +97,22 @@ public record Certificate(
             && RACE_DERIVED_ORC.matcher(certificateNumber).find();
     }
 
+    /** Public ORC certificate page for a dxtID; redirects to the certificate viewer. */
+    private static final String ORC_CERT_URL = "https://data.orc.org/public/WPub.dll/CC/";
+
+    /**
+     * The public web page of this certificate, or null if there is none. Only official ORC
+     * certificates have one: their {@code certificateNumber} is the ORC dxtID.
+     */
+    @JsonIgnore
+    public String publicUrl()
+    {
+        if (!"ORC".equalsIgnoreCase(system) || certificateNumber == null
+            || !certificateNumber.chars().allMatch(Character::isDigit) || certificateNumber.isEmpty())
+            return null;
+        return ORC_CERT_URL + certificateNumber;
+    }
+
     @Override
     public String toString()
     {

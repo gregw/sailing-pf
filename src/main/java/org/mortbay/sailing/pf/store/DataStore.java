@@ -32,6 +32,7 @@ import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Link;
 import org.mortbay.sailing.pf.data.Loadable;
 import org.mortbay.sailing.pf.data.SailSysEvent;
 import org.mortbay.sailing.pf.data.Maker;
@@ -463,7 +464,7 @@ public class DataStore
                             orphan.id(), targetId);
                         Boat renamed = new Boat(targetId, canonSail, canonDisplay,
                             orphan.designId(), orphan.clubIds(), orphan.certificates(),
-                            orphan.sources(), Instant.now(), null);
+                            orphan.sources(), orphan.links(), Instant.now(), null);
                         removeBoat(orphan.id());
                         putBoat(renamed);
                         rewriteFinisherBoatId(orphan.id(), targetId);
@@ -549,7 +550,7 @@ public class DataStore
                     resolvedDesignId,
                     candidate.clubIds(),
                     candidate.certificates(),
-                    addSource(candidate.sources(), sourceDesign), Instant.now(), candidate.loadedAt());
+                    addSource(candidate.sources(), sourceDesign), candidate.links(), Instant.now(), candidate.loadedAt());
                 String oldId = candidate.id();
                 removeBoat(oldId);
                 putBoat(upgraded);
@@ -775,7 +776,7 @@ public class DataStore
         else
         {
             Boat updated = new Boat(newBoatId, candidate.sailNumber(), canonicalName, finalDesignId,
-                candidate.clubIds(), candidate.certificates(), mergedSources, Instant.now(), null);
+                candidate.clubIds(), candidate.certificates(), mergedSources, candidate.links(), Instant.now(), null);
             if (idChanged)
             {
                 String oldId = candidate.id();
@@ -938,7 +939,7 @@ public class DataStore
         if (newBoatId.equals(b.id()))
         {
             Boat updated = new Boat(b.id(), b.sailNumber(), b.name(), designId,
-                b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+                b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
             putBoat(updated);
             return updated;
         }
@@ -950,7 +951,7 @@ public class DataStore
         }
         LOG.info("{}: updating designId {} → {} for boat {}", why, b.designId(), designId, b.id());
         Boat updated = new Boat(newBoatId, b.sailNumber(), b.name(), designId,
-            b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+            b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
         removeBoat(b.id());
         putBoat(updated);
         rewriteFinisherBoatId(b.id(), newBoatId);
@@ -1304,8 +1305,13 @@ public class DataStore
         Set<String> allSources = new LinkedHashSet<>(keepDesign.sources());
         for (Design md : toMerge)
             allSources.addAll(md.sources());
+        List<List<Link>> allLinks = new ArrayList<>();
+        allLinks.add(keepDesign.links());
+        for (Design md : toMerge)
+            allLinks.add(md.links());
+        List<Link> mergedLinks = Link.merge(allLinks);
         putDesign(new Design(keepDesign.id(), keepDesign.canonicalName(),
-            List.copyOf(allAliases), List.copyOf(allSources), Instant.now(),
+            List.copyOf(allAliases), List.copyOf(allSources), mergedLinks, Instant.now(),
             keepDesign.noSpinnaker(), null));
 
         // Repoint all boats whose designId references a merged-away design; fix boat IDs too
@@ -1336,18 +1342,18 @@ public class DataStore
 
                     List<String> mergedClubIds = mergeClubIds(existingAtNewId.clubIds(), boat.clubIds());
                     toWrite = new Boat(newId, existingAtNewId.sailNumber(), existingAtNewId.name(), keepId,
-                        mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
+                        mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources), Link.merge(existingAtNewId.links(), boat.links()), Instant.now(), null);
                 }
                 else
                 {
                     toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                        boat.clubIds(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                        boat.clubIds(), boat.certificates(), boat.sources(), boat.links(), boat.lastUpdated(), null);
                 }
             }
             else
             {
                 toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                    boat.clubIds(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                    boat.clubIds(), boat.certificates(), boat.sources(), boat.links(), boat.lastUpdated(), null);
             }
             putBoat(toWrite);
             updatedBoats++;
@@ -1808,7 +1814,7 @@ public class DataStore
                 mergedSources.add(note);
                 List<String> mergedClubIds = mergeClubIds(target.clubIds(), boat.clubIds());
                 Boat merged = new Boat(newId, target.sailNumber(), target.name(), null,
-                    mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources),
+                    mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources), Link.merge(target.links(), boat.links()),
                     Instant.now(), null);
                 removeBoat(boat.id());
                 putBoat(merged);
@@ -1824,7 +1830,7 @@ public class DataStore
                 // Simple rename: strip the design suffix in place.
                 Boat updated = new Boat(newId, boat.sailNumber(), boat.name(), null,
                     boat.clubIds(), boat.certificates(),
-                    addSource(boat.sources(), note), Instant.now(), null);
+                    addSource(boat.sources(), note), boat.links(), Instant.now(), null);
                 if (!newId.equals(boat.id()))
                 {
                     removeBoat(boat.id());
@@ -2490,9 +2496,14 @@ public class DataStore
         Set<String> mergedSources = new LinkedHashSet<>(keepBoat.sources());
         for (Boat mb : toMerge)
             mergedSources.addAll(mb.sources());
+        List<List<Link>> allLinks = new ArrayList<>();
+        allLinks.add(keepBoat.links());
+        for (Boat mb : toMerge)
+            allLinks.add(mb.links());
+        List<Link> mergedLinks = Link.merge(allLinks);
         Boat mergedBoat = new Boat(keepBoat.id(), keepBoat.sailNumber(), keepBoat.name(),
             designId, mergedClubIds,
-            List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
+            List.copyOf(certMap.values()), List.copyOf(mergedSources), mergedLinks, Instant.now(), null);
         putBoat(mergedBoat);
 
         // Repoint all finisher records that reference a merged-away boat ID
@@ -3231,7 +3242,7 @@ public class DataStore
             {
                 putDesign(new Design(existing.id(), existing.canonicalName(),
                     existing.aliases(), addSource(existing.sources(), "DesignOverride"),
-                    existing.lastUpdated(), existing.noSpinnaker(), null));
+                    existing.links(), existing.lastUpdated(), existing.noSpinnaker(), null));
             }
         });
 
@@ -3267,7 +3278,7 @@ public class DataStore
                 {
                     LOG.warn("noclub correction: clearing clubIds {} from boat {}", b.clubIds(), b.id());
                     putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
-                        List.of(), b.certificates(), b.sources(), Instant.now(), null));
+                        List.of(), b.certificates(), b.sources(), b.links(), Instant.now(), null));
                 }
             }
         }
@@ -3284,7 +3295,7 @@ public class DataStore
                 for (Boat b : withRaceOrc)
                     putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(), b.clubIds(),
                         b.certificates().stream().filter(c -> !c.isRaceDerivedOrc()).toList(),
-                        b.sources(), Instant.now(), null));
+                        b.sources(), b.links(), Instant.now(), null));
             }
         }
 
@@ -3425,7 +3436,7 @@ public class DataStore
                             LOG.info("Auto-renaming stale boat {} → {} (canonical sail per alias seed)",
                                 b.id(), canonId);
                             Boat renamed = new Boat(canonId, canonSail, displayName, b.designId(),
-                                b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+                                b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
                             String oldId = b.id();
                             removeBoat(oldId);
                             putBoat(renamed);
@@ -3534,7 +3545,7 @@ public class DataStore
                 {
                     LOG.info("Suffix-strip rename: '{}' ({}) → '{}' ({})", b.name(), b.id(), cleaned, newId);
                     Boat renamed = new Boat(newId, b.sailNumber(), cleaned, b.designId(),
-                        b.clubIds(), b.certificates(), b.sources(), Instant.now(), null);
+                        b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
                     String oldId = b.id();
                     removeBoat(oldId);
                     putBoat(renamed);
@@ -3605,7 +3616,7 @@ public class DataStore
                     {
                         Boat renamed = new Boat(newId, first.sailNumber(), canonicalName,
                             first.designId(), first.clubIds(), first.certificates(),
-                            first.sources(), Instant.now(), null);
+                            first.sources(), first.links(), Instant.now(), null);
                         String oldId = first.id();
                         if (!newId.equals(oldId))
                         {
@@ -3669,7 +3680,7 @@ public class DataStore
                     LOG.warn("noclub correction (post-migration): clearing clubIds {} from boat {}",
                         b.clubIds(), b.id());
                     putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
-                        List.of(), b.certificates(), b.sources(), Instant.now(), null));
+                        List.of(), b.certificates(), b.sources(), b.links(), Instant.now(), null));
                 }
             }
         }

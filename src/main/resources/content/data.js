@@ -994,8 +994,12 @@ function renderBoatPf(data) {
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
         html += `</div>`;
+        html += renderLinks(data.links);
         setTimeout(() => renderProfileChart(data.profile, 'pf-profile-chart', PP_SPOKES), 0);
     }
+
+    else
+        html += renderLinks(data.links);
 
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
@@ -1097,6 +1101,48 @@ function renderResidualChart(residuals) {
     });
 }
 
+/** Display names of well-known sites, by host suffix; other links show their host. */
+const LINK_SITES = [
+    ['sailboatdata.com', 'SailboatData'],
+    ['boat-specs.com', 'Boat-Specs'],
+    ['wikipedia.org', 'Wikipedia'],
+    ['orc.org', 'ORC'],
+];
+
+/** The text shown for a link: its label, else the site name, else the host. */
+function linkText(link) {
+    if (link.label) return link.label;
+    let host;
+    try { host = new URL(link.url).hostname.replace(/^www\./, ''); } catch (e) { return link.url; }
+    const site = LINK_SITES.find(([suffix]) => host === suffix || host.endsWith('.' + suffix));
+    return site ? site[1] : host;
+}
+
+/** A "Links:" line for a boat or design detail, or '' when there are none. */
+function renderLinks(links) {
+    if (!links || links.length === 0) return '';
+    const attr = v => esc(v).replace(/"/g, '&quot;');
+    const items = links.map(l => `<a href="${attr(l.url)}" target="_blank" rel="noopener noreferrer"`
+        + ` title="${attr(l.url)}">${esc(linkText(l))}</a>`);
+    return `<div class="detail-links" style="margin-top:0.4rem;font-size:0.9rem;">Links: ${items.join(' · ')}</div>`;
+}
+
+/** Links as edit-form text: one per line, the URL then the label if any. */
+function linksToText(links) {
+    return (links || []).map(l => l.label ? l.url + ' ' + l.label : l.url).join('\n');
+}
+
+/** Parses edit-form text (see {@link linksToText}) back into [{url, label}]. */
+function textToLinks(text) {
+    return (text || '').split('\n')
+        .map(line => line.trim())
+        .filter(line => line)
+        .map(line => {
+            const m = line.match(/^(\S+)\s*(.*)$/);
+            return m[2] ? {url: m[1], label: m[2]} : {url: m[1]};
+        });
+}
+
 /** The design profile section of the designs page detail: heading, radar chart and DP score. */
 function renderDesignProfile(dp) {
     if (!dp) return '';
@@ -1107,13 +1153,15 @@ function renderDesignProfile(dp) {
         ? y.year + (y.source === 'manual' ? ' (set manually)' : ` (median ORC age date of ${y.boats} boat${y.boats !== 1 ? 's' : ''})`)
         : 'unknown — set it on the edit form') + '</div>';
     if (!dp.profile)
-        return heading + yearLine + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 24 months.</div>';
+        return heading + yearLine + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 24 months.</div>'
+            + renderLinks(dp.links);
     const p = dp.profile;
     return heading + yearLine
         + `<div style="display:inline-block;vertical-align:top;text-align:left;">`
         + `  <div id="dp-profile-chart"></div>`
         + `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">DP: ${p.overallScore.toFixed(3)} — ${p.activeBoats} active boats</div>`
-        + `</div>`;
+        + `</div>`
+        + renderLinks(dp.links);
 }
 
 const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 24 months, modified boats included). '
@@ -1932,6 +1980,7 @@ function showEditPanel() {
     document.getElementById('edit-boat-sail').value = item.sailNumber || '';
     document.getElementById('edit-boat-name').value = item.name || '';
     document.getElementById('edit-boat-modified').checked = !!item.modified;
+    document.getElementById('edit-boat-links').value = linksToText(item.links);
     const initialClubIds = Array.isArray(item.clubIds)
         ? [...item.clubIds]
         : (item.clubId ? [item.clubId] : []);
@@ -2049,7 +2098,8 @@ async function saveBoatEdit() {
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
         modified: document.getElementById('edit-boat-modified').checked,
-        clubIds: getEditingBoatClubIds()
+        clubIds: getEditingBoatClubIds(),
+        links: textToLinks(document.getElementById('edit-boat-links').value)
     };
 
     const result = await fetchJson('/api/boats/edit', {
@@ -2086,6 +2136,7 @@ async function requestBoatEdit() {
         designId: document.getElementById('edit-boat-design').value.trim(),
         modified: document.getElementById('edit-boat-modified').checked,
         clubIds: getEditingBoatClubIds(),
+        links: textToLinks(document.getElementById('edit-boat-links').value),
         ...(email && { email }),
         ...(message && { message })
     };
@@ -2126,6 +2177,7 @@ function showEditDesignPanel() {
     if (odBox) odBox.checked = !!item.oneDesign;
     const yearInput = document.getElementById('edit-design-year');
     if (yearInput) yearInput.value = item.designYear != null ? item.designYear : '';
+    document.getElementById('edit-design-links').value = linksToText(item.links);
     const boats = item.boats != null ? item.boats : 0;
     const warn = document.getElementById('edit-design-warning');
     warn.textContent = boats > 0
@@ -2153,6 +2205,7 @@ function buildDesignEditBody() {
     if (odBox) body.oneDesign = !!odBox.checked;
     const yearInput = document.getElementById('edit-design-year');
     if (yearInput) body.designYear = yearInput.value.trim();
+    body.links = textToLinks(document.getElementById('edit-design-links').value);
     return body;
 }
 
@@ -2173,6 +2226,7 @@ async function saveDesignEdit() {
     if (result.idChanged)   msg += ' ID → ' + result.newDesignId + '.';
     if (result.nameChanged) msg += ' Name updated.';
     if (result.yearChanged) msg += ' Design year updated (the profile updates on the next PF run).';
+    if (result.linksChanged) msg += ' Links updated.';
     if (result.updatedBoats > 0)
         msg += ' ' + result.updatedBoats + ' boat' + (result.updatedBoats !== 1 ? 's' : '') + ' re-keyed.';
     if (result.updatedRaces > 0)

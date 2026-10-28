@@ -8,6 +8,7 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -33,6 +34,8 @@ public record Boat(
     List<String> clubIds, // home club domains; first entry is primary, may be empty
     List<Certificate> certificates, // measurement certificates held by this boat
     List<String> sources, // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    List<Link> links,     // external web pages about this boat (ORC certificate links are derived, not stored)
     Instant lastUpdated,  // when this record was last written by an importer; nullable
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Boat>
@@ -45,6 +48,17 @@ public record Boat(
             certificates = List.of();
         if (sources == null)
             sources = List.of();
+        links = Link.normalise(links);
+    }
+
+    /**
+     * A boat with no links. For new records only: a copy of an existing record must use the
+     * canonical constructor and carry its {@link #links()} across.
+     */
+    public Boat(String id, String sailNumber, String name, String designId, List<String> clubIds,
+                List<Certificate> certificates, List<String> sources, Instant lastUpdated, Instant loadedAt)
+    {
+        this(id, sailNumber, name, designId, clubIds, certificates, sources, List.of(), lastUpdated, loadedAt);
     }
 
     /**
@@ -62,6 +76,7 @@ public record Boat(
         @JsonProperty("clubId") String legacyClubId,
         @JsonProperty("certificates") List<Certificate> certificates,
         @JsonProperty("sources") List<String> sources,
+        @JsonProperty("links") List<Link> links,
         @JsonProperty("lastUpdated") Instant lastUpdated)
     {
         List<String> resolved;
@@ -72,7 +87,7 @@ public record Boat(
         else
             resolved = List.of();
         return new Boat(id, sailNumber, name, designId, resolved,
-            certificates, sources, lastUpdated, null);
+            certificates, sources, links, lastUpdated, null);
     }
 
     /**
@@ -115,7 +130,16 @@ public record Boat(
     public Boat withLoadedAt(Instant t)
     {
         return new Boat(id, sailNumber, name, designId, clubIds,
-            certificates, sources, lastUpdated, t);
+            certificates, sources, links, lastUpdated, t);
+    }
+
+    /**
+     * Returns a copy of this Boat with the given links.
+     */
+    public Boat withLinks(List<Link> newLinks)
+    {
+        return new Boat(id, sailNumber, name, designId, clubIds,
+            certificates, sources, newLinks, lastUpdated, loadedAt);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -130,13 +154,14 @@ public record Boat(
             && Objects.equals(name, b.name) && Objects.equals(designId, b.designId)
             && Objects.equals(clubIds, b.clubIds)
             && Objects.equals(certificates, b.certificates)
-            && Objects.equals(sources, b.sources) && Objects.equals(lastUpdated, b.lastUpdated);
+            && Objects.equals(sources, b.sources) && Objects.equals(links, b.links)
+            && Objects.equals(lastUpdated, b.lastUpdated);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, sailNumber, name, designId, clubIds, certificates, sources, lastUpdated);
+        return Objects.hash(id, sailNumber, name, designId, clubIds, certificates, sources, links, lastUpdated);
     }
 
     @Override
@@ -150,6 +175,7 @@ public record Boat(
             ", clubIds=" + clubIds +
             ", certificates=" + certificates +
             ", sources=" + sources +
+            ", links=" + links +
             ", lastUpdated=" + lastUpdated +
             '}';
     }

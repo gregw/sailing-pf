@@ -73,7 +73,7 @@ record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
             }
             if (changed)
                 store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
-                    boat.clubIds(), List.copyOf(certs), boat.sources(), boat.lastUpdated(), null));
+                    boat.clubIds(), List.copyOf(certs), boat.sources(), boat.links(), boat.lastUpdated(), null));
         }
     }
 
@@ -153,7 +153,7 @@ record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubIds(),
-            List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
+            List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
     }
 
     /** Parses a yyyy-MM-dd date, ignoring any trailing time part; null if absent or invalid. */

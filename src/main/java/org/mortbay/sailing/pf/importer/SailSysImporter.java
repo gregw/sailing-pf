@@ -985,7 +985,7 @@ public class SailSysImporter
         {
             store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
                 boat.designId(), List.of(boatClub.id()),
-                boat.certificates(), addSource(boat.sources(), SOURCE), Instant.now(), null));
+                boat.certificates(), addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
             boat = store.boats().get(boat.id());
         }
 
@@ -1063,7 +1063,7 @@ public class SailSysImporter
         store.putBoat(new Boat(current.id(), current.sailNumber(), current.name(),
             current.designId(), current.clubIds(),
             List.copyOf(certs),
-            addSource(current.sources(), SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "")),
+            addSource(current.sources(), SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "")), current.links(),
             Instant.now(), null));
 
         LOG.debug("SailSys: inferred {} cert {} (value={} year={}) for boat {}",

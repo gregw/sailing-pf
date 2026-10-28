@@ -695,7 +695,7 @@ public class TopYachtImporter
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
                         boat.designId(), List.of(fromClub.id()), boat.certificates(),
-                        addSource(boat.sources(), SOURCE), Instant.now(), null));
+                        addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
                 }
             }
 
@@ -1147,7 +1147,7 @@ public class TopYachtImporter
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
                         boat.designId(), List.of(fromClub.id()), boat.certificates(),
-                        addSource(boat.sources(), SOURCE), Instant.now(), null));
+                        addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
                 }
             }
 
@@ -1215,7 +1215,7 @@ public class TopYachtImporter
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubIds(), List.copyOf(certs),
-            addSource(boat.sources(), SOURCE), Instant.now(), null));
+            addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;
     }

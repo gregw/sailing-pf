@@ -187,7 +187,7 @@ public class AmsImporter
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubIds(),
-                List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
+                List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
     }
 
     private Double parseRating(String value, String boatName, String kind)
