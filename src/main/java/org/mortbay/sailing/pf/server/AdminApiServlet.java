@@ -927,8 +927,9 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * The links of an edit request: a JSON array of {@code {url, label}} objects in display order.
-     * A link whose URL is already in {@code existing} keeps its source; any other is {@code manual}.
+     * The links of an edit request: a JSON array of {@code {url, label, source}} objects in display
+     * order. A link without a source keeps the source of the same URL in {@code existing}, else is
+     * {@code manual}; a harvester applying its links names itself as the source.
      * Blank URLs are skipped and duplicate URLs dropped.
      *
      * @throws IllegalArgumentException if a URL is not an absolute http(s) URL
@@ -952,7 +953,9 @@ public class AdminApiServlet extends HttpServlet
                 throw new IllegalArgumentException("Not an http(s) URL: " + url);
             String label = m.get("label") == null ? null : m.get("label").toString();
             Link old = byUrl.get(url);
-            links.add(new Link(url, label, old != null ? old.source() : Link.MANUAL));
+            String source = m.get("source") != null ? m.get("source").toString()
+                : old != null ? old.source() : Link.MANUAL;
+            links.add(new Link(url, label, source));
         }
         return Link.normalise(links);
     }
@@ -2239,13 +2242,18 @@ public class AdminApiServlet extends HttpServlet
             }
             else
             {
-                // Id unchanged — just swap the canonical name and add the old name as an alias.
-                Design renamed = new Design(oldId, newName, aliases, old.sources(), links,
-                    java.time.Instant.now(), old.noSpinnaker(), null);
-                store.putDesign(renamed);
-                Aliases.appendDesignMergeAliases(store.configDir(), oldId, newName,
-                    List.of(old.canonicalName()));
-                store.reloadAliases();
+                // Id unchanged — swap the canonical name and add the old name as an alias,
+                // and/or replace the links. Other edits (flags, year) leave the record alone.
+                boolean renamedName = !old.canonicalName().equals(newName);
+                if (renamedName || linksChanged)
+                    store.putDesign(new Design(oldId, newName, aliases, old.sources(), links,
+                        java.time.Instant.now(), old.noSpinnaker(), null));
+                if (renamedName)
+                {
+                    Aliases.appendDesignMergeAliases(store.configDir(), oldId, newName,
+                        List.of(old.canonicalName()));
+                    store.reloadAliases();
+                }
             }
 
             // noSpinnaker is YAML-managed; persist via the catalogue, then re-stamp the

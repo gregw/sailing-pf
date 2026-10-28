@@ -28,6 +28,14 @@ class LinksApiTest
     }
 
     @Test
+    void parseLinksTakesAGivenSource()
+    {
+        List<Link> links = AdminApiServlet.parseLinks(
+            List.of(Map.of("url", "https://example.com/x", "source", "wikipedia")), List.of());
+        assertEquals(List.of(new Link("https://example.com/x", null, "wikipedia")), links);
+    }
+
+    @Test
     void parseLinksRejectsNonHttpUrls()
     {
         assertThrows(IllegalArgumentException.class,
