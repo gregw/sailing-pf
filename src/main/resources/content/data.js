@@ -2204,7 +2204,12 @@ function showEditDesignPanel() {
     const odBox = document.getElementById('edit-design-one-design');
     if (odBox) odBox.checked = !!item.oneDesign;
     const yearInput = document.getElementById('edit-design-year');
-    if (yearInput) yearInput.value = item.designYear != null ? item.designYear : '';
+    if (yearInput) {
+        yearInput.value = item.designYear != null ? item.designYear : '';
+        // With no manual year, show the derived one (from certificates) greyed as a hint
+        yearInput.placeholder = item.designYear == null && item.year != null ? item.year : '';
+        yearInput.title = item.designYear == null && item.yearSource ? item.year + ': ' + item.yearSource : '';
+    }
     document.getElementById('edit-design-links').value = linksToText(item.links);
     const boats = item.boats != null ? item.boats : 0;
     const warn = document.getElementById('edit-design-warning');
