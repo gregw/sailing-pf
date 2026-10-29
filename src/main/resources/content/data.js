@@ -248,7 +248,7 @@ const COLUMNS = {
                 ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
         { label: 'Year', type: 'action', sortKey: 'year', anchor: 'col-design-year',
-          tip: 'The design year: set on the design edit form, or else the median ORC certificate age date of the design\'s boats (hover for which). Used by the design profile\'s Modern spoke.',
+          tip: 'The design year: set on the design edit form, or else the earliest ORC certificate age date of the design\'s boats (hover for which). Used by the design profile\'s Modern spoke.',
           render: item => item.year != null ? String(item.year) : '',
           title: item => item.yearSource || null },
         { label: 'DP', key: 'profile', sortKey: 'profile', anchor: 'col-design-profile',
@@ -1156,7 +1156,7 @@ function renderDesignProfile(dp) {
     const heading = `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${name} — Design Profile ${infoBtn('chart-design-profile', DESIGN_PROFILE_TIP)}</div>`;
     const y = dp.designYear;
     const yearLine = '<div style="color:#555;font-size:0.85rem;">Design year: ' + (y
-        ? y.year + (y.source === 'manual' ? ' (set manually)' : ` (median ORC age date of ${y.boats} boat${y.boats !== 1 ? 's' : ''})`)
+        ? y.year + (y.source === 'manual' ? ' (set manually)' : ` (earliest ORC age date of ${y.boats} boat${y.boats !== 1 ? 's' : ''})`)
         : 'unknown — set it on the edit form') + '</div>';
     if (!dp.profile)
         return heading + yearLine + '<div style="color:#777;font-size:0.9rem;">No design profile: fewer than 3 boats of this design raced 3 or more times in the last 24 months.</div>'
@@ -1173,7 +1173,7 @@ function renderDesignProfile(dp) {
 const DESIGN_PROFILE_TIP = 'Radar chart: six percentile scores among designs with at least 3 active boats (3+ races in the last 24 months, modified boats included). '
     + 'Quantity: active boats. Ubiquity: effective number of clubs (10 boats at one club = 1, evenly over five clubs = 5). '
     + 'Frequency: races per active boat. Results: the boats\' average finishing place on PF-corrected time. '
-    + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Modern: the design year — newer scores higher; a design with no year scores 0.5. The year is set on the design edit form, or else is the median ORC certificate age date of its boats.';
+    + 'Consistency: how little the boats\' PFs differ from the design RF (the boats sail to the class rating). Modern: the design year — newer scores higher; a design with no year scores 0.5. The year is set on the design edit form, or else is the earliest ORC certificate age date of its boats.';
 
 /** Radar chart of a boat (PP_SPOKES) or design (DP_SPOKES) profile, in the spokes' area order. */
 function renderProfileChart(profile, containerId, spokes) {

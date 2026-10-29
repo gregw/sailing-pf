@@ -462,7 +462,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     }
 
     /**
-     * The design's year: the manual year (design.yaml) if set, otherwise the median ORC age
+     * The design's year: the manual year (design.yaml) if set, otherwise the earliest ORC age
      * date of its boats as of the last index rebuild; null if neither.
      */
     public DesignProfileBuilder.DesignYear designYear(String designId)

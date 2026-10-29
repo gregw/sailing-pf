@@ -3049,7 +3049,7 @@ public class AdminApiServlet extends HttpServlet
                 DesignProfileBuilder.DesignYear year = cache.designYear(d.id());
                 row.put("year",        year != null ? year.year() : null);
                 row.put("yearSource",  year == null ? null : "manual".equals(year.source()) ? "set manually"
-                    : "median ORC age date of " + year.boats() + " boat" + (year.boats() != 1 ? "s" : ""));
+                    : "earliest ORC age date of " + year.boats() + " boat" + (year.boats() != 1 ? "s" : ""));
                 row.put("flags",       designFlags(d.id(), null));
                 DesignProfile dp = cache.profilesByDesignId().get(d.id());
                 row.put("profile",     dp != null ? dp.overallScore() : null);

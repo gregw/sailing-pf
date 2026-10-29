@@ -2,6 +2,7 @@ package org.mortbay.sailing.pf.analysis;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -59,16 +60,15 @@ public class DesignProfileBuilder
 
     /**
      * A design's year and where it came from: {@code "manual"} (design.yaml) or
-     * {@code "ORC"} (the median age date of its ORC-certificated boats).
+     * {@code "ORC"} (the earliest age date of its ORC-certificated boats).
      */
     public record DesignYear(int year, String source, int boats) {}
 
     /**
-     * Each design's year: the manual year if set, otherwise the median ORC age year
+     * Each design's year: the manual year if set, otherwise the earliest ORC age year
      * ({@link Certificate#ageYear}) over the design's boats, from each boat's latest ORC
-     * certificate with one, leaving out boats flagged modified. For a production design the ORC
-     * age date is usually the series year, so most boats of a class share it; the median
-     * ignores the odd hull or launch date.
+     * certificate with one, leaving out boats flagged modified: the year the design first came
+     * out. A wrong early age date on one boat sets it too, so set a manual year to correct it.
      *
      * @param manual the design's manual year, or null
      */
@@ -90,8 +90,7 @@ public class DesignProfileBuilder
         Map<String, DesignYear> years = new HashMap<>();
         ages.forEach((designId, list) ->
         {
-            List<Integer> sorted = list.stream().sorted().toList();
-            years.put(designId, new DesignYear(sorted.get(sorted.size() / 2), "ORC", sorted.size()));
+            years.put(designId, new DesignYear(Collections.min(list), "ORC", list.size()));
         });
         Set<String> designIds = new HashSet<>(years.keySet());
         for (Boat boat : boats.values())

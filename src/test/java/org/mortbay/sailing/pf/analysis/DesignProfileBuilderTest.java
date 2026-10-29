@@ -141,10 +141,10 @@ class DesignProfileBuilderTest
     }
 
     @Test
-    void designYearIsTheMedianOrcAgeOfTheBoatsLatestCertificates()
+    void designYearIsTheEarliestOrcAgeOfTheBoatsLatestCertificates()
     {
         orcBoat("a0", "alpha", 2025, 1997);
-        orcBoat("a1", "alpha", 2024, 1985, 2026, 1996);   // latest certificate's age counts
+        orcBoat("a1", "alpha", 2024, 1985, 2026, 1996);   // latest certificate's age counts, not 1985
         orcBoat("a2", "alpha", 2026, 1990);
         orcBoat("a3", "alpha", 2026, 1971);                // modified: left out
         orcBoat("b0", "beta", 2026, 2001);
@@ -152,7 +152,7 @@ class DesignProfileBuilderTest
 
         Map<String, DesignProfileBuilder.DesignYear> years = DesignProfileBuilder.designYears(
             boats, "a3"::equals, id -> "beta".equals(id) ? 2005 : null);
-        assertEquals(new DesignProfileBuilder.DesignYear(1996, "ORC", 3), years.get("alpha"));
+        assertEquals(new DesignProfileBuilder.DesignYear(1990, "ORC", 3), years.get("alpha"));
         assertEquals(new DesignProfileBuilder.DesignYear(2005, "manual", 0), years.get("beta"), "manual wins");
         assertNull(years.get("gamma"), "no ORC age and no manual year");
     }
