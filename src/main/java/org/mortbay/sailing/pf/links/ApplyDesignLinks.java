@@ -23,14 +23,25 @@ import org.slf4j.LoggerFactory;
  * design edit API, so it is safe while the server runs.
  * <p>
  * For each row with {@code approve} set to {@code y}, the design's links become its existing
- * links that were not added by this harvest, followed by the row's {@code links} (space
- * separated) with source {@value #SOURCE}. Re-applying therefore replaces this harvest's links and
- * never touches links entered by hand. Rows may be edited before applying: remove a URL from
- * {@code links} to drop it.
+ * links that were not added from this source, followed by the row's {@code links} (space
+ * separated, those not already present) with the source given by {@code --source=} (default
+ * {@value #SOURCE}). Re-applying therefore replaces that source's links and never touches links
+ * entered by hand or from another source. Rows may be edited before applying: remove a URL from
+ * {@code links} to drop it. An optional {@code labels} column gives the links' labels, in the
+ * same order, separated by {@code |} (blank for none).
+ * <p>
+ * An optional {@code base} column names the design the row's design really is, which then gets
+ * the links:
+ * <ul>
+ *   <li>{@code y}: the row's design is merged into the base (its names become aliases).</li>
+ *   <li>{@code M}: the row's design is a modification of the base. It is renamed
+ *   "&lt;base&gt; Modified", so imports of its names fold into the base ticked modified, and its
+ *   boats move to the base ticked modified.</li>
+ * </ul>
  * <p>
  * Without {@code --apply} it only reports what it would change.
  * <p>
- * Usage: {@code ApplyDesignLinks <candidates.csv> [admin-url, default http://localhost:8888] [--apply]}
+ * Usage: {@code ApplyDesignLinks <candidates.csv> [admin-url, default http://localhost:8888] [--source=name] [--apply]}
  */
 public class ApplyDesignLinks
 {
@@ -43,16 +54,19 @@ public class ApplyDesignLinks
     {
         List<String> positional = new ArrayList<>();
         boolean apply = false;
+        String source = SOURCE;
         for (String a : args)
         {
             if ("--apply".equals(a))
                 apply = true;
+            else if (a.startsWith("--source="))
+                source = a.substring("--source=".length());
             else
                 positional.add(a);
         }
         if (positional.isEmpty())
         {
-            System.err.println("Usage: ApplyDesignLinks <candidates.csv> [admin-url] [--apply]");
+            System.err.println("Usage: ApplyDesignLinks <candidates.csv> [admin-url] [--source=name] [--apply]");
             System.exit(2);
         }
         Path csvFile = Path.of(positional.get(0));
@@ -63,50 +77,52 @@ public class ApplyDesignLinks
         int approveCol = header.indexOf("approve");
         int idCol = header.indexOf("designId");
         int linksCol = header.indexOf("links");
+        int labelsCol = header.indexOf("labels");
+        int baseCol = header.indexOf("base");
 
         HttpClient client = new HttpClient();
         client.start();
         int changed = 0, unchanged = 0, failed = 0;
         try
         {
+            Api api = new Api(client, base, apply);
             for (List<String> row : rows.subList(1, rows.size()))
             {
-                if (row.size() <= linksCol || !"y".equalsIgnoreCase(row.get(approveCol).trim()))
+                String approve = cell(row, approveCol);
+                boolean modified = "m".equalsIgnoreCase(approve);
+                if (row.size() <= linksCol || !("y".equalsIgnoreCase(approve) || modified))
                     continue;
-                String designId = row.get(idCol).trim();
-                ContentResponse current = client.GET(base + "/api/designs/"
-                    + URLEncoder.encode(designId, StandardCharsets.UTF_8) + "/profile");
-                if (current.getStatus() != 200)
+                String designId = cell(row, idCol);
+                String baseId = cell(row, baseCol);
+                try
                 {
-                    LOG.warn("{}: design not found (HTTP {})", designId, current.getStatus());
-                    failed++;
-                    continue;
-                }
-                List<Map<String, String>> existing = new ArrayList<>();
-                for (JsonNode l : MAPPER.readTree(current.getContentAsString()).path("links"))
-                    existing.add(linkMap(l.path("url").asText(), l.path("label").asText(null), l.path("source").asText(null)));
+                    if (modified && baseId.isEmpty())
+                        throw new IllegalStateException("M needs a base design");
+                    String target = baseId.isEmpty() ? designId : baseId;
+                    boolean folded = !baseId.isEmpty() && foldIntoBase(api, designId, baseId, modified);
 
-                List<Map<String, String>> links = merge(existing, List.of(row.get(linksCol).trim().split("\\s+")));
-                if (links.equals(existing))
-                {
-                    unchanged++;
-                    continue;
+                    JsonNode current = api.get("/api/designs/" + URLEncoder.encode(target, StandardCharsets.UTF_8) + "/profile");
+                    List<Map<String, String>> existing = new ArrayList<>();
+                    for (JsonNode l : current.path("links"))
+                        existing.add(linkMap(l.path("url").asText(), l.path("label").asText(null), l.path("source").asText(null)));
+
+                    List<Map<String, String>> links = merge(existing, List.of(cell(row, linksCol).split("\\s+")),
+                        List.of(cell(row, labelsCol).split("\\|", -1)), source);
+                    if (links.equals(existing) && !folded)
+                    {
+                        unchanged++;
+                        continue;
+                    }
+                    LOG.info("{}: {}", target, links.stream().map(l -> l.containsKey("label")
+                        ? l.get("url") + " [" + l.get("label") + "]" : l.get("url")).toList());
+                    if (!links.equals(existing))
+                        api.post("/api/designs/edit", Map.of("designId", target, "links", links));
+                    changed++;
                 }
-                LOG.info("{}: {}", designId, links.stream().map(l -> l.get("url")).toList());
-                changed++;
-                if (!apply)
-                    continue;
-                Map<String, Object> body = new LinkedHashMap<>();
-                body.put("designId", designId);
-                body.put("links", links);
-                ContentResponse response = client.POST(base + "/api/designs/edit")
-                    .body(new StringRequestContent("application/json", MAPPER.writeValueAsString(body)))
-                    .send();
-                if (response.getStatus() != 200)
+                catch (Exception e)
                 {
-                    LOG.warn("{}: edit failed: HTTP {} {}", designId, response.getStatus(), response.getContentAsString());
+                    LOG.warn("{}: {}", designId, e.getMessage());
                     failed++;
-                    changed--;
                 }
             }
         }
@@ -119,20 +135,102 @@ public class ApplyDesignLinks
     }
 
     /**
-     * The design's existing links that this harvest did not add, then the harvested URLs not
-     * already among them.
+     * Folds {@code designId} into {@code baseId}: merged into it, or, when {@code modified},
+     * renamed "&lt;base&gt; Modified" with its boats moved to the base ticked modified.
+     * False if {@code designId} is already gone (folded on an earlier run), so there is nothing to do.
      */
-    static List<Map<String, String>> merge(List<Map<String, String>> existing, List<String> harvested)
+    private static boolean foldIntoBase(Api api, String designId, String baseId, boolean modified) throws Exception
+    {
+        String enc = URLEncoder.encode(designId, StandardCharsets.UTF_8);
+        JsonNode design = api.getOrNull("/api/designs/" + enc + "/profile");
+        if (design == null)
+            return false;
+        JsonNode baseDesign = api.get("/api/designs/" + URLEncoder.encode(baseId, StandardCharsets.UTF_8) + "/profile");
+        List<String> boatIds = new ArrayList<>();
+        for (JsonNode b : api.get("/api/boats?showExcluded=true&size=100000&designId=" + enc).path("items"))
+            boatIds.add(b.path("id").asText());
+        if (!modified)
+        {
+            LOG.info("{}: merge into {} ({} boats)", designId, baseId, boatIds.size());
+            api.post("/api/designs/merge", Map.of("keepId", baseId, "mergeIds", List.of(designId)));
+            return true;
+        }
+        String name = baseDesign.path("designName").asText(baseId) + " Modified";
+        LOG.info("{}: rename to \"{}\", boats {} to {} modified", designId, name, boatIds, baseId);
+        JsonNode renamed = api.post("/api/designs/edit", Map.of("designId", designId, "canonicalName", name));
+        String modifiedId = renamed == null ? designId : renamed.path("newDesignId").asText(designId);
+        if (renamed == null)
+            boatIds.clear(); // dry run
+        else if (!modifiedId.equals(designId))
+        {
+            boatIds.clear();
+            for (JsonNode b : api.get("/api/boats?showExcluded=true&size=100000&designId="
+                + URLEncoder.encode(modifiedId, StandardCharsets.UTF_8)).path("items"))
+                boatIds.add(b.path("id").asText());
+        }
+        for (String boatId : boatIds)
+            api.post("/api/boats/edit", Map.of("boatId", boatId, "designId", baseId, "modified", true));
+        return true;
+    }
+
+    private static String cell(List<String> row, int col)
+    {
+        return col < 0 || col >= row.size() ? "" : row.get(col).trim();
+    }
+
+    /** JSON calls on the admin API; posts are only logged unless applying. */
+    private record Api(HttpClient client, String base, boolean apply)
+    {
+        JsonNode get(String path) throws Exception
+        {
+            JsonNode node = getOrNull(path);
+            if (node == null)
+                throw new IllegalStateException("not found: " + path);
+            return node;
+        }
+
+        JsonNode getOrNull(String path) throws Exception
+        {
+            ContentResponse response = client.GET(base + path);
+            if (response.getStatus() == 404)
+                return null;
+            if (response.getStatus() != 200)
+                throw new IllegalStateException("GET " + path + ": HTTP " + response.getStatus());
+            return MAPPER.readTree(response.getContentAsString());
+        }
+
+        /** The response, or null on a dry run. */
+        JsonNode post(String path, Map<String, Object> body) throws Exception
+        {
+            if (!apply)
+                return null;
+            ContentResponse response = client.POST(base + path)
+                .body(new StringRequestContent("application/json", MAPPER.writeValueAsString(body)))
+                .send();
+            if (response.getStatus() != 200)
+                throw new IllegalStateException("POST " + path + ": HTTP " + response.getStatus() + " " + response.getContentAsString());
+            return MAPPER.readTree(response.getContentAsString());
+        }
+    }
+
+    /**
+     * The design's existing links not from the source, then the harvested URLs not already among
+     * them, from the source, each labelled by the label at the same index (if any and not blank).
+     */
+    static List<Map<String, String>> merge(List<Map<String, String>> existing, List<String> harvested,
+        List<String> labels, String source)
     {
         List<Map<String, String>> links = new ArrayList<>();
         for (Map<String, String> l : existing)
-            if (!SOURCE.equals(l.get("source")))
+            if (!source.equals(l.get("source")))
                 links.add(l);
-        for (String url : harvested)
+        for (int i = 0; i < harvested.size(); i++)
         {
+            String url = harvested.get(i);
             if (url.isBlank() || links.stream().anyMatch(l -> url.equals(l.get("url"))))
                 continue;
-            links.add(linkMap(url, null, SOURCE));
+            String label = i < labels.size() && !labels.get(i).isBlank() ? labels.get(i).trim() : null;
+            links.add(linkMap(url, label, source));
         }
         return links;
     }

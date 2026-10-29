@@ -348,7 +348,7 @@ public class DesignLinkMatcher
     }
 
     /** A builder-stripped name worth matching on: not just a number, e.g. "30" from "Hunter 30". */
-    private static boolean isDistinctive(String key)
+    static boolean isDistinctive(String key)
     {
         return key.length() >= 4 && key.chars().filter(Character::isLetter).count() >= 3;
     }
@@ -361,7 +361,7 @@ public class DesignLinkMatcher
 
     // --- Reading and writing ---
 
-    private static List<Design> readDesigns(Path dir) throws IOException
+    static List<Design> readDesigns(Path dir) throws IOException
     {
         List<Design> designs = new ArrayList<>();
         try (Stream<Path> files = Files.list(dir))
@@ -372,7 +372,7 @@ public class DesignLinkMatcher
         return designs;
     }
 
-    private static Map<String, Integer> boatCounts(Path dir) throws IOException
+    static Map<String, Integer> boatCounts(Path dir) throws IOException
     {
         Map<String, Integer> counts = new HashMap<>();
         try (Stream<Path> files = Files.list(dir))
@@ -388,7 +388,7 @@ public class DesignLinkMatcher
     }
 
     /** The excluded and ignored design ids of {@code design.yaml}. */
-    private static Set<String> excludedDesigns(Path designYaml) throws IOException
+    static Set<String> excludedDesigns(Path designYaml) throws IOException
     {
         Set<String> ids = new HashSet<>();
         if (!Files.exists(designYaml))

@@ -29,10 +29,34 @@ class ApplyDesignLinksTest
             Map.of("url", "https://old.harvest", "source", "wikipedia"),
             Map.of("url", "https://sailboatdata.com/sailboat/x", "source", "manual"));
         List<Map<String, String>> merged = ApplyDesignLinks.merge(existing,
-            List.of("https://en.wikipedia.org/wiki/X", "https://sailboatdata.com/sailboat/x"));
+            List.of("https://en.wikipedia.org/wiki/X", "https://sailboatdata.com/sailboat/x"), List.of(), "wikipedia");
         assertEquals(List.of(
             Map.of("url", "https://class.org", "label", "Class", "source", "manual"),
             Map.of("url", "https://sailboatdata.com/sailboat/x", "source", "manual"),
             Map.of("url", "https://en.wikipedia.org/wiki/X", "source", "wikipedia")), merged);
+    }
+
+    @Test
+    void mergeLeavesOtherSourcesAlone()
+    {
+        List<Map<String, String>> existing = List.of(
+            Map.of("url", "https://en.wikipedia.org/wiki/X", "source", "wikipedia"),
+            Map.of("url", "https://sailboatdata.com/sailboat/old", "source", "speclinks"));
+        List<Map<String, String>> merged = ApplyDesignLinks.merge(existing,
+            List.of("https://en.wikipedia.org/wiki/X", "https://sailboatdata.com/sailboat/x"), List.of(), "speclinks");
+        assertEquals(List.of(
+            Map.of("url", "https://en.wikipedia.org/wiki/X", "source", "wikipedia"),
+            Map.of("url", "https://sailboatdata.com/sailboat/x", "source", "speclinks")), merged);
+    }
+
+    @Test
+    void mergeLabelsLinksByPosition()
+    {
+        List<Map<String, String>> merged = ApplyDesignLinks.merge(List.of(),
+            List.of("https://a", "https://b", "https://c"), List.of("A one", " ", "C one "), "speclinks");
+        assertEquals(List.of(
+            Map.of("url", "https://a", "label", "A one", "source", "speclinks"),
+            Map.of("url", "https://b", "source", "speclinks"),
+            Map.of("url", "https://c", "label", "C one", "source", "speclinks")), merged);
     }
 }
