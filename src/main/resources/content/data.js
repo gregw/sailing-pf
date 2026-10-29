@@ -90,7 +90,7 @@ function openClubTab(item) {
  * for this year — see Club.hasCurrentFeed). The hover tip explains (info-btn tooltip);
  * clicking it selects just this club and opens its Edit / Request edit form.
  */
-function noFeedAlert(item, cb) {
+function noFeedAlert(item) {
     const year = new Date().getFullYear();
     const span = document.createElement('span');
     span.className = 'info-btn feed-alert';
@@ -100,9 +100,7 @@ function noFeedAlert(item, cb) {
         + 'feed to make it live.';
     span.onclick = (e) => {
         e.stopPropagation();
-        clearSelection('clubs');
-        cb.checked = true;
-        toggleSelect('clubs', item, true);
+        selectOnly('clubs', item);
         showEditClubPanel();
         document.getElementById('edit-panel-clubs').scrollIntoView({behavior: 'smooth', block: 'nearest'});
     };
@@ -697,26 +695,34 @@ function renderTable(entity, items, append) {
                 selectionRestored = true;
             }
         }
-        // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
+        tr.dataset.id = item.id;
+        // A row click selects just this row and opens its detail; the first tick (nothing
+        // else selected) does the same, while further ticks build a multi-row selection.
+        const openRow = () => {
+            if (entity === 'races') state.currentRaceIdx = globalIdx;
+            if (entity in state.navIdx) state.navIdx[entity] = globalIdx;
+            selectOnly(entity, item);
+            loadDetail(entity, item.id, item);
+        };
         const tdCb = document.createElement('td');
         tdCb.style.textAlign = 'center';
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = state.selected[entity].has(item.id);
-        cb.onclick = (e) => { e.stopPropagation(); toggleSelect(entity, item, cb.checked); };
+        cb.onclick = (e) => {
+            e.stopPropagation();
+            if (cb.checked && state.selected[entity].size === 0) openRow();
+            else toggleSelect(entity, item, cb.checked);
+        };
         tdCb.appendChild(cb);
         if (entity === 'clubs') {
             // Left-aligned so the tick boxes line up whether or not a ⚠ follows
             tdCb.style.textAlign = 'left';
             tdCb.style.whiteSpace = 'nowrap';
-            if (item.currentFeed === false) tdCb.appendChild(noFeedAlert(item, cb));
+            if (item.currentFeed === false) tdCb.appendChild(noFeedAlert(item));
         }
         tr.appendChild(tdCb);
-        tr.onclick = () => {
-            if (entity === 'races') state.currentRaceIdx = globalIdx;
-            if (entity in state.navIdx) state.navIdx[entity] = globalIdx;
-            loadDetail(entity, item.id, item);
-        };
+        tr.onclick = openRow;
         cols.forEach(col => {
             const td = document.createElement('td');
             if (col.cls) td.className = col.cls;
@@ -1215,6 +1221,7 @@ function toggleSelect(entity, item, checked) {
         state.selected[entity].delete(item.id);
         state.selectedData[entity].delete(item.id);
     }
+    rowOf(entity, item.id)?.classList.toggle('selected', checked);
     // Any change to the selection closes the previously-opened detail panel; the
     // action bar is the new focus for the user until they click another row.
     const panel = document.getElementById('detail-' + entity);
@@ -1224,6 +1231,27 @@ function toggleSelect(entity, item, checked) {
         && !(state.selected.clubs.size === 1 && state.selected.clubs.has(editingClubId)))
         hideEditClubPanel();
     updateMergeBar(entity);
+}
+
+/** The table row of the given item, if it is loaded. */
+function rowOf(entity, id) {
+    return document.querySelector('#tbody-' + entity + ' tr[data-id="' + CSS.escape(id) + '"]');
+}
+
+/**
+ * Selects just this item, as a click on its row does: clears the rest of the selection (and
+ * the panels acting on it), then ticks the item. An open detail panel stays open for the
+ * caller to refill.
+ */
+function selectOnly(entity, item) {
+    if (state.selected[entity].size === 1 && state.selected[entity].has(item.id)) return;
+    const panel = document.getElementById('detail-' + entity);
+    const detailOpen = panel?.classList.contains('visible');
+    clearSelection(entity);
+    const cb = rowOf(entity, item.id)?.querySelector('td:first-child input[type=checkbox]');
+    if (cb) cb.checked = true;
+    toggleSelect(entity, item, true);
+    if (detailOpen) panel.classList.add('visible');
 }
 
 const ENTITY_NOUNS = {
@@ -2812,6 +2840,7 @@ function prevRace() {
         preferredDivision = document.getElementById('race-division-select').value || null;
         state.currentRaceIdx--;
         const r = state.raceItems[state.currentRaceIdx];
+        if (state.selected.races.size <= 1) selectOnly('races', r);
         loadDetail('races', r.id, r);
     }
 }
@@ -2821,6 +2850,7 @@ function nextRace() {
         preferredDivision = document.getElementById('race-division-select').value || null;
         state.currentRaceIdx++;
         const r = state.raceItems[state.currentRaceIdx];
+        if (state.selected.races.size <= 1) selectOnly('races', r);
         loadDetail('races', r.id, r);
     }
 }
@@ -2853,6 +2883,7 @@ function stepEntity(entity, step) {
     if (idx < 0 || idx >= state.navItems[entity].length) return;
     state.navIdx[entity] = idx;
     const item = state.navItems[entity][idx];
+    if (state.selected[entity].size <= 1) selectOnly(entity, item);
     loadDetail(entity, item.id, item);
 }
 
