@@ -15,8 +15,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -47,7 +49,8 @@ import static org.mortbay.sailing.pf.links.DesignLinkMatcher.key;
  *       the model, with or without the builder, e.g. "grand-surprise" or "archambault" +
  *       "grand-surprise"</li>
  *   <li>{@code stripped} — the page's name less leading builder words or a trailing one
- *       ("beneteau-first-40" → "first-40", "surprise-25-archambault" → "surprise-25"), or the
+ *       ("beneteau-first-40" → "first-40", "surprise-25-archambault" → "surprise-25") or less
+ *       trailing qualifiers ("farr-36-1990", "mc38-one-design", "oceanis-411-beneteau-1"), or the
  *       design's name less one or two leading words ("J Boats J/70" → "J/70"), but not
  *       both; only builder-like words (no numbers) are
  *       stripped, and what is left must still have a number in it</li>
@@ -119,6 +122,9 @@ public class SpecLinkMatcher
     private static final Pattern SAILBOATDATA = Pattern.compile("^https?://(?:www\\.)?sailboatdata\\.com/sailboat/([^/?#]+)/?$");
     private static final Pattern BOAT_SPECS = Pattern.compile("^https?://(?:www\\.)?boat-specs\\.com/sailing/sailboats/([^/?#]+)/([^/?#]+)/?$");
     private static final Pattern DIGITS = Pattern.compile("\\d+");
+    private static final Pattern QUALIFIER = Pattern.compile("(19|20)\\d\\d|\\d|od|cruiser");
+    /** Abbreviations used in design names: "Jeanneau SO 349" is the Sun Odyssey 349 */
+    private static final Map<String, String> ABBREVIATIONS = Map.of("so", "sun odyssey");
 
     private static final ObjectMapper JSON = JsonMapper.builder()
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -219,18 +225,48 @@ public class SpecLinkMatcher
     {
         Map<String, Kind> keys = new LinkedHashMap<>();
         List<String> w = p.words();
-        put(keys, String.join("", w), Kind.exact);
-        if (p.builderWords() > 0)
-            put(keys, String.join("", w.subList(p.builderWords(), w.size())), Kind.exact);
+        putKeys(keys, w, p.builderWords(), false);
+        // "farr-36-1990", "mc38-one-design", "oceanis-411-beneteau-1": the name less its qualifiers
+        List<String> core = withoutQualifiers(w);
+        if (core.size() < w.size() && core.size() > p.builderWords())
+            putKeys(keys, core, p.builderWords(), true);
+        return keys;
+    }
+
+    private static void putKeys(Map<String, Kind> keys, List<String> w, int builderWords, boolean qualified)
+    {
+        BiConsumer<String, Kind> put = qualified ? (k, kind) -> putStripped(keys, k) : (k, kind) -> put(keys, k, kind);
+        put.accept(String.join("", w), Kind.exact);
+        if (builderWords > 0)
+            put.accept(String.join("", w.subList(builderWords, w.size())), Kind.exact);
         // "first-407-beneteau" is "Beneteau First 40.7"
         if (w.size() > 1 && !hasDigit(w.getLast()))
-            put(keys, w.getLast() + String.join("", w.subList(0, w.size() - 1)), Kind.exact);
+            put.accept(w.getLast() + String.join("", w.subList(0, w.size() - 1)), Kind.exact);
         // Only builder-like words are stripped: "columbia-24-contender" is not a "contender"
         for (int n = 1; n <= 2 && n < w.size() && !hasDigit(w.get(n - 1)); n++)
             putStripped(keys, String.join("", w.subList(n, w.size())));
         if (w.size() > 1 && !hasDigit(w.getLast()))
             putStripped(keys, String.join("", w.subList(0, w.size() - 1)));
-        return keys;
+    }
+
+    /**
+     * The words less trailing qualifiers: years ("2008"), a page index ("1"), "od", "one design"
+     * and "cruiser".
+     */
+    static List<String> withoutQualifiers(List<String> words)
+    {
+        int end = words.size();
+        while (end > 1)
+        {
+            String last = words.get(end - 1);
+            if (QUALIFIER.matcher(last).matches())
+                end--;
+            else if (end > 2 && "design".equals(last) && "one".equals(words.get(end - 2)))
+                end -= 2;
+            else
+                break;
+        }
+        return words.subList(0, end);
     }
 
     /**
@@ -242,6 +278,13 @@ public class SpecLinkMatcher
         Set<String> designKeys = DesignLinkMatcher.designKeys(design);
         Map<String, Kind> keys = new LinkedHashMap<>();
         designKeys.forEach(k -> put(keys, k, Kind.exact));
+        for (String name : names(design))
+        {
+            String expanded = Arrays.stream(name.trim().split("\\s+"))
+                .map(w -> ABBREVIATIONS.getOrDefault(w.toLowerCase(), w)).collect(Collectors.joining(" "));
+            if (!expanded.equalsIgnoreCase(name.trim()))
+                put(keys, key(expanded), Kind.exact);
+        }
         // "Beneteau First 40" → "First 40"
         for (String name : names(design))
         {

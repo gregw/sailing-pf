@@ -122,4 +122,42 @@ class SpecLinkMatcherTest
             """);
         assertEquals(Map.of("hunter30", Set.of(Site.sailboatdata)), SpecLinkMatcher.covered(csv));
     }
+
+    @Test
+    void trailingQualifiersAreStripped()
+    {
+        assertEquals(List.of("farr", "36"), SpecLinkMatcher.withoutQualifiers(List.of("farr", "36", "1990")));
+        assertEquals(List.of("bavaria", "38"),
+            SpecLinkMatcher.withoutQualifiers(List.of("bavaria", "38", "cruiser", "2008", "2010")));
+        assertEquals(List.of("mc38"), SpecLinkMatcher.withoutQualifiers(List.of("mc38", "one", "design")));
+        assertEquals(List.of("hunter", "30"), SpecLinkMatcher.withoutQualifiers(List.of("hunter", "30")));
+
+        SpecLinkMatcher m = new SpecLinkMatcher(List.of(
+            "https://sailboatdata.com/sailboat/farr-36-1990/",
+            "https://sailboatdata.com/sailboat/farr-36-od-2002/",
+            "https://sailboatdata.com/sailboat/oceanis-411-beneteau-1/",
+            "https://sailboatdata.com/sailboat/tornado-catamaran/"));
+        Proposal p = m.propose(design("farr36", "FARR 36"), 5, false, Set.of());
+        assertEquals(List.of("https://sailboatdata.com/sailboat/farr-36-1990",
+            "https://sailboatdata.com/sailboat/farr-36-od-2002"), p.links());
+        assertEquals(Kind.stripped, p.bySite().get(Site.sailboatdata).getFirst().kind());
+        assertFalse(p.approvable());
+        assertEquals(List.of("https://sailboatdata.com/sailboat/oceanis-411-beneteau-1"),
+            m.propose(design("beneteauoceanis411", "Beneteau Oceanis 411"), 5, false, Set.of()).links());
+        // Stripped names still need a number
+        assertNull(m.propose(design("tornado", "Tornado"), 5, false, Set.of()));
+        // A whole-name match beats a qualified one: hunter-30, not hunter-30-2
+        assertEquals(List.of("https://sailboatdata.com/sailboat/hunter-30",
+            "https://www.boat-specs.com/sailing/sailboats/hunter-marine/hunter-30"),
+            matcher.propose(design("hunter30", "Hunter 30"), 5, false, Set.of()).links());
+    }
+
+    @Test
+    void abbreviationsAreExpanded()
+    {
+        SpecLinkMatcher m = new SpecLinkMatcher(List.of("https://sailboatdata.com/sailboat/sun-odyssey-349-jeanneau/"));
+        Proposal p = m.propose(design("jeanneauso349", "Jeanneau SO 349"), 5, false, Set.of());
+        assertEquals(Kind.exact, p.bySite().get(Site.sailboatdata).getFirst().kind());
+        assertTrue(p.approvable());
+    }
 }
