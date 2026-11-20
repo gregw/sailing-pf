@@ -382,7 +382,6 @@ noSpinnaker:
 - "laserradial"
 - "laser47"
 oneDesign:
-- "sydney38"
 - "farr30"
 - "farr36"
 - "etchells"
@@ -390,13 +389,22 @@ oneDesign:
 - "adams10"
 - "young88"
 - "swarbricks80"
-- "sydney36cr"
 - "archambaultgrandsurprise"
 - "jboatj80"
 - "jboatsj24"
-- "jboatsj70"
 - "jboatsj99"
 - "fareast28r"
+- "sydney32"
+- "sydney39cr"
+- "jboatsj80"
+designYears:
+  archambaultgrandsurprise: 1999
+  sydney38: 1999
+  jeanneauso409: 2010
+  sydney36: 1998
+  sydney36cr: 2006
+  jboatsj70: 2012
+  jboatsj80: 1992
 modifiedBoats:
 - sailNumber: "3835"
   name: "Shits n Giggles"
@@ -492,6 +500,12 @@ modifiedBoats:
   name: "Esprit"
 - sailNumber: "1919"
   name: "Lost Horizon"
+- sailNumber: "1902"
+  name: "Seaya"
+- sailNumber: "SM301"
+  name: "Zombies Can't Swim"
+- sailNumber: "7004"
+  name: "Blakey"
 boatDesignOverrides:
 - designId: "sydney36mkii"
   canonicalName: "Sydney 36 MkII"
@@ -610,5 +624,26 @@ boatDesignOverrides:
     until: null
   - sailNumber: "581"
     name: "Corum"
+    from: null
+    until: null
+- designId: "adams13"
+  canonicalName: "Adams 13"
+  boats:
+  - sailNumber: "1902"
+    name: "Seaya"
+    from: null
+    until: null
+- designId: "bavaria44"
+  canonicalName: "BAVARIA 44"
+  boats:
+  - sailNumber: "SM301"
+    name: "Zombies Can't Swim"
+    from: null
+    until: null
+- designId: "dehler46"
+  canonicalName: "DEHLER 46"
+  boats:
+  - sailNumber: "7004"
+    name: "Blakey"
     from: null
     until: null

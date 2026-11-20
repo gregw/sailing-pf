@@ -4,6 +4,8 @@ designs:
     aliases:
     - "Sydney 36 OD"
     - "Sydney 36 CR"
+    - "Sydney 36 C"
+    - "sydney36c"
   customplym61:
     canonicalName: "Custom Plym 61"
     aliases:
@@ -991,6 +993,34 @@ designs:
     - "Fareast 28"
     - "fareast28"
     - "FAREAST 28R"
+  adams13modified:
+    canonicalName: "Adams 13 Modified"
+    aliases:
+    - "Adams 13e"
+    - "adams13e"
+  cape31:
+    canonicalName: "CAPE 31"
+    aliases:
+    - "Andrew Cape 31"
+    - "andrewcape31"
+  bavaria44modified:
+    canonicalName: "BAVARIA 44 Modified"
+    aliases:
+    - "Bavaria 44 \"X\""
+    - "bavaria44x"
+  dehler46modified:
+    canonicalName: "DEHLER 46 Modified"
+    aliases:
+    - "Dehler 46c"
+    - "dehler46c"
+  jeanneauso409:
+    canonicalName: "Jeanneau Sun Odyssey 409"
+    aliases:
+    - "Jeanneau SO 409"
+  sydney39cr:
+    canonicalName: "Sydney 39CR"
+    aliases:
+    - "Sydney 39Cr"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"

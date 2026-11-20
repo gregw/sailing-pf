@@ -1243,7 +1243,21 @@ clubs:
     excluded: null
     email: "info@sailportstephens.com.au"
     aliases: []
-    topyacht: null
+    topyacht:
+      sps:
+        name: "Sail Port Stephens"
+        urls:
+        - "https://www.topyacht.net.au/results/2022/sps/index.htm"
+        - "https://www.topyacht.net.au/results/2021/sps/index.htm"
+        - "https://www.topyacht.net.au/results/2019/sps/index.htm"
+        - "https://www.topyacht.net.au/results/2018/sps/index.htm"
+        - "https://www.topyacht.net.au/results/2017/sps/index.htm"
+        - "https://tes.topyacht.net.au/results/2016/sps/index.htm"
+        - "https://tes.topyacht.net.au/results/2015/sps/index.htm"
+        - "https://tes.topyacht.net.au/results/2014/sps/index.htm"
+        - "https://tes.topyacht.net.au/results/2013/sps/index.htm"
+        - "https://tes.topyacht.net.au/results/2012/sps/index.htm"
+        - "https://tes.topyacht.net.au/results/2011/sps/index.htm"
     sailsys: null
     boats: null
     seriesTypes: null

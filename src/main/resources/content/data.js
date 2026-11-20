@@ -863,6 +863,13 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
         pfDiv.innerHTML = '<em>Loading…</em>';
         const pfData = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/pf');
         pfDiv.innerHTML = pfData ? renderBoatPf(pfData) : '<em>No PF data available</em>';
+        const boatDpDiv = document.getElementById('pf-design-profile');
+        if (boatDpDiv && data.designId) {
+            const dp = await fetchJson('/api/designs/' + encodeURIComponent(data.designId) + '/profile');
+            boatDpDiv.innerHTML = renderDesignProfile(dp, 'pf-dp-chart');
+            if (dp && dp.profile)
+                setTimeout(() => renderProfileChart(dp.profile, 'pf-dp-chart', DP_SPOKES), 0);
+        }
 
         const aliasDiv = document.getElementById('aliases-boats');
         const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
@@ -995,17 +1002,19 @@ function renderBoatPf(data) {
 
     if (data.profile) {
         const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
+        html += `<div style="display:inline-block;vertical-align:top;text-align:left;margin-right:1.5rem;">`;
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile', 'Radar chart: six fleet-relative percentile scores based on the last 24 months. Frequency: how often the boat races. Diversity: distinct opponents raced. Consistency: how tight the residuals are. NonChaotic: whether the boat\'s errors come in orderly races, where the rest of the fleet finished close to its handicaps (its own), or in disorderly races (excusable), regardless of how big they are. Stability: flatness of trend (level=best, declining=worst). Results: average finishing place on PF-corrected time in its divisions (independent of how often it races).')}</div>`;
-        html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
         html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
         html += `</div>`;
+        // The boat's design profile and links, filled in by loadDetail
+        html += `<div id="pf-design-profile" style="display:inline-block;vertical-align:top;text-align:left;"></div>`;
         html += renderLinks(data.links);
         setTimeout(() => renderProfileChart(data.profile, 'pf-profile-chart', PP_SPOKES), 0);
     }
 
     else
-        html += renderLinks(data.links);
+        html += `<div id="pf-design-profile"></div>` + renderLinks(data.links);
 
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
@@ -1149,8 +1158,12 @@ function textToLinks(text) {
         });
 }
 
-/** The design profile section of the designs page detail: heading, radar chart and DP score. */
-function renderDesignProfile(dp) {
+/**
+ * A design profile section: heading, design year, radar chart (in the element with id
+ * chartId, for the caller to draw), DP score and the design's links. Shown on the designs
+ * page detail and, for its design, on a boat's detail.
+ */
+function renderDesignProfile(dp, chartId = 'dp-profile-chart') {
     if (!dp) return '';
     const name = esc((dp.designName || dp.designId) + (dp.flags || ''));
     const heading = `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${name} — Design Profile ${infoBtn('chart-design-profile', DESIGN_PROFILE_TIP)}</div>`;
@@ -1164,7 +1177,7 @@ function renderDesignProfile(dp) {
     const p = dp.profile;
     return heading + yearLine
         + `<div style="display:inline-block;vertical-align:top;text-align:left;">`
-        + `  <div id="dp-profile-chart"></div>`
+        + `  <div id="${chartId}"></div>`
         + `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">DP: ${p.overallScore.toFixed(3)} — ${p.activeBoats} active boats</div>`
         + `</div>`
         + renderLinks(dp.links);
