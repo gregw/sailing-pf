@@ -101,6 +101,60 @@ class TopYachtImporterTest
         assertEquals("Valid", links.get(0).name());
     }
 
+    // --- legacy (pre-2018) layout without CSS classes ---
+
+    @Test
+    void parseSeriesPageHandlesLegacyLayout()
+    {
+        // Trimmed from tes.topyacht.net.au/results/2011/sps/racing/series.htm
+        String html = "<html><body><table border=0>" +
+            "<caption class=caption><b><i><font></font></i></b></caption>" +
+            "<tr bgcolor=#84acce><td class='boldText txtsize'></td>" +
+            "<td class='boldText txtsize'>EHC Div1</td><td class='boldText txtsize'>Entrants</td></tr>" +
+            "<tr><td class='boldText txtsize'>Series Scores</td><td><A HREF='SGrp6.htm'><img></A></td><td></td></tr>" +
+            "<tr><td class='boldText txtsize'>Race 4 - 4/17/2011 </td>" +
+            "<td><A HREF='04RGrp6.htm'><img></A></td><td><A HREF='04entr.htm'><img></A></td></tr>" +
+            "<tr><td class='boldText txtsize'>Race 3 - 4/16/2011 </td>" +
+            "<td><A HREF='03RGrp6.htm'><img></A></td><td>&nbsp;</td></tr>" +
+            "</table></body></html>";
+
+        List<TopYachtImporter.RaceRow> rows =
+            importer.parseSeriesPage(html, "https://tes.topyacht.net.au/results/2011/sps/racing/series.htm");
+
+        assertEquals(2, rows.size());
+        assertEquals(4, rows.get(0).number());
+        assertEquals(LocalDate.of(2011, 4, 17), rows.get(0).date());
+        assertEquals(List.of("https://tes.topyacht.net.au/results/2011/sps/racing/04RGrp6.htm"),
+            rows.get(0).resultsUrls());
+    }
+
+    @Test
+    void parseResultsPageHandlesLegacyLayout()
+    {
+        // Trimmed from tes.topyacht.net.au/results/2016/sps/perform/05RGrp14.htm
+        String html = "<html><body><p>Race 5 &nbsp (17/04/2016)&nbsp </p><table border=0>" +
+            "<caption class=caption><b><i><font>EHC Div1 results  Start : 11:30  </font></i></b></caption>" +
+            "<tr bgcolor=#84acce><td>Place</td><td>Sail No</td><td>Boat Name</td><td>From</td>" +
+            "<td>Elapsd</td><td>Cor'd T</td><td>Skipper</td><td>Score</td><td>Fin Tim</td></tr>" +
+            "<tr bgcolor=#ffffff><td>1</td><td>4100</td><td>THE BANSHEE</td><td>CSC</td>" +
+            "<td>02:07:53</td><td>02:16:35</td><td>Someone</td><td>1.0</td><td>13:37:53</td></tr>" +
+            "<tr bgcolor=#ddf5f6><td>2</td><td>67</td><td>COLORTILE</td><td>CSC&amp;RMYC</td>" +
+            "<td>02:02:22</td><td>02:18:53</td><td>Someone</td><td>2.0</td><td>13:32:22</td></tr>" +
+            "</table></body></html>";
+
+        ParsedRace race = importer.parseResultsPage(html);
+
+        assertNotNull(race);
+        assertEquals(1, race.divisions().size());
+        List<ParsedRow> rows = race.divisions().get(0).rows();
+        assertEquals(2, rows.size());
+        assertEquals("4100", rows.get(0).sailNo());
+        assertEquals("THE BANSHEE", rows.get(0).boatName());
+        assertEquals(Duration.ofHours(2).plusMinutes(7).plusSeconds(53), rows.get(0).elapsed());
+        assertEquals("CSC", rows.get(0).clubCode());
+        assertEquals(LocalDate.of(2016, 4, 17), importer.extractRaceDate(html));
+    }
+
     // --- parseSeriesPage ---
 
     @Test

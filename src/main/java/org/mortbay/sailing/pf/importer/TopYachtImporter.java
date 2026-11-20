@@ -773,6 +773,8 @@ public class TopYachtImporter
 
         Element table = doc.selectFirst("table.centre_index_table");
         if (table == null)
+            table = legacyIndexTable(doc);
+        if (table == null)
             return result;
 
         // Identify excluded column indices from the header row.
@@ -859,6 +861,41 @@ public class TopYachtImporter
     /**
      * Test-friendly overload -- no URL context for log lines.
      */
+    /**
+     * Older TopYacht pages (seen up to 2017, e.g. tes.topyacht.net.au) use the same layout
+     * as current ones but carry no {@code centre_index_table} class. Picks the first table
+     * with a row labelled "Race N".
+     */
+    private static Element legacyIndexTable(Document doc)
+    {
+        for (Element table : doc.select("table"))
+        {
+            for (Element row : table.select("tr"))
+            {
+                Element first = row.selectFirst("td");
+                if (first != null && RACE_LABEL.matcher(first.text()).find())
+                    return table;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Older TopYacht results pages carry no {@code centre_results_table} class. A results
+     * table is recognised by a caption containing the word "results".
+     */
+    private static Elements legacyResultsTables(Document doc)
+    {
+        Elements result = new Elements();
+        for (Element table : doc.select("table"))
+        {
+            Element caption = table.selectFirst("caption");
+            if (caption != null && caption.text().toLowerCase().matches(".*\\bresults\\b.*"))
+                result.add(table);
+        }
+        return result;
+    }
+
     ParsedRace parseResultsPage(String html)
     {
         return parseResultsPage(html, null);
@@ -868,6 +905,9 @@ public class TopYachtImporter
     {
         Document doc = Jsoup.parse(html);
         Elements tables = doc.select("table.centre_results_table");
+        boolean legacy = tables.isEmpty();
+        if (legacy)
+            tables = legacyResultsTables(doc);
         if (tables.isEmpty())
         {
             ImporterLog.warn(LOG, "TopYacht: no centre_results_table found in results page url={}", url);
@@ -996,7 +1036,7 @@ public class TopYachtImporter
             }
 
             // Find header row (type1) and detect column indices
-            Element headerRow = table.selectFirst("tr.type1");
+            Element headerRow = legacy ? table.selectFirst("tr") : table.selectFirst("tr.type1");
             if (headerRow == null)
             {
                 ImporterLog.warn(LOG, "TopYacht: no header row (type1) found in results table; skipping division (system={}, division='{}', url={})",
@@ -1041,8 +1081,12 @@ public class TopYachtImporter
             int minCols = Math.max(nameIdx, timeIdx);
             if (sailIdx >= 0)
                 minCols = Math.max(minCols, sailIdx);
-            for (Element row : table.select("tr.type3, tr.type4"))
+            // Legacy pages have no row classes: every row after the header is data.
+            Elements dataRows = legacy ? table.select("tr") : table.select("tr.type3, tr.type4");
+            for (Element row : dataRows)
             {
+                if (row == headerRow)
+                    continue;
                 Elements cells = row.select("td");
                 if (cells.size() <= minCols)
                     continue;
