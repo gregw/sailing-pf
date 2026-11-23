@@ -142,6 +142,15 @@ public record Boat(
             certificates, sources, newLinks, lastUpdated, loadedAt);
     }
 
+    /**
+     * Returns a copy of this Boat with the given certificates.
+     */
+    public Boat withCertificates(List<Certificate> newCertificates)
+    {
+        return new Boat(id, sailNumber, name, designId, clubIds,
+            newCertificates, sources, links, lastUpdated, loadedAt);
+    }
+
     // loadedAt is loading metadata, not domain data — exclude from equality
     @Override
     public boolean equals(Object o)

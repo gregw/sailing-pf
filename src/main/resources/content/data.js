@@ -1016,6 +1016,12 @@ function renderBoatPf(data) {
     else
         html += `<div id="pf-design-profile"></div>` + renderLinks(data.links);
 
+    if (data.pfHistory && data.pfHistory.length > 0) {
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">PF history ${infoBtn('chart-pf-history','This boat\'s PF as it stood on 1 July of each past season: the same analysis rerun on only the races and certificates known by then. The last point is the current PF. A flat line means the boat has performed consistently; a step shows a change (crew, sails, modifications). Larger, darker markers carry more weight.')}</div>`;
+        html += '<div id="pf-history-chart"></div>';
+        setTimeout(() => renderPfHistoryChart(data), 0);
+    }
+
     if (data.residuals && data.residuals.length > 0) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
         const sel = window._residualMonths != null ? window._residualMonths : 0;
@@ -1034,6 +1040,51 @@ function renderBoatPf(data) {
         }, 0);
     }
     return html;
+}
+
+// A boat's PF at each season's 1 July cutoff (data.pfHistory), with the current PF as the
+// last point, one line per variant it has raced.
+function renderPfHistoryChart(data) {
+    const container = document.getElementById('pf-history-chart');
+    if (!container || typeof Plotly === 'undefined') return;
+    const today = new Date().toISOString().slice(0, 10);
+    const variants = [
+        ['spin', 'Spin', 'rgba(0,100,255,1)'],
+        ['nonSpin', 'Non-spin', 'rgba(255,75,0,1)'],
+        ['twoHanded', 'Two-handed', 'rgba(0,150,80,1)']
+    ];
+    const traces = [];
+    for (const [key, name, color] of variants) {
+        const pts = data.pfHistory.filter(h => h.pf && h.pf[key])
+            .map(h => ({ date: h.cutoff, value: h.pf[key].value, weight: h.pf[key].weight, races: h.pf[key].races, current: false }));
+        if (pts.length === 0) continue;
+        const cur = data[key];
+        if (cur && cur.value != null && cur.raceCount > 0)
+            pts.push({ date: today, value: cur.value, weight: cur.weight, races: cur.raceCount, current: true });
+        traces.push({
+            x: pts.map(p => p.date),
+            y: pts.map(p => p.value),
+            mode: 'lines+markers',
+            type: 'scatter',
+            name: name,
+            line: { color: color, width: 1.5 },
+            marker: {
+                color: pts.map(p => color.replace(/[\d.]+\)$/, Math.max(0.35, Math.min(1, p.weight)).toFixed(2) + ')')),
+                size: pts.map(p => 6 + 6 * Math.min(Math.max(p.weight, 0), 1)),
+                symbol: pts.map(p => p.current ? 'diamond' : 'circle')
+            },
+            text: pts.map(p => `${name} ${p.current ? '(current)' : 'at ' + p.date}<br>PF ${p.value.toFixed(4)}  wt ${p.weight.toFixed(3)}<br>${p.races} races`),
+            hoverinfo: 'text'
+        });
+    }
+    const layout = {
+        xaxis: { title: 'As at' },
+        yaxis: { title: 'PF', tickformat: '.3f' },
+        height: 300,
+        margin: { t: 20, b: 50, l: 60, r: 20 }
+    };
+    Plotly.newPlot(container, traces, layout, { responsive: true })
+        .then(() => Plotly.Plots.resize(container));
 }
 
 function renderResidualChart(residuals) {

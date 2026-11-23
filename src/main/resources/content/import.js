@@ -16,6 +16,8 @@ const DISPLAY_NAMES = {
     'reference-factors':'Calculate Reference Factors',
     'build-indexes':    'Build Indexes',
     'pf-optimise':     'PF Optimise',
+    'pf-history':      'PF History',
+    'pf-history/all':  'PF History (recompute all)',
     'save-database': 'Save Database',
     'clear-cache-orc': 'Clear HTTP Cache(ORC)',
     'clear-cache-sailsys': 'Clear HTTP Cache(Sailsys)'
@@ -109,6 +111,8 @@ function taskTip(name, mode) {
         'reference-factors':  'Computes IRC-equivalent reference factors for all boats.',
         'build-indexes':      'Rebuilds navigation indexes (boat→races, design→boats, etc.).',
         'pf-optimise':       'Runs the PF optimiser to produce Performance Factors.',
+        'pf-history':        'Reruns the analysis on the data as at 1 July of each past season and keeps each boat\'s PF, for the PF history on the boat page. Only seasons not yet held are computed.',
+        'pf-history/all':    'Recomputes the PF history for every season, e.g. after the algorithm or old race data has changed.',
         'save-database':      'Flushes the DataStore and rewrites admin.yaml to disk.',
         'clear-cache-orc': 'Deletes all files in the ORC HTTP cache directory (cache/orc).',
         'clear-cache-sailsys': 'Deletes all files in the SailSys HTTP cache directory (cache/sailsys).',

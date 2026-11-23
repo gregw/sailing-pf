@@ -302,6 +302,8 @@ public class TaskService
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
         new ImporterEntry("pf-optimise",       "run",  false, false),
+        new ImporterEntry("pf-history",        "run",  false, false),
+        new ImporterEntry("pf-history",        "all",  false, false),
         new ImporterEntry("save-database", "run", false, false),
         new ImporterEntry("clear-cache-orc", "run", false, false),
         new ImporterEntry("clear-cache-sailsys", "run", false, false)
@@ -1065,6 +1067,15 @@ public void stop()
                     cache.refreshPf(pfConfig(), stopRequested::get);
                 else
                     LOG.warn("PF optimise requested but cache is not configured");
+            }
+            // PF as at 1 July of each past season; "all" recomputes the seasons already held.
+            case "pf-history" ->
+            {
+                if (cache != null)
+                    cache.refreshPfHistory("all".equals(mode), outlierSigma != null ? outlierSigma : 2.5,
+                        clubCertificateWeight, minAnalysisR2, minAnalysisPairs, pfConfig(), stopRequested::get);
+                else
+                    LOG.warn("PF history requested but cache is not configured");
             }
             case "save-database" ->
             {

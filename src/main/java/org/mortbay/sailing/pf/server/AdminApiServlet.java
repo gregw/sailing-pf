@@ -809,6 +809,9 @@ public class AdminApiServlet extends HttpServlet
         if (profile != null)
             result.put("profile", profileMap(profile));
 
+        // PF as at 1 July of each past season (PfHistory), oldest first
+        result.put("pfHistory", cache.pfHistory().forBoat(id));
+
         writeJson(resp, result);
     }
 

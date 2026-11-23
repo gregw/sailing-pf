@@ -6,9 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.mortbay.sailing.pf.analysis.BoatDerived;
 import org.mortbay.sailing.pf.analysis.BoatPf;
@@ -24,6 +22,7 @@ import org.mortbay.sailing.pf.analysis.PerformanceProfile;
 import org.mortbay.sailing.pf.analysis.DuplicateRaces;
 import org.mortbay.sailing.pf.analysis.PerformanceProfileBuilder;
 import org.mortbay.sailing.pf.analysis.PfConfig;
+import org.mortbay.sailing.pf.analysis.PfHistory;
 import org.mortbay.sailing.pf.analysis.PfOptimiser;
 import org.mortbay.sailing.pf.analysis.PfQuality;
 import org.mortbay.sailing.pf.analysis.PfResult;
@@ -31,7 +30,6 @@ import org.mortbay.sailing.pf.analysis.RaceDerived;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
 import org.mortbay.sailing.pf.analysis.ReferenceNetworkBuilder;
 import org.mortbay.sailing.pf.data.Boat;
-import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Factor;
@@ -79,6 +77,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile int    consistencyDropInterval  = 11;
     private volatile double ageHalfLifeYears         = 0.0;
     private volatile DuplicateRaces duplicates       = DuplicateRaces.NONE;
+    private volatile PfHistory pfHistory;  // loaded on first use
 
     public void setDiversityWeights(double nonSpin, double spin, double twoHanded)
     {
@@ -210,43 +209,9 @@ public class AnalysisCache implements DataStore.InvalidationListener
         this.designDerived = Map.copyOf(newDesigns);
     }
 
-    /**
-     * Minimum number of IRC certificates required in a year for it to be considered
-     * as the target IRC year. Years with fewer certs lack the paired data needed to
-     * build robust conversion-graph edges, so they are excluded in favour of the
-     * most recent year that does meet the threshold.
-     */
-    private static final int MIN_IRC_CERT_COUNT = 100;
-
-    /**
-     * Returns the most recent IRC certificate year that has at least
-     * {@link #MIN_IRC_CERT_COUNT} certificates in the store, falling back to the
-     * absolute maximum IRC cert year, then to the current calendar year.
-     *
-     * <p>The threshold is needed because the early weeks of a new racing season
-     * may already contain a handful of certs for the coming year (e.g. 59 certs
-     * in 2026 vs 334 in 2025). Using that low-count year as the target would
-     * require conversion-graph edges built from very few paired observations,
-     * which typically fail the minimum-R² gate and break gen-0 RF computation
-     * for the majority of boats that hold only the previous year's certs.
-     */
     private int maxIrcCertYear()
     {
-        Map<Integer, Long> yearCounts = store.boats().values().stream()
-            .flatMap(b -> b.certificates().stream())
-            .filter(c -> "IRC".equals(c.system()))
-            .collect(Collectors.groupingBy(Certificate::year, Collectors.counting()));
-
-        // Latest year with enough data to anchor the conversion graph
-        OptionalInt max = yearCounts.entrySet().stream()
-            .filter(e -> e.getValue() >= MIN_IRC_CERT_COUNT)
-            .mapToInt(Map.Entry::getKey)
-            .max();
-
-        if (max.isEmpty())
-            max = yearCounts.keySet().stream().mapToInt(Integer::intValue).max();
-
-        int year = max.orElse(LocalDate.now().getYear());
+        int year = ReferenceNetworkBuilder.latestIrcYear(store);
         LOG.info("AnalysisCache: using currentYear={} for reference factor target", year);
         return year;
     }
@@ -515,6 +480,110 @@ public class AnalysisCache implements DataStore.InvalidationListener
     }
 
     /**
+     * For a boat whose design is flagged noSpinnaker, its spin and non-spin PFs collapsed into
+     * one: the design physically cannot fly a kite, so any spin/non-spin split in the source
+     * data is a categorisation artifact. Otherwise the PF unchanged.
+     */
+    static BoatPf collapseNoSpinnaker(DataStore store, Boat boat, BoatPf pf)
+    {
+        if (boat.designId() != null && store.isDesignNoSpinnaker(boat.designId())
+            && (pf.spin() != null || pf.nonSpin() != null))
+        {
+            // Its entries are all non-spinnaker (EntryVariant.of), so a spin slot with no
+            // races holds only its RF -- take the race-derived non-spin PF as it is.
+            Factor combined = pf.spin() == null || pf.spinRaceCount() == 0 && pf.nonSpinRaceCount() > 0
+                ? pf.nonSpin()
+                : pf.nonSpin() == null ? pf.spin()
+                : Factor.aggregate(pf.spin(), pf.nonSpin());
+            // Pick the larger-magnitude (more recent / data-driven) delta and combine race counts.
+            double delta = Math.abs(pf.referenceDeltaSpin()) > Math.abs(pf.referenceDeltaNonSpin())
+                ? pf.referenceDeltaSpin() : pf.referenceDeltaNonSpin();
+            int totalRaces = pf.spinRaceCount() + pf.nonSpinRaceCount();
+            pf = new BoatPf(combined, combined, pf.twoHanded(),
+                delta, delta, pf.referenceDeltaTwoHanded(),
+                totalRaces, totalRaces, pf.twoHandedRaceCount());
+        }
+        return pf;
+    }
+
+    /**
+     * Runs the whole analysis (comparisons, reference factors, PF) on the data as at
+     * {@code cutoff} ({@link DataStore#asOf}), with the current settings, and returns each
+     * boat's PF. Nothing cached here changes. The target IRC year is the one the data as at
+     * the cutoff gives; the configured override applies only to the current PF.
+     */
+    public Map<String, BoatPf> pfAsOf(LocalDate cutoff, double outlierSigma, double clubCertificateWeight,
+                                      double minR2, int minPairs, PfConfig config,
+                                      java.util.function.Supplier<Boolean> stopCheck)
+    {
+        DataStore view = store.asOf(cutoff);
+        ConversionGraph graph = ConversionGraph.from(new HandicapAnalyser(view, outlierSigma).analyseAll(), minR2, minPairs);
+        int year = ReferenceNetworkBuilder.latestIrcYear(view);
+        DuplicateRaces dups = DuplicateRaces.find(view);
+        ReferenceNetworkBuilder.BuildResult built =
+            new ReferenceNetworkBuilder(clubCertificateWeight, ageHalfLifeYears, dups).build(view, graph, year);
+
+        Map<String, BoatDerived> derived = new LinkedHashMap<>();
+        built.boatFactors().forEach((id, rf) ->
+        {
+            Boat boat = view.boats().get(id);
+            if (boat != null && !store.isBoatExcluded(id)
+                && (boat.designId() == null || !store.isDesignExcluded(boat.designId())))
+                derived.put(id, new BoatDerived(boat, rf, Set.of(), Set.of(), null));
+        });
+        PfResult result = new PfOptimiser().optimise(view, derived, config, stopCheck, graph, year, dups);
+
+        Map<String, BoatPf> pfs = new LinkedHashMap<>();
+        result.boatPfs().forEach((id, pf) -> pfs.put(id, collapseNoSpinnaker(store, derived.get(id).boat(), pf)));
+        LOG.info("AnalysisCache: PF as at {} — {} races, {} boats, target IRC year {}",
+            cutoff, view.races().size(), pfs.size(), year);
+        return pfs;
+    }
+
+    /**
+     * Snapshots each boat's PF as at 1 July of each past season ({@link PfHistory}) and saves
+     * them. Seasons already held are kept unless {@code all}.
+     */
+    public void refreshPfHistory(boolean all, double outlierSigma, double clubCertificateWeight,
+                                 double minR2, int minPairs, PfConfig config,
+                                 java.util.function.Supplier<Boolean> stopCheck)
+    {
+        PfHistory history = pfHistory();
+        List<LocalDate> cutoffs = PfHistory.seasonCutoffs(store, LocalDate.now());
+        history.retain(cutoffs);
+        LOG.info("AnalysisCache: PF history for seasons {}", cutoffs);
+        for (LocalDate cutoff : cutoffs)
+        {
+            if (stopCheck.get())
+                break;
+            if (!all && history.has(cutoff))
+                continue;
+            Map<String, BoatPf> pfs = pfAsOf(cutoff, outlierSigma, clubCertificateWeight, minR2, minPairs, config, stopCheck);
+            if (stopCheck.get())
+                break;
+            history.put(PfHistory.Season.of(cutoff, pfs));
+            history.save();
+        }
+        history.save();
+    }
+
+    /** The PF history, loaded from its file on first use. */
+    public PfHistory pfHistory()
+    {
+        PfHistory h = pfHistory;
+        if (h == null)
+        {
+            synchronized (this)
+            {
+                h = pfHistory;
+                if (h == null)
+                    pfHistory = h = PfHistory.load(store.dataRoot());
+            }
+        }
+        return h;
+    }
+
+    /**
      * Merges PF results into the consolidated Derived maps using copy-on-write.
      */
     private void mergePfResults(PfResult result)
@@ -535,28 +604,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
             BoatDerived existing = newBoats.get(e.getKey());
             if (existing == null)
                 continue;
-            BoatPf pf = e.getValue();
-            // For boats whose design is flagged noSpinnaker, collapse spin and nonSpin into
-            // one aggregated factor — the design physically cannot fly a kite, so any
-            // spin/nonSpin split in the source data is a categorisation artifact.
-            Boat boat = existing.boat();
-            if (boat.designId() != null && store.isDesignNoSpinnaker(boat.designId())
-                && (pf.spin() != null || pf.nonSpin() != null))
-            {
-                // Its entries are all non-spinnaker (EntryVariant.of), so a spin slot with no
-                // races holds only its RF -- take the race-derived non-spin PF as it is.
-                Factor combined = pf.spin() == null || pf.spinRaceCount() == 0 && pf.nonSpinRaceCount() > 0
-                    ? pf.nonSpin()
-                    : pf.nonSpin() == null ? pf.spin()
-                    : Factor.aggregate(pf.spin(), pf.nonSpin());
-                // Pick the larger-magnitude (more recent / data-driven) delta and combine race counts.
-                double delta = Math.abs(pf.referenceDeltaSpin()) > Math.abs(pf.referenceDeltaNonSpin())
-                    ? pf.referenceDeltaSpin() : pf.referenceDeltaNonSpin();
-                int totalRaces = pf.spinRaceCount() + pf.nonSpinRaceCount();
-                pf = new BoatPf(combined, combined, pf.twoHanded(),
-                    delta, delta, pf.referenceDeltaTwoHanded(),
-                    totalRaces, totalRaces, pf.twoHandedRaceCount());
-            }
+            BoatPf pf = collapseNoSpinnaker(store, existing.boat(), e.getValue());
             newBoats.put(e.getKey(), new BoatDerived(existing.boat(), existing.referenceFactors(),
                 existing.raceIds(), existing.seriesIds(), pf));
         }

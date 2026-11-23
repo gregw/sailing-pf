@@ -1306,6 +1306,17 @@ public class DataStore
         return Collections.unmodifiableMap(races);
     }
 
+    /**
+     * A read-only view of this store as at {@code cutoff}: races before that date, and
+     * certificates for years up to its year; everything else as now. For rerunning the
+     * analysis as at a past date. The view supports only the reads the analysis makes.
+     */
+    public DataStore asOf(java.time.LocalDate cutoff)
+    {
+        requireStarted();
+        return new DatedDataStore(this, cutoff);
+    }
+
     public void removeBoat(String id)
     {
         requireStarted();

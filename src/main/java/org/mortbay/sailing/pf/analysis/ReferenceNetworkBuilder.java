@@ -83,6 +83,38 @@ public class ReferenceNetworkBuilder
     /** Certificates older than this many years relative to currentYear are ignored. */
     public static final int MAX_CERT_AGE_YEARS = 5;
 
+    /**
+     * Minimum number of IRC certificates in a year for it to be the target year: years with
+     * fewer lack the paired data needed for robust conversion-graph edges.
+     */
+    private static final int MIN_IRC_CERT_COUNT = 100;
+
+    /**
+     * The target IRC year for a build: the latest IRC certificate year with at least
+     * {@link #MIN_IRC_CERT_COUNT} certificates, else the latest IRC year, else the current
+     * year.
+     * <p>
+     * The threshold matters because the early weeks of a season may already hold a handful
+     * of certificates for the coming year (e.g. 59 in 2026 vs 334 in 2025). Using that year
+     * as the target would need conversion edges built from very few pairs, which typically
+     * fail the minimum-R² gate and break gen-0 RFs for most boats, which hold only the
+     * previous year's certificates.
+     */
+    public static int latestIrcYear(DataStore store)
+    {
+        Map<Integer, Long> yearCounts = new java.util.HashMap<>();
+        for (Boat boat : store.boats().values())
+            for (Certificate c : boat.certificates())
+                if ("IRC".equals(c.system()))
+                    yearCounts.merge(c.year(), 1L, Long::sum);
+        return yearCounts.entrySet().stream()
+            .filter(e -> e.getValue() >= MIN_IRC_CERT_COUNT)
+            .mapToInt(Map.Entry::getKey)
+            .max()
+            .orElse(yearCounts.keySet().stream().mapToInt(Integer::intValue).max()
+                .orElse(LocalDate.now().getYear()));
+    }
+
     /** Default base weight multiplier for club-level certificates (vs 1.0 for international). */
     public static final double DEFAULT_CLUB_BASE_WEIGHT = 0.9;
 
