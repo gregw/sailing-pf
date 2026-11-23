@@ -278,6 +278,7 @@ public class TaskService
                                Double pfDubiousFactor,               // null → default 1.5
                                Double pfMaxFactor,                   // null → default 2.0
                                Double pfAgeHalfLifeYears,            // null → default 2.0; 0 = no age decay
+                               Double pfVariantOrderLambda,          // null → default 0.0; 0 = off
                                Integer slidingAverageCount,       // null → default 8
                                Integer slidingAverageDrops,       // null → default 0
                                Double diversityNonSpinWeight,     // null → default 0.8
@@ -340,6 +341,7 @@ public class TaskService
     private volatile double pfDubiousFactor = 1.5;
     private volatile double pfMaxFactor = 2.0;
     private volatile double pfAgeHalfLifeYears = 2.0;
+    private volatile double pfVariantOrderLambda = 0.0;
     private volatile int slidingAverageCount = 8;
     private volatile int slidingAverageDrops = 0;
     private volatile double diversityNonSpinWeight   = 0.8;
@@ -438,6 +440,8 @@ public class TaskService
                 pfMaxFactor = config.pfMaxFactor();
             if (config.pfAgeHalfLifeYears() != null)
                 pfAgeHalfLifeYears = config.pfAgeHalfLifeYears();
+            if (config.pfVariantOrderLambda() != null)
+                pfVariantOrderLambda = config.pfVariantOrderLambda();
             if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
             if (config.slidingAverageDrops() != null) slidingAverageDrops = config.slidingAverageDrops();
             if (config.diversityNonSpinWeight()   != null) diversityNonSpinWeight   = config.diversityNonSpinWeight();
@@ -667,7 +671,8 @@ public void stop()
                                        Boolean pfLogOuterDiagnostics,
                                        Double pfDubiousFactor,
                                        Double pfMaxFactor,
-                                       Double pfAgeHalfLifeYears)
+                                       Double pfAgeHalfLifeYears,
+                                       Double pfVariantOrderLambda)
     {
         importerEntries = checkEntries(entries);
         globalSchedule = schedule;
@@ -700,6 +705,8 @@ public void stop()
             if (cache != null)
                 cache.setAgeHalfLifeYears(pfAgeHalfLifeYears);
         }
+        if (pfVariantOrderLambda != null)
+            this.pfVariantOrderLambda = pfVariantOrderLambda;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -834,6 +841,11 @@ public void stop()
     public double pfGraphCrossVariantLambda()
     {
         return pfGraphCrossVariantLambda;
+    }
+
+    public double pfVariantOrderLambda()
+    {
+        return pfVariantOrderLambda;
     }
 
     public double pfNoRaceFallbackWeight()
@@ -1120,7 +1132,7 @@ public void stop()
             pfCrossVariantLambda, pfGraphCrossVariantLambda,
             pfNoRaceFallbackWeight,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-            pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears);
+            pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears, pfVariantOrderLambda);
     }
 
     /**
@@ -1217,7 +1229,7 @@ public void stop()
                     pfCrossVariantLambda, pfGraphCrossVariantLambda,
                     pfNoRaceFallbackWeight,
                     pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-                    pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears,
+                    pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears, pfVariantOrderLambda,
                     slidingAverageCount, slidingAverageDrops,
                     diversityNonSpinWeight, diversitySpinWeight, diversityTwoHandedWeight,
                     consistencyDropInterval,

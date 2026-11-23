@@ -127,6 +127,24 @@
         </label>
         <input type="number" id="pf-age-half-life" step="0.25" min="0" style="width:6em">
 
+        <label for="pf-cross-variant">
+            Variant ratio pull
+            <a href="ui-tips.md#config-pf-cross-variant" class="info-btn" data-tip="Pulls the gap between a boat&apos;s spin, non-spin and two-handed PFs toward the gap between its own RFs in those variants. Only the gap is held, not the level, so a boat that sails better than its certificate keeps that. 0 = off. Suggested 2." target="_blank">ⓘ</a>:
+        </label>
+        <input type="number" id="pf-cross-variant" step="0.25" min="0" style="width:6em">
+
+        <label for="pf-graph-cross-variant">
+            Fleet variant pull
+            <a href="ui-tips.md#config-pf-graph-cross-variant" class="info-btn" data-tip="Pulls each of a boat&apos;s variant PFs toward the fleet-wide conversion from its other variants (e.g. the typical spin to non-spin ratio). 0 = off. Default 0.25." target="_blank">ⓘ</a>:
+        </label>
+        <input type="number" id="pf-graph-cross-variant" step="0.05" min="0" style="width:6em">
+
+        <label for="pf-variant-order">
+            Variant order pull
+            <a href="ui-tips.md#config-pf-variant-order" class="info-btn" data-tip="One-sided: acts only when a boat&apos;s non-spin or two-handed PF comes out above its spin PF and it has raced both, pulling the pair back toward the boat&apos;s RF gap between them. Boats already in order are untouched; no-spinnaker designs are exempt. 0 = off. Suggested 8." target="_blank">ⓘ</a>:
+        </label>
+        <input type="number" id="pf-variant-order" step="0.5" min="0" style="width:6em">
+
         <label for="pf-outer-damping">
           Outer damping factor
           <a href="ui-tips.md#config-pf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles. Lower values damp oscillation; 1.0 = no damping. Default 0.5. Typical range 0.05–1.0." target="_blank">ⓘ</a>:

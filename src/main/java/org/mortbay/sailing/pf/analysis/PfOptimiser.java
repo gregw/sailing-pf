@@ -434,16 +434,20 @@ public class PfOptimiser
                             }
                         }
 
+                        Boat boatRec = null;
+                        {
+                            BoatDerived bd = boatDerivedMap.get(boatId);
+                            boatRec = bd != null ? bd.boat() : null;
+                        }
+                        boolean noSpinDesign = boatRec != null && boatRec.designId() != null
+                            && store.isDesignNoSpinnaker(boatRec.designId());
+
                         // Graph-driven cross-variant coupling: pull each variant's PF toward
                         // the FLEET-WIDE conversion-graph prediction of the other variants'
                         // current PFs (Gauss-Seidel — reads current logPf[v2][b] each pass).
                         double muG = config.graphCrossVariantLambda();
                         if (muG > 0 && varConv != null)
                         {
-                            BoatDerived bd = boatDerivedMap.get(boatId);
-                            Boat boatRec = bd != null ? bd.boat() : null;
-                            boolean noSpinDesign = boatRec != null && boatRec.designId() != null
-                                && store.isDesignNoSpinnaker(boatRec.designId());
                             double[] rfLogs2 = boatLogRf.get(boatId);
                             for (int v2 = 0; v2 < 3; v2++)
                             {
@@ -474,6 +478,34 @@ public class PfOptimiser
 
                         if (denom <= 0) continue; // all weights zero — keep current value
                         double newLogPf = numer / denom;
+
+                        // Variant order (one-sided): spin should be at least as fast as nonSpin
+                        // and twoHanded. Only when this solve would cross a raced sibling, pull
+                        // toward it; boats already in order are left alone.
+                        double muO = config.variantOrderLambda();
+                        if (muO > 0)
+                        {
+                            for (int v2 = 0; v2 < 3; v2++)
+                            {
+                                if (v2 == v || (v != SPIN && v2 != SPIN) || entryCount[v2][b] == 0)
+                                    continue;
+                                if (noSpinDesign && (v == NON_SPIN || v2 == NON_SPIN))
+                                    continue;
+                                double other = logPf[v2][b];
+                                boolean crosses = v == SPIN ? newLogPf < other : newLogPf > other;
+                                if (crosses)
+                                {
+                                    // Target the boat's RF gap between the two (spin above), or
+                                    // equality if it has no RF in either.
+                                    double[] rfl = boatLogRf.get(boatId);
+                                    double gap = Double.isNaN(rfl[SPIN]) || Double.isNaN(rfl[v == SPIN ? v2 : v])
+                                        ? 0 : Math.max(0, rfl[SPIN] - rfl[v == SPIN ? v2 : v]);
+                                    numer += muO * (v == SPIN ? other + gap : other - gap);
+                                    denom += muO;
+                                }
+                            }
+                            newLogPf = numer / denom;
+                        }
                         if (Double.isNaN(newLogPf) || Double.isInfinite(newLogPf)) continue;
                         double delta = Math.abs(newLogPf - logPf[v][b]);
                         if (delta > maxDelta)

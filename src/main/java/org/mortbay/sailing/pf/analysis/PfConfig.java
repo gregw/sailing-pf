@@ -15,6 +15,11 @@ package org.mortbay.sailing.pf.analysis;
  * </ul>
  * Both terms can be enabled simultaneously; their effects sum.
  *
+ * <p>{@code variantOrderLambda} is one-sided: it acts only when a boat's nonSpin or twoHanded
+ * PF comes out above its spin PF (both raced), pulling the pair toward the boat's RF gap
+ * between them (or equality without RFs). Boats already
+ * in order are untouched. No-spinnaker designs are exempt for spin/nonSpin.
+ *
  * <p>{@code noRaceFallbackWeight} caps the confidence assigned to a boat's PF for a variant
  * in which the boat has zero race entries AND from which no cross-variant graph inference
  * is available (e.g. graph not loaded, or no other variant has races). The PF value falls
@@ -43,7 +48,8 @@ public record PfConfig(
     boolean logOuterDiagnostics,    // when true, log top weight-flippers and PF-movers each outer cycle
     double dubiousFactor,           // PF threshold above which entry weights ramp down (default 1.5)
     double maxFactor,               // PF threshold at/above which entry weights are zero (default 2.0)
-    double ageHalfLifeYears         // half-life of a result's weight, in years before the boat's latest race; 0 = off
+    double ageHalfLifeYears,        // half-life of a result's weight, in years before the boat's latest race; 0 = off
+    double variantOrderLambda       // one-sided pull when nonSpin/twoHanded PF exceeds spin PF; 0 = off
 )
 {
     public static final PfConfig DEFAULT = new PfConfig(
@@ -61,6 +67,21 @@ public record PfConfig(
             asymmetryFactor, outerDampingFactor, outerConvergenceThreshold, crossVariantLambda,
             graphCrossVariantLambda, noRaceFallbackWeight, outerPfConvergenceThreshold,
             logOuterDiagnostics, dubiousFactor, maxFactor, 0.0);
+    }
+
+    /** Without the variant-order pull. */
+    public PfConfig(double lambda, double convergenceThreshold, int maxInnerIterations,
+                    int maxOuterIterations, double outlierK, double asymmetryFactor,
+                    double outerDampingFactor, double outerConvergenceThreshold,
+                    double crossVariantLambda, double graphCrossVariantLambda,
+                    double noRaceFallbackWeight, double outerPfConvergenceThreshold,
+                    boolean logOuterDiagnostics, double dubiousFactor, double maxFactor,
+                    double ageHalfLifeYears)
+    {
+        this(lambda, convergenceThreshold, maxInnerIterations, maxOuterIterations, outlierK,
+            asymmetryFactor, outerDampingFactor, outerConvergenceThreshold, crossVariantLambda,
+            graphCrossVariantLambda, noRaceFallbackWeight, outerPfConvergenceThreshold,
+            logOuterDiagnostics, dubiousFactor, maxFactor, ageHalfLifeYears, 0.0);
     }
 
     /** The weight multiplier for a result {@code ageYears} before the boat's latest race. */

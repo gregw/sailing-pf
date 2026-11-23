@@ -78,6 +78,9 @@ async function loadImporters() {
         document.getElementById('pf-dubious-factor').value = data.pfConfig.dubiousFactor;
         document.getElementById('pf-max-factor').value = data.pfConfig.maxFactor;
         document.getElementById('pf-age-half-life').value = data.pfConfig.ageHalfLifeYears;
+        document.getElementById('pf-cross-variant').value = data.pfConfig.crossVariantLambda;
+        document.getElementById('pf-graph-cross-variant').value = data.pfConfig.graphCrossVariantLambda;
+        document.getElementById('pf-variant-order').value = data.pfConfig.variantOrderLambda;
         document.getElementById('pf-outer-damping').value = data.pfConfig.outerDampingFactor;
         document.getElementById('pf-outer-convergence').value = data.pfConfig.outerConvergenceThreshold;
         document.getElementById('pf-outer-pf-convergence').value = data.pfConfig.outerPfConvergenceThreshold;
@@ -265,6 +268,11 @@ async function saveSchedule() {
     // 0 means "no age decay", so keep it (unlike the fields above, where 0 means unset).
     const ageHalfLife = parseFloat(document.getElementById('pf-age-half-life').value);
     const pfAgeHalfLifeYears = isNaN(ageHalfLife) ? null : ageHalfLife;
+    // The variant couplings are off at 0, so keep 0 too.
+    const keepZero = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+    const pfCrossVariantLambda = keepZero('pf-cross-variant');
+    const pfGraphCrossVariantLambda = keepZero('pf-graph-cross-variant');
+    const pfVariantOrderLambda = keepZero('pf-variant-order');
     const pfOuterDampingFactor = parseFloat(document.getElementById('pf-outer-damping').value) || null;
     const pfOuterConvergenceThreshold = parseFloat(document.getElementById('pf-outer-convergence').value) || null;
     const pfOuterPfConvergenceThreshold = parseFloat(document.getElementById('pf-outer-pf-convergence').value) || null;
@@ -276,7 +284,8 @@ async function saveSchedule() {
             pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
             pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold,
             pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-            pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears
+            pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears,
+            pfCrossVariantLambda, pfGraphCrossVariantLambda, pfVariantOrderLambda
         })
     });
     if (!resp.ok) {

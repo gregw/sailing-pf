@@ -3947,6 +3947,7 @@ public class AdminApiServlet extends HttpServlet
         pfConfig.put("dubiousFactor", _taskService.pfDubiousFactor());
         pfConfig.put("maxFactor", _taskService.pfMaxFactor());
         pfConfig.put("ageHalfLifeYears", _taskService.pfAgeHalfLifeYears());
+        pfConfig.put("variantOrderLambda", _taskService.pfVariantOrderLambda());
         result.put("pfConfig", pfConfig);
         result.put("slidingAverageCount", _taskService.slidingAverageCount());
         result.put("slidingAverageDrops", _taskService.slidingAverageDrops());
@@ -4100,6 +4101,9 @@ public class AdminApiServlet extends HttpServlet
             Object rawAgeHalfLife = body.get("pfAgeHalfLifeYears");
             Double pfAgeHalfLifeYears = (rawAgeHalfLife instanceof Number n16 && n16.doubleValue() >= 0)
                 ? n16.doubleValue() : null;
+            Object rawVariantOrder = body.get("pfVariantOrderLambda");
+            Double pfVariantOrderLambda = (rawVariantOrder instanceof Number n17 && n17.doubleValue() >= 0)
+                ? n17.doubleValue() : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
                 targetIrcYear, outlierSigma,
@@ -4108,7 +4112,7 @@ public class AdminApiServlet extends HttpServlet
                 pfCrossVariantLambda, pfGraphCrossVariantLambda,
                 pfNoRaceFallbackWeight,
                 pfOuterPfConvergenceThreshold, pfLogOuterDiagnostics,
-                pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears);
+                pfDubiousFactor, pfMaxFactor, pfAgeHalfLifeYears, pfVariantOrderLambda);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }
