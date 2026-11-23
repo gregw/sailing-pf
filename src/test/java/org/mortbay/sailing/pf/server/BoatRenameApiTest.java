@@ -59,6 +59,9 @@ class BoatRenameApiTest
         store.setAutoSanityCheck(false);
         store.putBoat(new Boat("7709-sailexchange", "7709", "Sail Exchange", null, List.of(), List.of(), List.of(), null, null));
         store.putBoat(new Boat("7709-kanreki", "7709", "Kanreki", null, List.of(), List.of(), List.of(), null, null));
+        store.putBoat(new Boat("7709-abouttime", "7709", "About Time", null, List.of(), List.of(), List.of(), null, null));
+        race(LocalDate.of(2016, 11, 5), 5, "7709-abouttime");
+        race(LocalDate.of(2017, 12, 2), 6, "7709-abouttime");
         race(LocalDate.of(2019, 3, 2), 1, "7709-sailexchange");
         race(LocalDate.of(2020, 2, 1), 2, "7709-sailexchange");
         race(LocalDate.of(2021, 10, 9), 3, "7709-kanreki");
@@ -141,6 +144,32 @@ class BoatRenameApiTest
         assertFalse(store.writtenBoatAliases(kanreki).getFirst().isRename());
         rows = (List<Map<String, Object>>) MAPPER.readValue(get("/api/boats?q=exchange"), Map.class).get("items");
         assertTrue(rows.isEmpty(), "a merge without a date is not listed: " + rows);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aSecondRenameIsPlacedInTheNameHistory() throws Exception
+    {
+        post("/api/boats/merge", """
+            {"keepId":"7709-kanreki","mergeIds":["7709-sailexchange"],
+             "renames":{"7709-sailexchange":{"direction":"until","date":"2021-08-14"}}}""");
+        // About Time raced before Sail Exchange: it was renamed Sail Exchange, not Kanreki
+        Map<String, Object> plan = MAPPER.readValue(get("/api/boats/merge-plan?keep=7709-kanreki&merge=7709-abouttime"), Map.class);
+        Map<String, Object> p = ((List<Map<String, Object>>) plan.get("boats")).getFirst();
+        assertEquals("until", p.get("direction"));
+        assertEquals("2019-03-02", p.get("date"));
+        assertEquals("Sail Exchange", p.get("otherName"));
+        assertEquals("2019-03-02", p.get("otherFirstRace"));
+        assertEquals("2020-02-01", p.get("otherLastRace"));
+
+        post("/api/boats/merge", """
+            {"keepId":"7709-kanreki","mergeIds":["7709-abouttime"],
+             "renames":{"7709-abouttime":{"direction":"until","date":"2019-03-02"}}}""");
+        Boat kanreki = store.boats().get("7709-kanreki");
+        List<Aliases.SailNumberName> renames = store.writtenBoatAliases(kanreki);
+        assertEquals("About Time", AdminApiServlet.nameAt(kanreki, renames, LocalDate.of(2017, 1, 1)));
+        assertEquals("Sail Exchange", AdminApiServlet.nameAt(kanreki, renames, LocalDate.of(2020, 1, 1)));
+        assertEquals("Kanreki", AdminApiServlet.nameAt(kanreki, renames, LocalDate.of(2022, 1, 1)));
     }
 
     @Test

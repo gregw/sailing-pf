@@ -1534,9 +1534,11 @@ async function loadMergeRenames() {
     const range = (f, l) => f ? ` (raced ${f}${l && l !== f ? ' to ' + l : ''})` : ' (no races)';
     const rows = plan.boats.filter(b => b.alias).map(b => {
         const older = b.direction === 'until';
+        // The kept boat's name next to this one in its name history (it may have had several)
+        const other = `${esc(b.otherName || plan.keepName)}${range(b.otherFirstRace, b.otherLastRace)}`;
         const text = older
-            ? `${esc(b.name)}${range(b.firstRace, b.lastRace)} was renamed ${esc(plan.keepName)}${range(plan.keepFirstRace, plan.keepLastRace)} on`
-            : `${esc(plan.keepName)}${range(plan.keepFirstRace, plan.keepLastRace)} was renamed ${esc(b.name)}${range(b.firstRace, b.lastRace)} on`;
+            ? `${esc(b.name)}${range(b.firstRace, b.lastRace)} was renamed ${other} on`
+            : `${other} was renamed ${esc(b.name)}${range(b.firstRace, b.lastRace)} on`;
         return `<div style="margin:0.3rem 0 0.3rem 1.5rem;font-size:0.9rem;">${text}
             <input type="date" class="merge-rename-date" data-id="${esc(b.id)}" data-direction="${b.direction}" value="${b.date || ''}">
             <span style="color:#777;">${b.date ? '' : '— could not be determined from the races; '}leave blank for a plain merge</span></div>`;

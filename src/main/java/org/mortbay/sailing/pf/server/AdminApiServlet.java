@@ -959,12 +959,30 @@ public class AdminApiServlet extends HttpServlet
         return new RenameProposal(!mergedFirst.isAfter(keepFirst), null);
     }
 
-    /** The first and last dates a boat raced, or null if it has no dated races. */
-    private LocalDate[] raceDateRange(String boatId)
+    /**
+     * The name a boat raced under on {@code date}, from its renames (dated aliases): the
+     * alias with the earliest {@code until} after the date, else the one with the latest
+     * {@code from} on or before it, else its current name.
+     */
+    static String nameAt(Boat boat, List<Aliases.SailNumberName> renames, LocalDate date)
+    {
+        Aliases.SailNumberName before = null, from = null;
+        for (Aliases.SailNumberName a : renames)
+        {
+            if (a.until() != null && date.isBefore(a.until()) && (before == null || a.until().isBefore(before.until())))
+                before = a;
+            if (a.from() != null && !date.isBefore(a.from()) && (from == null || a.from().isAfter(from.from())))
+                from = a;
+        }
+        Aliases.SailNumberName a = before != null ? before : from;
+        return a == null ? boat.name() : renameName(boat, a);
+    }
+
+    /** The dates of a boat's races, oldest first. */
+    private List<LocalDate> raceDates(String boatId)
     {
         BoatDerived bd = cache.boatDerived().get(boatId);
         java.util.Collection<String> raceIds = bd != null ? bd.raceIds() : null;
-        LocalDate first = null, last = null;
         if (raceIds == null || raceIds.isEmpty())
         {
             List<String> found = new ArrayList<>();
@@ -975,15 +993,22 @@ public class AdminApiServlet extends HttpServlet
                             found.add(race.id());
             raceIds = found;
         }
+        List<LocalDate> dates = new ArrayList<>();
         for (String raceId : raceIds)
         {
             Race race = store.races().get(raceId);
-            if (race == null || race.date() == null)
-                continue;
-            if (first == null || race.date().isBefore(first)) first = race.date();
-            if (last == null || race.date().isAfter(last)) last = race.date();
+            if (race != null && race.date() != null)
+                dates.add(race.date());
         }
-        return first == null ? null : new LocalDate[]{first, last};
+        dates.sort(null);
+        return dates;
+    }
+
+    /** The first and last dates a boat raced, or null if it has no dated races. */
+    private LocalDate[] raceDateRange(String boatId)
+    {
+        List<LocalDate> dates = raceDates(boatId);
+        return dates.isEmpty() ? null : new LocalDate[]{dates.getFirst(), dates.getLast()};
     }
 
     /**
@@ -1004,6 +1029,9 @@ public class AdminApiServlet extends HttpServlet
             return;
         }
         LocalDate[] keepRange = raceDateRange(keep.id());
+        List<LocalDate> keepDates = raceDates(keep.id());
+        List<Aliases.SailNumberName> renames = store.writtenBoatAliases(keep).stream()
+            .filter(Aliases.SailNumberName::isRename).toList();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("keepId", keep.id());
         result.put("keepName", keep.name());
@@ -1027,6 +1055,15 @@ public class AdminApiServlet extends HttpServlet
             m.put("alias", mergeAlias(keep, mb) != null);
             m.put("direction", p.until() ? "until" : "from");
             m.put("date", p.date() == null ? null : p.date().toString());
+            // The kept boat's name next to this one in its name history: the name it was
+            // renamed to (until) or from (from), with the kept boat's races under that name.
+            LocalDate at = p.date() != null ? (p.until() ? p.date() : p.date().minusDays(1))
+                : keepRange == null ? null : p.until() ? keepRange[0] : keepRange[1];
+            String other = at == null ? keep.name() : nameAt(keep, renames, at);
+            List<LocalDate> otherDates = keepDates.stream().filter(d -> other.equals(nameAt(keep, renames, d))).toList();
+            m.put("otherName", other);
+            m.put("otherFirstRace", otherDates.isEmpty() ? null : otherDates.getFirst().toString());
+            m.put("otherLastRace", otherDates.isEmpty() ? null : otherDates.getLast().toString());
             boats.add(m);
         }
         result.put("boats", boats);

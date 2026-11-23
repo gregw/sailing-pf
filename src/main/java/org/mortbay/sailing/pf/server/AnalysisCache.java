@@ -542,9 +542,10 @@ public class AnalysisCache implements DataStore.InvalidationListener
 
     /**
      * Snapshots each boat's PF as at 1 July of each past season ({@link PfHistory}) and saves
-     * them. Seasons already held are kept unless {@code all}.
+     * them. Every season is recomputed, since imports, merges and settings all change the
+     * past; a stopped run keeps the seasons it had finished.
      */
-    public void refreshPfHistory(boolean all, double outlierSigma, double clubCertificateWeight,
+    public void refreshPfHistory(double outlierSigma, double clubCertificateWeight,
                                  double minR2, int minPairs, PfConfig config,
                                  java.util.function.Supplier<Boolean> stopCheck)
     {
@@ -556,8 +557,6 @@ public class AnalysisCache implements DataStore.InvalidationListener
         {
             if (stopCheck.get())
                 break;
-            if (!all && history.has(cutoff))
-                continue;
             Map<String, BoatPf> pfs = pfAsOf(cutoff, outlierSigma, clubCertificateWeight, minR2, minPairs, config, stopCheck);
             if (stopCheck.get())
                 break;

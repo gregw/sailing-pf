@@ -303,7 +303,6 @@ public class TaskService
         new ImporterEntry("build-indexes",      "run",  false, false),
         new ImporterEntry("pf-optimise",       "run",  false, false),
         new ImporterEntry("pf-history",        "run",  false, false),
-        new ImporterEntry("pf-history",        "all",  false, false),
         new ImporterEntry("save-database", "run", false, false),
         new ImporterEntry("clear-cache-orc", "run", false, false),
         new ImporterEntry("clear-cache-sailsys", "run", false, false)
@@ -385,7 +384,7 @@ public class TaskService
                 importerEntries = new ArrayList<>();
                 for (ImporterEntry e : config.importers())
                 {
-                    if (known.contains(e.name()))
+                    if (known.contains(e.name()) && !RETIRED_MODES.contains(e.name() + "/" + e.mode()))
                         importerEntries.add(e);
                     else
                         LOG.info("Dropping retired task '{}' from admin.yaml", e.name());
@@ -1000,6 +999,9 @@ public void stop()
             .orElseThrow();
     }
 
+    /** Modes of current tasks that have been retired (name/mode), dropped from admin.yaml. */
+    private static final java.util.Set<String> RETIRED_MODES = java.util.Set.of("pf-history/all");
+
     private static final java.util.Set<String> IMPORTER_NAMES = java.util.Set.of(
         "sailsys", "orc-api", "ams", "topyacht", "bwps", "myc-archive");
 
@@ -1068,11 +1070,11 @@ public void stop()
                 else
                     LOG.warn("PF optimise requested but cache is not configured");
             }
-            // PF as at 1 July of each past season; "all" recomputes the seasons already held.
+            // PF as at 1 July of each past season, all recomputed.
             case "pf-history" ->
             {
                 if (cache != null)
-                    cache.refreshPfHistory("all".equals(mode), outlierSigma != null ? outlierSigma : 2.5,
+                    cache.refreshPfHistory(outlierSigma != null ? outlierSigma : 2.5,
                         clubCertificateWeight, minAnalysisR2, minAnalysisPairs, pfConfig(), stopRequested::get);
                 else
                     LOG.warn("PF history requested but cache is not configured");

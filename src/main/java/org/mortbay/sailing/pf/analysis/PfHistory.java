@@ -29,8 +29,8 @@ import org.mortbay.sailing.pf.store.DataStore;
  * boat's PF can be seen staying constant, drifting or stepping over the years.
  * <p>
  * Only variants a boat had raced before the cutoff are kept, since with no races its PF is
- * just its reference factor. Held in {@code <dataRoot>/cache/pf-history.json}: a past season
- * never changes unless the algorithm or the old data does, so seasons are computed once.
+ * just its reference factor. Held in {@code <dataRoot>/cache/pf-history.json} and recomputed
+ * in full when asked, since imports, merges and settings all change the past.
  */
 public final class PfHistory
 {
