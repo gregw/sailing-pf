@@ -9,6 +9,7 @@ const DISPLAY_NAMES = {
     'ams':              'Import AMS Certificates',
     'topyacht':         'Import TopYacht Races',
     'bwps':             'Import BWPS Races',
+    'bwps/history':     'Import BWPS History',
     'myc-archive':      'Import MYC Archive',
     'rshyr':            'Import RSHYR Races',
     'analysis':         'Analyse Certificates',
@@ -38,8 +39,8 @@ function applyAuthState() {
     });
 }
 
-function displayName(name) {
-    return DISPLAY_NAMES[name] || name;
+function displayName(name, mode) {
+    return DISPLAY_NAMES[name + '/' + mode] || DISPLAY_NAMES[name] || name;
 }
 
 function formatLastRun(iso) {
@@ -95,13 +96,14 @@ function buildTable(entries) {
     }
 }
 
-function taskTip(name) {
+function taskTip(name, mode) {
     const tips = {
         'sailsys':            'Imports the SailSys events configured on each club (clubs page → Edit → SailSys events).',
         'orc-api':            'Downloads ORC certificate data from the ORC API (sas.orc.org). Needs config/orc-api-key or ORC_API_KEY.',
         'ams':                'Scrapes AMS certificate data from raceyachts.org.',
         'topyacht':           'Scrapes race results from the TopYacht events configured on each club.',
-        'bwps':               'Imports BWPS (BlueSail) race results from the CYCA.',
+        'bwps':               'Imports BWPS (BlueSail) race results from the CYCA, from bwpsMinYear on.',
+        'bwps/history':       'Imports all the CYCA history: BWPS races, Sydney Hobart and Gold Coast, walking back until each has been missing 3 years in a row. Races already held are not fetched again.',
         'myc-archive':        'One-off: imports MYC results 2012-2020 from the scoring workbooks (.xlsx, and .zip of them) in pf-data/myc-archive. Safe to re-run.',
         'analysis':           'Builds the ConversionGraph from paired handicap observations.',
         'reference-factors':  'Computes IRC-equivalent reference factors for all boats.',
@@ -111,7 +113,7 @@ function taskTip(name) {
         'clear-cache-orc': 'Deletes all files in the ORC HTTP cache directory (cache/orc).',
         'clear-cache-sailsys': 'Deletes all files in the SailSys HTTP cache directory (cache/sailsys).',
     };
-    return tips[name] || name;
+    return tips[name + '/' + mode] || tips[name] || name;
 }
 
 function buildRow(entry) {
@@ -140,7 +142,7 @@ function buildRow(entry) {
         <button class="order-btn" title="Move down in run order"
                 onclick="moveRow('${esc(entry.name)}','${esc(entry.mode)}','down')">↓</button>
       </td>
-      <td>${esc(displayName(entry.name))} ${infoBtn('task-' + entry.name, taskTip(entry.name))}</td>
+      <td>${esc(displayName(entry.name, entry.mode))} ${infoBtn('task-' + entry.name + '-' + entry.mode, taskTip(entry.name, entry.mode))}</td>
       <td><span class="badge ${isRunning ? 'badge-running' : 'badge-idle'}"
                id="badge-${esc(key)}">${esc(entry.status)}</span>${progressField}</td>
       <td style="white-space:nowrap;font-family:monospace;font-size:0.9em;color:#555">${esc(formatLastRun(entry.lastRun))}</td>

@@ -296,6 +296,7 @@ public class TaskService
         new ImporterEntry("ams",                "api",  false, false),
         new ImporterEntry("topyacht",           "api",  false, false),
         new ImporterEntry("bwps",               "api",  false, false),
+        new ImporterEntry("bwps",               "history", false, false),
         new ImporterEntry("myc-archive",        "run",  false, false),
         new ImporterEntry("analysis",           "run",  false, false),
         new ImporterEntry("reference-factors",  "run",  false, false),
@@ -1027,7 +1028,14 @@ public void stop()
             case "topyacht" -> new TopYachtImporter(store, httpClient).run(recentRaceReimportDays);
             // Every club that has opted in (null = no club restriction), as for TopYacht.
             case "sailsys"  -> sailSysImporter().run(recentRaceReimportDays, null);
-            case "bwps"     -> new BwpsImporter(store, httpClient).run(recentRaceReimportDays, bwpsMinYear);
+            case "bwps"     ->
+            {
+                // "history": everything the CYCA sites hold; otherwise bwpsMinYear onwards.
+                if ("history".equals(mode))
+                    new BwpsImporter(store, httpClient).runHistory(recentRaceReimportDays);
+                else
+                    new BwpsImporter(store, httpClient).run(recentRaceReimportDays, bwpsMinYear);
+            }
             // One-off: MYC's historic scoring workbooks in <dataRoot>/myc-archive.
             case "myc-archive" -> new MycSpreadsheetImporter(store).run();
             case "analysis" ->

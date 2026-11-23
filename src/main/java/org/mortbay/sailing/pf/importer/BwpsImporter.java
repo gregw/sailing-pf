@@ -86,50 +86,20 @@ public class BwpsImporter
     private static final Pattern RACE_ID_JS = Pattern.compile("const\\s+raceId\\s*=\\s*(\\d+)");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** Minimum fleet size for category auto-discovery. */
-    static final int MIN_FLEET_SIZE = 20;
+    // --- Major races, each with its own race website on the CYCA platform ---
+    // The site's /race/<year>/results page embeds that year's feeds raceId; the feeds give
+    // the start and the results categories. Nothing per year is configured.
+    static final MajorRace RSHYR = new MajorRace(RSHYR_SOURCE,
+        "Rolex Sydney Hobart Yacht Race", "https://rolexsydneyhobart.com");
+    static final MajorRace GOLDCOAST = new MajorRace(GOLDCOAST_SOURCE,
+        "Noakes Sydney Gold Coast Yacht Race", "https://goldcoast.cycaracing.com");
+    static final List<MajorRace> MAJOR_RACES = List.of(RSHYR, GOLDCOAST);
 
-    // --- RSHYR configuration ---
-    static final CycaFeedsRaceConfig RSHYR_CONFIG = new CycaFeedsRaceConfig(
-        RSHYR_SOURCE,
-        "Rolex Sydney Hobart Yacht Race",
-        "https://rolexsydneyhobart.com",
-        Map.of(2022, 165, 2023, 176, 2024, 178, 2025, 185),
-        Map.of(
-            2021, new RaceCategories(732,  840,  841),
-            2022, new RaceCategories(862,  863,  864),
-            2023, new RaceCategories(985,  986,  null),
-            2024, new RaceCategories(1000, 1001, null),
-            2025, new RaceCategories(1051, 1052, null)),
-        Map.of(),      // no per-year overrides needed; fixed date below
-        12, 26,        // always Dec 26
-        13,            // 13:00 AEDT start
-        2021);
-
-    // --- Gold Coast configuration ---
-    // No race in 2020 or 2021 (COVID cancellations).
-    static final CycaFeedsRaceConfig GOLDCOAST_CONFIG = new CycaFeedsRaceConfig(
-        GOLDCOAST_SOURCE,
-        "Noakes Sydney Gold Coast Yacht Race",
-        "https://goldcoast.cycaracing.com",
-        Map.of(2018, 112, 2019, 145, 2022, 158, 2023, 170, 2024, 179, 2025, 186),
-        Map.of(
-            2018, new RaceCategories(500, 501, 503),
-            2019, new RaceCategories(696, 697, 699),
-            2022, new RaceCategories(761, 762, 764),
-            2023, new RaceCategories(932, 933, null),
-            2024, new RaceCategories(1008, 1009, null),
-            2025, new RaceCategories(1060, 1061, null)),
-        Map.of(
-            2018, LocalDate.of(2018, 7, 28),
-            2019, LocalDate.of(2019, 7, 27),
-            2022, LocalDate.of(2022, 7, 30),
-            2023, LocalDate.of(2023, 7, 29),
-            2024, LocalDate.of(2024, 7, 27),
-            2025, LocalDate.of(2025, 7, 26)),
-        0, 0,          // date varies each year; use knownRaceDates
-        13,            // 13:00 AEST start
-        2018);
+    /**
+     * In a history run, a race (or the minor-race index) missing this many years in a row
+     * marks the start of its history.
+     */
+    static final int HISTORY_GAP_YEARS = 3;
 
     /** Race names in the BWPS standings that are handled via the feeds API instead. */
     private static final List<String> FEEDS_RACE_KEYWORDS = List.of("SYDNEY HOBART", "GOLD COAST");
@@ -139,7 +109,6 @@ public class BwpsImporter
     private int recentRaceReimportDays = 30;
     /** Pause before each yacht page fetch: one page per boat imported, so be polite. */
     int yachtPageDelayMs = 200;
-    private int minYear = DEFAULT_MIN_YEAR;
 
     public BwpsImporter(DataStore store, HttpClient httpClient)
     {
@@ -174,17 +143,15 @@ public class BwpsImporter
 
     public void run(int recentRaceReimportDays) throws Exception { run(recentRaceReimportDays, DEFAULT_MIN_YEAR); }
 
+    /** Imports the seasons minYear..now: the minor races, then the major races. */
     public void run(int recentRaceReimportDays, int minYear) throws Exception
     {
         this.recentRaceReimportDays = recentRaceReimportDays;
-        this.minYear = minYear;
-
         int currentYear = LocalDate.now().getYear();
-        // Sail number → yacht listing entry (design, detail page), filled in by both phases.
+        // Sail number → yacht listing entry (design, detail page), filled in by every race.
         Map<String, YachtInfo> yachts = new LinkedHashMap<>();
 
-        // Phase 1: BWPS minor races from the results pages. A failure here must not stop
-        // the major races below.
+        // A failure in the minor races must not stop the major races below.
         try
         {
             importBwpsResults(minYear, currentYear, yachts);
@@ -193,74 +160,92 @@ public class BwpsImporter
         {
             ImporterLog.error(LOG, "BWPS: minor-race import failed: {}", e.getMessage(), e);
         }
-
-        // Phase 2: Major races via CYCA feeds API
-
-        for (CycaFeedsRaceConfig config : List.of(RSHYR_CONFIG, GOLDCOAST_CONFIG))
+        for (MajorRace race : MAJOR_RACES)
         {
-            for (int year = Math.max(config.minYear(), minYear); year <= currentYear; year++)
-            {
-                // Fetch yacht designs for this year's race website (may 404 for future years)
-                yachts.putAll(fetchYachtListing(
-                    config.websiteBase() + "/race/" + year + "/yachts"));
-
-                try
-                {
-                    importCycaFeedsYear(config, year, yachts);
-                }
-                catch (Exception e)
-                {
-                    ImporterLog.error(LOG, "BWPS: failed to import {} year {}: {}",
-                        config.source(), year, e.getMessage(), e);
-                }
-            }
+            for (int year = minYear; year <= currentYear; year++)
+                importMajorRace(race, year, yachts);
         }
-
         LOG.info("BWPS: all phases complete");
     }
 
+    /**
+     * Imports all the history the sites hold: walks back from this year until the
+     * minor-race index, and then each major race, has been missing
+     * {@value #HISTORY_GAP_YEARS} years in a row. Races already held are not fetched again.
+     */
+    public void runHistory(int recentRaceReimportDays) throws Exception
+    {
+        this.recentRaceReimportDays = recentRaceReimportDays;
+        int currentYear = LocalDate.now().getYear();
+        Map<String, YachtInfo> yachts = new LinkedHashMap<>();
+
+        int gap = 0;
+        int year = currentYear;
+        for (; gap < HISTORY_GAP_YEARS; year--)
+            gap = importBwpsYear(year, yachts) ? 0 : gap + 1;
+        LOG.info("BWPS history: minor-race results start in {}", year + 1 + HISTORY_GAP_YEARS);
+
+        for (MajorRace race : MAJOR_RACES)
+        {
+            gap = 0;
+            year = currentYear;
+            for (; gap < HISTORY_GAP_YEARS; year--)
+                gap = importMajorRace(race, year, yachts) == Outcome.ABSENT ? gap + 1 : 0;
+            LOG.info("BWPS history: {} results start in {}", race.source(),
+                year + 1 + HISTORY_GAP_YEARS);
+        }
+        LOG.info("BWPS: history complete");
+    }
+
     // ========================================================================
-    // Phase 1: BWPS minor races from the results pages + CYCA feeds
+    // Minor races: the BWPS results pages
     // ========================================================================
     //
     // The BWPS site lists each season's races at /race/<year>/results, linking to
-    // /race/<year>/results/<race-slug>; each race page embeds its CYCA feeds raceId. The feeds
-    // give the start time (Race/Summary) and the results per category: elapsed times come only
-    // from Line Honours (finish − start); the IRC (and ORC) results supply each boat's rating
-    // for its certificate. Hobart and Gold Coast are skipped here — phase 2 imports them.
+    // /race/<year>/results/<race-slug>. Hobart and Gold Coast are listed there too, but are
+    // imported from their own sites (see importMajorRace).
 
     /** Imports every minor BWPS race of the seasons fromYear..toYear. */
     void importBwpsResults(int fromYear, int toYear, Map<String, YachtInfo> yachts)
     {
         for (int year = fromYear; year <= toYear; year++)
+            importBwpsYear(year, yachts);
+    }
+
+    /** Imports one season's minor races; false if the site has no results index for it. */
+    boolean importBwpsYear(int year, Map<String, YachtInfo> yachts)
+    {
+        List<String> slugs;
+        try
         {
-            List<String> slugs;
+            slugs = parseResultsIndex(fetchString(BASE_URL + "/race/" + year + "/results"), year);
+        }
+        catch (Exception e)
+        {
+            ImporterLog.warn(LOG, "BWPS: no results index for {}: {}", year, e.getMessage());
+            return false;
+        }
+        LOG.info("BWPS: {} race(s) listed for {}: {}", slugs.size(), year, slugs);
+        String seriesName = SERIES_NAME_PREFIX + " " + year;
+        for (String slug : slugs)
+        {
+            String raceName = raceNameFromSlug(slug);
+            if (isFeedsMajorRace(raceName))
+                continue;   // imported from its own site
             try
             {
-                slugs = parseResultsIndex(fetchString(BASE_URL + "/race/" + year + "/results"), year);
+                importFeedsRace(new FeedsRace(year, SOURCE, raceName,
+                    BASE_URL + "/race/" + year + "/results/" + slug,
+                    BASE_URL + "/race/" + year + "/yachts/" + slug,
+                    List.of(seriesName)), yachts);
             }
             catch (Exception e)
             {
-                ImporterLog.warn(LOG, "BWPS: no results index for {}: {}", year, e.getMessage());
-                continue;
-            }
-            LOG.info("BWPS: {} race(s) listed for {}: {}", slugs.size(), year, slugs);
-            for (String slug : slugs)
-            {
-                String raceName = raceNameFromSlug(slug);
-                if (isFeedsMajorRace(raceName))
-                    continue;   // phase 2
-                try
-                {
-                    importBwpsRace(year, slug, raceName, yachts);
-                }
-                catch (Exception e)
-                {
-                    ImporterLog.error(LOG, "BWPS: failed to import '{}' {}: {}", raceName, year,
-                        e.getMessage(), e);
-                }
+                ImporterLog.error(LOG, "BWPS: failed to import '{}' {}: {}", raceName, year,
+                    e.getMessage(), e);
             }
         }
+        return true;
     }
 
     /** The race slugs linked from a season's results index, in page order. */
@@ -288,55 +273,122 @@ public class BwpsImporter
         return FEEDS_RACE_KEYWORDS.stream().anyMatch(upper::contains);
     }
 
-    /** Imports one minor race, unless it is already held and not recent. */
-    void importBwpsRace(int year, String slug, String raceName, Map<String, YachtInfo> yachts)
-        throws Exception
-    {
-        String seriesName = SERIES_NAME_PREFIX + " " + year;
-        String seriesId   = IdGenerator.generateSeriesId(CLUB_ID, seriesName);
+    // ========================================================================
+    // Major races: each from its own race website
+    // ========================================================================
 
+    /**
+     * Imports one year of a major race. It belongs to that year's BWPS series and to the
+     * race's own series.
+     */
+    Outcome importMajorRace(MajorRace race, int year, Map<String, YachtInfo> yachts)
+    {
+        try
+        {
+            return importFeedsRace(new FeedsRace(year, race.source(), race.seriesName(),
+                race.websiteBase() + "/race/" + year + "/results",
+                race.websiteBase() + "/race/" + year + "/yachts",
+                List.of(SERIES_NAME_PREFIX + " " + year, race.seriesName())), yachts);
+        }
+        catch (Exception e)
+        {
+            ImporterLog.error(LOG, "BWPS: failed to import {} {}: {}", race.source(), year,
+                e.getMessage(), e);
+            return Outcome.ABSENT;
+        }
+    }
+
+    // ========================================================================
+    // Any race on the CYCA platform
+    // ========================================================================
+    //
+    // A race's results page embeds its CYCA feeds raceId. The feeds give the start time and
+    // results categories (Race/Summary) and the results per category: elapsed times come
+    // only from Line Honours (finish − start); the IRC (and ORC) results supply each boat's
+    // rating for its certificate.
+
+    /** What became of one race. ABSENT: the sites have no usable results for it. */
+    enum Outcome { IMPORTED, HELD, NOT_SAILED, ABSENT }
+
+    /**
+     * A race to import.
+     *
+     * @param year        the season (BWPS) or year (major race) it is listed under
+     * @param source      source tag for the Race record
+     * @param raceName    the race's name
+     * @param resultsUrl  its results page, which embeds the feeds raceId
+     * @param yachtsUrl   its yacht list (designs, links to each yacht's page)
+     * @param seriesNames the series it belongs to; the first is its primary series
+     */
+    record FeedsRace(int year, String source, String raceName, String resultsUrl, String yachtsUrl,
+                     List<String> seriesNames) {}
+
+    /** Imports one race, unless it is already held and not recent. */
+    Outcome importFeedsRace(FeedsRace fr, Map<String, YachtInfo> yachts) throws Exception
+    {
         // Held already (matched by name and year, so no request is needed) and not recent.
         Race held = store.races().values().stream()
-            .filter(r -> CLUB_ID.equals(r.clubId()) && SOURCE.equals(r.source())
-                && raceName.equalsIgnoreCase(r.name()) && r.date() != null && r.date().getYear() == year)
+            .filter(r -> CLUB_ID.equals(r.clubId()) && fr.source().equals(r.source())
+                && fr.raceName().equalsIgnoreCase(r.name()) && r.date() != null
+                && r.date().getYear() == fr.year())
             .findFirst().orElse(null);
         if (held != null && !isRecentRace(held.date()))
         {
-            store.addRaceToClubSeries(CLUB_ID, seriesId, seriesName, held.id());
-            return;
+            addToSeries(fr, held.id());
+            return Outcome.HELD;
         }
 
-        Matcher idMatch = RACE_ID_JS.matcher(fetchString(BASE_URL + "/race/" + year + "/results/" + slug));
+        String page;
+        try
+        {
+            page = fetchString(fr.resultsUrl());
+        }
+        catch (Exception e)
+        {
+            LOG.info("BWPS: no results page for '{}' {}: {}", fr.raceName(), fr.year(), e.getMessage());
+            return Outcome.ABSENT;
+        }
+        Matcher idMatch = RACE_ID_JS.matcher(page);
         if (!idMatch.find())
         {
-            ImporterLog.warn(LOG, "BWPS: no raceId on the results page for '{}' {}", raceName, year);
-            return;
+            // e.g. a year the race was not held (Hobart 2020)
+            LOG.info("BWPS: no raceId on the results page for '{}' {} ({}); not held",
+                fr.raceName(), fr.year(), fr.resultsUrl());
+            return Outcome.ABSENT;
         }
         int cycaRaceId = Integer.parseInt(idMatch.group(1));
 
         RaceSummary summary = MAPPER.readValue(
             fetchString(FEEDS_BASE + "/Race/Summary/" + cycaRaceId), RaceSummary.class);
+        if (summary.year() != null && summary.year() != fr.year())
+        {
+            // e.g. a year the race was not held, whose page shows another year's race
+            LOG.info("BWPS: '{}' {} page gives raceId={} of {}; no race that year",
+                fr.raceName(), fr.year(), cycaRaceId, summary.year());
+            return Outcome.ABSENT;
+        }
         if (summary.startDateTime() == null || summary.startDateTime().startsWith(ZERO_DATE_PREFIX))
         {
-            LOG.info("BWPS: '{}' {} (raceId={}) has no start time yet -- skipping", raceName, year, cycaRaceId);
-            return;
+            LOG.info("BWPS: '{}' {} (raceId={}) has no start time yet -- skipping",
+                fr.raceName(), fr.year(), cycaRaceId);
+            return Outcome.NOT_SAILED;
         }
         LocalDateTime start = LocalDateTime.parse(summary.startDateTime());
         if (start.atZone(SYDNEY_TZ).isAfter(ZonedDateTime.now(SYDNEY_TZ)))
         {
-            LOG.info("BWPS: '{}' {} starts {} -- not sailed yet, skipping", raceName, year, start);
-            return;
+            LOG.info("BWPS: '{}' {} starts {} -- not sailed yet, skipping", fr.raceName(), fr.year(), start);
+            return Outcome.NOT_SAILED;
         }
         LocalDate raceDate = start.toLocalDate();
         String raceId = IdGenerator.generateRaceId(CLUB_ID, raceDate, 1);
         Race existing = store.races().get(raceId);
-        if (existing != null && SOURCE.equals(existing.source()) && !isRecentRace(raceDate))
+        if (existing != null && fr.source().equals(existing.source()) && !isRecentRace(raceDate))
         {
-            store.addRaceToClubSeries(CLUB_ID, seriesId, seriesName, raceId);
-            return;
+            addToSeries(fr, raceId);
+            return Outcome.HELD;
         }
 
-        Integer lhCat = null, ircCat = null, orcCat = null;
+        Integer lhCat = null, ircCat = null, orcCat = null, phsCat = null;
         for (SummaryCategory c : summary.categories() == null ? List.<SummaryCategory>of() : summary.categories())
         {
             if (c.id() == null || c.name() == null)
@@ -348,49 +400,98 @@ public class BwpsImporter
                 ircCat = c.id();
             else if (orcCat == null && (name.equals("ORC") || name.equals("ORCI")))
                 orcCat = c.id();
+            else if (phsCat == null && name.equals("PHS"))
+                phsCat = c.id();
         }
-        if (lhCat == null || ircCat == null)
+        if (lhCat == null || (ircCat == null && orcCat == null && phsCat == null))
         {
-            ImporterLog.warn(LOG, "BWPS: '{}' {} (raceId={}) -- Line Honours or IRC category missing",
-                raceName, year, cycaRaceId);
-            return;
+            ImporterLog.warn(LOG, "BWPS: '{}' {} (raceId={}) -- no Line Honours, or no IRC/ORC/PHS category",
+                fr.raceName(), fr.year(), cycaRaceId);
+            return Outcome.ABSENT;
+        }
+
+        List<FeedsEntry> lhEntries = fetchCategory(cycaRaceId, lhCat);
+        // Results are matched across categories by sail number. Early years (e.g. the 1990s
+        // Hobarts) mostly lack them, so too little of the race would survive.
+        long finished = lhEntries.stream().filter(BwpsImporter::finished).count();
+        long withSail = lhEntries.stream().filter(BwpsImporter::finished)
+            .filter(e -> e.sailNumber() != null && !e.sailNumber().isBlank()).count();
+        if (finished > 0 && withSail * 2 < finished)
+        {
+            ImporterLog.warn(LOG, "BWPS: '{}' {} (raceId={}) -- only {} of {} finishers have a sail number; skipping",
+                fr.raceName(), fr.year(), cycaRaceId, withSail, finished);
+            return Outcome.ABSENT;
         }
 
         // This race's yacht list: design and detail page (club) per boat.
-        yachts.putAll(fetchYachtListing(BASE_URL + "/race/" + year + "/yachts/" + slug));
+        yachts.putAll(fetchYachtListing(fr.yachtsUrl()));
 
-        // Elapsed times from Line Honours only: finish (its CorrectedTime, at TCF 1) − start.
-        Map<String, Duration> elapsedBySailNum =
-            buildElapsedMap(fetchCategory(cycaRaceId, lhCat), start.atZone(SYDNEY_TZ));
+        // Elapsed times from Line Honours only: finish (its CorrectedTime) − start.
+        Map<String, Duration> elapsedBySailNum = buildElapsedMap(lhEntries, start.atZone(SYDNEY_TZ));
 
         // IRC (and ORC) results only for each boat's rating → certificate; finishers without
-        // a Line Honours elapsed time are dropped.
+        // a Line Honours elapsed time are dropped. PHS is mostly the same fleet scored again,
+        // so it adds only the boats in neither IRC nor ORC (and gives them no certificate).
         LinkedHashMap<String, List<Finisher>> divMap = new LinkedHashMap<>();
-        int count = processFeedsEntries(fetchCategory(cycaRaceId, ircCat), "IRC", raceDate,
-            elapsedBySailNum, divMap, SOURCE, yachts);
+        Set<String> placed = new HashSet<>();
+        int count = 0;
+        if (ircCat != null)
+            count += processFeedsEntries(fetchCategory(cycaRaceId, ircCat), "IRC", raceDate,
+                elapsedBySailNum, divMap, fr.source(), yachts, placed, false);
         if (orcCat != null)
             count += processFeedsEntries(fetchCategory(cycaRaceId, orcCat), "ORC", raceDate,
-                elapsedBySailNum, divMap, SOURCE, yachts);
+                elapsedBySailNum, divMap, fr.source(), yachts, placed, false);
+        if (phsCat != null)
+        {
+            // PHS only adds boats, so failing to fetch it must not lose the race.
+            List<FeedsEntry> phs = List.of();
+            try
+            {
+                phs = fetchCategory(cycaRaceId, phsCat);
+            }
+            catch (Exception e)
+            {
+                ImporterLog.warn(LOG, "BWPS: '{}' {} (raceId={}) -- PHS results unavailable: {}",
+                    fr.raceName(), fr.year(), cycaRaceId, e.getMessage());
+            }
+            count += processFeedsEntries(phs, "PHS", raceDate,
+                elapsedBySailNum, divMap, fr.source(), yachts, placed, true);
+        }
         if (divMap.isEmpty())
         {
-            ImporterLog.warn(LOG, "BWPS: '{}' {} -- no IRC/ORC finishers with Line Honours times",
-                raceName, year);
-            return;
+            ImporterLog.warn(LOG, "BWPS: '{}' {} -- no IRC/ORC/PHS finishers with Line Honours times",
+                fr.raceName(), fr.year());
+            return Outcome.ABSENT;
         }
 
         List<Division> divisions = divMap.entrySet().stream()
             .map(e -> new Division(e.getKey(), List.copyOf(e.getValue())))
             .toList();
-        store.putRace(new Race(raceId, CLUB_ID, List.of(seriesId), raceDate, 1,
-            raceName, divisions, SOURCE, Instant.now(), null));
+        List<String> seriesIds = fr.seriesNames().stream()
+            .map(n -> IdGenerator.generateSeriesId(CLUB_ID, n)).toList();
+        store.putRace(new Race(raceId, CLUB_ID, seriesIds, raceDate, 1,
+            fr.raceName(), divisions, fr.source(), Instant.now(), null));
         LOG.info("BWPS: imported race {} '{}' {} ({} finishers, {} division(s))",
-            raceId, raceName, year, count, divisions.size());
-        store.addRaceToClubSeries(CLUB_ID, seriesId, seriesName, raceId);
+            raceId, fr.raceName(), fr.year(), count, divisions.size());
+        addToSeries(fr, raceId);
+        return Outcome.IMPORTED;
     }
 
-    /** The parts of /Race/Summary/{raceId} used: start time and the results categories. */
+    private void addToSeries(FeedsRace fr, String raceId)
+    {
+        for (String name : fr.seriesNames())
+            store.addRaceToClubSeries(CLUB_ID, IdGenerator.generateSeriesId(CLUB_ID, name), name, raceId);
+    }
+
+    private static boolean finished(FeedsEntry e)
+    {
+        return e.isFinished() || "Finished".equalsIgnoreCase(e.status());
+    }
+
+    /** The parts of /Race/Summary/{raceId} used: year, start time and the results categories. */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record RaceSummary(@JsonProperty("StartDateTime") String startDateTime,
+    record RaceSummary(@JsonProperty("Year") Integer year,
+                       @JsonProperty("StartDateTime") String startDateTime,
                        @JsonProperty("Status") String status,
                        @JsonProperty("Categories") List<SummaryCategory> categories) {}
 
@@ -398,339 +499,6 @@ public class BwpsImporter
     record SummaryCategory(@JsonProperty("Id") Integer id,
                            @JsonProperty("Name") String name,
                            @JsonProperty("Type") String type) {}
-
-    // ========================================================================
-    // Phase 2: CYCA feeds API races (RSHYR, Gold Coast)
-    // ========================================================================
-
-    /**
-     * Imports a single year of a CYCA feeds-API race (RSHYR or Gold Coast).
-     */
-    void importCycaFeedsYear(CycaFeedsRaceConfig config, int year,
-                             Map<String, YachtInfo> yachts) throws Exception
-    {
-        // Determine race date
-        LocalDate raceDate = config.raceDate(year);
-        if (raceDate == null)
-        {
-            LOG.debug("{}: year {} -- no known race date, skipping", config.source(), year);
-            return;
-        }
-
-        // Discover or look up the CYCA raceId
-        Integer cycaRaceId = config.knownRaceIds().get(year);
-        if (cycaRaceId == null)
-            cycaRaceId = discoverRaceId(config, year);
-        if (cycaRaceId == null)
-        {
-            LOG.info("{}: year {} -- no raceId (race not yet run or not in feed), skipping",
-                config.source(), year);
-            return;
-        }
-
-        // BWPS year series (all races share this)
-        String bwpsSeriesName = SERIES_NAME_PREFIX + " " + year;
-        String bwpsSeriesId   = IdGenerator.generateSeriesId(CLUB_ID, bwpsSeriesName);
-
-        // Dedicated race series
-        String raceSeriesId = IdGenerator.generateSeriesId(CLUB_ID, config.seriesName());
-
-        String raceId = IdGenerator.generateRaceId(CLUB_ID, raceDate, 1);
-
-        // Check for existing race
-        if (store.races().containsKey(raceId))
-        {
-            Race existing = store.races().get(raceId);
-            boolean recent = isRecentRace(raceDate);
-            if (config.source().equals(existing.source()) && !recent)
-            {
-                LOG.info("{}: year {} -- already imported ({} divisions), skipping",
-                    config.source(), year,
-                    existing.divisions() != null ? existing.divisions().size() : 0);
-                store.addRaceToClubSeries(CLUB_ID, bwpsSeriesId, bwpsSeriesName, raceId);
-                store.addRaceToClubSeries(CLUB_ID, raceSeriesId, config.seriesName(), raceId);
-                return;
-            }
-            LOG.info("{}: year {} -- race exists from source='{}'{}, will reimport",
-                config.source(), year, existing.source(), recent ? " (recent)" : "");
-        }
-
-        LOG.info("{}: year {} -- cycaRaceId={}, starting category discovery",
-            config.source(), year, cycaRaceId);
-
-        RaceCategories cats = discoverCategories(config, year, cycaRaceId);
-        if (cats == null)
-        {
-            ImporterLog.warn(LOG, "{}: year {} -- could not identify LH + IRC/ORC categories",
-                config.source(), year);
-            return;
-        }
-
-        // Line Honours: elapsed times for all finishers
-        LOG.info("{}: year {} -- fetching Line Honours (cat {})", config.source(), year, cats.lhCategoryId());
-        List<FeedsEntry> lhEntries = fetchCategory(cycaRaceId, cats.lhCategoryId());
-
-        ZonedDateTime raceStart = ZonedDateTime.of(
-            raceDate.getYear(), raceDate.getMonthValue(), raceDate.getDayOfMonth(),
-            config.raceStartHour(), 0, 0, 0, SYDNEY_TZ);
-        Map<String, Duration> elapsedBySailNum = buildElapsedMap(lhEntries, raceStart);
-        LOG.info("{}: year {} -- {} LH finishers with valid elapsed times",
-            config.source(), year, elapsedBySailNum.size());
-
-        // IRC All
-        LinkedHashMap<String, List<Finisher>> divMap = new LinkedHashMap<>();
-        int count = 0;
-
-        LOG.info("{}: year {} -- fetching IRC (cat {})", config.source(), year, cats.ircCategoryId());
-        List<FeedsEntry> ircEntries = fetchCategory(cycaRaceId, cats.ircCategoryId());
-        LOG.info("{}: year {} -- {} IRC entries", config.source(), year, ircEntries.size());
-        count += processFeedsEntries(ircEntries, "IRC", raceDate, elapsedBySailNum, divMap,
-            config.source(), yachts);
-
-        // ORC All (optional)
-        if (cats.orcCategoryId() != null)
-        {
-            LOG.info("{}: year {} -- fetching ORC (cat {})", config.source(), year, cats.orcCategoryId());
-            List<FeedsEntry> orcEntries = fetchCategory(cycaRaceId, cats.orcCategoryId());
-            LOG.info("{}: year {} -- {} ORC entries", config.source(), year, orcEntries.size());
-            count += processFeedsEntries(orcEntries, "ORC", raceDate, elapsedBySailNum, divMap,
-                config.source(), yachts);
-        }
-
-        if (divMap.isEmpty())
-        {
-            ImporterLog.warn(LOG, "{}: year {} -- no finishers with matched elapsed times",
-                config.source(), year);
-            return;
-        }
-
-        List<Division> divisions = divMap.entrySet().stream()
-            .map(e -> new Division(e.getKey(), List.copyOf(e.getValue())))
-            .toList();
-
-        // Dual series membership: BWPS year series + dedicated race series
-        List<String> seriesIds = List.of(bwpsSeriesId, raceSeriesId);
-
-        store.putRace(new Race(raceId, CLUB_ID, seriesIds, raceDate, 1,
-            config.seriesName(), divisions, config.source(), Instant.now(), null));
-        LOG.info("{}: year {} saved -- {} finishers across {} division(s) [{}]",
-            config.source(), year, count, divisions.size(),
-            divisions.stream().map(Division::name).toList());
-
-        store.addRaceToClubSeries(CLUB_ID, bwpsSeriesId, bwpsSeriesName, raceId);
-        store.addRaceToClubSeries(CLUB_ID, raceSeriesId, config.seriesName(), raceId);
-    }
-
-    // --- Category discovery ---
-
-    /**
-     * Returns the highest category ID across all known configs, used as the starting
-     * point for scanning future years.
-     */
-    static int highestKnownCategoryId()
-    {
-        int max = 0;
-        for (CycaFeedsRaceConfig config : List.of(RSHYR_CONFIG, GOLDCOAST_CONFIG))
-        {
-            for (RaceCategories cats : config.knownCategories().values())
-            {
-                if (cats.lhCategoryId() > max) max = cats.lhCategoryId();
-                if (cats.ircCategoryId() > max) max = cats.ircCategoryId();
-                if (cats.orcCategoryId() != null && cats.orcCategoryId() > max)
-                    max = cats.orcCategoryId();
-            }
-        }
-        return max;
-    }
-
-    /**
-     * Returns known {@link RaceCategories} for the given year, or discovers them
-     * via the Categories API (preferred) or by scanning category IDs (fallback).
-     */
-    RaceCategories discoverCategories(CycaFeedsRaceConfig config, int year, int raceId) throws Exception
-    {
-        RaceCategories known = config.knownCategories().get(year);
-        if (known != null)
-        {
-            LOG.info("{}: year {} raceId={} -- using known categories: LH={} IRC={} ORC={}",
-                config.source(), year, raceId, known.lhCategoryId(), known.ircCategoryId(),
-                known.orcCategoryId() != null ? known.orcCategoryId() : "none");
-            return known;
-        }
-
-        // Try the Categories API first -- much faster than scanning
-        RaceCategories fromApi = discoverCategoriesViaApi(config, year, raceId);
-        if (fromApi != null)
-            return fromApi;
-
-        // Fallback: scan forward from the highest category we've seen.
-        int scanStart = highestKnownCategoryId() + 1;
-        int scanEnd   = scanStart + 200;
-        LOG.info("{}: year {} raceId={} -- scanning categories {}–{} (API failed, falling back)",
-            config.source(), year, raceId, scanStart, scanEnd);
-
-        Integer lhCat  = null;
-        Integer ircCat = null;
-        Integer orcCat = null;
-        int consecutiveEmpty = 0;
-        boolean foundAny = false;
-
-        for (int catId = scanStart; catId <= scanEnd; catId++)
-        {
-            List<FeedsEntry> entries;
-            try
-            {
-                entries = fetchCategory(raceId, catId);
-            }
-            catch (Exception e)
-            {
-                LOG.debug("{}: raceId={} cat={} fetch error: {}", config.source(), raceId, catId, e.getMessage());
-                if (foundAny)
-                {
-                    consecutiveEmpty++;
-                    if (consecutiveEmpty >= 12 && lhCat != null && ircCat != null)
-                        break;
-                }
-                continue;
-            }
-
-            if (entries.isEmpty())
-            {
-                if (foundAny)
-                {
-                    consecutiveEmpty++;
-                    if (consecutiveEmpty >= 12 && lhCat != null && ircCat != null)
-                        break;
-                }
-                continue;
-            }
-            consecutiveEmpty = 0;
-            foundAny = true;
-
-            CategoryType type = classifyCategory(entries);
-            LOG.info("{}: raceId={} cat={} entries={} type={}",
-                config.source(), raceId, catId, entries.size(), type);
-
-            switch (type)
-            {
-                case LINE_HONOURS -> { if (lhCat  == null) lhCat  = catId; }
-                case IRC          -> { if (ircCat == null) ircCat = catId; }
-                case ORC          -> { if (orcCat == null) orcCat = catId; }
-                default           -> {}
-            }
-        }
-
-        if (lhCat == null || ircCat == null)
-        {
-            ImporterLog.warn(LOG, "{}: category discovery failed for year={} raceId={} (scanned {}–{}): "
-                + "lhCat={} ircCat={} orcCat={}",
-                config.source(), year, raceId, scanStart, scanEnd, lhCat, ircCat, orcCat);
-            return null;
-        }
-        LOG.info("{}: year {} raceId={} discovered → LH={} IRC={} ORC={}",
-            config.source(), year, raceId, lhCat, ircCat, orcCat != null ? orcCat : "none");
-        return new RaceCategories(lhCat, ircCat, orcCat);
-    }
-
-    /**
-     * Discovers categories via the {@code /Race/Categories/{raceId}} API endpoint.
-     * Returns null if the API call fails or doesn't contain both LH and IRC categories.
-     */
-    @SuppressWarnings("unchecked")
-    private RaceCategories discoverCategoriesViaApi(CycaFeedsRaceConfig config, int year, int raceId)
-    {
-        String url = FEEDS_BASE + "/Race/Categories/" + raceId;
-        try
-        {
-            String json = fetchString(url);
-            List<Map<String, Object>> categories = MAPPER.readValue(json,
-                MAPPER.getTypeFactory().constructCollectionType(List.class, Map.class));
-
-            Integer lhCat = null, ircCat = null, orcCat = null;
-            for (Map<String, Object> cat : categories)
-            {
-                String name = (String) cat.get("Name");
-                Number id = (Number) cat.get("Id");
-                if (name == null || id == null)
-                    continue;
-                String upper = name.toUpperCase(Locale.ENGLISH);
-                if (upper.equals("LINE HONOURS") && lhCat == null)
-                    lhCat = id.intValue();
-                else if (upper.equals("IRC") && ircCat == null)
-                    ircCat = id.intValue();
-                else if ((upper.equals("ORCI") || upper.equals("ORC")) && orcCat == null)
-                    orcCat = id.intValue();
-            }
-
-            if (lhCat != null && ircCat != null)
-            {
-                LOG.info("{}: year {} raceId={} -- discovered via Categories API: LH={} IRC={} ORC={}",
-                    config.source(), year, raceId, lhCat, ircCat, orcCat != null ? orcCat : "none");
-                return new RaceCategories(lhCat, ircCat, orcCat);
-            }
-            LOG.debug("{}: Categories API for raceId={} incomplete: LH={} IRC={} ORC={}",
-                config.source(), raceId, lhCat, ircCat, orcCat);
-        }
-        catch (Exception e)
-        {
-            LOG.debug("{}: Categories API failed for raceId={}: {}", config.source(), raceId, e.getMessage());
-        }
-        return null;
-    }
-
-    /**
-     * Classifies a category by inspecting its entries.
-     * <ul>
-     *   <li><b>LINE_HONOURS</b>: ≥ {@value MIN_FLEET_SIZE} entries; all finished have TCF ≈ 1.0.</li>
-     *   <li><b>IRC</b>: entries span ≥ 2 distinct numeric DivisionName values.</li>
-     *   <li><b>IRC_SUB</b>: exactly 1 distinct numeric DivisionName -- per-division sub-category.</li>
-     *   <li><b>ORC</b>: varying TCF, no numeric divisions, ≥ {@value MIN_FLEET_SIZE} entries.</li>
-     * </ul>
-     */
-    static CategoryType classifyCategory(List<FeedsEntry> entries)
-    {
-        if (entries.isEmpty())
-            return CategoryType.UNKNOWN;
-
-        long finished = entries.stream()
-            .filter(e -> e.isFinished() || "Finished".equalsIgnoreCase(e.status()))
-            .count();
-
-        if (finished > 0 && entries.size() >= MIN_FLEET_SIZE)
-        {
-            long tcfOne = entries.stream()
-                .filter(e -> e.isFinished() || "Finished".equalsIgnoreCase(e.status()))
-                .filter(e -> Math.abs(e.tcf() - 1.0) < 0.005)
-                .count();
-            long tcfZero = entries.stream()
-                .filter(e -> e.isFinished() || "Finished".equalsIgnoreCase(e.status()))
-                .filter(e -> e.tcf() == 0.0)
-                .count();
-            if (tcfOne == finished || tcfZero == finished)
-                return CategoryType.LINE_HONOURS;
-        }
-
-        Set<String> numericDivs = new HashSet<>();
-        for (FeedsEntry e : entries)
-        {
-            String div = e.divisionName();
-            if (div != null && div.matches("[0-9]+"))
-                numericDivs.add(div);
-        }
-
-        if (numericDivs.size() >= 2)
-            return CategoryType.IRC;
-
-        if (numericDivs.size() == 1)
-            return CategoryType.IRC_SUB;
-
-        boolean hasVaryingTcf = entries.stream()
-            .anyMatch(e -> Math.abs(e.tcf() - 1.0) > 0.01 && e.tcf() != 0.0);
-        if (hasVaryingTcf && entries.size() >= MIN_FLEET_SIZE)
-            return CategoryType.ORC;
-
-        return CategoryType.UNKNOWN;
-    }
 
     // --- Elapsed time computation ---
 
@@ -774,9 +542,14 @@ public class BwpsImporter
 
     // --- Entry processing ---
 
+    /**
+     * Adds a category's finishers to {@code divMap}, recording each one's sail number in
+     * {@code placed}; with {@code onlyUnplaced}, boats already placed (by an earlier
+     * category of the same race) are skipped.
+     */
     private int processFeedsEntries(List<FeedsEntry> entries, String system, LocalDate date,
         Map<String, Duration> elapsedBySailNum, LinkedHashMap<String, List<Finisher>> divMap,
-        String source, Map<String, YachtInfo> yachts)
+        String source, Map<String, YachtInfo> yachts, Set<String> placed, boolean onlyUnplaced)
     {
         int count = 0;
         for (FeedsEntry entry : entries)
@@ -787,6 +560,8 @@ public class BwpsImporter
                 continue;
 
             String sailNum = normSailNum(entry.sailNumber());
+            if (onlyUnplaced && placed.contains(sailNum))
+                continue;
             Duration elapsed = elapsedBySailNum.get(sailNum);
             if (elapsed == null)
             {
@@ -833,6 +608,7 @@ public class BwpsImporter
 
             divMap.computeIfAbsent(divKey, k -> new ArrayList<>())
                 .add(new Finisher(boat.id(), elapsed, false, certNum));
+            placed.add(sailNum);
             LOG.info("{}: {} {} {} [{}] elapsed={} cert={}",
                 source, system, divKey, cleanName, entry.sailNumber(),
                 String.format("%dd%02dh%02dm",
@@ -841,37 +617,6 @@ public class BwpsImporter
             count++;
         }
         return count;
-    }
-
-    // --- Race ID discovery ---
-
-    /**
-     * Discovers the CYCA raceId for a given year by scraping the results page and
-     * extracting the {@code const raceId = <n>;} JavaScript constant.
-     */
-    Integer discoverRaceId(CycaFeedsRaceConfig config, int year) throws Exception
-    {
-        String url = config.websiteBase() + "/race/" + year + "/results";
-        String html;
-        try
-        {
-            html = fetchString(url);
-        }
-        catch (Exception e)
-        {
-            ImporterLog.warn(LOG, "{}: could not fetch results page for year {}: {}",
-                config.source(), year, e.getMessage());
-            return null;
-        }
-        Matcher m = RACE_ID_JS.matcher(html);
-        if (m.find())
-        {
-            int id = Integer.parseInt(m.group(1));
-            LOG.info("{}: year {} → raceId={} (discovered from page)", config.source(), year, id);
-            return id;
-        }
-        ImporterLog.warn(LOG, "{}: raceId not found in results page for year {}", config.source(), year);
-        return null;
     }
 
     List<FeedsEntry> fetchCategory(int raceId, int categoryId) throws Exception
@@ -1054,7 +799,8 @@ public class BwpsImporter
     private String inferCertificate(Boat boat, String system, int year, double tcf,
                                     boolean twoHanded, String source)
     {
-        if ("ORC".equalsIgnoreCase(system))
+        // ORC ratings come only from official certificates; PHS is a club handicap, not a certificate.
+        if ("ORC".equalsIgnoreCase(system) || "PHS".equalsIgnoreCase(system))
             return null;
         for (Certificate cert : boat.certificates())
         {
@@ -1123,43 +869,13 @@ public class BwpsImporter
     // ========================================================================
 
     /**
-     * Configuration for a CYCA feeds-API race (RSHYR or Gold Coast).
+     * A major race with its own website on the CYCA platform.
      *
-     * @param source          source tag for Race records (e.g. "RSHYR", "GoldCoast")
-     * @param seriesName      dedicated series name (e.g. "Rolex Sydney Hobart Yacht Race")
-     * @param websiteBase     base URL of the race website (e.g. "https://rolexsydneyhobart.com")
-     * @param knownRaceIds    year → CYCA raceId mapping
-     * @param knownCategories year → category IDs mapping
-     * @param knownRaceDates  year → start date (for races with variable dates)
-     * @param fixedRaceMonth  month of race if constant (e.g. 12 for RSHYR); 0 if variable
-     * @param fixedRaceDay    day of race if constant (e.g. 26 for RSHYR); 0 if variable
-     * @param raceStartHour   hour of day the race starts (e.g. 13 for 1 PM)
-     * @param minYear         earliest year to import
+     * @param source      source tag for its Race records (e.g. "RSHYR")
+     * @param seriesName  its own series, and its races' name
+     * @param websiteBase its website (e.g. "https://rolexsydneyhobart.com")
      */
-    record CycaFeedsRaceConfig(
-        String source,
-        String seriesName,
-        String websiteBase,
-        Map<Integer, Integer> knownRaceIds,
-        Map<Integer, RaceCategories> knownCategories,
-        Map<Integer, LocalDate> knownRaceDates,
-        int fixedRaceMonth,
-        int fixedRaceDay,
-        int raceStartHour,
-        int minYear)
-    {
-        /** Returns the race start date for the given year, or null if unknown. */
-        LocalDate raceDate(int year)
-        {
-            if (fixedRaceMonth > 0 && fixedRaceDay > 0)
-                return LocalDate.of(year, fixedRaceMonth, fixedRaceDay);
-            return knownRaceDates.get(year);
-        }
-    }
-
-    enum CategoryType { LINE_HONOURS, IRC, IRC_SUB, ORC, UNKNOWN }
-
-    record RaceCategories(int lhCategoryId, int ircCategoryId, Integer orcCategoryId) {}
+    record MajorRace(String source, String seriesName, String websiteBase) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class FeedsEntry
