@@ -679,6 +679,22 @@ function renderTable(entity, items, append) {
     items.forEach((item, itemIdx) => {
         const globalIdx = baseIdx + itemIdx;
         const tr = document.createElement('tr');
+        // A boat's former (or later) name, from a dated alias: its own row, which opens the
+        // boat but is not selectable (it is not a separate record).
+        if (item.aliasOf) {
+            tr.classList.add('alias-row');
+            tr.style.fontStyle = 'italic';
+            tr.title = item.name + ' ' + renameWhen(item.aliasFrom, item.aliasUntil) + ', now ' + item.aliasOf;
+            item = { ...item, name: item.name + ' \u2192 ' + item.aliasOf };
+            tr.onclick = () => {
+                if (entity in state.navIdx) state.navIdx[entity] = globalIdx;
+                loadDetail(entity, item.id);
+            };
+            tr.appendChild(document.createElement('td'));
+            appendRowCells(tr, cols, item);
+            tbody.appendChild(tr);
+            return;
+        }
         if (item.excluded) {
             tr.classList.add('excluded');
             tr.title = item.exclusionReason
@@ -723,51 +739,61 @@ function renderTable(entity, items, append) {
         }
         tr.appendChild(tdCb);
         tr.onclick = openRow;
-        cols.forEach(col => {
-            const td = document.createElement('td');
-            if (col.cls) td.className = col.cls;
-            if (col.type === 'action') {
-                if (col.customCell) {
-                    col.customCell(td, item);
-                } else {
-                    const text = col.render ? col.render(item) : col.label;
-                    const extraClass = col.btnClass ? col.btnClass(item) : '';
-                    const tooltip = col.title ? col.title(item) : null;
-                    if (text && col.action) {
-                        const btn = document.createElement('button');
-                        btn.className = 'link-btn' + (extraClass ? ' ' + extraClass : '');
-                        btn.textContent = text;
-                        if (tooltip) btn.title = tooltip;
-                        else if (col.cls && text) btn.title = text; // Add title for truncated text cells
-                        btn.onclick = (e) => {
-                            e.stopPropagation();
-                            col.action(item);
-                        };
-                        // col.designProfile(item) names a design whose profile shows on hover
-                        const hoverDesignId = col.designProfile ? col.designProfile(item) : null;
-                        if (hoverDesignId) attachDesignProfileHover(btn, hoverDesignId);
-                        td.appendChild(btn);
-                    } else {
-                        td.textContent = text || '';
-                        if (tooltip) td.title = tooltip;
-                        else if (col.cls && text) td.title = text; // Add title for truncated text cells
-                        if (extraClass) td.className = ((td.className || '') + ' ' + extraClass).trim();
-                    }
-                }
-            } else {
-                const v = col.key != null ? item[col.key] : item;
-                const rawValue = v != null ? String(v) : '';
-                td.innerHTML = col.render ? col.render(v) : esc(rawValue);
-                // Add title attribute for cells that may be truncated (those with id-col or similar classes)
-                if (col.cls && rawValue) {
-                    td.title = rawValue;
-                }
-            }
-            tr.appendChild(td);
-        });
+        appendRowCells(tr, cols, item);
         tbody.appendChild(tr);
     });
     if (selectionRestored) updateMergeBar(entity);
+}
+
+/** Appends a list row's cells, one per column. */
+function appendRowCells(tr, cols, item) {
+    cols.forEach(col => {
+        const td = document.createElement('td');
+        if (col.cls) td.className = col.cls;
+        if (col.type === 'action') {
+            if (col.customCell) {
+                col.customCell(td, item);
+            } else {
+                const text = col.render ? col.render(item) : col.label;
+                const extraClass = col.btnClass ? col.btnClass(item) : '';
+                const tooltip = col.title ? col.title(item) : null;
+                if (text && col.action) {
+                    const btn = document.createElement('button');
+                    btn.className = 'link-btn' + (extraClass ? ' ' + extraClass : '');
+                    btn.textContent = text;
+                    if (tooltip) btn.title = tooltip;
+                    else if (col.cls && text) btn.title = text; // Add title for truncated text cells
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        col.action(item);
+                    };
+                    // col.designProfile(item) names a design whose profile shows on hover
+                    const hoverDesignId = col.designProfile ? col.designProfile(item) : null;
+                    if (hoverDesignId) attachDesignProfileHover(btn, hoverDesignId);
+                    td.appendChild(btn);
+                } else {
+                    td.textContent = text || '';
+                    if (tooltip) td.title = tooltip;
+                    else if (col.cls && text) td.title = text; // Add title for truncated text cells
+                    if (extraClass) td.className = ((td.className || '') + ' ' + extraClass).trim();
+                }
+            }
+        } else {
+            const v = col.key != null ? item[col.key] : item;
+            const rawValue = v != null ? String(v) : '';
+            td.innerHTML = col.render ? col.render(v) : esc(rawValue);
+            // Add title attribute for cells that may be truncated (those with id-col or similar classes)
+            if (col.cls && rawValue) {
+                td.title = rawValue;
+            }
+        }
+        tr.appendChild(td);
+    });
+}
+
+/** "until 2021-08-14" / "from 2021-08-14" for a rename alias's dates. */
+function renameWhen(from, until) {
+    return [from ? 'from ' + from : '', until ? 'until ' + until : ''].filter(Boolean).join(' ');
 }
 
 function renderScrollStatus(entity) {
@@ -873,7 +899,7 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
 
         const aliasDiv = document.getElementById('aliases-boats');
         const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
-        aliasDiv.innerHTML = aliases && aliases.length > 0 ? renderBoatAliases(aliases) : '';
+        aliasDiv.innerHTML = aliases && aliases.length > 0 ? renderBoatAliases(aliases, data) : '';
 
         // Store loaded boat data for possible reuse (edit flow is selection-driven now)
         state.lastDetailBoat = data;
@@ -942,18 +968,36 @@ function renderClubDetail(club) {
         </dl>`;
 }
 
-function renderBoatAliases(aliases) {
+function renderBoatAliases(aliases, boat) {
     if (!aliases || aliases.length === 0) return '';
     const rows = aliases.map(a => {
         const sail = a.sailNumber ? esc(a.sailNumber) : '';
-        const name = a.name ? esc(a.name) : '';
-        return `<tr><td>${sail}</td><td>${name}</td></tr>`;
+        const name = esc(a.displayName || a.name || '');
+        const used = a.from || a.until ? esc(renameWhen(a.from, a.until)) : '<span style="color:#999">any time</span>';
+        return `<tr><td>${sail}</td><td>${name}</td><td>${used}</td></tr>`;
     }).join('');
-    return `<strong>Aliases</strong>
+    return renderNameHistory(aliases, boat) + `<strong>Aliases</strong>
       <table style="width:auto;margin-top:0.4rem;">
-        <thead><tr><th>Sail #</th><th>Name</th></tr></thead>
+        <thead><tr><th>Sail #</th><th>Name</th><th>Used</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
+}
+
+/**
+ * The names a boat has raced under, in order, from its dated aliases (renames): e.g.
+ * "Sail Exchange until 2021-08-14, then Kanreki". Empty if it has no renames.
+ */
+function renderNameHistory(aliases, boat) {
+    const renames = aliases.filter(a => a.from || a.until);
+    if (renames.length === 0 || !boat) return '';
+    const label = a => esc([a.displayName || a.name || boat.name, a.sailNumber && a.sailNumber !== boat.sailNumber ? '(' + a.sailNumber + ')' : '']
+        .filter(Boolean).join(' '));
+    const before = renames.filter(a => a.until).sort((x, y) => x.until.localeCompare(y.until));
+    const after = renames.filter(a => a.from).sort((x, y) => x.from.localeCompare(y.from));
+    const parts = before.map(a => `${label(a)} until ${esc(a.until)}`);
+    parts.push(`<strong>${esc(boat.name)}</strong>`);
+    after.forEach(a => parts.push(`${label(a)} from ${esc(a.from)}`));
+    return `<div style="margin-bottom:0.5rem;">Name history: ${parts.join(', then ')}</div>`;
 }
 
 function renderBoatPf(data) {
@@ -1077,11 +1121,18 @@ function renderPfHistoryChart(data) {
             hoverinfo: 'text'
         });
     }
+    // A vertical line at each rename: a new owner or crew is where a step would show.
+    const renames = (data.renames || []).filter(a => a.from || a.until);
     const layout = {
         xaxis: { title: 'As at' },
         yaxis: { title: 'PF', tickformat: '.3f' },
         height: 300,
-        margin: { t: 20, b: 50, l: 60, r: 20 }
+        margin: { t: 20, b: 50, l: 60, r: 20 },
+        shapes: renames.map(a => ({ type: 'line', xref: 'x', yref: 'paper', x0: a.from || a.until, x1: a.from || a.until,
+            y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } })),
+        annotations: renames.map(a => ({ xref: 'x', yref: 'paper', x: a.from || a.until, y: 1, yanchor: 'bottom',
+            showarrow: false, font: { size: 10, color: '#555' },
+            text: esc(a.until ? 'was ' + (a.displayName || a.name) : 'renamed ' + (a.displayName || a.name)) }))
     };
     Plotly.newPlot(container, traces, layout, { responsive: true })
         .then(() => Plotly.Plots.resize(container));
@@ -1448,6 +1499,7 @@ function showMergePanel(entity) {
         radio.name  = 'merge-keep-' + entity;
         radio.value = id;
         if (i === 0) radio.checked = true;
+        if (entity === 'boats') radio.onchange = () => loadMergeRenames();
         label.appendChild(radio);
         const desc = entity === 'boats'
             ? ' ' + esc(id) + '  —  sail: ' + esc(item.sailNumber || '') + '  name: ' + esc(item.name || '')
@@ -1455,7 +1507,51 @@ function showMergePanel(entity) {
         label.appendChild(document.createTextNode(desc));
         list.appendChild(label);
     });
+    if (entity === 'boats') {
+        const renames = document.createElement('div');
+        renames.id = 'merge-renames-boats';
+        list.appendChild(renames);
+        loadMergeRenames();
+    }
     panel.style.display = '';
+}
+
+/**
+ * Fills the boat merge panel with a rename date for each boat being merged whose name or
+ * sail number differs from the kept boat's, suggested from the dates of their races. A date
+ * records the old name and when it was used; cleared, the merge is a plain alias.
+ */
+async function loadMergeRenames() {
+    const div = document.getElementById('merge-renames-boats');
+    if (!div) return;
+    const keep = document.querySelector('#merge-radio-list-boats input[name="merge-keep-boats"]:checked');
+    if (!keep) return;
+    const merge = Array.from(state.selected.boats).filter(id => id !== keep.value);
+    div.innerHTML = '';
+    const plan = await fetchJson('/api/boats/merge-plan?keep=' + encodeURIComponent(keep.value)
+        + '&merge=' + encodeURIComponent(merge.join(',')));
+    if (!plan || !plan.boats) return;
+    const range = (f, l) => f ? ` (raced ${f}${l && l !== f ? ' to ' + l : ''})` : ' (no races)';
+    const rows = plan.boats.filter(b => b.alias).map(b => {
+        const older = b.direction === 'until';
+        const text = older
+            ? `${esc(b.name)}${range(b.firstRace, b.lastRace)} was renamed ${esc(plan.keepName)}${range(plan.keepFirstRace, plan.keepLastRace)} on`
+            : `${esc(plan.keepName)}${range(plan.keepFirstRace, plan.keepLastRace)} was renamed ${esc(b.name)}${range(b.firstRace, b.lastRace)} on`;
+        return `<div style="margin:0.3rem 0 0.3rem 1.5rem;font-size:0.9rem;">${text}
+            <input type="date" class="merge-rename-date" data-id="${esc(b.id)}" data-direction="${b.direction}" value="${b.date || ''}">
+            <span style="color:#777;">${b.date ? '' : '— could not be determined from the races; '}leave blank for a plain merge</span></div>`;
+    });
+    if (rows.length > 0)
+        div.innerHTML = `<div style="margin-top:0.5rem;font-weight:bold;font-size:0.9rem;">Rename date</div>` + rows.join('');
+}
+
+/** The rename dates entered in the boat merge panel: {mergeId: {direction, date}}. */
+function mergeRenames() {
+    const renames = {};
+    document.querySelectorAll('#merge-renames-boats .merge-rename-date').forEach(input => {
+        if (input.value) renames[input.dataset.id] = { direction: input.dataset.direction, date: input.value };
+    });
+    return renames;
 }
 
 function hideMergePanel(entity) {
@@ -1574,10 +1670,11 @@ async function performMerge(entity) {
     const statusEl = document.getElementById('merge-status-' + entity);
     statusEl.textContent = 'Merging…';
 
+    const renames = entity === 'boats' ? mergeRenames() : {};
     const result = await fetchJson('/api/' + entity + '/merge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keepId, mergeIds })
+        body: JSON.stringify({ keepId, mergeIds, renames })
     });
 
     if (!result) {
@@ -1610,7 +1707,8 @@ async function requestMerge(entity) {
     const result = await fetchJson('/api/' + entity + '/merge-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keepId, mergeIds, ...(email && { email }), ...(message && { message }) })
+        body: JSON.stringify({ keepId, mergeIds, ...(entity === 'boats' && { renames: mergeRenames() }),
+            ...(email && { email }), ...(message && { message }) })
     });
 
     if (result && result.ok) {
@@ -2073,6 +2171,7 @@ function showEditPanel() {
     document.getElementById('edit-boat-name').value = item.name || '';
     document.getElementById('edit-boat-modified').checked = !!item.modified;
     document.getElementById('edit-boat-links').value = linksToText(item.links);
+    loadEditBoatAliases(item.id);
     const initialClubIds = Array.isArray(item.clubIds)
         ? [...item.clubIds]
         : (item.clubId ? [item.clubId] : []);
@@ -2086,6 +2185,52 @@ function showEditPanel() {
     document.getElementById('edit-status-boats').textContent = '';
     document.getElementById('edit-panel-boats').style.display = '';
     applyMergeAuthState();
+}
+
+/** The aliases of the boat being edited, as loaded, so a save sends only changed dates. */
+let editingBoatAliases = [];
+
+/**
+ * Lists the edited boat's aliases, each with when it was in use: a rename has a date (the
+ * name was used before it, or from it); with none it is a plain alias, used any time.
+ */
+async function loadEditBoatAliases(boatId) {
+    const div = document.getElementById('edit-boat-aliases');
+    if (!div) return;
+    div.innerHTML = '';
+    editingBoatAliases = [];
+    const aliases = await fetchJson('/api/boats/' + encodeURIComponent(boatId) + '/aliases');
+    if (editingBoatId !== boatId) return;
+    editingBoatAliases = Array.isArray(aliases) ? aliases : [];
+    if (editingBoatAliases.length === 0) {
+        div.innerHTML = '<span style="color:#777;">None</span>';
+        return;
+    }
+    div.innerHTML = editingBoatAliases.map((a, i) => {
+        const label = [a.sailNumber, a.displayName || a.name].filter(Boolean).map(esc).join(' ');
+        const from = !!a.from;
+        return `<div style="margin-bottom:0.2rem;">${label}: used
+            <select id="edit-alias-dir-${i}">
+              <option value="until"${from ? '' : ' selected'}>before</option>
+              <option value="from"${from ? ' selected' : ''}>from</option>
+            </select>
+            <input type="date" id="edit-alias-date-${i}" value="${esc(a.from || a.until || '')}">
+            <span style="color:#777;">blank = any time</span></div>`;
+    }).join('');
+}
+
+/** The aliases whose rename date was changed in the edit panel, as sent to rename-dates. */
+function changedAliasDates() {
+    const changed = [];
+    editingBoatAliases.forEach((a, i) => {
+        const dir = document.getElementById('edit-alias-dir-' + i)?.value;
+        const date = document.getElementById('edit-alias-date-' + i)?.value || null;
+        const from = date && dir === 'from' ? date : null;
+        const until = date && dir === 'until' ? date : null;
+        if ((a.from || null) !== from || (a.until || null) !== until)
+            changed.push({ sailNumber: a.sailNumber || null, name: a.name || null, from, until });
+    });
+    return changed;
 }
 
 function hideEditPanel() {
@@ -2184,6 +2329,20 @@ async function saveBoatEdit() {
     const statusEl = document.getElementById('edit-status-boats');
     statusEl.textContent = 'Saving…';
 
+    // Rename dates first: they are keyed by the boat's current sail number and name.
+    const aliasDates = changedAliasDates();
+    if (aliasDates.length > 0) {
+        const r = await fetchJson('/api/boats/rename-dates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ boatId: editingBoatId, aliases: aliasDates })
+        });
+        if (!r || !r.ok) {
+            statusEl.textContent = 'Save failed: ' + ((r && r.error) || 'see console');
+            return;
+        }
+    }
+
     const body = {
         boatId: editingBoatId,
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
@@ -2229,6 +2388,7 @@ async function requestBoatEdit() {
         modified: document.getElementById('edit-boat-modified').checked,
         clubIds: getEditingBoatClubIds(),
         links: textToLinks(document.getElementById('edit-boat-links').value),
+        aliasDates: changedAliasDates(),
         ...(email && { email }),
         ...(message && { message })
     };

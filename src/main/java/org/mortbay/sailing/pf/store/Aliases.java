@@ -3,6 +3,7 @@ package org.mortbay.sailing.pf.store;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -13,7 +14,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import org.eclipse.jetty.util.StringUtil;
@@ -32,7 +37,9 @@ public class Aliases
     private static final Logger LOG = LoggerFactory.getLogger(org.mortbay.sailing.pf.store.Aliases.class);
     private static final String FILENAME = "aliases.yaml";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
-            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER));
+            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     /** Australian country/fleet sail-number prefixes. "AUS5656" and "5656" are the same boat. */
     private static final List<String> AUS_PREFIXES = List.of("JAUS", "EAUS", "VAUS", "SAUS", "AUS");
@@ -116,8 +123,46 @@ public class Aliases
 
     public record BoatEntry (String canonicalName, List<SailNumberName> aliases){};
 
-    public record SailNumberName(String sailNumber, String name)
-    {}
+    /**
+     * Another sail number and/or name a boat has been known by. {@code name} is normalised
+     * (it is what imports match on). A rename also records when the alias was in use: before
+     * {@code until} (the boat was renamed from it on that date), or from {@code from} (it was
+     * renamed to it on that date), with the name as the boat raced under it in
+     * {@code displayName}. An alias with neither date is just another spelling, used any time.
+     */
+    public record SailNumberName(
+        String sailNumber,
+        String name,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String displayName,
+        @JsonInclude(JsonInclude.Include.NON_NULL) LocalDate from,
+        @JsonInclude(JsonInclude.Include.NON_NULL) LocalDate until)
+    {
+        public SailNumberName(String sailNumber, String name)
+        {
+            this(sailNumber, name, null, null, null);
+        }
+
+        /** True if this alias records a rename (it has a date). */
+        @JsonIgnore
+        public boolean isRename()
+        {
+            return from != null || until != null;
+        }
+
+        /** True if this alias names the same sail number and name as {@code other}. */
+        public boolean sameAs(String otherSail, String otherName)
+        {
+            return Objects.equals(norm(sailNumber, true), norm(otherSail, true))
+                && Objects.equals(norm(name, false), norm(otherName, false));
+        }
+
+        private static String norm(String s, boolean sail)
+        {
+            if (s == null || s.isBlank())
+                return null;
+            return sail ? IdGenerator.normaliseSailNumber(s) : IdGenerator.normaliseName(s);
+        }
+    }
 
     /** Result of a boat alias lookup: normalised canonical sail/name pair plus display name. */
     public record BoatMatch(String normSailNumber, String normName, String canonicalDisplayName) {}
@@ -141,6 +186,8 @@ public class Aliases
         private final Map<String, List<IndexedBoat>> name2Aliases;
         /** canonical key (normSail-normName) → BoatEntry with all aliases */
         private final Map<String, BoatEntry> canonicalBoatIndex;
+        /** canonical key (normSail-normName) → the aliases as written, with any rename dates */
+        private final Map<String, List<SailNumberName>> writtenBoatAliases;
 
         private Loaded(Yaml yaml)
         {
@@ -151,6 +198,7 @@ public class Aliases
                 sailNo2Aliases = Map.of();
                 name2Aliases = Map.of();
                 canonicalBoatIndex = Map.of();
+                writtenBoatAliases = Map.of();
                 return;
 
             }
@@ -187,6 +235,7 @@ public class Aliases
             Map<String, List<IndexedBoat>> sailNo2AliasesMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             Map<String, List<IndexedBoat>> name2AliasesMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             Map<String, BoatEntry> canonicalBoatIndexMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            Map<String, List<SailNumberName>> writtenMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             if (yaml.boats != null && !yaml.boats.isEmpty())
             {
                 for (Map.Entry<String, BoatEntry> e : yaml.boats.entrySet())
@@ -254,6 +303,7 @@ public class Aliases
                     final BoatEntry normalised = new BoatEntry(entry.canonicalName, aliases);
                     final IndexedBoat indexed = new IndexedBoat(canonical, normalised);
                     canonicalBoatIndexMutable.put(sailNumName, normalised);
+                    writtenMutable.put(sailNumName, List.copyOf(e.getValue().aliases));
 
                     for (SailNumberName snn : aliases)
                     {
@@ -285,6 +335,7 @@ public class Aliases
             sailNo2Aliases = Collections.unmodifiableMap(sailNo2AliasesMutable);
             name2Aliases = Collections.unmodifiableMap(name2AliasesMutable);
             canonicalBoatIndex = Collections.unmodifiableMap(canonicalBoatIndexMutable);
+            writtenBoatAliases = Collections.unmodifiableMap(writtenMutable);
             LOG.debug("Boat alias sailNumberIndex keys: {}", sailNo2Aliases);
             LOG.debug("Boat alias nameIndex keys: {}", name2Aliases);
         }
@@ -373,6 +424,15 @@ public class Aliases
             String key = normSailNumber + "-" + normName;
             BoatEntry entry = canonicalBoatIndex.get(key);
             return entry != null ? entry.aliases() : List.of();
+        }
+
+        /**
+         * The aliases for a boat as written in aliases.yaml (not expanded into sail/name
+         * combinations), with any rename dates; empty if none.
+         */
+        List<SailNumberName> writtenBoatAliases(String normSailNumber, String normName)
+        {
+            return writtenBoatAliases.getOrDefault(normSailNumber + "-" + normName, List.of());
         }
     }
 
@@ -470,10 +530,14 @@ public class Aliases
         int absorbed = 0;
         for (SailNumberName snn : aliases)
         {
-            boolean duplicate = existing.stream().anyMatch(e ->
-                Objects.equals(e.sailNumber(), snn.sailNumber()) && Objects.equals(e.name(), snn.name()));
-            if (!duplicate)
+            int duplicate = -1;
+            for (int i = 0; i < existing.size() && duplicate < 0; i++)
+                if (existing.get(i).sameAs(snn.sailNumber(), snn.name()))
+                    duplicate = i;
+            if (duplicate < 0)
                 existing.add(snn);
+            else if (snn.isRename() || snn.displayName() != null)
+                existing.set(duplicate, snn);   // a rename date supersedes the plain alias
 
             // Absorb and remove any orphan entry keyed by this alias's (sail, name).
             // Skip if it would refer to the keep key itself (defensive — shouldn't normally happen).
@@ -522,6 +586,63 @@ public class Aliases
         {
             LOG.error("Failed to write {}: {}", file, e.getMessage());
         }
+    }
+
+    /**
+     * Sets the rename dates of a boat's aliases in aliases.yaml: for each of {@code updates},
+     * the alias with the same sail number and name gets its {@code from}/{@code until} (null
+     * clears them, leaving a plain alias). Returns how many aliases were changed.
+     */
+    public static int setRenameDates(Path configDir, String normSailNo, String normName, List<SailNumberName> updates)
+    {
+        Path file = configDir.resolve(FILENAME);
+        if (!Files.exists(file))
+            return 0;
+        Yaml yaml;
+        try
+        {
+            yaml = YAML_MAPPER.readValue(file.toFile(), Yaml.class);
+        }
+        catch (Exception e)
+        {
+            throw new IllegalStateException("Failed to read " + file + ": " + e.getMessage(), e);
+        }
+        if (yaml == null || yaml.boats == null)
+            return 0;
+        String key = normSailNo + "-" + normName;
+        String actualKey = yaml.boats.keySet().stream().filter(k -> k.equalsIgnoreCase(key)).findFirst().orElse(null);
+        if (actualKey == null)
+            return 0;
+        BoatEntry entry = yaml.boats.get(actualKey);
+        List<SailNumberName> aliases = new ArrayList<>(entry.aliases());
+        int changed = 0;
+        for (SailNumberName u : updates)
+        {
+            for (int i = 0; i < aliases.size(); i++)
+            {
+                SailNumberName a = aliases.get(i);
+                if (!a.sameAs(u.sailNumber(), u.name()))
+                    continue;
+                if (!Objects.equals(a.from(), u.from()) || !Objects.equals(a.until(), u.until()))
+                {
+                    aliases.set(i, new SailNumberName(a.sailNumber(), a.name(), a.displayName(), u.from(), u.until()));
+                    changed++;
+                }
+            }
+        }
+        if (changed == 0)
+            return 0;
+        yaml.boats.put(actualKey, new BoatEntry(entry.canonicalName(), aliases));
+        try
+        {
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
+            LOG.info("Updated {} rename date(s) for {}", changed, actualKey);
+        }
+        catch (Exception e)
+        {
+            throw new IllegalStateException("Failed to write " + file + ": " + e.getMessage(), e);
+        }
+        return changed;
     }
 
     /**

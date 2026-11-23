@@ -2509,6 +2509,29 @@ public class DataStore
     }
 
     /**
+     * A boat's aliases as written in aliases.yaml, with any rename dates (see
+     * {@link Aliases.SailNumberName}); empty if it has none.
+     */
+    public List<Aliases.SailNumberName> writtenBoatAliases(Boat boat)
+    {
+        requireStarted();
+        return aliases.writtenBoatAliases(IdGenerator.normaliseSailNumber(boat.sailNumber()), IdGenerator.normaliseName(boat.name()));
+    }
+
+    /**
+     * Sets the rename dates of a boat's aliases (see {@link Aliases#setRenameDates}) and
+     * reloads the aliases. Returns how many changed.
+     */
+    public int setBoatRenameDates(Boat boat, List<Aliases.SailNumberName> updates)
+    {
+        requireStarted();
+        int changed = Aliases.setRenameDates(configDir, IdGenerator.normaliseSailNumber(boat.sailNumber()), IdGenerator.normaliseName(boat.name()), updates);
+        if (changed > 0)
+            reloadAliases();
+        return changed;
+    }
+
+    /**
      * Returns a list of stale-boat violations detected after the startup repair passes have
      * run. Each violation is a human-readable string identifying a boat whose stored identity
      * disagrees with the current configuration (aliases.yaml, design.yaml boatDesignOverrides,
