@@ -1023,6 +1023,90 @@ public class DataStore
     }
 
     /**
+     * Gives a boat a home club from a results page's club code (e.g. "MYC"), when the boat
+     * has no club yet and has not been explicitly marked as having none. A code equal to
+     * the short name of {@code organisingClubId} (nullable) means that club, since short
+     * names such as "MYC" are shared by clubs in different states; any other code is
+     * resolved with {@link #findUniqueClubByShortName}. An unknown or ambiguous code
+     * leaves the boat unchanged.
+     *
+     * @return the boat as now stored (the input boat if nothing changed)
+     */
+    public Boat assignClubFromCode(Boat boat, String clubCode, String organisingClubId,
+                                   String source, String context)
+    {
+        requireStarted();
+        if (clubCode == null || clubCode.isBlank() || !boat.clubIds().isEmpty()
+            || isExplicitlyNoClub(boat.id()))
+            return boat;
+        Club organising = organisingClubId == null ? null
+            : Optional.ofNullable(clubs().get(organisingClubId)).orElse(clubSeed().get(organisingClubId));
+        Club club = organising != null && clubCode.trim().equalsIgnoreCase(organising.shortName())
+            ? organising
+            : findUniqueClubByShortName(clubCode, null, context);
+        if (club == null)
+            return boat;
+        Boat updated = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
+            List.of(club.id()), boat.certificates(), addSource(boat.sources(), source),
+            boat.links(), Instant.now(), null);
+        putBoat(updated);
+        return updated;
+    }
+
+    /**
+     * Records that {@code raceId} belongs to the series {@code seriesId} of club
+     * {@code clubId}, creating the series (named {@code seriesName}) if the club does not
+     * yet have it. A club present only in the seed (clubs.yaml) is persisted first. Does
+     * nothing if the club is unknown.
+     */
+    public void addRaceToClubSeries(String clubId, String seriesId, String seriesName, String raceId)
+    {
+        requireStarted();
+        Club club = clubs().get(clubId);
+        if (club == null)
+        {
+            Club seed = clubSeed().get(clubId);
+            if (seed == null)
+                return;
+            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
+                seed.email(),
+                seed.aliases() != null ? seed.aliases() : List.of(),
+                seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
+                seed.sailsysEvents() != null ? seed.sailsysEvents() : List.of(),
+                List.of(), null);
+            putClub(club);
+        }
+
+        List<Series> series = new ArrayList<>(club.series() != null ? club.series() : List.of());
+        int idx = -1;
+        for (int i = 0; i < series.size(); i++)
+        {
+            if (seriesId.equals(series.get(i).id()))
+            {
+                idx = i;
+                break;
+            }
+        }
+        if (idx >= 0)
+        {
+            Series existing = series.get(idx);
+            if (existing.raceIds().contains(raceId))
+                return;
+            List<String> raceIds = new ArrayList<>(existing.raceIds());
+            raceIds.add(raceId);
+            series.set(idx, new Series(existing.id(), existing.name(), existing.isCatchAll(),
+                List.copyOf(raceIds)));
+        }
+        else
+        {
+            series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
+        }
+        putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
+            club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
+            List.copyOf(series), null));
+    }
+
+    /**
      * Finds a club by short name, long name, or alias, ignoring state.
      * First tries an exact short name match; if that finds nothing, falls back to matching
      * against long name or aliases (handles full-name club fields from BWPS etc.).

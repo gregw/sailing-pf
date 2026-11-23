@@ -302,7 +302,7 @@ public class BwpsImporter
             .findFirst().orElse(null);
         if (held != null && !isRecentRace(held.date()))
         {
-            updateClubSeries(CLUB_ID, seriesId, seriesName, held.id());
+            store.addRaceToClubSeries(CLUB_ID, seriesId, seriesName, held.id());
             return;
         }
 
@@ -332,7 +332,7 @@ public class BwpsImporter
         Race existing = store.races().get(raceId);
         if (existing != null && SOURCE.equals(existing.source()) && !isRecentRace(raceDate))
         {
-            updateClubSeries(CLUB_ID, seriesId, seriesName, raceId);
+            store.addRaceToClubSeries(CLUB_ID, seriesId, seriesName, raceId);
             return;
         }
 
@@ -385,7 +385,7 @@ public class BwpsImporter
             raceName, divisions, SOURCE, Instant.now(), null));
         LOG.info("BWPS: imported race {} '{}' {} ({} finishers, {} division(s))",
             raceId, raceName, year, count, divisions.size());
-        updateClubSeries(CLUB_ID, seriesId, seriesName, raceId);
+        store.addRaceToClubSeries(CLUB_ID, seriesId, seriesName, raceId);
     }
 
     /** The parts of /Race/Summary/{raceId} used: start time and the results categories. */
@@ -447,8 +447,8 @@ public class BwpsImporter
                 LOG.info("{}: year {} -- already imported ({} divisions), skipping",
                     config.source(), year,
                     existing.divisions() != null ? existing.divisions().size() : 0);
-                updateClubSeries(CLUB_ID, bwpsSeriesId, bwpsSeriesName, raceId);
-                updateClubSeries(CLUB_ID, raceSeriesId, config.seriesName(), raceId);
+                store.addRaceToClubSeries(CLUB_ID, bwpsSeriesId, bwpsSeriesName, raceId);
+                store.addRaceToClubSeries(CLUB_ID, raceSeriesId, config.seriesName(), raceId);
                 return;
             }
             LOG.info("{}: year {} -- race exists from source='{}'{}, will reimport",
@@ -517,8 +517,8 @@ public class BwpsImporter
             config.source(), year, count, divisions.size(),
             divisions.stream().map(Division::name).toList());
 
-        updateClubSeries(CLUB_ID, bwpsSeriesId, bwpsSeriesName, raceId);
-        updateClubSeries(CLUB_ID, raceSeriesId, config.seriesName(), raceId);
+        store.addRaceToClubSeries(CLUB_ID, bwpsSeriesId, bwpsSeriesName, raceId);
+        store.addRaceToClubSeries(CLUB_ID, raceSeriesId, config.seriesName(), raceId);
     }
 
     // --- Category discovery ---
@@ -1088,54 +1088,6 @@ public class BwpsImporter
         return List.copyOf(updated);
     }
 
-    private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)
-    {
-        Club club = store.clubs().get(clubId);
-        if (club == null)
-        {
-            Club seed = store.clubSeed().get(clubId);
-            if (seed == null)
-                return;
-            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
-                seed.email(),
-                seed.aliases() != null ? seed.aliases() : List.of(),
-                seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
-                seed.sailsysEvents() != null ? seed.sailsysEvents() : List.of(),
-                List.of(), null);
-            store.putClub(club);
-        }
-
-        List<Series> series = new ArrayList<>(club.series());
-        int idx = -1;
-        for (int i = 0; i < series.size(); i++)
-        {
-            if (seriesId.equals(series.get(i).id()))
-            {
-                idx = i;
-                break;
-            }
-        }
-
-        if (idx >= 0)
-        {
-            Series existing = series.get(idx);
-            if (!existing.raceIds().contains(raceId))
-            {
-                List<String> newRaceIds = new ArrayList<>(existing.raceIds());
-                newRaceIds.add(raceId);
-                series.set(idx, new Series(existing.id(), existing.name(), existing.isCatchAll(),
-                    List.copyOf(newRaceIds)));
-            }
-        }
-        else
-        {
-            series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
-        }
-
-        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
-            List.copyOf(series), null));
-    }
 
     private boolean isRecentRace(LocalDate date)
     {

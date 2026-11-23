@@ -32,6 +32,7 @@ import org.mortbay.sailing.pf.analysis.ConversionGraph;
 import org.mortbay.sailing.pf.analysis.PfConfig;
 import org.mortbay.sailing.pf.importer.AmsImporter;
 import org.mortbay.sailing.pf.importer.BwpsImporter;
+import org.mortbay.sailing.pf.importer.MycSpreadsheetImporter;
 import org.mortbay.sailing.pf.importer.ImporterLog;
 import org.mortbay.sailing.pf.importer.OrcApiImporter;
 import org.mortbay.sailing.pf.importer.SailSysImporter;
@@ -295,6 +296,7 @@ public class TaskService
         new ImporterEntry("ams",                "api",  false, false),
         new ImporterEntry("topyacht",           "api",  false, false),
         new ImporterEntry("bwps",               "api",  false, false),
+        new ImporterEntry("myc-archive",        "run",  false, false),
         new ImporterEntry("analysis",           "run",  false, false),
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
@@ -996,7 +998,7 @@ public void stop()
     }
 
     private static final java.util.Set<String> IMPORTER_NAMES = java.util.Set.of(
-        "sailsys", "orc-api", "ams", "topyacht", "bwps");
+        "sailsys", "orc-api", "ams", "topyacht", "bwps", "myc-archive");
 
     private void runImporter(String name, String mode, int startId) throws Exception
     {
@@ -1026,6 +1028,8 @@ public void stop()
             // Every club that has opted in (null = no club restriction), as for TopYacht.
             case "sailsys"  -> sailSysImporter().run(recentRaceReimportDays, null);
             case "bwps"     -> new BwpsImporter(store, httpClient).run(recentRaceReimportDays, bwpsMinYear);
+            // One-off: MYC's historic scoring workbooks in <dataRoot>/myc-archive.
+            case "myc-archive" -> new MycSpreadsheetImporter(store).run();
             case "analysis" ->
             {
                 if (cache != null)

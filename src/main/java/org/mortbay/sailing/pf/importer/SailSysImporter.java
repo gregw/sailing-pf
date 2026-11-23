@@ -740,7 +740,7 @@ public class SailSysImporter
         }
 
         if (clubId != null && seriesId != null && seriesName != null)
-            updateClubSeries(clubId, seriesId, seriesName, raceId);
+            store.addRaceToClubSeries(clubId, seriesId, seriesName, raceId);
     }
 
     // --- Division / finisher building ---
@@ -1170,45 +1170,6 @@ public class SailSysImporter
 
     // --- Club / series helpers ---
 
-    private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)
-    {
-        Club club = store.clubs().get(clubId);
-        if (club == null)
-            club = store.clubSeed().get(clubId);
-        if (club == null)
-            return;
-
-        List<Series> series = new ArrayList<>(club.series() != null ? club.series() : List.of());
-        int idx = -1;
-        for (int i = 0; i < series.size(); i++)
-        {
-            if (seriesId.equals(series.get(i).id()))
-            {
-                idx = i;
-                break;
-            }
-        }
-
-        if (idx >= 0)
-        {
-            Series existing = series.get(idx);
-            if (!existing.raceIds().contains(raceId))
-            {
-                List<String> newRaceIds = new ArrayList<>(existing.raceIds());
-                newRaceIds.add(raceId);
-                series.set(idx, new Series(existing.id(), existing.name(), existing.isCatchAll(),
-                    List.copyOf(newRaceIds)));
-            }
-        }
-        else
-        {
-            series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
-        }
-
-        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(),
-            club.excluded(), club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
-            List.copyOf(series), null));
-    }
 
     // --- Utilities ---
 

@@ -691,18 +691,8 @@ public class TopYachtImporter
             if (boat == null)
                 continue;
 
-            if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubIds().isEmpty()
-                && !store.isExplicitlyNoClub(boat.id()))
-            {
-                Club fromClub = store.findUniqueClubByShortName(me.clubCode, null,
-                    "TopYacht boat sailNo=" + sailNo + " name=" + me.boatName + " urls=" + sourceUrls);
-                if (fromClub != null)
-                {
-                    store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), List.of(fromClub.id()), boat.certificates(),
-                        addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
-                }
-            }
+            boat = store.assignClubFromCode(boat, me.clubCode, null, SOURCE,
+                "TopYacht boat sailNo=" + sailNo + " name=" + me.boatName + " urls=" + sourceUrls);
 
             // Infer certificates from AHC values for measurement systems; use first cert number
             String certNumber = null;
@@ -1187,18 +1177,8 @@ public class TopYachtImporter
             if (boat == null)
                 continue;
 
-            if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubIds().isEmpty()
-                && !store.isExplicitlyNoClub(boat.id()))
-            {
-                Club fromClub = store.findUniqueClubByShortName(row.clubCode(), null,
-                    "TopYacht boat sailNo=" + row.sailNo() + " name=" + row.boatName() + " url=" + url);
-                if (fromClub != null)
-                {
-                    store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), List.of(fromClub.id()), boat.certificates(),
-                        addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
-                }
-            }
+            boat = store.assignClubFromCode(boat, row.clubCode(), null, SOURCE,
+                "TopYacht boat sailNo=" + row.sailNo() + " name=" + row.boatName() + " url=" + url);
 
             String certNumber = null;
             if (isMeasurementHandicapSystem(handicapSystem) && row.ahcValue() != null)
