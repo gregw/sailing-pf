@@ -472,7 +472,9 @@ public class AdminApiServlet extends HttpServlet
      * differing on design); {@code sailDesign} (boats matching another on sail # and design
      * but with a different normalised name); {@code sailDesignName} (boats matching another
      * on sail # and design where one's normalised name is a substring of the other's, e.g.
-     * "azzuro" inside "komatsuazzuro"). Omit or send an empty value for no de-dup filter.
+     * "azzuro" inside "komatsuazzuro"); {@code rename} (likely renames: same sail # and design,
+     * different normalised name, racing periods that do not overlap — see
+     * {@link #renameCandidates}). Omit or send an empty value for no de-dup filter.
      * The {@code showExcluded} flag (default false) hides boats that are
      * individually excluded or whose design is excluded. The {@code excludeNulls} flag removes
      * rows where the sort column is null.
@@ -746,8 +748,65 @@ public class AdminApiServlet extends HttpServlet
                 }
                 yield hits;
             }
+            case "rename" -> renameCandidates();
             default -> null; // unknown value → no filter, same as omitted
         };
+    }
+
+    /**
+     * Boats that look like one boat renamed: the same sail number and design as another boat,
+     * a different normalised name, and racing periods that do not overlap (one boat's last
+     * race is before the other's first). Boats with no dated races are left out, since there
+     * is nothing to say when they raced, and so are boats with no sail number, which share
+     * one only by having none.
+     */
+    Set<String> renameCandidates()
+    {
+        Map<String, List<Boat>> bySailDesign = store.boats().values().stream()
+            .filter(b -> b.designId() != null && b.sailNumber() != null && !b.sailNumber().isBlank())
+            .collect(Collectors.groupingBy(b -> b.sailNumber() + "|" + b.designId()));
+        Set<String> inGroups = new HashSet<>();
+        for (List<Boat> grp : bySailDesign.values())
+            if (grp.size() > 1)
+                grp.forEach(b -> inGroups.add(b.id()));
+
+        // First and last race date of each boat in a group, in one pass over the races.
+        Map<String, LocalDate[]> range = new HashMap<>();
+        for (Race race : store.races().values())
+        {
+            if (race.date() == null)
+                continue;
+            for (Division d : race.divisions())
+                for (Finisher f : d.finishers())
+                    if (inGroups.contains(f.boatId()))
+                        range.merge(f.boatId(), new LocalDate[]{race.date(), race.date()}, (a, b) -> new LocalDate[]{
+                            a[0].isBefore(b[0]) ? a[0] : b[0], a[1].isAfter(b[1]) ? a[1] : b[1]});
+        }
+
+        Set<String> hits = new HashSet<>();
+        for (List<Boat> grp : bySailDesign.values())
+        {
+            for (int i = 0; i < grp.size(); i++)
+            {
+                Boat a = grp.get(i);
+                LocalDate[] ra = range.get(a.id());
+                if (ra == null)
+                    continue;
+                for (int j = i + 1; j < grp.size(); j++)
+                {
+                    Boat b = grp.get(j);
+                    LocalDate[] rb = range.get(b.id());
+                    if (rb == null || IdGenerator.normaliseName(a.name()).equals(IdGenerator.normaliseName(b.name())))
+                        continue;
+                    if (ra[1].isBefore(rb[0]) || rb[1].isBefore(ra[0]))
+                    {
+                        hits.add(a.id());
+                        hits.add(b.id());
+                    }
+                }
+            }
+        }
+        return hits;
     }
 
     /**

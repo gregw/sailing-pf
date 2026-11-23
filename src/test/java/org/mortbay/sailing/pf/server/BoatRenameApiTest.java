@@ -182,6 +182,34 @@ class BoatRenameApiTest
         assertFalse(alias.isRename());
     }
 
+    @Test
+    void renameCandidatesFilter() throws Exception
+    {
+        // Same sail and design, different names, one after the other: a likely rename.
+        store.putBoat(new Boat("100-alpha-x", "100", "Alpha", "x", List.of(), List.of(), List.of(), null, null));
+        store.putBoat(new Boat("100-beta-x", "100", "Beta", "x", List.of(), List.of(), List.of(), null, null));
+        race(LocalDate.of(2015, 1, 3), 1, "100-alpha-x");
+        race(LocalDate.of(2016, 1, 3), 1, "100-alpha-x");
+        race(LocalDate.of(2017, 1, 3), 1, "100-beta-x");
+        // Same sail and design, different names, racing at the same time: two boats.
+        store.putBoat(new Boat("200-gamma-x", "200", "Gamma", "x", List.of(), List.of(), List.of(), null, null));
+        store.putBoat(new Boat("200-delta-x", "200", "Delta", "x", List.of(), List.of(), List.of(), null, null));
+        race(LocalDate.of(2015, 2, 7), 1, "200-gamma-x");
+        race(LocalDate.of(2015, 6, 7), 1, "200-delta-x");
+        race(LocalDate.of(2016, 2, 7), 1, "200-gamma-x");
+        // Same sail, different design: not a rename candidate.
+        store.putBoat(new Boat("300-eps-x", "300", "Eps", "x", List.of(), List.of(), List.of(), null, null));
+        store.putBoat(new Boat("300-zeta-y", "300", "Zeta", "y", List.of(), List.of(), List.of(), null, null));
+        race(LocalDate.of(2015, 3, 7), 1, "300-eps-x");
+        race(LocalDate.of(2018, 3, 7), 1, "300-zeta-y");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) MAPPER.readValue(
+            get("/api/boats?dupeFilter=rename&size=100"), Map.class).get("items");
+        assertEquals(java.util.Set.of("100-alpha-x", "100-beta-x"),
+            rows.stream().map(r -> (String) r.get("id")).collect(java.util.stream.Collectors.toSet()));
+    }
+
     private void race(LocalDate date, int n, String boatId)
     {
         store.putRace(new Race("club-" + date + "-000" + n, "club", List.of("series"), date, n, null,
