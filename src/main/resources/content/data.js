@@ -1541,15 +1541,30 @@ async function loadMergeRenames() {
             : `${other} was renamed ${esc(b.name)}${range(b.firstRace, b.lastRace)} on`;
         return `<div style="margin:0.3rem 0 0.3rem 1.5rem;font-size:0.9rem;">${text}
             <input type="date" class="merge-rename-date" data-id="${esc(b.id)}" data-direction="${b.direction}" value="${b.date || ''}">
-            <span style="color:#777;">${b.date ? '' : '— could not be determined from the races; '}leave blank for a plain merge</span></div>`;
+            ${b.date ? '' : '<span style="color:#777;">— could not be determined from the races</span>'}</div>`;
     });
-    if (rows.length > 0)
-        div.innerHTML = `<div style="margin-top:0.5rem;font-weight:bold;font-size:0.9rem;">Rename date</div>` + rows.join('');
+    if (rows.length === 0) return;
+    // Ticked when any rename date was found; untick for a plain merge.
+    const looksLikeRename = plan.boats.some(b => b.alias && b.date);
+    div.innerHTML = `<label style="display:block;margin-top:0.5rem;font-weight:bold;font-size:0.9rem;">
+            <input type="checkbox" id="merge-treat-as-rename" ${looksLikeRename ? 'checked' : ''}
+                onchange="updateMergeRenameDates()"> Treat as rename</label>
+        <div id="merge-rename-rows">${rows.join('')}</div>`;
+    updateMergeRenameDates();
+}
+
+/** Shows the rename dates only while "Treat as rename" is ticked. */
+function updateMergeRenameDates() {
+    const tick = document.getElementById('merge-treat-as-rename');
+    const rows = document.getElementById('merge-rename-rows');
+    if (tick && rows) rows.style.display = tick.checked ? '' : 'none';
 }
 
 /** The rename dates entered in the boat merge panel: {mergeId: {direction, date}}. */
 function mergeRenames() {
     const renames = {};
+    const tick = document.getElementById('merge-treat-as-rename');
+    if (!tick || !tick.checked) return renames;
     document.querySelectorAll('#merge-renames-boats .merge-rename-date').forEach(input => {
         if (input.value) renames[input.dataset.id] = { direction: input.dataset.direction, date: input.value };
     });
