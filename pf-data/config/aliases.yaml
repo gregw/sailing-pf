@@ -1620,6 +1620,8 @@ boats:
       name: "shkscallywag"
     - sailNumber: "HKG2276"
       name: "shkscallywag100"
+    - sailNumber: "HKG2276"
+      name: "scallywag"
   "795-panther":
     canonicalName: "PANTHER"
     aliases:
@@ -3409,6 +3411,8 @@ boats:
     aliases:
     - sailNumber: "B247M40"
       name: "amayaii"
+    - sailNumber: "B247"
+      name: "amaya"
   M434-carpediemx:
     canonicalName: "CARPE DIEM X"
     aliases:
@@ -3449,3 +3453,64 @@ boats:
     aliases:
     - sailNumber: "73"
       name: "chickenlips"
+  A75-hughie2:
+    canonicalName: "HUGHIE 2"
+    aliases:
+    - sailNumber: "A75"
+      name: "hughieii"
+  MYC73-topodds:
+    canonicalName: "TOP ODDS"
+    aliases:
+    - sailNumber: "A73"
+      name: "topodds"
+    - sailNumber: "MYC73"
+      name: "manlysailing"
+    - sailNumber: "A73"
+      name: "manlysailing"
+  "4770-kaotic":
+    canonicalName: "Kaotic"
+    aliases:
+    - sailNumber: "160"
+      name: "kaotic"
+  "7742-kialoa2":
+    canonicalName: "Kialoa 2"
+    aliases:
+    - sailNumber: "7742"
+      name: "kialoaii"
+  "70-ragamuffin52":
+    canonicalName: "Ragamuffin 52"
+    aliases:
+    - sailNumber: "70"
+      name: "ragamuffin"
+  "8975A-zora1":
+    canonicalName: "Zora 1"
+    aliases:
+    - sailNumber: "8975A"
+      name: "zora"
+  "262-helsal3":
+    canonicalName: "Helsal 3"
+    aliases:
+    - sailNumber: "262"
+      name: "helsaliii"
+  YC3300-secretmensbusiness3:
+    canonicalName: "Secret Mens Business 3"
+    aliases:
+    - sailNumber: "YC3300"
+      name: "secretmensbusiness"
+  "4924-sheii":
+    canonicalName: "She II"
+    aliases:
+    - sailNumber: "4924"
+      name: "she"
+  "421-thegoatii":
+    canonicalName: "The Goat II"
+    aliases:
+    - sailNumber: "421"
+      name: "thegoat"
+  "7709-kanreki":
+    canonicalName: "Kanreki"
+    aliases:
+    - sailNumber: "7709"
+      name: "sailexchange"
+      displayName: "Sail Exchange"
+      until: "2024-03-29"

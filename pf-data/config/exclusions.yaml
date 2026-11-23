@@ -5842,6 +5842,24 @@ races:
 - id: "rqys.com.au-2026-06-27-0008"
   reason: "series-pattern: name='Race  8' series='OTB Frostbite Series 2026 - Southern\
     \ Course'"
+- id: "myc.org.au-2019-03-01-0001"
+  reason: "Replaced by MYC spreadsheet import"
+- id: "cyca.com.au-2019-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.4x (fastest 153024s, slowest 517260s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2017-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.6x (fastest 119724s, slowest 433321s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2012-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.0x (fastest 152592s, slowest 463212s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2005-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 4.2x (fastest 153610s, slowest 642237s) — likely merged courses or bad\
+    \ timing data"
 series:
 - pattern: "\\boptimist\\b"
   reason: ""
