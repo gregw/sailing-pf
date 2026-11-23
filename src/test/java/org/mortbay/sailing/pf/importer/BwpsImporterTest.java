@@ -167,16 +167,18 @@ class BwpsImporterTest
         assertEquals(List.of(IdGenerator.generateSeriesId(BwpsImporter.CLUB_ID, "Blue Water Pointscore 2025")),
             race.seriesIds());
 
-        Map<String, Division> divs = new LinkedHashMap<>();
-        race.divisions().forEach(d -> divs.put(d.name(), d));
-        assertEquals(List.of("IRC Div 1", "IRC Div 2 Two-Handed"), List.copyOf(divs.keySet()),
-            "the (DH) entry is a two-handed result; the retired boat is dropped");
+        assertEquals(List.of(BwpsImporter.DIVISION), race.divisions().stream().map(Division::name).toList(),
+            "one division: everyone sails the same course at the same time");
+        List<Finisher> finishers = race.divisions().getFirst().finishers();
+        assertEquals(2, finishers.size(), "the retired boat is dropped");
 
-        Finisher moneypenny = divs.get("IRC Div 1").finishers().getFirst();
+        Finisher moneypenny = finishers.get(0);
         assertEquals(Duration.ofHours(6).plusMinutes(15).plusSeconds(44), moneypenny.elapsedTime(),
             "elapsed = Line Honours finish − start, not the IRC corrected time");
+        assertFalse(moneypenny.twoHanded());
 
-        Finisher disko = divs.get("IRC Div 2 Two-Handed").finishers().getFirst();
+        Finisher disko = finishers.get(1);
+        assertTrue(disko.twoHanded(), "the (DH) entry is a two-handed result");
         assertEquals(Duration.ofHours(11).plusMinutes(30), disko.elapsedTime());
         Boat diskoBoat = store.boats().get(disko.boatId());
         assertEquals("Disko Trooper", diskoBoat.name(), "(DH) stripped from the name");
@@ -208,14 +210,32 @@ class BwpsImporterTest
         imp.importBwpsResults(2025, 2025, new LinkedHashMap<>());
 
         Race race = store.races().get("cyca.com.au-2025-09-20-0001");
-        Map<String, Division> divs = new LinkedHashMap<>();
-        race.divisions().forEach(d -> divs.put(d.name(), d));
-        assertEquals(List.of("IRC Div 1", "IRC Div 2 Two-Handed", "PHS"), List.copyOf(divs.keySet()));
-        List<Finisher> phs = divs.get("PHS").finishers();
-        assertEquals(1, phs.size(), "Moneypenny is not counted again");
-        assertEquals(Duration.ofHours(12), phs.getFirst().elapsedTime(), "elapsed from Line Honours");
-        assertTrue(store.boats().get(phs.getFirst().boatId()).certificates().isEmpty(),
+        List<Finisher> finishers = race.divisions().getFirst().finishers();
+        assertEquals(3, finishers.size(), "Moneypenny is not counted again");
+        Finisher cruiser = finishers.get(2);
+        assertEquals(Duration.ofHours(12), cruiser.elapsedTime(), "elapsed from Line Honours");
+        assertTrue(store.boats().get(cruiser.boatId()).certificates().isEmpty(),
             "PHS is not a certificate");
+    }
+
+    @Test
+    void heldRaceInTheOldFormIsImportedAgain()
+    {
+        // As imported before: separate IRC divisions, and the (DH) boat held as crewed.
+        store.putRace(new Race("cyca.com.au-2025-09-20-0001", BwpsImporter.CLUB_ID,
+            List.of(IdGenerator.generateSeriesId(BwpsImporter.CLUB_ID, "Blue Water Pointscore 2025")),
+            LocalDate.of(2025, 9, 20), 1, "Flinders Islet Race", List.of(
+                new Division("IRC Div 1", List.of(new Finisher("old-a", Duration.ofHours(6), false, null))),
+                new Division("IRC Div 2", List.of(new Finisher("old-b", Duration.ofHours(11), false, null)))),
+            BwpsImporter.SOURCE, null, null));
+
+        CannedImporter imp = canned();
+        imp.importBwpsResults(2025, 2025, new LinkedHashMap<>());
+
+        Race race = store.races().get("cyca.com.au-2025-09-20-0001");
+        assertTrue(BwpsImporter.isCurrentForm(race));
+        assertTrue(race.divisions().getFirst().finishers().get(1).twoHanded());
+        assertTrue(imp.fetched.stream().anyMatch(u -> u.contains("/Results/Final/")), imp.fetched.toString());
     }
 
     @Test
@@ -332,6 +352,23 @@ class BwpsImporterTest
         assertEquals(BwpsImporter.Outcome.HELD,
             again.importMajorRace(BwpsImporter.RSHYR, 2005, new LinkedHashMap<>()));
         assertTrue(again.fetched.isEmpty(), again.fetched.toString());
+    }
+
+    @Test
+    void wholeFleetLineHonoursIsUsedNotASubset()
+    {
+        CannedImporter imp = new CannedImporter(store);
+        putHobart(imp, 2024, 178, "2024-12-26T13:00:00", "2024-12-28T13:00:00", "AUS1");
+        // The 2024 Hobart lists "Double Handed Line Honours" before "Line Honours".
+        imp.responses.put("/Race/Summary/178", """
+            {"RaceId":178,"Year":2024,"StartDateTime":"2024-12-26T13:00:00","Categories":[
+              {"Id":1782,"Name":"IRC","Type":"Handicap"},
+              {"Id":1007,"Name":"Double Handed Line Honours","Type":"Line Honours"},
+              {"Id":1781,"Name":"Line Honours","Type":"Line Honours"}]}
+            """);
+        assertEquals(BwpsImporter.Outcome.IMPORTED,
+            imp.importMajorRace(BwpsImporter.RSHYR, 2024, new LinkedHashMap<>()));
+        assertFalse(imp.fetched.stream().anyMatch(u -> u.endsWith("/1007")), imp.fetched.toString());
     }
 
     @Test

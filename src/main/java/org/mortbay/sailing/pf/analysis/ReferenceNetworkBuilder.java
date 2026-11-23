@@ -724,14 +724,17 @@ public class ReferenceNetworkBuilder
                 List<Finisher> finishers = race.divisions().get(di).finishers();
                 for (Finisher f : finishers)
                 {
-                    if (f.elapsedTime() == null) continue;
+                    // A two-handed result in a mixed division (a CYCA offshore race) is
+                    // neither a spinnaker nor a non-spinnaker result: it neither gives nor
+                    // takes a propagated factor.
+                    if (f.elapsedTime() == null || f.twoHanded()) continue;
                     if (store.isBoatExcluded(f.boatId())) continue;
                     if (duplicates.isReferenceOnly(race.id(), di, f.boatId())) continue;
                     List<Finisher> peers = new ArrayList<>(finishers.size() - 1);
                     for (Finisher peer : finishers)
                     {
                         if (!peer.boatId().equals(f.boatId()) && peer.elapsedTime() != null
-                                && !store.isBoatExcluded(peer.boatId()))
+                                && !peer.twoHanded() && !store.isBoatExcluded(peer.boatId()))
                             peers.add(peer);
                     }
                     index.computeIfAbsent(f.boatId(), k -> new ArrayList<>())

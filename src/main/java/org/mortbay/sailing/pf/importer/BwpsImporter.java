@@ -38,6 +38,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.data.SeriesType;
 import org.mortbay.sailing.pf.store.DataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +101,9 @@ public class BwpsImporter
      * marks the start of its history.
      */
     static final int HISTORY_GAP_YEARS = 3;
+
+    /** The one division of every race: all classes sail the same course at the same time. */
+    static final String DIVISION = "Overall";
 
     /** Race names in the BWPS standings that are handled via the feeds API instead. */
     private static final List<String> FEEDS_RACE_KEYWORDS = List.of("SYDNEY HOBART", "GOLD COAST");
@@ -332,7 +336,7 @@ public class BwpsImporter
                 && fr.raceName().equalsIgnoreCase(r.name()) && r.date() != null
                 && r.date().getYear() == fr.year())
             .findFirst().orElse(null);
-        if (held != null && !isRecentRace(held.date()))
+        if (held != null && !isRecentRace(held.date()) && isCurrentForm(held))
         {
             addToSeries(fr, held.id());
             return Outcome.HELD;
@@ -384,17 +388,26 @@ public class BwpsImporter
         Race existing = store.races().get(raceId);
         if (existing != null && fr.source().equals(existing.source()) && !isRecentRace(raceDate))
         {
-            addToSeries(fr, raceId);
-            return Outcome.HELD;
+            if (isCurrentForm(existing))
+            {
+                addToSeries(fr, raceId);
+                return Outcome.HELD;
+            }
+            LOG.info("BWPS: re-importing {} '{}' into one division", raceId, fr.raceName());
         }
 
-        Integer lhCat = null, ircCat = null, orcCat = null, phsCat = null;
+        // The whole fleet's categories are named plainly ("Line Honours", "IRC"); others are
+        // subsets ("Double Handed Line Honours", "Corinthian - IRC"), and a subset can be
+        // listed first. A Line Honours category not so named is used only if there is no other.
+        Integer lhCat = null, lhByType = null, ircCat = null, orcCat = null, phsCat = null;
         for (SummaryCategory c : summary.categories() == null ? List.<SummaryCategory>of() : summary.categories())
         {
             if (c.id() == null || c.name() == null)
                 continue;
             String name = c.name().trim().toUpperCase(Locale.ENGLISH);
-            if (lhCat == null && (name.equals("LINE HONOURS") || "Line Honours".equalsIgnoreCase(c.type())))
+            if (lhByType == null && "Line Honours".equalsIgnoreCase(c.type()))
+                lhByType = c.id();
+            if (lhCat == null && name.equals("LINE HONOURS"))
                 lhCat = c.id();
             else if (ircCat == null && name.equals("IRC"))
                 ircCat = c.id();
@@ -403,6 +416,8 @@ public class BwpsImporter
             else if (phsCat == null && name.equals("PHS"))
                 phsCat = c.id();
         }
+        if (lhCat == null)
+            lhCat = lhByType;
         if (lhCat == null || (ircCat == null && orcCat == null && phsCat == null))
         {
             ImporterLog.warn(LOG, "BWPS: '{}' {} (raceId={}) -- no Line Honours, or no IRC/ORC/PHS category",
@@ -429,18 +444,20 @@ public class BwpsImporter
         // Elapsed times from Line Honours only: finish (its CorrectedTime) − start.
         Map<String, Duration> elapsedBySailNum = buildElapsedMap(lhEntries, start.atZone(SYDNEY_TZ));
 
-        // IRC (and ORC) results only for each boat's rating → certificate; finishers without
-        // a Line Honours elapsed time are dropped. PHS is mostly the same fleet scored again,
-        // so it adds only the boats in neither IRC nor ORC (and gives them no certificate).
+        // Everyone sails the same course at the same time, so the race is one division, two-
+        // handed boats included (flagged on each result), and each boat is in it once. IRC
+        // gives each boat's rating → certificate; ORC and PHS mostly rescore the same fleet,
+        // so they add only boats not yet in (with no certificate). Finishers without a Line
+        // Honours elapsed time are dropped.
         LinkedHashMap<String, List<Finisher>> divMap = new LinkedHashMap<>();
         Set<String> placed = new HashSet<>();
         int count = 0;
         if (ircCat != null)
             count += processFeedsEntries(fetchCategory(cycaRaceId, ircCat), "IRC", raceDate,
-                elapsedBySailNum, divMap, fr.source(), yachts, placed, false);
+                elapsedBySailNum, divMap, fr.source(), yachts, placed);
         if (orcCat != null)
             count += processFeedsEntries(fetchCategory(cycaRaceId, orcCat), "ORC", raceDate,
-                elapsedBySailNum, divMap, fr.source(), yachts, placed, false);
+                elapsedBySailNum, divMap, fr.source(), yachts, placed);
         if (phsCat != null)
         {
             // PHS only adds boats, so failing to fetch it must not lose the race.
@@ -455,7 +472,7 @@ public class BwpsImporter
                     fr.raceName(), fr.year(), cycaRaceId, e.getMessage());
             }
             count += processFeedsEntries(phs, "PHS", raceDate,
-                elapsedBySailNum, divMap, fr.source(), yachts, placed, true);
+                elapsedBySailNum, divMap, fr.source(), yachts, placed);
         }
         if (divMap.isEmpty())
         {
@@ -475,6 +492,18 @@ public class BwpsImporter
             raceId, fr.raceName(), fr.year(), count, divisions.size());
         addToSeries(fr, raceId);
         return Outcome.IMPORTED;
+    }
+
+    /**
+     * True if a held race is in the current form: the one {@value #DIVISION} division.
+     * Races imported before that kept IRC/ORC/PHS divisions apart, and those imported before
+     * two-handed entries were recognised hold them as crewed results; both are imported
+     * again rather than converted, since only the feeds say which results were two-handed.
+     */
+    static boolean isCurrentForm(Race race)
+    {
+        return race.divisions() != null && race.divisions().size() == 1
+            && DIVISION.equals(race.divisions().getFirst().name());
     }
 
     private void addToSeries(FeedsRace fr, String raceId)
@@ -543,13 +572,13 @@ public class BwpsImporter
     // --- Entry processing ---
 
     /**
-     * Adds a category's finishers to {@code divMap}, recording each one's sail number in
-     * {@code placed}; with {@code onlyUnplaced}, boats already placed (by an earlier
-     * category of the same race) are skipped.
+     * Adds a category's finishers to the race's one division in {@code divMap}, skipping
+     * boats already placed by an earlier category of the race and recording the rest in
+     * {@code placed} (by sail number).
      */
     private int processFeedsEntries(List<FeedsEntry> entries, String system, LocalDate date,
         Map<String, Duration> elapsedBySailNum, LinkedHashMap<String, List<Finisher>> divMap,
-        String source, Map<String, YachtInfo> yachts, Set<String> placed, boolean onlyUnplaced)
+        String source, Map<String, YachtInfo> yachts, Set<String> placed)
     {
         int count = 0;
         for (FeedsEntry entry : entries)
@@ -560,7 +589,7 @@ public class BwpsImporter
                 continue;
 
             String sailNum = normSailNum(entry.sailNumber());
-            if (onlyUnplaced && placed.contains(sailNum))
+            if (placed.contains(sailNum))
                 continue;
             Duration elapsed = elapsedBySailNum.get(sailNum);
             if (elapsed == null)
@@ -595,22 +624,11 @@ public class BwpsImporter
             boat = applyYachtDetails(boat, details, date, source);
             String certNum = inferCertificate(boat, system, date.getYear(), entry.tcf(), dh, source);
 
-            // Division key: "IRC Div 3", "ORC", etc. A double-handed entry goes in its own
-            // "… Two-Handed" division: the finisher's variant is read from the division name
-            // (EntryVariant), so this is what makes its result a two-handed one.
-            String divKey;
-            if (entry.divisionName() != null && !entry.divisionName().isBlank())
-                divKey = system + " Div " + entry.divisionName();
-            else
-                divKey = system;
-            if (dh)
-                divKey += " Two-Handed";
-
-            divMap.computeIfAbsent(divKey, k -> new ArrayList<>())
-                .add(new Finisher(boat.id(), elapsed, false, certNum));
+            divMap.computeIfAbsent(DIVISION, k -> new ArrayList<>())
+                .add(new Finisher(boat.id(), elapsed, false, certNum, dh));
             placed.add(sailNum);
-            LOG.info("{}: {} {} {} [{}] elapsed={} cert={}",
-                source, system, divKey, cleanName, entry.sailNumber(),
+            LOG.info("{}: {}{} {} [{}] elapsed={} cert={}",
+                source, system, dh ? " two-handed" : "", cleanName, entry.sailNumber(),
                 String.format("%dd%02dh%02dm",
                     elapsed.toDaysPart(), elapsed.toHoursPart(), elapsed.toMinutesPart()),
                 certNum);

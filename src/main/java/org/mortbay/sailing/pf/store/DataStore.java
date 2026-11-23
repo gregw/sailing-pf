@@ -1460,7 +1460,7 @@ public class DataStore
                         String remapped = boatIdRemap.get(f.boatId());
                         if (remapped != null)
                         {
-                            newFinishers.add(new Finisher(remapped, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                            newFinishers.add(f.withBoatId(remapped));
                             changed = true;
                             updatedFinishers++;
                         }
@@ -2387,7 +2387,7 @@ public class DataStore
             changed = true;
             divisions.add(new Division(d.name(), d.finishers().stream()
                 .map(f -> keepsFlag(f, ns) ? f
-                    : new Finisher(f.boatId(), f.elapsedTime(), ns, f.certificateNumber()))
+                    : f.withNonSpinnaker(ns))
                 .toList()));
         }
         if (!changed)
@@ -2605,7 +2605,7 @@ public class DataStore
                 {
                     if (mergeIdSet.contains(f.boatId()))
                     {
-                        newFinishers.add(new Finisher(keepId, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                        newFinishers.add(f.withBoatId(keepId));
                         changed = true;
                         updatedFinishers++;
                     }
@@ -2662,7 +2662,7 @@ public class DataStore
                 {
                     if (oldBoatId.equals(f.boatId()))
                     {
-                        newFinishers.add(new Finisher(newBoatId, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                        newFinishers.add(f.withBoatId(newBoatId));
                         changed = true;
                         updatedFinishers++;
                     }

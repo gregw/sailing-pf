@@ -39,6 +39,17 @@ class EntryVariantTest
     }
 
     @Test
+    void twoHandedFlagMarksAResultInAMixedDivision()
+    {
+        Finisher dh = new Finisher("boat", Duration.ofMinutes(60), false, null, true);
+        assertEquals(TWO_HANDED, EntryVariant.of(null, OPEN, dh, false));
+        assertEquals(TWO_HANDED, EntryVariant.of(SeriesType.SPIN, OPEN, dh, false));
+        assertEquals(NON_SPIN, EntryVariant.of(SeriesType.NON_SPIN, OPEN, dh, false));
+        assertEquals(NON_SPIN, EntryVariant.of(null, OPEN, dh, true), "a no-spinnaker design");
+        assertTrue(EntryVariant.isExplicit(null, OPEN, dh, false));
+    }
+
+    @Test
     void spinSeriesMakesSpinButKeepsTwoHanded()
     {
         assertEquals(SPIN, EntryVariant.of(SeriesType.SPIN, OPEN, SPIN_ENTRY, false));

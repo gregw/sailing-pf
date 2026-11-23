@@ -34,8 +34,9 @@ public enum EntryVariant
      *       non-spinnaker, whatever its series, division or own flag — two-handed included,
      *       since two-handed is a spinnaker handicap;</li>
      *   <li>a {@link SeriesType#NON_SPIN} series makes everyone non-spinnaker;</li>
-     *   <li>a two-handed division name makes its finishers two-handed — even in a
-     *       {@link SeriesType#SPIN} series, since two-handed is a spinnaker handicap;</li>
+     *   <li>a finisher marked {@link Finisher#twoHanded} or in a two-handed division
+     *       (by name) is two-handed — even in a {@link SeriesType#SPIN} series, since
+     *       two-handed is a spinnaker handicap;</li>
      *   <li>a {@link SeriesType#SPIN} series makes everyone else spinnaker;</li>
      *   <li>a non-spinnaker division name makes its finishers non-spinnaker;</li>
      *   <li>in a {@link SeriesType#TWO_HANDED} series spinnaker entries are two-handed and
@@ -55,7 +56,7 @@ public enum EntryVariant
         if (raceType == SeriesType.NON_SPIN)
             return NON_SPIN;
         String divName = div.name();
-        if (SeriesType.containsTwoHandedKeyword(divName))
+        if (f.twoHanded() || SeriesType.containsTwoHandedKeyword(divName))
             return TWO_HANDED;
         if (raceType == SeriesType.SPIN)
             return SPIN;
@@ -79,7 +80,7 @@ public enum EntryVariant
         if (raceType == SeriesType.NON_SPIN || raceType == SeriesType.SPIN)
             return true;
         String divName = div.name();
-        if (SeriesType.containsTwoHandedKeyword(divName) || SeriesType.containsNonSpinKeyword(divName))
+        if (f.twoHanded() || SeriesType.containsTwoHandedKeyword(divName) || SeriesType.containsNonSpinKeyword(divName))
             return true;
         return !f.nonSpinnaker() && raceType == SeriesType.TWO_HANDED;
     }

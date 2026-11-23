@@ -2042,7 +2042,7 @@ public class AdminApiServlet extends HttpServlet
                         {
                             if (f.boatId().equals(boatId))
                             {
-                                newFinishers.add(new Finisher(newBoatId, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                                newFinishers.add(f.withBoatId(newBoatId));
                                 changed = true;
                                 updatedFinishers++;
                             }
