@@ -155,6 +155,30 @@ class TopYachtImporterTest
         assertEquals(LocalDate.of(2016, 4, 17), importer.extractRaceDate(html));
     }
 
+    @Test
+    void parseResultsPageAcceptsMinutesSecondsElapsed()
+    {
+        // tes.topyacht.net.au/results/2016/sps/mc38/01RGrp21.htm: sub-hour races are "MM:SS"
+        String html = "<html><body><table>" +
+            "<caption>OD results  Start : 13:00</caption>" +
+            "<tr><td>Place</td><td>Sail No</td><td>Boat Name</td><td>From</td><td>Elapsd</td><td>Fin Tim</td></tr>" +
+            "<tr><td>1</td><td>NZL38014</td><td>MENACE</td><td>RAYC</td><td>48:02</td><td>13:48:02</td></tr>" +
+            "</table></body></html>";
+
+        ParsedRace race = importer.parseResultsPage(html);
+
+        assertNotNull(race);
+        assertEquals(Duration.ofMinutes(48).plusSeconds(2), race.divisions().get(0).rows().get(0).elapsed());
+    }
+
+    @Test
+    void extractRaceDateAcceptsTwoDigitYear()
+    {
+        // topyacht.net.au/results/2018/sps/racing/01RGrp5.htm
+        String html = "<html><body><p>Race 1  &nbsp (13/04/18)&nbsp </p></body></html>";
+        assertEquals(LocalDate.of(2018, 4, 13), importer.extractRaceDate(html));
+    }
+
     // --- parseSeriesPage ---
 
     @Test

@@ -81,8 +81,10 @@ public class TopYachtImporter
     // on the series index and surface the date only on the linked results page.
     private static final Pattern RACE_LABEL = Pattern.compile(
         "Race\\s+(\\d+)(?:\\s*-\\s*(\\d{1,2}/\\d{1,2}/\\d{4}))?", Pattern.CASE_INSENSITIVE);
+    // Year may be 2 digits (e.g. SPS 2018-2021: "(13/04/18)"), parsed as 20YY.
     private static final Pattern RESULTS_PAGE_DATE = Pattern.compile(
-        "\\((\\d{1,2}/\\d{1,2}/\\d{4})\\)");
+        "\\((\\d{1,2}/\\d{1,2}/(?:\\d{4}|\\d{2}))\\)");
+    private static final Pattern TWO_DIGIT_YEAR = Pattern.compile("^(\\d{1,2}/\\d{1,2}/)(\\d{2})$");
     // Alternate header form used by some clubs (e.g. CYCSA: "(05-Nov-25)",
     // RYCT: "(11-July-2021)"). Month may be 3-letter abbreviation or full name.
     private static final Pattern RESULTS_PAGE_DATE_DMY = Pattern.compile(
@@ -441,6 +443,9 @@ public class TopYachtImporter
      */
     static LocalDate parseSlashDate(String raw)
     {
+        Matcher yy = TWO_DIGIT_YEAR.matcher(raw);
+        if (yy.matches())
+            raw = yy.group(1) + "20" + yy.group(2);
         try
         {
             return LocalDate.parse(raw, DATE_FMT);
@@ -1642,14 +1647,15 @@ public class TopYachtImporter
             || upper.equals("DNC") || upper.equals("OCS") || upper.equals("DSQ"))
             return null;
 
+        // Older pages give races under an hour as "MM:SS" (e.g. "48:02").
         String[] parts = text.split(":");
-        if (parts.length != 3)
+        if (parts.length != 3 && parts.length != 2)
             return null;
         try
         {
-            int h = Integer.parseInt(parts[0].trim());
-            int min = Integer.parseInt(parts[1].trim());
-            int sec = Integer.parseInt(parts[2].trim());
+            int h = parts.length == 3 ? Integer.parseInt(parts[0].trim()) : 0;
+            int min = Integer.parseInt(parts[parts.length - 2].trim());
+            int sec = Integer.parseInt(parts[parts.length - 1].trim());
             return Duration.ofHours(h).plusMinutes(min).plusSeconds(sec);
         }
         catch (NumberFormatException e)
