@@ -3033,6 +3033,10 @@ public class AdminApiServlet extends HttpServlet
                 fm.put("division", div.name());
                 fm.put("elapsed", elapsedSec);
                 fm.put("variant", fVariant);
+                // The spinnaker flag the entry was imported with, when the series type,
+                // division name or design overrides it
+                if (enteredDiffers(fVariant, f))
+                    fm.put("enteredVariant", f.nonSpinnaker() ? "nonSpin" : "spin");
                 fm.put("countedIn", finisherCountedIn(race, div, f));
                 fm.put("pf", pfVal);
                 fm.put("rf", rfVal);
@@ -3045,6 +3049,7 @@ public class AdminApiServlet extends HttpServlet
             }
         }
         String divisionVariant = variantsUsed.size() == 1 ? variantsUsed.iterator().next() : "mixed";
+        long overridden = finishers.stream().filter(m -> m.containsKey("enteredVariant")).count();
 
         // Sort by PF value ascending (nulls last)
         finishers.sort(Comparator.comparing(
@@ -3069,6 +3074,7 @@ public class AdminApiServlet extends HttpServlet
         result.put("date",        race.date() != null ? race.date().toString() : null);
         result.put("divisionName",    divisionName);
         result.put("divisionVariant", divisionVariant);
+        result.put("overriddenEntries", overridden);
         result.put("totalFinishers",  totalFinishers);
         result.put("sameRaceAs",      cache.duplicates().sameRaceAs(raceId).stream()
             .map(id ->
@@ -3165,6 +3171,15 @@ public class AdminApiServlet extends HttpServlet
     private String finisherVariant(Race race, Division div, Finisher f)
     {
         return cache.duplicates().variant(store, race, divisionIndex(race, div), div, f).code();
+    }
+
+    /**
+     * True if a finisher's spinnaker flag as imported disagrees with the variant it is
+     * analysed as (spin or non-spin; two-handed is decided separately).
+     */
+    private static boolean enteredDiffers(String variant, Finisher f)
+    {
+        return ("spin".equals(variant) && f.nonSpinnaker()) || ("nonSpin".equals(variant) && !f.nonSpinnaker());
     }
 
     /** The race in which this finisher's result counts, if it is a reference-only copy; else null. */

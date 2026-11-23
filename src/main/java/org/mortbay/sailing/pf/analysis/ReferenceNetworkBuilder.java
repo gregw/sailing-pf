@@ -753,7 +753,11 @@ public class ReferenceNetworkBuilder
 
             for (int di = 0; di < race.divisions().size(); di++)
             {
-                List<Finisher> finishers = race.divisions().get(di).finishers();
+                // Each finisher with its spinnaker flag as raced: the stored flag is as
+                // imported, and the race's series type may override it.
+                List<Finisher> finishers = race.divisions().get(di).finishers().stream()
+                    .map(f -> f.withNonSpinnaker(store.isNonSpinnakerAsRaced(race, f)))
+                    .toList();
                 for (Finisher f : finishers)
                 {
                     // A two-handed result in a mixed division (a CYCA offshore race) is

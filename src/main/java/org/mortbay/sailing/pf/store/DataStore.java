@@ -1245,13 +1245,6 @@ public class DataStore
     {
         requireStarted();
         clubs.put(club.id(), club);
-        // Races are often put before the series naming them, so a name-derived series type
-        // can only be applied once the series is here.
-        if (races != null && club.series() != null)
-            applySeriesTypes(club.series().stream()
-                .filter(sr -> sr.raceIds() != null)
-                .flatMap(sr -> sr.raceIds().stream())
-                .distinct().toList());
         InvalidationListener l = invalidationListener;
         if (l != null) l.onClubChanged(club.id());
     }
@@ -1271,7 +1264,7 @@ public class DataStore
     public void putRace(Race imported)
     {
         requireStarted();
-        Race race = applySeriesType(imported);
+        Race race = imported;
         boolean isNew = !races.containsKey(race.id());
         races.put(race.id(), race);
         if (autoSanityCheck && isNew && !excludedRaces.containsKey(race.id()))
@@ -2262,7 +2255,6 @@ public class DataStore
     {
         requireStarted();
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
-        applySeriesTypesToAllRaces();
     }
 
     /**
@@ -2322,9 +2314,29 @@ public class DataStore
     }
 
     /**
+     * A finisher's spinnaker flag as raced: forced by the race's series type
+     * ({@link #raceSeriesType}) -- non-spinnaker in an NS race, spinnaker in a spin race
+     * except for a boat whose design has no spinnaker -- otherwise its own flag as imported.
+     * The stored flag is never changed, so clearing a series type restores it. (The PF
+     * optimiser decides a finisher's full variant with
+     * {@link org.mortbay.sailing.pf.data.EntryVariant#of}.)
+     */
+    public boolean isNonSpinnakerAsRaced(Race race, Finisher f)
+    {
+        SeriesType type = raceSeriesType(race);
+        if (type == SeriesType.NON_SPIN)
+            return true;
+        if (type == SeriesType.SPIN)
+            return f.nonSpinnaker() && isBoatNoSpinnakerDesign(f.boatId());
+        return f.nonSpinnaker();
+    }
+
+    /**
      * Sets a series' type in clubs.yaml ({@code null} removes it, reverting to the name-derived
-     * default), then re-applies series types to every held race and writes the races changed.
-     * Returns the IDs of the races changed.
+     * default). The races themselves are not changed: their finishers keep their spinnaker
+     * flags as imported, and the series type overrides them when the analysis reads them
+     * ({@link org.mortbay.sailing.pf.data.EntryVariant#of}), so clearing the type restores
+     * them. Returns the IDs of the series' races, whose derived data is invalidated.
      */
     public List<String> setSeriesType(String seriesId, SeriesType type)
     {
@@ -2340,9 +2352,13 @@ public class DataStore
         if (!ClubLoader.setSeriesType(configDir, clubId, shortNameIfNew, seriesId, type))
             return List.of();
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
-        List<String> changed = applySeriesTypesToAllRaces();
-        changed.forEach(id -> write(raceFilePath(races.get(id)), races.get(id)));
-        return changed;
+        List<String> affected = races.values().stream()
+            .filter(r -> r.seriesIds() != null && r.seriesIds().contains(seriesId))
+            .map(Race::id).toList();
+        InvalidationListener l = invalidationListener;
+        if (l != null)
+            affected.forEach(l::onRaceChanged);
+        return affected;
     }
 
     /**
@@ -2367,85 +2383,6 @@ public class DataStore
             spin |= type == SeriesType.SPIN;
         }
         return twoHanded ? SeriesType.TWO_HANDED : spin ? SeriesType.SPIN : null;
-    }
-
-    /**
-     * Returns the race with each finisher's spinnaker flag forced by the type of the series
-     * the race belongs to ({@link #raceSeriesType}): all non-spinnaker in an NS race, all
-     * spinnaker in a spin race, except boats of a no-spinnaker design, which keep their own
-     * flag; otherwise the race unchanged. Two-handed is a spinnaker
-     * variant decided per entry by {@link org.mortbay.sailing.pf.data.EntryVariant#of}, so a
-     * 2H race's flags are left alone. Applied on every {@link #putRace} and at load, so a
-     * re-import cannot revert it.
-     */
-    private Race applySeriesType(Race race)
-    {
-        if (race.divisions() == null)
-            return race;
-        SeriesType type = raceSeriesType(race);
-        if (type != SeriesType.NON_SPIN && type != SeriesType.SPIN)
-            return race;
-        boolean ns = type == SeriesType.NON_SPIN;
-        boolean changed = false;
-        List<Division> divisions = new ArrayList<>(race.divisions().size());
-        for (Division d : race.divisions())
-        {
-            if (d.finishers() == null || d.finishers().stream().allMatch(f -> keepsFlag(f, ns)))
-            {
-                divisions.add(d);
-                continue;
-            }
-            changed = true;
-            divisions.add(new Division(d.name(), d.finishers().stream()
-                .map(f -> keepsFlag(f, ns) ? f
-                    : f.withNonSpinnaker(ns))
-                .toList()));
-        }
-        if (!changed)
-            return race;
-        LOG.info("Race {} is in a {} series -- marking all finishers {}", race.id(),
-            ns ? "non-spinnaker" : "spinnaker", ns ? "non-spinnaker" : "spinnaker");
-        return new Race(race.id(), race.clubId(), race.seriesIds(), race.date(), race.number(),
-            race.name(), divisions, race.source(), race.lastUpdated(), race.loadedAt());
-    }
-
-    /**
-     * True if forcing the finisher's spinnaker flag to {@code ns} leaves it unchanged: it
-     * already has that flag, or it would be upgraded to spinnaker but its boat's design has
-     * no spinnaker.
-     */
-    private boolean keepsFlag(Finisher f, boolean ns)
-    {
-        return f.nonSpinnaker() == ns || (!ns && isBoatNoSpinnakerDesign(f.boatId()));
-    }
-
-    /**
-     * Re-applies {@link #applySeriesType} to the given races (all held races when null),
-     * notifying the invalidation listener for each race changed. Returns the IDs changed.
-     */
-    private List<String> applySeriesTypes(Collection<String> raceIds)
-    {
-        InvalidationListener l = invalidationListener;
-        List<String> changed = new ArrayList<>();
-        for (String id : raceIds == null ? List.copyOf(races.keySet()) : raceIds)
-        {
-            Race r = races.get(id);
-            if (r == null)
-                continue;
-            Race fixed = applySeriesType(r);
-            if (fixed == r)
-                continue;
-            races.put(id, fixed);
-            changed.add(id);
-            if (l != null)
-                l.onRaceChanged(id);
-        }
-        return changed;
-    }
-
-    private List<String> applySeriesTypesToAllRaces()
-    {
-        return applySeriesTypes(null);
     }
 
     /**
@@ -3377,7 +3314,6 @@ public class DataStore
         clubs.replaceAll((id, c) -> enrichWithSeed(c));
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
-        applySeriesTypesToAllRaces();
 
         migrateTopYachtIds();
         migrateTopYachtDivisionMerge();

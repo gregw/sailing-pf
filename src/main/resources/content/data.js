@@ -2605,7 +2605,7 @@ async function saveSeriesEdit() {
         statusEl.textContent = 'Save failed: ' + ((result && result.error) || 'see console');
         return;
     }
-    statusEl.textContent = `Saved — ${result.racesChanged} race(s) updated.`;
+    statusEl.textContent = `Saved — ${result.racesChanged} race(s) affected; the analysis applies it on its next run.`;
     clearSelection('series');
     loadList('series', 0);
 }
@@ -3259,7 +3259,18 @@ async function loadRaceDivChart(raceId, divisionName) {
     }
     const VARIANT_LABELS = { spin: 'Spin', nonSpin: 'Non-Spin', twoHanded: 'Two-Handed', mixed: 'MIXED' };
     const labelEl = document.getElementById('race-variant-label');
-    if (labelEl) labelEl.textContent = 'Variant: ' + (VARIANT_LABELS[data.divisionVariant] ?? data.divisionVariant ?? '');
+    if (labelEl) {
+        labelEl.textContent = 'Variant: ' + (VARIANT_LABELS[data.divisionVariant] ?? data.divisionVariant ?? '');
+        // Entries analysed as another variant than they were entered (the series type,
+        // division name or design overrides their own flag)
+        const overridden = data.finishers.filter(f => f.enteredVariant);
+        if (overridden.length > 0) {
+            labelEl.textContent += ` (${overridden.length} of ${data.finishers.length} entered as `
+                + [...new Set(overridden.map(f => VARIANT_LABELS[f.enteredVariant] || f.enteredVariant))].join('/') + ')';
+            labelEl.title = 'Entered as another variant, overridden by the series type, division name or design: '
+                + overridden.map(f => f.name).join(', ');
+        }
+    }
 
     // Show note about excluded finishers
     const plotted = data.finishers.filter(f => f.pf != null && f.elapsed > 0).length;

@@ -1747,11 +1747,21 @@ class DataStoreTest {
             .allMatch(Finisher::nonSpinnaker);
     }
 
-    private static boolean noneNonSpin(Race race)
+    /** True if every finisher of the stored race is non-spinnaker as raced (series type applied). */
+    private static boolean allNonSpin(DataStore store, String raceId)
     {
+        Race race = store.races().get(raceId);
         return race.divisions().stream()
             .flatMap(d -> d.finishers().stream())
-            .noneMatch(Finisher::nonSpinnaker);
+            .allMatch(f -> store.isNonSpinnakerAsRaced(race, f));
+    }
+
+    private static boolean noneNonSpin(DataStore store, String raceId)
+    {
+        Race race = store.races().get(raceId);
+        return race.divisions().stream()
+            .flatMap(d -> d.finishers().stream())
+            .noneMatch(f -> store.isNonSpinnakerAsRaced(race, f));
     }
 
     private static Club clubWithSeries(String seriesName, Race race)
@@ -1770,12 +1780,14 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putRace(race);
-        assertTrue(allNonSpin(store.races().get(race.id())));
+        assertTrue(allNonSpin(store, race.id()));
+        assertEquals(race, store.races().get(race.id()), "the stored flags are kept as imported");
         store.stop();
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
-        assertTrue(allNonSpin(store2.races().get(race.id())), "type survives save/reload");
+        assertTrue(allNonSpin(store2, race.id()), "type survives save/reload");
+        assertEquals(race.divisions(), store2.races().get(race.id()).divisions(), "flags as imported after reload");
         store2.stop();
     }
 
@@ -1793,7 +1805,7 @@ class DataStoreTest {
         writeClubsYaml(tempDir, NS_CLUBS_YAML);
         DataStore store2 = new DataStore(tempDir);
         store2.start();
-        assertTrue(allNonSpin(store2.races().get(race.id())));
+        assertTrue(allNonSpin(store2, race.id()));
         store2.stop();
     }
 
@@ -1819,7 +1831,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putRace(race);
-        assertTrue(noneNonSpin(store.races().get(race.id())));
+        assertTrue(noneNonSpin(store, race.id()));
         store.stop();
     }
 
@@ -1831,13 +1843,13 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putRace(race);
-        assertFalse(allNonSpin(store.races().get(race.id())));
+        assertFalse(allNonSpin(store, race.id()));
         // The series arrives after its race, as importers do; its name makes it NS.
         store.putClub(clubWithSeries("Wednesday Non-Spinnaker 2025-26", race));
         String seriesId = race.seriesIds().get(0);
         assertEquals(SeriesType.NON_SPIN, store.seriesType(seriesId));
         assertFalse(store.isSeriesTypeSet(seriesId));
-        assertTrue(allNonSpin(store.races().get(race.id())));
+        assertTrue(allNonSpin(store, race.id()));
         store.stop();
     }
 
@@ -1855,7 +1867,7 @@ class DataStoreTest {
 
         List<String> changed = store.setSeriesType(seriesId, SeriesType.NON_SPIN);
         assertEquals(List.of(race.id()), changed);
-        assertTrue(allNonSpin(store.races().get(race.id())));
+        assertTrue(allNonSpin(store, race.id()));
         assertTrue(store.isSeriesTypeSet(seriesId));
         String yaml = Files.readString(tempDir.resolve("config/clubs.yaml"));
         assertTrue(yaml.contains("myc.com.au/club-championship: \"ns\""), yaml);
@@ -1864,7 +1876,12 @@ class DataStoreTest {
         DataStore store2 = new DataStore(tempDir);
         store2.start();
         assertEquals(SeriesType.NON_SPIN, store2.seriesType(seriesId));
-        assertTrue(allNonSpin(store2.races().get(race.id())));
+        assertTrue(allNonSpin(store2, race.id()));
+
+        // Clearing the type restores the entries' own flags: nothing was overwritten
+        store2.setSeriesType(seriesId, null);
+        assertFalse(allNonSpin(store2, race.id()));
+        assertEquals(race.divisions(), store2.races().get(race.id()).divisions());
         store2.stop();
     }
 
