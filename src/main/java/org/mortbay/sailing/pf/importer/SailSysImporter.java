@@ -630,6 +630,30 @@ public class SailSysImporter
         return true;
     }
 
+    /**
+     * The club whose SailSys feed names this race's SailSys club (a club-kind event) or its
+     * series (a series-kind event): an unambiguous match where the short name may be shared
+     * (MYC, BYC, ...). Null if no club's feed does, or more than one does.
+     */
+    private Club clubBySailSysFeed(RaceData data)
+    {
+        Integer sailsysClubId = data.club != null ? data.club.id : null;
+        Integer sailsysSeriesId = data.series != null ? data.series.id : null;
+        Club found = null;
+        for (Club c : store.clubs().values())
+        {
+            boolean match = c.sailsysEvents().stream().anyMatch(e ->
+                (sailsysClubId != null && sailsysClubId.equals(e.clubId()))
+                    || (sailsysSeriesId != null && sailsysSeriesId.equals(e.seriesId())));
+            if (!match)
+                continue;
+            if (found != null)
+                return null;
+            found = c;
+        }
+        return found;
+    }
+
     private void processRace(RaceData data, Club owningClub)
     {
         currentSailSysRaceId = data.id != null ? data.id : 0;
@@ -653,9 +677,11 @@ public class SailSysImporter
             Club byName = store.findUniqueClubByShortName(data.club.shortName, data.club.longName, context);
             if (owningClub == null)
             {
-                // No club context (cache replay): fall back to the name lookup, and skip the
-                // race when the name resolves only to excluded clubs.
-                organizingClub = byName;
+                // No club context (cache replay): the club whose SailSys feed names this race's
+                // SailSys club or series, else the name lookup; skip the race when the name
+                // resolves only to excluded clubs.
+                Club byFeed = clubBySailSysFeed(data);
+                organizingClub = byFeed != null ? byFeed : byName;
                 if (byName == null && store.isClubNameExcluded(data.club.shortName))
                 {
                     LOG.debug("SailSys: skipping race id={} -- organising club '{}' is excluded",
@@ -1332,6 +1358,7 @@ public class SailSysImporter
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class ClubSummary
     {
+        public Integer id;
         public String shortName;
         public String longName;
     }
@@ -1339,6 +1366,7 @@ public class SailSysImporter
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class SeriesSummary
     {
+        public Integer id;
         public String name;
     }
 
