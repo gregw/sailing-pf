@@ -84,7 +84,7 @@ class BoatIdentityStoreTest
 
         store.save();
         String json;
-        try (var files = Files.walk(tempDir.resolve("imported/races")))
+        try (var files = Files.walk(tempDir.resolve("races")))
         {
             json = Files.readString(files.filter(p -> p.toString().endsWith(".json")).findFirst().orElseThrow());
         }
@@ -108,7 +108,7 @@ class BoatIdentityStoreTest
         store.putBoat(aboutTimeThenKanreki());
         store.putRace(race(LocalDate.of(2020, 1, 4), KANREKI));
         store.save();
-        assertTrue(Files.exists(tempDir.resolve("imported/boats/" + KANREKI + ".json")));
+        assertTrue(Files.exists(tempDir.resolve("boats/" + KANREKI + ".json")));
 
         // The boat is renamed again: a third identity becomes current
         String next = "7709-kanrekiii-cookson12";
@@ -116,8 +116,8 @@ class BoatIdentityStoreTest
         store.save();
 
         assertEquals(List.of(next), List.copyOf(store.boats().keySet()));
-        assertFalse(Files.exists(tempDir.resolve("imported/boats/" + KANREKI + ".json")), "old file removed");
-        assertTrue(Files.exists(tempDir.resolve("imported/boats/" + next + ".json")));
+        assertFalse(Files.exists(tempDir.resolve("boats/" + KANREKI + ".json")), "old file removed");
+        assertTrue(Files.exists(tempDir.resolve("boats/" + next + ".json")));
         Finisher f = store.races().values().iterator().next().divisions().getFirst().finishers().getFirst();
         assertEquals(next, f.boatId());
         assertEquals(KANREKI, f.identityId());
@@ -134,6 +134,20 @@ class BoatIdentityStoreTest
         assertTrue(store.boats().isEmpty());
         assertNull(store.boat(KANREKI));
         assertNull(store.boat(ABOUT_TIME));
+    }
+
+    @Test
+    void aNewDatabaseIsMarkedFormat2AndAV1OneIsRefused(@TempDir Path tempDir) throws Exception
+    {
+        Path fresh = tempDir.resolve("fresh");
+        new DataStore(fresh).start();
+        assertEquals(DataStore.FORMAT, Files.readString(fresh.resolve(DataStore.FORMAT_FILE)).trim());
+
+        Path v1 = tempDir.resolve("v1");
+        Files.createDirectories(v1.resolve("imported/boats"));
+        IllegalStateException e = org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+            () -> new DataStore(v1).start());
+        assertTrue(e.getMessage().contains("v1 database"), e.getMessage());
     }
 
     @Test

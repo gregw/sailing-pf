@@ -123,8 +123,8 @@ public class DesignLinkMatcher
         Path dir = WikipediaDesignHarvest.outputFile(root).getParent();
         List<Article> articles = JSON.readValue(WikipediaDesignHarvest.outputFile(root).toFile(),
             new TypeReference<List<Article>>() {});
-        List<Design> designs = readDesigns(root.resolve("imported").resolve("designs"));
-        Map<String, Integer> boats = boatCounts(root.resolve("imported").resolve("boats"));
+        List<Design> designs = readDesigns(root.resolve("designs"));
+        Map<String, Integer> boats = boatCounts(root.resolve("boats"));
         Set<String> excluded = excludedDesigns(root.resolve("config").resolve("design.yaml"));
         LOG.info("{} articles, {} designs", articles.size(), designs.size());
 

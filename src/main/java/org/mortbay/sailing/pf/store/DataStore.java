@@ -151,10 +151,10 @@ public class DataStore
     {
         this.root = root;
         this.configDir = root.resolve("config");
-        this.racesDir = root.resolve("imported/races");
-        this.boatsDir = root.resolve("imported/boats");
-        this.designsDir = root.resolve("imported/designs");
-        this.clubsDir = root.resolve("imported/clubs");
+        this.racesDir = root.resolve("races");
+        this.boatsDir = root.resolve("boats");
+        this.designsDir = root.resolve("designs");
+        this.clubsDir = root.resolve("clubs");
         this.catalogueDir = root.resolve("catalogue");
     }
 
@@ -166,6 +166,40 @@ public class DataStore
     }
 
     // --- Lifecycle ---
+
+    /** The file in the data root naming the database format. */
+    public static final String FORMAT_FILE = "FORMAT";
+    /** The database format this code reads and writes: boats with identities, no imported/ tier. */
+    public static final String FORMAT = "2";
+
+    /**
+     * Checks the data root holds a format {@value #FORMAT} database, marking a new (empty) one.
+     * A v1 database (an {@code imported/} directory and no FORMAT file) must be converted first.
+     */
+    private void checkFormat()
+    {
+        Path formatFile = root.resolve(FORMAT_FILE);
+        try
+        {
+            if (Files.exists(formatFile))
+            {
+                String format = Files.readString(formatFile).trim();
+                if (!FORMAT.equals(format))
+                    throw new IllegalStateException("Database " + root + " is format " + format
+                        + ", but this version reads format " + FORMAT);
+                return;
+            }
+            if (Files.isDirectory(root.resolve("imported")))
+                throw new IllegalStateException("Database " + root + " is a v1 database (imported/ and no "
+                    + FORMAT_FILE + " file): convert it with the v2 migration first");
+            Files.createDirectories(root);
+            Files.writeString(formatFile, FORMAT + "\n");
+        }
+        catch (IOException e)
+        {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     /**
      * Resolves the data root directory using the standard lookup chain:
@@ -3445,6 +3479,7 @@ public class DataStore
     public void start()
     {
         LOG.info("Start DataStore root={}", root.toAbsolutePath());
+        checkFormat();
 
         boats = new LinkedHashMap<>();
         identityIndex = new java.util.HashMap<>();

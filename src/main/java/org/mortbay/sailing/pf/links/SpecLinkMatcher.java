@@ -164,8 +164,8 @@ public class SpecLinkMatcher
                 urls.add(m.group());
         }
 
-        List<Design> designs = DesignLinkMatcher.readDesigns(root.resolve("imported").resolve("designs"));
-        Map<String, Integer> boats = DesignLinkMatcher.boatCounts(root.resolve("imported").resolve("boats"));
+        List<Design> designs = DesignLinkMatcher.readDesigns(root.resolve("designs"));
+        Map<String, Integer> boats = DesignLinkMatcher.boatCounts(root.resolve("boats"));
         Set<String> excluded = DesignLinkMatcher.excludedDesigns(root.resolve("config").resolve("design.yaml"));
         Path reviewed = dir.resolve("design-link-reviewed.csv");
         if (!Files.exists(reviewed))

@@ -276,7 +276,7 @@ class DataStoreTest {
     {
         // A pre-multi-club boat record on disk had a scalar "clubId" field. The new
         // record exposes a "clubIds" list; the @JsonCreator factory accepts either form.
-        Path boatsDir = tempDir.resolve("imported/boats");
+        Path boatsDir = tempDir.resolve("boats");
         Files.createDirectories(boatsDir);
         Files.writeString(boatsDir.resolve("legacy-boat.json"),
             "{\"id\":\"legacy-boat\",\"sailNumber\":\"AUS9\",\"name\":\"Legacy\","
@@ -337,8 +337,8 @@ class DataStoreTest {
         store.putBoat(boat2);
         store.stop();
 
-        assertTrue(tempDir.resolve("imported/boats/MYC100-shearmagic-adams10.json").toFile().exists());
-        assertTrue(tempDir.resolve("imported/boats/MYC7-tensixty-radford1060.json").toFile().exists());
+        assertTrue(tempDir.resolve("boats/MYC100-shearmagic-adams10.json").toFile().exists());
+        assertTrue(tempDir.resolve("boats/MYC7-tensixty-radford1060.json").toFile().exists());
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
@@ -412,7 +412,7 @@ class DataStoreTest {
         store.stop();
 
         // File should use '--' as filesystem separator
-        assertTrue(tempDir.resolve("imported/clubs/rycv.com.au--ppnyc.json").toFile().exists());
+        assertTrue(tempDir.resolve("clubs/rycv.com.au--ppnyc.json").toFile().exists());
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
@@ -456,7 +456,7 @@ class DataStoreTest {
             List.of(), List.of(), null));
         store.save();
 
-        String json = Files.readString(tempDir.resolve("imported/clubs/c.example.json"));
+        String json = Files.readString(tempDir.resolve("clubs/c.example.json"));
         assertFalse(json.contains("\"longName\""), "longName should not be in JSON");
         assertFalse(json.contains("\"state\""), "state should not be in JSON");
         assertFalse(json.contains("\"excluded\""), "excluded should not be in JSON");
@@ -1125,12 +1125,12 @@ class DataStoreTest {
                 "kept design.aliases should contain the merged-away canonical name: " + kept.aliases());
 
         // 3. Kept design.json on disk also contains the alias (verifies save())
-        String keptJson = Files.readString(tempDir.resolve("imported/designs/elliott6.json"));
+        String keptJson = Files.readString(tempDir.resolve("designs/elliott6.json"));
         assertTrue(keptJson.contains("Elliot 6"),
                 "elliott6.json on disk should contain the Elliot 6 alias:\n" + keptJson);
 
         // 4. Merged-away design file is gone
-        assertFalse(Files.exists(tempDir.resolve("imported/designs/elliot6.json")),
+        assertFalse(Files.exists(tempDir.resolve("designs/elliot6.json")),
                 "elliot6.json should have been removed from disk");
 
         // 5. aliases.yaml was written with the design alias entry

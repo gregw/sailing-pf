@@ -112,7 +112,7 @@ public class WikipediaDesignHarvest
         try
         {
             List<Article> articles = new WikipediaDesignHarvest(client)
-                .harvest(designNames(root.resolve("imported").resolve("designs")));
+                .harvest(designNames(root.resolve("designs")));
             Files.createDirectories(out.getParent());
             MAPPER.writeValue(out.toFile(), articles);
             LOG.info("Wrote {} articles to {}", articles.size(), out);

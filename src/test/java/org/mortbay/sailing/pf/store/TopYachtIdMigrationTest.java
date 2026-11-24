@@ -58,7 +58,7 @@ class TopYachtIdMigrationTest
         Race race = new Race(raceId, CLUB, List.of(CLUB + "/" + seriesSlug), date, number, null,
             List.of(new Division("PHS", List.of(new Finisher("b1-boat", java.time.Duration.ofHours(2), false, null)))),
             sourceUrl == null ? "TopYacht" : "TopYacht - " + sourceUrl, Instant.now(), null);
-        Path file = root.resolve("imported/races").resolve(CLUB).resolve(seriesSlug)
+        Path file = root.resolve("races").resolve(CLUB).resolve(seriesSlug)
             .resolve(raceId + ".json");
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), race);
@@ -67,7 +67,7 @@ class TopYachtIdMigrationTest
     private void writeClubJson(Path root, List<Series> series) throws IOException
     {
         Club club = new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
-        Path file = root.resolve("imported/clubs").resolve(CLUB + ".json");
+        Path file = root.resolve("clubs").resolve(CLUB + ".json");
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), club);
     }
@@ -120,7 +120,7 @@ class TopYachtIdMigrationTest
     void migrationMovesTheRaceFileAndRemovesTheOldOne(@TempDir Path root) throws IOException
     {
         writeCollidedRegatta(root);
-        Path oldFile = root.resolve("imported/races").resolve(CLUB)
+        Path oldFile = root.resolve("races").resolve(CLUB)
             .resolve("spinnaker-division-2").resolve(CLUB + "-2025-08-29-0001.json");
         assertTrue(Files.exists(oldFile));
 
@@ -128,7 +128,7 @@ class TopYachtIdMigrationTest
         store.start();
 
         assertFalse(Files.exists(oldFile), "stale race file should be deleted");
-        assertTrue(Files.exists(root.resolve("imported/races").resolve(CLUB)
+        assertTrue(Files.exists(root.resolve("races").resolve(CLUB)
             .resolve("mirw-spinnaker-division-2")
             .resolve(CLUB + "-mirw-spinnaker-division-2-2025-08-29-0001.json")));
         store.stop();
@@ -272,7 +272,7 @@ class TopYachtIdMigrationTest
         Race sailsys = new Race(CLUB + "-2025-10-01-0001", CLUB,
             List.of(CLUB + "/club-season"), LocalDate.of(2025, 10, 1), 1, null,
             List.of(new Division("PHS", List.of())), "SailSys", Instant.now(), null);
-        Path file = root.resolve("imported/races").resolve(CLUB).resolve("club-season")
+        Path file = root.resolve("races").resolve(CLUB).resolve("club-season")
             .resolve(sailsys.id() + ".json");
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), sailsys);

@@ -73,7 +73,7 @@ class TopYachtDivisionMergeMigrationTest
                 List.of(new Finisher(boatId, Duration.ofHours(2), false, null)))),
             "TopYacht - https://tes.topyacht.net.au/results/2025/mirw/" + seriesSlug + "/r.htm",
             Instant.now(), null);
-        Path file = root.resolve("imported/races").resolve(CLUB).resolve(seriesSlug)
+        Path file = root.resolve("races").resolve(CLUB).resolve(seriesSlug)
             .resolve(raceId + ".json");
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), race);
@@ -82,7 +82,7 @@ class TopYachtDivisionMergeMigrationTest
     private void writeClubJson(Path root, List<Series> series) throws IOException
     {
         Club club = new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
-        Path file = root.resolve("imported/clubs").resolve(CLUB + ".json");
+        Path file = root.resolve("clubs").resolve(CLUB + ".json");
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), club);
     }
@@ -170,7 +170,7 @@ class TopYachtDivisionMergeMigrationTest
     private Series seriesFor(Path root, String slug, String name) throws IOException
     {
         List<String> raceIds = new ArrayList<>();
-        Path dir = root.resolve("imported/races").resolve(CLUB).resolve(slug);
+        Path dir = root.resolve("races").resolve(CLUB).resolve(slug);
         if (Files.exists(dir))
         {
             try (var s = Files.list(dir))
@@ -284,7 +284,7 @@ class TopYachtDivisionMergeMigrationTest
     void oldPerDivisionRaceFilesAreRemoved(@TempDir Path root) throws IOException
     {
         writeMirw2025(root, true);
-        Path oldDir = root.resolve("imported/races").resolve(CLUB)
+        Path oldDir = root.resolve("races").resolve(CLUB)
             .resolve("mirw-sealink-spinnaker-division-2");
         assertTrue(Files.exists(oldDir));
 
