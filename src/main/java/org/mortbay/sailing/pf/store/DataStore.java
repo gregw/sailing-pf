@@ -2459,6 +2459,17 @@ public class DataStore
      * Sets the rename dates of a boat's aliases (see {@link Aliases#setRenameDates}) and
      * reloads the aliases. Returns how many changed.
      */
+    /** Adds and removes a boat's aliases in aliases.yaml (see {@link Aliases#editBoatAliases}). */
+    public int editBoatAliases(Boat boat, List<Aliases.SailNumberName> add, List<Aliases.SailNumberName> remove)
+    {
+        requireStarted();
+        int changed = Aliases.editBoatAliases(configDir, IdGenerator.normaliseSailNumber(boat.sailNumber()),
+            IdGenerator.normaliseName(boat.name()), boat.name(), add, remove);
+        if (changed > 0)
+            reloadAliases();
+        return changed;
+    }
+
     public int setBoatRenameDates(Boat boat, List<Aliases.SailNumberName> updates)
     {
         requireStarted();

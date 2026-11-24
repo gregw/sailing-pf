@@ -596,6 +596,78 @@ public class Aliases
      * the alias with the same sail number and name gets its {@code from}/{@code until} (null
      * clears them, leaving a plain alias). Returns how many aliases were changed.
      */
+    /**
+     * Adds and removes aliases of the boat keyed {@code normSailNo-normName} in aliases.yaml.
+     * An alias may give a sail number, a name or both. Removals match by normalised sail number
+     * and name; an added alias equal to an existing one, or to the boat itself, is skipped.
+     * A boat left with no aliases loses its entry. Returns how many aliases were added or
+     * removed.
+     */
+    public static int editBoatAliases(Path configDir, String normSailNo, String normName, String canonicalName,
+                                      List<SailNumberName> add, List<SailNumberName> remove)
+    {
+        Path file = configDir.resolve(FILENAME);
+        Yaml yaml = null;
+        if (Files.exists(file))
+        {
+            try
+            {
+                yaml = YAML_MAPPER.readValue(file.toFile(), Yaml.class);
+            }
+            catch (Exception e)
+            {
+                throw new IllegalStateException("Failed to read " + file + ": " + e.getMessage(), e);
+            }
+        }
+        if (yaml == null)
+            yaml = new Yaml();
+        if (yaml.boats == null)
+            yaml.boats = new LinkedHashMap<>();
+        String key = normSailNo + "-" + normName;
+        String actualKey = yaml.boats.keySet().stream().filter(k -> k.equalsIgnoreCase(key)).findFirst().orElse(key);
+        BoatEntry entry = yaml.boats.get(actualKey);
+        List<SailNumberName> aliases = entry != null && entry.aliases() != null
+            ? new ArrayList<>(entry.aliases()) : new ArrayList<>();
+        int changed = 0;
+        for (SailNumberName r : remove)
+        {
+            if (aliases.removeIf(a -> a.sameAs(r.sailNumber(), r.name())))
+                changed++;
+        }
+        for (SailNumberName a : add)
+        {
+            String sail = a.sailNumber() == null || a.sailNumber().isBlank() ? null : IdGenerator.normaliseSailNumber(a.sailNumber());
+            String name = a.name() == null || a.name().isBlank() ? null : IdGenerator.normaliseName(a.name());
+            if (sail == null && name == null)
+                continue;
+            if ((sail == null || sail.equalsIgnoreCase(normSailNo)) && (name == null || name.equalsIgnoreCase(normName)))
+                continue;   // the boat itself
+            if (aliases.stream().anyMatch(e -> e.sameAs(sail, name)))
+                continue;
+            // Keep the name as written for display when normalising changed it
+            String display = name != null && !name.equals(a.name().trim()) ? a.name().trim() : null;
+            aliases.add(new SailNumberName(sail, name, display, a.from(), a.until()));
+            changed++;
+        }
+        if (changed == 0)
+            return 0;
+        if (aliases.isEmpty())
+            yaml.boats.remove(actualKey);
+        else
+            yaml.boats.put(actualKey, new BoatEntry(entry != null ? entry.canonicalName() : canonicalName, aliases));
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
+            LOG.info("Edited {} alias(es) of {}", changed, actualKey);
+        }
+        catch (Exception e)
+        {
+            throw new IllegalStateException("Failed to write " + file + ": " + e.getMessage(), e);
+        }
+        return changed;
+    }
+
     public static int setRenameDates(Path configDir, String normSailNo, String normName, List<SailNumberName> updates)
     {
         Path file = configDir.resolve(FILENAME);

@@ -237,6 +237,8 @@ public class AdminApiServlet extends HttpServlet
         {
             handleEditBoat(req, resp);
         }
+        else if ("/boats/aliases".equals(path))
+            handleEditBoatAliases(req, resp);
         else if ("/boats/rename-dates".equals(path))
         {
             handleBoatRenameDates(req, resp);
@@ -994,7 +996,6 @@ public class AdminApiServlet extends HttpServlet
         return entry;
     }
 
-    /** A rename suggested when merging: the merged boat's alias in use until or from a date. */
     /** A name in a boat's history and the first and last races under it; id is the boat being merged, null for the kept boat. */
     private record NameSpan(String id, String name, LocalDate first, LocalDate last)
     {
@@ -1197,6 +1198,44 @@ public class AdminApiServlet extends HttpServlet
                     updates.add(new Aliases.SailNumberName((String) a.get("sailNumber"), (String) a.get("name"), null,
                         parseOptionalDate(a.get("from")), parseOptionalDate(a.get("until"))));
             int changed = store.setBoatRenameDates(boat, updates);
+            writeJson(resp, Map.of("ok", true, "changed", changed));
+        }
+        catch (IllegalArgumentException | java.time.format.DateTimeParseException e)
+        {
+            resp.setStatus(400);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/boats/aliases — adds and removes a boat's aliases. Body: {@code {boatId,
+     * add: [{sailNumber, name, from, until}], remove: [{sailNumber, name}]}}; an alias gives a
+     * sail number, a name or both. Only future imports are affected: existing boats are not
+     * merged or split.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleEditBoatAliases(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            Boat boat = store.boats().get(String.valueOf(body.get("boatId")));
+            if (boat == null)
+            {
+                resp.setStatus(404);
+                writeJson(resp, Map.of("error", "Boat not found: " + body.get("boatId")));
+                return;
+            }
+            List<Aliases.SailNumberName> add = new ArrayList<>();
+            List<Aliases.SailNumberName> remove = new ArrayList<>();
+            if (body.get("add") instanceof List<?> l)
+                for (Map<String, Object> a : (List<Map<String, Object>>) l)
+                    add.add(new Aliases.SailNumberName((String) a.get("sailNumber"), (String) a.get("name"), null,
+                        parseOptionalDate(a.get("from")), parseOptionalDate(a.get("until"))));
+            if (body.get("remove") instanceof List<?> l)
+                for (Map<String, Object> a : (List<Map<String, Object>>) l)
+                    remove.add(new Aliases.SailNumberName((String) a.get("sailNumber"), (String) a.get("name")));
+            int changed = store.editBoatAliases(boat, add, remove);
             writeJson(resp, Map.of("ok", true, "changed", changed));
         }
         catch (IllegalArgumentException | java.time.format.DateTimeParseException e)

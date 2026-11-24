@@ -246,6 +246,32 @@ class BoatRenameApiTest
     }
 
     @Test
+    void aliasesCanBeAddedAndRemoved() throws Exception
+    {
+        ContentResponse added = post("/api/boats/aliases", """
+            {"boatId":"7709-kanreki","add":[
+              {"sailNumber":"AUS 7709","name":null},
+              {"sailNumber":null,"name":"Kanreki II"},
+              {"sailNumber":"7710","name":"Old Kanreki","until":"2015-01-01"},
+              {"sailNumber":"7709","name":"KANREKI"}]}""");
+        assertEquals(200, added.getStatus(), added.getContentAsString());
+        Boat kanreki = store.boats().get("7709-kanreki");
+        List<Aliases.SailNumberName> aliases = store.writtenBoatAliases(kanreki);
+        // 7709 KANREKI is the boat itself, so it is skipped
+        assertEquals(3, aliases.size(), aliases.toString());
+        Aliases.SailNumberName old = aliases.stream().filter(a -> "oldkanreki".equals(a.name())).findFirst().orElseThrow();
+        assertEquals("Old Kanreki", old.displayName());
+        assertEquals(LocalDate.of(2015, 1, 1), old.until());
+
+        ContentResponse removed = post("/api/boats/aliases", """
+            {"boatId":"7709-kanreki","remove":[
+              {"sailNumber":"AUS7709","name":null},{"sailNumber":null,"name":"kanrekiii"},
+              {"sailNumber":"7710","name":"oldkanreki"}]}""");
+        assertEquals(200, removed.getStatus(), removed.getContentAsString());
+        assertEquals(List.of(), store.writtenBoatAliases(kanreki));
+    }
+
+    @Test
     void mergeWithoutDateIsAPlainAlias() throws Exception
     {
         ContentResponse merged = post("/api/boats/merge", "{\"keepId\":\"7709-kanreki\",\"mergeIds\":[\"7709-sailexchange\"]}");
