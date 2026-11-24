@@ -764,8 +764,16 @@ public final class V2Migration
         {
             String leftover = m.getKey();
             String target = m.getValue();
+            if (!Files.exists(designsDir.resolve(leftover + ".json")) || !Files.exists(designsDir.resolve(target + ".json")))
+                continue;   // already merged the other way
             if (leftoverTo.containsKey(target))
-                continue;   // a chain: leave for a person
+            {
+                // Each names the other (jboatsj24 and j24): the one with fewer boats merges.
+                // A longer chain is left for a person.
+                if (!leftover.equals(leftoverTo.get(target)) || designBoats(boats, leftover) > designBoats(boats, target)
+                    || designBoats(boats, leftover) == designBoats(boats, target) && leftover.compareTo(target) < 0)
+                    continue;
+            }
             for (String key : new ArrayList<>(boats.keySet()))
                 if (boats.containsKey(key) && leftover.equals(boats.get(key).designId()))
                     redesign(key, target, boats, races, report);
@@ -790,6 +798,11 @@ public final class V2Migration
             Files.delete(leftoverFile);
             report.designsMerged++;
         }
+    }
+
+    private static long designBoats(Map<String, Boat> boats, String designId)
+    {
+        return boats.values().stream().filter(b -> designId.equals(b.designId())).count();
     }
 
     /** design.yaml's design flags and years onto the design files. */

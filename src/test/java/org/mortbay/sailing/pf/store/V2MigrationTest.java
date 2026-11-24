@@ -84,6 +84,10 @@ class V2MigrationTest
                 canonicalName: "J/24"
                 aliases:
                 - "J Boats J24"
+              jboatsj24:
+                canonicalName: "J Boats J24"
+                aliases:
+                - "J/24"
             """);
         write(v1.resolve("imported/designs/j24.json"), "{\"id\":\"j24\",\"canonicalName\":\"J/24\"}");
         write(v1.resolve("imported/designs/jboatsj24.json"), "{\"id\":\"jboatsj24\",\"canonicalName\":\"J Boats J24\"}");
@@ -178,9 +182,11 @@ class V2MigrationTest
         write(v1.resolve("imported/races/myc.org.au/s/b.json"), race("b", "2020-01-11", "SailSys-12", "100-alpha-j24"));
         write(v1.resolve("imported/races/myc.org.au/s/c.json"), race("c", "2020-01-18", "TopYacht - https://x/r.htm", "100-alpha-j24"));
         write(v1.resolve("imported/races/myc.org.au/s/d.json"), race("d", "2020-01-25", "TopYacht", "100-alpha-j24"));
+        write(v1.resolve("imported/races/unknown/e.json"), race("e", "2020-02-01", "SailSys-13", "100-alpha-j24"));
         // race 11's cached results are good; race 12's cache holds an error: it cannot be replayed
         write(v1.resolve("cache/sailsys/races/race-000011.json"), "{\"result\":\"success\",\"data\":{\"id\":11}}");
         write(v1.resolve("cache/sailsys/races/race-000012.json"), "{\"result\":\"error\"}");
+        write(v1.resolve("cache/sailsys/races/race-000013.json"), "{\"result\":\"success\",\"data\":{\"id\":13}}");
 
         Path v2 = tempDir.resolve("v2");
         V2Migration.convert(v1, v2, java.util.EnumSet.of(V2Migration.Purge.SAILSYS, V2Migration.Purge.TOPYACHT));
@@ -193,10 +199,13 @@ class V2MigrationTest
 
         // "a" comes back from the re-import; "c" does not, so it is restored
         store.putRace(JSON_RACE(v2.resolve("purged/races/myc.org.au/s/a.json")));
+        // "e" comes back under another ID, its club now known: it is not restored as well
+        write(tempDir.resolve("e2.json"), race("e2", "2020-02-01", "SailSys-13", "100-alpha-j24"));
+        store.putRace(JSON_RACE(tempDir.resolve("e2.json")));
         V2Restore.Result result = V2Restore.restore(store, false);
         assertEquals(java.util.Map.of("TopYacht", 1), result.restored());
-        assertEquals(java.util.Map.of("SailSys", 1), result.reimported());
-        assertEquals(java.util.Set.of("a", "b", "c", "d"), store.races().keySet());
+        assertEquals(java.util.Map.of("SailSys", 2), result.reimported());
+        assertEquals(java.util.Set.of("a", "b", "c", "d", "e2"), store.races().keySet());
     }
 
     private static Race JSON_RACE(Path f) throws Exception

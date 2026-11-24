@@ -16,7 +16,8 @@ import org.mortbay.sailing.pf.data.Race;
 /**
  * After the purged races have been re-imported, puts back those that did not come back: each
  * race under {@code purged/races/} (kept there by {@link V2Migration}) whose ID the database
- * does not hold is restored as it was converted. So the database ends with the re-imported
+ * does not hold is restored as it was converted, unless a race from the same SailSys race or
+ * TopYacht page came back under another ID (its club now resolved, or its series renamed). So the database ends with the re-imported
  * races plus exactly those that could not be got back. Run with the server stopped.
  * <p>
  * Usage: {@code V2Restore [--dry-run] <v2-root>}.
@@ -73,13 +74,18 @@ public final class V2Restore
         Map<String, Integer> reimported = new TreeMap<>();
         if (!Files.isDirectory(purgedDir))
             return new Result(restored, reimported);
+        java.util.Set<String> heldSources = new java.util.HashSet<>();
+        for (Race r : store.races().values())
+            if (identifyingSource(r.source()))
+                heldSources.add(r.source().trim());
         try (Stream<Path> files = Files.walk(purgedDir))
         {
             for (Path f : files.filter(p -> p.toString().endsWith(".json")).toList())
             {
                 Race race = JSON.readValue(f.toFile(), Race.class);
                 String source = sourceName(race.source());
-                if (store.races().containsKey(race.id()))
+                if (store.races().containsKey(race.id())
+                    || identifyingSource(race.source()) && heldSources.contains(race.source().trim()))
                 {
                     reimported.merge(source, 1, Integer::sum);
                     continue;
@@ -92,6 +98,12 @@ public final class V2Restore
         if (!dryRun)
             store.save();
         return new Result(restored, reimported);
+    }
+
+    /** Whether a race source names one race: a SailSys race ID or a TopYacht results page. */
+    static boolean identifyingSource(String source)
+    {
+        return source != null && (source.trim().startsWith("SailSys-") || source.trim().startsWith("TopYacht - "));
     }
 
     /** The importer's name in a race source: "SailSys-7473" or "TopYacht - url" gives SailSys or TopYacht. */
