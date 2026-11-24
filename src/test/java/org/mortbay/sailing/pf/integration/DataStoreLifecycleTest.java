@@ -19,7 +19,6 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Finisher;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.importer.SailSysImporter;
-import org.mortbay.sailing.pf.store.Aliases;
 import org.mortbay.sailing.pf.store.DataStore;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -168,19 +167,13 @@ class DataStoreLifecycleTest
                 stale.clubIds(), List.of(), List.of("admin:rename"), Instant.now(), null);
             store.putBoat(canon);
             store.mergeBoats(VELOCITY_CANON, List.of(VELOCITY_STALE));
-            Aliases.addAliases(store.configDir(), "YC868", "Velocity",
-                List.of(new Aliases.SailNumberName("YC868", "peachteatsvelocity")));
-            store.reloadAliases();
         }
 
         // (b) Corum: merge "Norton White Corum" stale into the plain "Corum" boat.
-        // Mirrors handleMergeBoats: mergeBoats + addAliases.
+        // Mirrors handleMergeBoats: a merge as spelling records the misspelling as an alias.
         if (store.boats().containsKey(CORUM_STALE_NW) && store.boats().containsKey(CORUM_STALE_PLAIN))
         {
             store.mergeBoats(CORUM_STALE_PLAIN, List.of(CORUM_STALE_NW));
-            Aliases.addAliases(store.configDir(), "1088", "Corum",
-                List.of(new Aliases.SailNumberName("1088", "nortonwhitecorum")));
-            store.reloadAliases();
         }
         // Corum is a Mumm 36, though entered as a Farr Mumm 36: its design is set, and an alias
         // says its results of any design are Corum's (what a v1 design override converts to).
@@ -196,26 +189,11 @@ class DataStoreLifecycleTest
         assertTrue(okavAll.contains(OKAVANGO_CANON),
             "Expected canonical " + OKAVANGO_CANON + " from Phase 1 (sail JAUS4788 → 4788). Got: " + okavAll);
 
-        List<Aliases.SailNumberName> okavAliasEntries = new ArrayList<>();
-        for (String id : okavAll)
-        {
-            if (id.equals(OKAVANGO_CANON))
-                continue;
-            Boat b = store.boats().get(id);
-            if (b == null)
-                continue;
-            okavAliasEntries.add(new Aliases.SailNumberName(b.sailNumber(), "okavangodelta"));
-        }
         List<String> toMerge = okavAll.stream()
             .filter(id -> !id.equals(OKAVANGO_CANON))
             .toList();
         if (!toMerge.isEmpty())
             store.mergeBoats(OKAVANGO_CANON, toMerge);
-        if (!okavAliasEntries.isEmpty())
-        {
-            Aliases.addAliases(store.configDir(), "4788", "Okavango Delta", okavAliasEntries);
-            store.reloadAliases();
-        }
 
         // (d) Santoy: a Radford 12 Cat Rig, though entered as a Radford 12.
         setDesignEnteredAsAny(store, SANTOY_STALE, "radford12catrig", "Radford 12 Cat Rig");

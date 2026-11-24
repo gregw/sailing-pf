@@ -46,6 +46,8 @@ import org.mortbay.sailing.pf.importer.IdGenerator;
  *       {@code boatDesignOverrides} entry becomes the boat's design (re-keying its identities
  *       and results) and an alias saying its results of any design are this boat, as the
  *       override did. Dated overrides are reported (a design change makes a new boat).</li>
+ *   <li>{@code aliases.yaml} design aliases join the design files' aliases (a design named
+ *       there but not yet held is created), and aliases.yaml is retired.</li>
  *   <li>The easily re-imported races are purged, to be re-imported under v2 matching: the
  *       MYC archive and the BWPS importer's (BWPS, Sydney Hobart, Gold Coast), with the
  *       certificates those importers derived.</li>
@@ -96,6 +98,7 @@ public final class V2Migration
         int curatedClubs;
         int modified;
         int designOverrides;
+        int designAliases;
         final List<String> notes = new ArrayList<>();
 
         @Override
@@ -111,6 +114,7 @@ public final class V2Migration
                 .append("  identities, curated clubs: ").append(curatedClubs).append('\n')
                 .append("  boats modified:           ").append(modified).append('\n')
                 .append("  design overrides applied: ").append(designOverrides).append('\n')
+                .append("  design aliases moved:     ").append(designAliases).append('\n')
                 .append("  races kept:               ").append(racesKept).append('\n')
                 .append("  races purged:             ").append(racesPurged).append('\n')
                 .append("  certificates purged:      ").append(certificatesPurged).append('\n');
@@ -223,6 +227,7 @@ public final class V2Migration
         applyAliases(v1.resolve("config"), boats, races, report);
         applyClubOverrides(v1.resolve("config"), boats, report);
         applyDesignConfig(v1.resolve("config"), v2.resolve("designs"), boats, races, report);
+        moveDesignAliases(v1.resolve("config"), v2.resolve("designs"), report);
 
         // Write boats (named by current identity) and races
         Path boatsDir = Files.createDirectories(v2.resolve("boats"));
@@ -411,13 +416,14 @@ public final class V2Migration
     }
 
     /**
-     * Removes the per-boat sections from the v2 copy of the config, now held on the boats:
-     * aliases.yaml boats, design.yaml modifiedBoats and boatDesignOverrides, clubs.yaml per-club
-     * boat lists, boatClubOverrides and noclub.
+     * Removes from the v2 copy of the config what the boats and designs now hold: aliases.yaml
+     * (boat aliases on identities, design aliases in the design files), design.yaml
+     * modifiedBoats and boatDesignOverrides, clubs.yaml per-club boat lists, boatClubOverrides
+     * and noclub.
      */
     private static void stripBoatConfig(Path configDir) throws IOException
     {
-        strip(configDir.resolve("aliases.yaml"), List.of("boats"), null);
+        Files.deleteIfExists(configDir.resolve("aliases.yaml"));
         strip(configDir.resolve("design.yaml"), List.of("modifiedBoats", "boatDesignOverrides"), null);
         strip(configDir.resolve("clubs.yaml"), List.of("boatClubOverrides", "noclub"), "boats");
     }
@@ -498,6 +504,49 @@ public final class V2Migration
                     report.designOverrides++;
                 }
             }
+        }
+    }
+
+    /** aliases.yaml's design entries into the design files' aliases. */
+    private static void moveDesignAliases(Path configDir, Path designsDir, Report report) throws IOException
+    {
+        Path file = configDir.resolve("aliases.yaml");
+        if (!Files.exists(file))
+            return;
+        JsonNode entries = YAML.readTree(file.toFile()).path("designs");
+        if (!entries.isObject())
+            return;
+        for (Map.Entry<String, JsonNode> e : (Iterable<Map.Entry<String, JsonNode>>) entries::fields)
+        {
+            String id = e.getKey();
+            String canonicalName = text(e.getValue(), "canonicalName");
+            Path designFile = designsDir.resolve(id + ".json");
+            com.fasterxml.jackson.databind.node.ObjectNode design;
+            if (Files.exists(designFile))
+                design = (com.fasterxml.jackson.databind.node.ObjectNode)JSON.readTree(designFile.toFile());
+            else
+            {
+                design = JSON.createObjectNode();
+                design.put("id", id);
+                design.put("canonicalName", canonicalName != null ? canonicalName : id);
+                design.putArray("sources").add("aliases.yaml");
+                Files.createDirectories(designsDir);
+            }
+            String name = design.path("canonicalName").asText(id);
+            com.fasterxml.jackson.databind.node.ArrayNode aliases = design.get("aliases") instanceof
+                com.fasterxml.jackson.databind.node.ArrayNode a ? a : design.putArray("aliases");
+            List<String> have = new ArrayList<>();
+            aliases.forEach(a -> have.add(a.asText().toLowerCase()));
+            for (JsonNode alias : e.getValue().path("aliases"))
+            {
+                String a = alias.asText();
+                if (a.isBlank() || a.equalsIgnoreCase(name) || have.contains(a.toLowerCase()))
+                    continue;
+                aliases.add(a);
+                have.add(a.toLowerCase());
+                report.designAliases++;
+            }
+            JSON.writerWithDefaultPrettyPrinter().writeValue(designFile.toFile(), design);
         }
     }
 

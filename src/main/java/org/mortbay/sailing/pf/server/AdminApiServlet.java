@@ -56,7 +56,6 @@ import org.mortbay.sailing.pf.data.TopYachtGroup;
 import org.mortbay.sailing.pf.importer.IdGenerator;
 import org.mortbay.sailing.pf.importer.SailSysImporter;
 import org.mortbay.sailing.pf.importer.TopYachtPrefix;
-import org.mortbay.sailing.pf.store.Aliases;
 import org.mortbay.sailing.pf.store.DataStore;
 
 public class AdminApiServlet extends HttpServlet
@@ -2296,9 +2295,6 @@ public class AdminApiServlet extends HttpServlet
             DataStore.DesignMergeResult result = store.mergeDesigns(keepId, mergeIds);
             store.save();
 
-            Aliases.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
-            store.reloadAliases();
-
             cache.refreshIndexes();
 
             writeJson(resp, Map.of("ok", true,
@@ -2543,13 +2539,6 @@ public class AdminApiServlet extends HttpServlet
                 updatedRaces     = r.updatedRaces();
                 updatedFinishers = r.updatedFinishers();
 
-                // Design-level aliases in aliases.yaml so future imports of the old id or
-                // the old canonical name resolve to the new design.
-                List<String> aliasNames = new ArrayList<>();
-                aliasNames.add(old.canonicalName());
-                aliasNames.add(oldId);
-                Aliases.appendDesignMergeAliases(store.configDir(), newId, newName, aliasNames);
-                store.reloadAliases();
             }
             else
             {
@@ -2561,9 +2550,6 @@ public class AdminApiServlet extends HttpServlet
                         java.time.Instant.now(), old.noSpinnaker(), null));
                 if (renamedName)
                 {
-                    Aliases.appendDesignMergeAliases(store.configDir(), oldId, newName,
-                        List.of(old.canonicalName()));
-                    store.reloadAliases();
                 }
             }
 

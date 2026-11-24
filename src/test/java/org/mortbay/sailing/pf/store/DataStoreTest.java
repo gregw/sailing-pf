@@ -677,33 +677,16 @@ class DataStoreTest {
     // --- Alias seed integration ---
 
     @Test
-    void findOrCreateBoatResolvesDesignAliasFromSeed(@TempDir Path tempDir) {
-        // aliases.yaml maps "Sydney 36 OD" → sydney36cr
+    void findOrCreateBoatResolvesADesignAlias(@TempDir Path tempDir) {
+        // The Sydney 36 CR design file lists "Sydney 36 OD" as an alias
         DataStore store = new DataStore(tempDir);
         store.start();
-        // Pre-populate the canonical design
-        Design canonical = new Design("sydney36cr", "Sydney 36 CR", List.of(), List.of(), null, false, null);
-        store.putDesign(canonical);
+        store.putDesign(new Design("sydney36cr", "Sydney 36 CR", List.of("Sydney 36 OD"), List.of(), null, false, null));
 
         Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydney 36 OD");
 
         assertEquals("sydney36cr", boat.designId());
         assertEquals(1, store.designs().size());
-    }
-
-    @Test
-    void findOrCreateBoatCreatesCanonicalDesignViaSeedWhenAbsent(@TempDir Path tempDir) {
-        // aliases.yaml maps "Sydney 36 OD" → sydney36cr with canonicalName "Sydney 36 CR"
-        // If sydney36cr doesn't exist yet, it should be created with the seed's canonical name
-        DataStore store = new DataStore(tempDir);
-        store.start();
-
-        Boat boat = store.findOrCreateBoat("AUS99", "TestBoat", "Sydney 36 OD");
-
-        assertEquals("sydney36cr", boat.designId());
-        Design created = store.designs().get("sydney36cr");
-        assertNotNull(created);
-        assertEquals("Sydney 36 CR", created.canonicalName());
     }
 
     @Test
@@ -1087,8 +1070,6 @@ class DataStoreTest {
 
         DataStore.DesignMergeResult result = store.mergeDesigns("elliott6", List.of("elliot6"));
         store.save();
-        Aliases.appendDesignMergeAliases(store.configDir(), "elliott6", elliott6.canonicalName(), aliasNames);
-        store.reloadAliases();
 
         // 1. Boat updated: old designId gone, boat now under elliott6
         assertEquals(1, result.updatedBoats(), "exactly one boat should have been rewritten");
@@ -1111,12 +1092,9 @@ class DataStoreTest {
         assertFalse(Files.exists(tempDir.resolve("designs/elliot6.json")),
                 "elliot6.json should have been removed from disk");
 
-        // 5. aliases.yaml was written with the design alias entry
-        String aliasesYaml = Files.readString(tempDir.resolve("config/aliases.yaml"));
-        assertTrue(aliasesYaml.contains("elliott6"),
-                "aliases.yaml should have an elliott6 design entry:\n" + aliasesYaml);
-        assertTrue(aliasesYaml.contains("Elliot 6") || aliasesYaml.contains("elliot6"),
-                "aliases.yaml should list the merged-away name/id as an alias:\n" + aliasesYaml);
+        // 5. The kept design lists the merged-away name as an alias
+        assertTrue(store.designs().get("elliott6").aliases().stream().anyMatch(x -> x.equalsIgnoreCase("Elliot 6")),
+                "elliott6 should list Elliot 6 as an alias: " + store.designs().get("elliott6").aliases());
 
         // 6. Simulate a re-import: SailSys sees design "Elliot 6" again.
         //    Must resolve to elliott6 and must NOT recreate the elliot6 design record.

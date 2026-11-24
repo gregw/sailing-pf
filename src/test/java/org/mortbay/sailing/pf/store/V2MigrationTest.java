@@ -140,7 +140,7 @@ class V2MigrationTest
             store.findOrCreateBoat("1088", "Corum", "Farr Mumm 36", LocalDate.of(2025, 1, 4), "test").id());
         String designYaml = Files.readString(v2.resolve("config/design.yaml"));
         assertFalse(designYaml.contains("boatDesignOverrides") || designYaml.contains("modifiedBoats"), designYaml);
-        assertFalse(Files.readString(v2.resolve("config/aliases.yaml")).contains("kanreki"));
+        assertFalse(Files.exists(v2.resolve("config/aliases.yaml")), "aliases.yaml is retired");
 
         assertThrows(IllegalArgumentException.class, () -> V2Migration.convert(v1, v2), "will not overwrite");
     }

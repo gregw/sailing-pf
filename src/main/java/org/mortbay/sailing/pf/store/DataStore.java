@@ -104,7 +104,7 @@ public class DataStore
     private Map<String, Design> designs;
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
-    private Aliases.Loaded aliases; // lookup-only alias data from aliases.yaml; never written to disk
+    private Map<String, String> designNameIndex; // design name/alias (normalised) -> design id; null when stale
     private Designs.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
     private ClubLoader.ClubCatalogue clubCatalogue;  // lookup-only club overrides from clubs.yaml
     private List<Maker> makers;
@@ -510,7 +510,7 @@ public class DataStore
         if (isModifiedDesignId(resolved))
         {
             Design d = designs.get(resolved);
-            String seedName = aliases.designCanonicalName(resolved);
+            String seedName = designCanonicalName(resolved);
             String baseName = withoutModified(d != null ? d.canonicalName() : seedName != null ? seedName : rawDesign);
             if (baseName != null && !isModifiedDesignId(resolveDesignId(baseName)))
             {
@@ -543,7 +543,7 @@ public class DataStore
         final String normSailNo = sailNo;
         final String normName = name;
 
-        String designId = aliases.resolveDesignAlias(IdGenerator.normaliseName(rawDesign));
+        String designId = resolveDesignAlias(IdGenerator.normaliseName(rawDesign));
         // If the resolved design is ignored -- via the curated {@code ignored:} list in
         // design.yaml or via the runtime user-toggled set -- treat the incoming boat as
         // design-less for matching purposes, otherwise a new designless record would get
@@ -787,7 +787,7 @@ public class DataStore
             if (designNameMatches(d, designId))
                 return d.id();
         }
-        String canonicalId = aliases.resolveDesignAlias(designId);
+        String canonicalId = resolveDesignAlias(designId);
         return canonicalId != null ? canonicalId : designId;
     }
 
@@ -830,7 +830,7 @@ public class DataStore
         if (base == null)
             return null;
         // A held design that is itself an alias (e.g. s80 → swarbricks80) resolves to its canonical
-        String canonical = aliases.resolveDesignAlias(base.id());
+        String canonical = resolveDesignAlias(base.id());
         String baseId = canonical != null && designs.containsKey(canonical) ? canonical : base.id();
         return isModifiedDesignId(baseId) ? null : baseId;
     }
@@ -958,14 +958,14 @@ public class DataStore
         }
 
         // Check the alias seed for a known equivalence
-        String canonicalId = aliases.resolveDesignAlias(designId);
+        String canonicalId = resolveDesignAlias(designId);
         if (canonicalId != null)
         {
             Design existing = designs.get(canonicalId);
             if (existing != null)
                 return existing;
             // Canonical design not yet in store -- create it using the seed's canonical name
-            String seedName = aliases.designCanonicalName(canonicalId);
+            String seedName = designCanonicalName(canonicalId);
             design = new Design(canonicalId, seedName != null ? seedName : className.trim(),
                 List.of(), List.of(), null, false, null);
             putDesign(design);
@@ -1280,8 +1280,52 @@ public class DataStore
         if (l != null) l.onClubChanged(club.id());
     }
 
+    /**
+     * The design a normalised design name or alias names (a design's id, its canonical name or
+     * one of its aliases, from the design files), or the name itself if no design has it.
+     */
+    private String resolveDesignAlias(String normName)
+    {
+        if (normName == null || normName.isBlank())
+            return normName;
+        if (designs.containsKey(normName))
+            return normName;
+        return designNameIndex().getOrDefault(normName, normName);
+    }
+
+    /** The canonical name of a design, or null if there is no such design. */
+    private String designCanonicalName(String designId)
+    {
+        Design d = designId == null ? null : designs.get(designId);
+        return d == null ? null : d.canonicalName();
+    }
+
+    private Map<String, String> designNameIndex()
+    {
+        Map<String, String> index = designNameIndex;
+        if (index == null)
+        {
+            index = new java.util.HashMap<>();
+            for (Design d : designs.values())
+            {
+                List<String> names = new ArrayList<>(d.aliases());
+                names.add(d.canonicalName());
+                for (String n : names)
+                {
+                    if (n == null || n.isBlank())
+                        continue;
+                    index.putIfAbsent(IdGenerator.normaliseName(n), d.id());
+                    index.putIfAbsent(IdGenerator.normaliseDesignName(n), d.id());
+                }
+            }
+            designNameIndex = index;
+        }
+        return index;
+    }
+
     public void putDesign(Design design)
     {
+        designNameIndex = null;
         requireStarted();
         // Always reflect the catalogue's current noSpinnaker state on the in-memory record.
         boolean catNoSpin = designCatalogue.isNoSpinnaker(design.id());
@@ -1358,6 +1402,7 @@ public class DataStore
 
     public void removeDesign(String id)
     {
+        designNameIndex = null;
         requireStarted();
         Design existing = designs.remove(id);
         if (existing != null)
@@ -2123,16 +2168,6 @@ public class DataStore
         {
             LOG.warn("Failed to save exclusions.yaml: {}", e.getMessage());
         }
-    }
-
-    /**
-     * Reloads the alias seed from disk.  Called after aliases.yaml has been updated
-     * (e.g. following a merge operation) so that subsequent imports honour the new entries.
-     */
-    public void reloadAliases()
-    {
-        requireStarted();
-        aliases = Aliases.load(configDir);
     }
 
     /**
@@ -3256,9 +3291,9 @@ public class DataStore
         });
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
+        designNameIndex = null;
         clubSeed = ClubLoader.load(configDir);
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
-        aliases = Aliases.load(configDir);
         designCatalogue = Designs.load(configDir);
         // Stamp the catalogue-derived noSpinnaker flag onto every Design now that both the
         // designs map and the catalogue are loaded. Subsequent toggles re-stamp via reloadDesignCatalogue().
@@ -3300,7 +3335,7 @@ public class DataStore
             {
                 if (b.designId() == null)
                     continue;
-                String canonical = aliases.resolveDesignAlias(b.designId());
+                String canonical = resolveDesignAlias(b.designId());
                 if (!canonical.equals(b.designId()) && designs.containsKey(canonical))
                     designAliasUpdates.add(Map.entry(b.id(), canonical));
             }
@@ -3441,7 +3476,7 @@ public class DataStore
             // (4) design alias drift: stored designId is itself an alias.
             if (b.designId() != null)
             {
-                String canonical = aliases.resolveDesignAlias(b.designId());
+                String canonical = resolveDesignAlias(b.designId());
                 if (!canonical.equals(b.designId()) && designs.containsKey(canonical))
                     violations.add(String.format(
                         "design-alias drift on %s: stored designId=%s but canonical is %s",
@@ -3465,7 +3500,7 @@ public class DataStore
         clubs = null;
         clubSeed = null;
         clubCatalogue = null;
-        aliases = null;
+        designNameIndex = null;
         designCatalogue = null;
         makers = null;
         makersDirty = false;
