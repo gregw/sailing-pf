@@ -94,16 +94,42 @@ class BoatRenameApiTest
         store.stop();
     }
 
-    @Test
-    void proposeRenameFromRaceDates()
+    @SuppressWarnings("unchecked")
+    private Map<String, Map<String, Object>> plan(String keep, String merge) throws Exception
     {
-        LocalDate a = LocalDate.of(2019, 1, 1), b = LocalDate.of(2020, 1, 1), c = LocalDate.of(2021, 1, 1), d = LocalDate.of(2022, 1, 1);
-        assertEquals(new AdminApiServlet.RenameProposal(true, c), AdminApiServlet.proposeRename(c, d, a, b),
-            "merged boat raced first: its name was used until the kept boat's first race");
-        assertEquals(new AdminApiServlet.RenameProposal(false, c), AdminApiServlet.proposeRename(a, b, c, d),
-            "merged boat raced after: its name was used from its own first race");
-        assertNull(AdminApiServlet.proposeRename(a, c, b, d).date(), "overlapping races: no date");
-        assertNull(AdminApiServlet.proposeRename(null, null, a, b).date(), "no races: no date");
+        Map<String, Object> plan = MAPPER.readValue(get("/api/boats/merge-plan?keep=" + keep + "&merge=" + merge), Map.class);
+        Map<String, Map<String, Object>> byId = new java.util.HashMap<>();
+        for (Map<String, Object> b : (List<Map<String, Object>>) plan.get("boats"))
+            byId.put((String) b.get("id"), b);
+        return byId;
+    }
+
+    @Test
+    void threeNamesMergedIntoTheLatestFormAChain() throws Exception
+    {
+        Map<String, Map<String, Object>> p = plan("7709-kanreki", "7709-abouttime,7709-sailexchange");
+        // About Time was renamed Sail Exchange (not Kanreki), on Sail Exchange's first race
+        assertEquals("until", p.get("7709-abouttime").get("direction"));
+        assertEquals("2019-03-02", p.get("7709-abouttime").get("date"));
+        assertEquals("Sail Exchange", p.get("7709-abouttime").get("otherName"));
+        assertEquals("until", p.get("7709-sailexchange").get("direction"));
+        assertEquals("2021-10-09", p.get("7709-sailexchange").get("date"));
+        assertEquals("Kanreki", p.get("7709-sailexchange").get("otherName"));
+    }
+
+    @Test
+    void threeNamesMergedIntoTheEarliestFormAChain() throws Exception
+    {
+        Map<String, Map<String, Object>> p = plan("7709-abouttime", "7709-sailexchange,7709-kanreki");
+        // Sail Exchange was renamed from About Time; Kanreki from Sail Exchange (not About Time)
+        assertEquals("from", p.get("7709-sailexchange").get("direction"));
+        assertEquals("2019-03-02", p.get("7709-sailexchange").get("date"));
+        assertEquals("About Time", p.get("7709-sailexchange").get("otherName"));
+        assertEquals("from", p.get("7709-kanreki").get("direction"));
+        assertEquals("2021-10-09", p.get("7709-kanreki").get("date"));
+        assertEquals("Sail Exchange", p.get("7709-kanreki").get("otherName"));
+        assertEquals("2019-03-02", p.get("7709-kanreki").get("otherFirstRace"));
+        assertEquals("2020-02-01", p.get("7709-kanreki").get("otherLastRace"));
     }
 
     @Test
@@ -170,6 +196,53 @@ class BoatRenameApiTest
         assertEquals("About Time", AdminApiServlet.nameAt(kanreki, renames, LocalDate.of(2017, 1, 1)));
         assertEquals("Sail Exchange", AdminApiServlet.nameAt(kanreki, renames, LocalDate.of(2020, 1, 1)));
         assertEquals("Kanreki", AdminApiServlet.nameAt(kanreki, renames, LocalDate.of(2022, 1, 1)));
+    }
+
+    @Test
+    void mergingARenamedBoatKeepsItsRenameDates() throws Exception
+    {
+        post("/api/boats/merge", """
+            {"keepId":"7709-kanreki","mergeIds":["7709-sailexchange"],
+             "renames":{"7709-sailexchange":{"direction":"until","date":"2021-08-14"}}}""");
+        // Kanreki, with its own rename, is merged into About Time: its history moves with it
+        ContentResponse merged = post("/api/boats/merge", """
+            {"keepId":"7709-abouttime","mergeIds":["7709-kanreki"],
+             "renames":{"7709-kanreki":{"direction":"from","date":"2019-03-02"}}}""");
+        assertEquals(200, merged.getStatus(), merged.getContentAsString());
+        Aliases.SailNumberName sailExchange = store.writtenBoatAliases(store.boats().get("7709-abouttime")).stream()
+            .filter(a -> "sailexchange".equals(a.name())).findFirst().orElseThrow();
+        assertEquals(LocalDate.of(2021, 8, 14), sailExchange.until());
+        assertEquals("Sail Exchange", sailExchange.displayName());
+    }
+
+    @Test
+    void pickingAnAliasAsCurrentRepairsAMergeKeptUnderTheOldName() throws Exception
+    {
+        // Kanreki (renamed from Sail Exchange) merged into About Time, keeping the old name
+        post("/api/boats/merge", """
+            {"keepId":"7709-kanreki","mergeIds":["7709-sailexchange"],
+             "renames":{"7709-sailexchange":{"direction":"until","date":"2021-10-09"}}}""");
+        post("/api/boats/merge", """
+            {"keepId":"7709-abouttime","mergeIds":["7709-kanreki"],
+             "renames":{"7709-kanreki":{"direction":"from","date":"2021-10-09"}}}""");
+
+        // The edit panel with Kanreki picked as current: an edit to its sail and name, then
+        // the dates of the old current name, now an alias
+        ContentResponse edited = post("/api/boats/edit",
+            "{\"boatId\":\"7709-abouttime\",\"sailNumber\":\"7709\",\"name\":\"Kanreki\"}");
+        assertEquals(200, edited.getStatus(), edited.getContentAsString());
+        String newId = (String) MAPPER.readValue(edited.getContentAsString(), Map.class).get("newBoatId");
+        ContentResponse dated = post("/api/boats/rename-dates", "{\"boatId\":\"" + newId
+            + "\",\"aliases\":[{\"sailNumber\":\"7709\",\"name\":\"About Time\",\"until\":\"2019-03-02\"}]}");
+        assertEquals(200, dated.getStatus(), dated.getContentAsString());
+
+        Boat kanreki = store.boats().get(newId);
+        assertEquals("Kanreki", kanreki.name());
+        List<Aliases.SailNumberName> aliases = store.writtenBoatAliases(kanreki);
+        assertEquals(2, aliases.size(), aliases.toString());
+        assertEquals("About Time", AdminApiServlet.nameAt(kanreki, aliases, LocalDate.of(2017, 1, 1)));
+        assertEquals("Sail Exchange", AdminApiServlet.nameAt(kanreki, aliases, LocalDate.of(2020, 1, 1)));
+        assertEquals("Kanreki", AdminApiServlet.nameAt(kanreki, aliases, LocalDate.of(2022, 1, 1)));
     }
 
     @Test

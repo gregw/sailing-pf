@@ -565,7 +565,10 @@ public class Aliases
                         Objects.equals(e.sailNumber(), aliasSail) && Objects.equals(e.name(), aliasName));
                     if (!dup)
                     {
-                        existing.add(new SailNumberName(aliasSail, aliasName));
+                        // Keep its rename (display name and dates): the orphan's renames are
+                        // the merged boat's name history, now the kept boat's.
+                        existing.add(new SailNumberName(aliasSail, aliasName,
+                            orphanAlias.displayName(), orphanAlias.from(), orphanAlias.until()));
                         absorbed++;
                     }
                 }

@@ -995,27 +995,13 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /** A rename suggested when merging: the merged boat's alias in use until or from a date. */
-    record RenameProposal(boolean until, LocalDate date)
+    /** A name in a boat's history and the first and last races under it; id is the boat being merged, null for the kept boat. */
+    private record NameSpan(String id, String name, LocalDate first, LocalDate last)
     {
-    }
-
-    /**
-     * The rename suggested when merging a boat into another, from the dates of their races:
-     * if every race of the merged boat came before every race of the kept one, it was renamed
-     * to the kept name on the kept boat's first race (its alias was in use until then); if
-     * every race came after, it was renamed from the kept name on its own first race (its
-     * alias in use from then). If their races overlap, or either has none, no date can be
-     * determined: the direction then follows which raced first, with a null date.
-     */
-    static RenameProposal proposeRename(LocalDate keepFirst, LocalDate keepLast, LocalDate mergedFirst, LocalDate mergedLast)
-    {
-        if (keepFirst == null || mergedFirst == null)
-            return new RenameProposal(true, null);
-        if (mergedLast.isBefore(keepFirst))
-            return new RenameProposal(true, keepFirst);
-        if (mergedFirst.isAfter(keepLast))
-            return new RenameProposal(false, mergedFirst);
-        return new RenameProposal(!mergedFirst.isAfter(keepFirst), null);
+        boolean id(String boatId)
+        {
+            return boatId.equals(id);
+        }
     }
 
     /**
@@ -1096,15 +1082,61 @@ public class AdminApiServlet extends HttpServlet
         result.put("keepName", keep.name());
         result.put("keepFirstRace", keepRange == null ? null : keepRange[0].toString());
         result.put("keepLastRace", keepRange == null ? null : keepRange[1].toString());
-        List<Map<String, Object>> boats = new ArrayList<>();
+        // One name history for the merged result: the kept boat's names (from its renames),
+        // then each boat being merged. A boat is renamed to the next name in it, or from the
+        // previous one, so merging several names at once puts each next to its neighbours.
+        List<Boat> merged = new ArrayList<>();
         for (String id : merge.split(","))
         {
             Boat mb = store.boats().get(id.trim());
-            if (mb == null || mb.id().equals(keep.id()))
-                continue;
+            if (mb != null && !mb.id().equals(keep.id()))
+                merged.add(mb);
+        }
+        List<NameSpan> spans = new ArrayList<>();
+        Map<String, List<LocalDate>> keepByName = new LinkedHashMap<>();
+        for (LocalDate d : keepDates)
+            keepByName.computeIfAbsent(nameAt(keep, renames, d), k -> new ArrayList<>()).add(d);
+        keepByName.forEach((name, ds) -> spans.add(new NameSpan(null, name, ds.getFirst(), ds.getLast())));
+        for (Boat mb : merged)
+        {
             LocalDate[] range = raceDateRange(mb.id());
-            RenameProposal p = proposeRename(keepRange == null ? null : keepRange[0], keepRange == null ? null : keepRange[1],
-                range == null ? null : range[0], range == null ? null : range[1]);
+            if (range != null)
+                spans.add(new NameSpan(mb.id(), mb.name(), range[0], range[1]));
+        }
+        spans.sort(Comparator.comparing(NameSpan::first));
+        NameSpan current = spans.stream().filter(sp -> sp.id() == null && sp.name().equals(keep.name())).findFirst()
+            .orElse(keepRange == null ? null : new NameSpan(null, keep.name(), keepRange[0], keepRange[1]));
+
+        List<Map<String, Object>> boats = new ArrayList<>();
+        for (Boat mb : merged)
+        {
+            LocalDate[] range = raceDateRange(mb.id());
+            NameSpan self = range == null ? null : new NameSpan(mb.id(), mb.name(), range[0], range[1]);
+            boolean until = true;
+            LocalDate date = null;
+            NameSpan other = current;
+            if (self != null && current != null)
+            {
+                if (self.first().isAfter(current.last()))
+                {
+                    // Raced after the kept name: renamed from the name before it
+                    until = false;
+                    other = spans.stream().filter(sp -> !sp.id(mb.id()) && sp.first().isBefore(self.first()))
+                        .reduce((a, b) -> b).orElse(current);
+                    if (other.last().isBefore(self.first()))
+                        date = self.first();
+                }
+                else if (self.last().isBefore(current.first()))
+                {
+                    // Raced before the kept name: renamed to the name after it
+                    other = spans.stream().filter(sp -> !sp.id(mb.id()) && sp.first().isAfter(self.first()))
+                        .findFirst().orElse(current);
+                    if (self.last().isBefore(other.first()))
+                        date = other.first();
+                }
+                else
+                    until = !self.first().isAfter(current.first());   // overlapping: no date
+            }
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", mb.id());
             m.put("sailNumber", mb.sailNumber());
@@ -1112,17 +1144,13 @@ public class AdminApiServlet extends HttpServlet
             m.put("firstRace", range == null ? null : range[0].toString());
             m.put("lastRace", range == null ? null : range[1].toString());
             m.put("alias", mergeAlias(keep, mb) != null);
-            m.put("direction", p.until() ? "until" : "from");
-            m.put("date", p.date() == null ? null : p.date().toString());
-            // The kept boat's name next to this one in its name history: the name it was
-            // renamed to (until) or from (from), with the kept boat's races under that name.
-            LocalDate at = p.date() != null ? (p.until() ? p.date() : p.date().minusDays(1))
-                : keepRange == null ? null : p.until() ? keepRange[0] : keepRange[1];
-            String other = at == null ? keep.name() : nameAt(keep, renames, at);
-            List<LocalDate> otherDates = keepDates.stream().filter(d -> other.equals(nameAt(keep, renames, d))).toList();
-            m.put("otherName", other);
-            m.put("otherFirstRace", otherDates.isEmpty() ? null : otherDates.getFirst().toString());
-            m.put("otherLastRace", otherDates.isEmpty() ? null : otherDates.getLast().toString());
+            m.put("direction", until ? "until" : "from");
+            m.put("date", date == null ? null : date.toString());
+            // The name next to this one in the history, the boat it was renamed to (until) or
+            // from (from), with the races under that name.
+            m.put("otherName", other == null ? keep.name() : other.name());
+            m.put("otherFirstRace", other == null ? null : other.first().toString());
+            m.put("otherLastRace", other == null ? null : other.last().toString());
             boats.add(m);
         }
         result.put("boats", boats);
@@ -2399,7 +2427,7 @@ public class AdminApiServlet extends HttpServlet
                 if (!oldNormSail.equalsIgnoreCase(newNormSail) || !oldNormName.equalsIgnoreCase(newNormName))
                 {
                     List<Aliases.SailNumberName> aliasEntries = List.of(
-                        new Aliases.SailNumberName(oldNormSail, oldNormName));
+                        new Aliases.SailNumberName(oldNormSail, oldNormName, boat.name(), null, null));
                     Aliases.addAliases(store.configDir(), newNormSail, name, aliasEntries);
                     store.reloadAliases();
                 }
