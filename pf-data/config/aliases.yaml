@@ -1021,6 +1021,11 @@ designs:
     canonicalName: "Sydney 39CR"
     aliases:
     - "Sydney 39Cr"
+  cookson12:
+    canonicalName: "Cookson 12"
+    aliases:
+    - "COOKSON 12M"
+    - "cookson12m"
 boats:
   "1014-wildthing":
     canonicalName: "Wild Thing"
@@ -3170,11 +3175,6 @@ boats:
     aliases:
     - sailNumber: "S349"
       name: "greenbeaconwhiteswan"
-  R60-arcticblonde:
-    canonicalName: "Arctic Blonde"
-    aliases:
-    - sailNumber: "R60"
-      name: "gccmarcticblonde"
   NZ2991-domino:
     canonicalName: "Domino"
     aliases:
@@ -3234,6 +3234,14 @@ boats:
       name: "hutchiesyeahbaby"
     - sailNumber: "A5"
       name: "flowsailsyeahbaby"
+    - sailNumber: "A5"
+      name: "gbpyeahbaby"
+    - sailNumber: "A5"
+      name: "wardcivilyeahbaby"
+    - sailNumber: "A5"
+      name: "pmayeahbaby"
+      displayName: "PMA YEAH BABY"
+      until: "2015-12-26"
   A19-malukaofkermandie:
     canonicalName: "Maluka of Kermandie"
     aliases:
@@ -3507,10 +3515,197 @@ boats:
     aliases:
     - sailNumber: "421"
       name: "thegoat"
+  YC3300-secretmensbusiness35:
+    canonicalName: "Secret Men's Business 3.5"
+    aliases:
+    - sailNumber: "YC3300"
+      name: "holdenssecretmensbusiness35"
+      displayName: "Holdens Secret Men's Business 3.5"
+      from: "2012-12-26"
+  YC3300-hardyssecretmensbusiness:
+    canonicalName: "Hardys Secret Mens Business"
+    aliases:
+    - sailNumber: "YC3300"
+      name: "hardyssecretmens"
+      displayName: "Hardys Secret Mens"
+      until: "2005-07-30"
+  S390-jazzplayer:
+    canonicalName: "Jazz Player"
+    aliases:
+    - sailNumber: "S390"
+      name: "jazzplayerthinkpinkfoundation"
+      displayName: "Jazz Player-Think Pink Foundation"
+      from: "2013-12-26"
+  NOR2-andrewshortmarinedjuice:
+    canonicalName: "Andrew Short Marine-Djuice"
+    aliases:
+    - sailNumber: "NOR2"
+      name: "andrewshort"
+      displayName: "Andrew Short"
+      from: "2003-12-26"
+  "8008-occasionalcoarselanguage":
+    canonicalName: "Occasional Coarse Language"
+    aliases:
+    - sailNumber: "8008"
+      name: "occasionalcoarse"
+  "12358-comanche":
+    canonicalName: "Comanche"
+    aliases:
+    - sailNumber: "12358"
+      name: "ldvcomanche"
+  "7407-chancellor":
+    canonicalName: "Chancellor"
+    aliases:
+    - sailNumber: "7407"
+      name: "chancellordodo"
+  "7272-andrewshortmarine":
+    canonicalName: "Andrew Short Marine"
+    aliases:
+    - sailNumber: "7272"
+      name: "andrewshortmarinemercury"
+  "8008-occasionalcoarselanguagetoo":
+    canonicalName: "Occasional Coarse Language Too"
+    aliases:
+    - sailNumber: "8008"
+      name: "snowdomeoccasionalcoarselanguagetoo"
+  "185-seadragon":
+    canonicalName: "Sea Dragon"
+    aliases:
+    - sailNumber: "185"
+      name: "themenace"
+      displayName: "THE MENACE"
+      from: "2021-03-08"
+  SM432-thylacineone:
+    canonicalName: "Thylacine One"
+    aliases:
+    - sailNumber: "SM432"
+      name: "thylacimeone"
+  SB450-marrakesh:
+    canonicalName: "Marrakesh"
+    aliases:
+    - sailNumber: "SB450"
+      name: "marakesh"
+      displayName: "Marakesh"
+      until: "2022-12-10"
   "7709-kanreki":
     canonicalName: "Kanreki"
     aliases:
+    - sailNumber: "7700"
+      name: "abouttime"
+      displayName: "About Time"
+      until: "2018-07-28"
     - sailNumber: "7709"
       name: "sailexchange"
-      displayName: "Sail Exchange"
       until: "2024-03-29"
+  S480-memrsjones:
+    canonicalName: "Me & Mrs Jones"
+    aliases:
+    - sailNumber: "S480"
+      name: "meandmrsjones"
+  RUS1-mahligai:
+    canonicalName: "Mahligai"
+    aliases:
+    - sailNumber: "RUS1"
+      name: "seaventusmahligai"
+  SYD1000-lawconnect:
+    canonicalName: "LawConnect"
+    aliases:
+    - sailNumber: "SYD1000"
+      name: "perpetualloyal"
+      displayName: "Perpetual LOYAL"
+      until: "2018-07-28"
+    - sailNumber: "SYD1000"
+      name: "infotrack"
+      displayName: "Infotrack"
+      until: "2021-12-03"
+  SM500-oisin:
+    canonicalName: "Oisin"
+    aliases:
+    - sailNumber: "SM500"
+      name: "cancan"
+      displayName: "Can Can"
+      until: "2021-11-05"
+  SM150-bandit:
+    canonicalName: "Bandit"
+    aliases:
+    - sailNumber: "SM150"
+      name: "omnishambles"
+      displayName: "OMNISHAMBLES"
+      until: "2022-03-05"
+  SM1113-happyhour:
+    canonicalName: "Happy Hour"
+    aliases:
+    - sailNumber: "SM1113"
+      name: "playlist"
+      displayName: "PLAYLIST"
+      until: "2023-09-28"
+  SA241-oscar:
+    canonicalName: "Oscar²"
+    aliases:
+    - sailNumber: "SA241"
+      name: "enza"
+      displayName: "Enza"
+      until: "2021-11-05"
+  RQ432-bountybrushwareourrush:
+    canonicalName: "Bounty Brushware Our Rush"
+    aliases:
+    - sailNumber: "RQ432"
+      name: "dekadence"
+      displayName: "Dekadence"
+      until: "2019-06-29"
+    - sailNumber: "RQ432"
+      name: "bountybrasswareourrush"
+  RQ0052-envyscooters:
+    canonicalName: "Envy Scooters"
+    aliases:
+    - sailNumber: "RQ0052"
+      name: "envyscootersbeachball52"
+  R60-alphatauri:
+    canonicalName: "ALPHA TAURI"
+    aliases:
+    - sailNumber: "R60"
+      name: "arcticblonde"
+      displayName: "Arctic Blonde"
+      until: "2025-11-15"
+    - sailNumber: "R60"
+      name: "gccmarcticblonde"
+    - sailNumber: "R60"
+      name: "envy"
+      displayName: "Envy"
+      until: "2022-01-05"
+  MH442-lucy:
+    canonicalName: "Lucy"
+    aliases:
+    - sailNumber: "MH442"
+      name: "toybox"
+      displayName: "Toy Box"
+      until: "2025-03-31"
+    - sailNumber: "MH442"
+      name: "nationalcreditinsurancetoybox"
+  M41-jensminc:
+    canonicalName: "Jensminc"
+    aliases:
+    - sailNumber: "M41"
+      name: "jensmic"
+  M161-lmrsolar:
+    canonicalName: "LMR Solar"
+    aliases:
+    - sailNumber: "M161"
+      name: "frantic"
+      displayName: "Frantic"
+      until: "2010-07-31"
+    - sailNumber: "M161"
+      name: "lmrsolarfrantic"
+      displayName: "LMR Solar (Frantic)"
+      until: "2010-12-26"
+  M1011-wednesday:
+    canonicalName: "Wednesday"
+    aliases:
+    - sailNumber: "M1011"
+      name: "getiton"
+      displayName: "Get It On"
+      until: "2024-06-05"
+    - sailNumber: "M1011"
+      name: "deepphilosophy"
+      displayName: "Deep Philosophy"
+      until: "2025-10-13"

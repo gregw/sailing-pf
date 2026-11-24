@@ -48,6 +48,7 @@ clubs:
         club: 3
     boats:
     - "1-back2black-reichelpughgp42"
+    - "7709-kanreki-cookson12"
     seriesTypes:
       cyca.com.au/2018-19-wednesday-twilight: "ns"
       cyca.com.au/2019-2020-wednesday-twilight-series: "ns"
@@ -243,7 +244,8 @@ clubs:
     aliases: []
     topyacht: null
     sailsys: null
-    boats: null
+    boats:
+    - "8009-troublestrife-cookson12"
     seriesTypes: null
   rsays.com.au:
     shortName: "RSAYS"
@@ -378,6 +380,7 @@ clubs:
     - "1255-melody-swansondart"
     - "MYC32-esprit-archambaultgrandsurprise"
     - "MYC73-topodds-northshore27"
+    - "7709-kanreki-cookson12"
     seriesTypes:
       myc.org.au/2020-2021-twilight-female-helm-series: "ns"
       myc.org.au/2020-2021-twilight-series: "ns"
@@ -407,7 +410,8 @@ clubs:
       club-5:
         name: "MHYC Keelboat racing"
         club: 5
-    boats: null
+    boats:
+    - "7709-kanreki-cookson12"
     seriesTypes:
       mhyc.com.au/club-non-pointscore-pacific-rigging-wednesday-series: "ns"
       mhyc.com.au/smithy-s-waterproofing-women-s-helm-twilight-series-2025-26: "ns"
@@ -765,7 +769,8 @@ clubs:
     aliases: []
     topyacht: null
     sailsys: null
-    boats: null
+    boats:
+    - "D099-kraken42s-cookson12"
     seriesTypes: null
   wmyc.com.au:
     shortName: "WMSC"

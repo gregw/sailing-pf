@@ -397,6 +397,7 @@ oneDesign:
 - "sydney32"
 - "sydney39cr"
 - "jboatsj80"
+- "elliott7"
 designYears:
   archambaultgrandsurprise: 1999
   sydney38: 1999
@@ -520,6 +521,10 @@ modifiedBoats:
   name: "Broomstick"
 - sailNumber: "MH20"
   name: "THEPHILOSOPHERS CLUB"
+- sailNumber: "8009"
+  name: "Trouble & Strife"
+- sailNumber: "D099"
+  name: "Kraken 42S"
 boatDesignOverrides:
 - designId: "sydney36mkii"
   canonicalName: "Sydney 36 MkII"
