@@ -1722,6 +1722,64 @@ class DataStoreTest {
             "alias for 'sticky' should resolve to canonical 'Sticky II'");
     }
 
+    /**
+     * A rename alias (7700 About Time → 7709 Kanreki, until 2018-07-28) only claims the boat
+     * that raced under that name in its period. Later boats the owner also called About Time,
+     * of other designs, keep their own identity, at startup and on import.
+     */
+    @Test
+    void renameAliasOnlyAppliesInItsPeriod(@TempDir Path tempDir) throws IOException
+    {
+        Files.createDirectories(tempDir.resolve("config"));
+        Files.writeString(tempDir.resolve("config/aliases.yaml"), """
+            boats:
+              "7709-kanreki":
+                canonicalName: "Kanreki"
+                aliases:
+                - sailNumber: "7700"
+                  name: "abouttime"
+                  displayName: "About Time"
+                  until: "2018-07-28"
+            designs: {}
+            """);
+        DataStore seed = new DataStore(tempDir);
+        seed.start();
+        seed.setAutoSanityCheck(false);
+        seed.putBoat(new Boat("7709-kanreki-cookson12", "7709", "Kanreki", "cookson12", List.of(), List.of(), List.of(), null, null));
+        seed.putBoat(new Boat("7700-abouttime-cookson12", "7700", "About Time", "cookson12", List.of(), List.of(), List.of(), null, null));
+        seed.putBoat(new Boat("7700-abouttime-cookson50", "7700", "About Time", "cookson50", List.of(), List.of(), List.of(), null, null));
+        seed.putBoat(new Boat("7700-abouttime-neoroma430", "7700", "About Time", "neoroma430", List.of(), List.of(), List.of(), null, null));
+        aliasRace(seed, LocalDate.of(2004, 1, 3), "7700-abouttime-cookson12");
+        aliasRace(seed, LocalDate.of(2018, 3, 3), "7700-abouttime-cookson50");   // in the period, but another design
+        aliasRace(seed, LocalDate.of(2022, 3, 5), "7700-abouttime-neoroma430");  // after the period
+        aliasRace(seed, LocalDate.of(2025, 3, 1), "7709-kanreki-cookson12");
+        seed.save();
+        seed.stop();
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        assertNull(store.boats().get("7700-abouttime-cookson12"), "the Cookson 12 About Time is Kanreki");
+        assertNotNull(store.boats().get("7700-abouttime-cookson50"), "another design keeps its identity");
+        assertNotNull(store.boats().get("7700-abouttime-neoroma430"), "after the rename the name is free");
+        // The Cookson 50 raced in the alias period: flagged for a person to decide, not renamed
+        assertEquals(1, store.findStaleBoatViolations().size(), store.findStaleBoatViolations().toString());
+        assertTrue(store.findStaleBoatViolations().getFirst().contains("7700-abouttime-cookson50"));
+
+        // Imports: About Time before the rename is Kanreki; after it, the NeoRoma's own record
+        assertEquals("7709-kanreki-cookson12",
+            store.findOrCreateBoat("7700", "About Time", "Cookson 12", LocalDate.of(2005, 1, 8), "test").id());
+        assertEquals("7700-abouttime-neoroma430",
+            store.findOrCreateBoat("7700", "About Time", "NeoRoma 430", LocalDate.of(2023, 1, 7), "test").id());
+        assertNotNull(store.boats().get("7700-abouttime-cookson50"));
+    }
+
+    private static void aliasRace(DataStore store, LocalDate date, String boatId)
+    {
+        store.putRace(new Race("club-" + date + "-0001", "club", List.of("club/s"), date, 1, null,
+            List.of(new Division("Div", List.of(new Finisher(boatId, Duration.ofHours(1), false, null)))),
+            "test", null, null));
+    }
+
     @Test
     void findBoatUsesNameEquivalenceFallback(@TempDir Path tempDir) throws IOException
     {

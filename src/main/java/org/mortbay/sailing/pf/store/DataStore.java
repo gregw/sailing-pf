@@ -424,7 +424,8 @@ public class DataStore
         String sailNo = IdGenerator.normaliseSailNumber(rawSailNo);
         String name = IdGenerator.normaliseName(rawName);
 
-        Aliases.BoatMatch aliased = aliases.lookupBoat(sailNo, name).orElse(null);
+        // A rename alias applies only to races in its period (date null: any alias)
+        Aliases.BoatMatch aliased = aliases.lookupBoat(sailNo, name, date).orElse(null);
         if (aliased != null)
         {
             sourceDesign += ":" + sailNo + " " + name + "=>" + aliased;
@@ -443,6 +444,13 @@ public class DataStore
                     if (sailNo.equalsIgnoreCase(b.sailNumber())
                         && name.equalsIgnoreCase(IdGenerator.normaliseName(b.name())))
                         orphans.add(b);
+                }
+                // Only boats the alias applies to: not another boat that used the same
+                // sail number and name at other times, or that has another design.
+                if (!orphans.isEmpty())
+                {
+                    Map<String, List<LocalDate>> raceDates = raceDatesByBoat();
+                    orphans.removeIf(o -> aliasMatchForBoat(o, raceDates.getOrDefault(o.id(), List.of())).isEmpty());
                 }
                 for (Boat orphan : orphans)
                 {
@@ -2628,6 +2636,46 @@ public class DataStore
      * Called when a boat is upgraded (e.g. design added to ID) so that existing race
      * finisher records continue to point to the correct boat.
      */
+    /** The dates each boat raced, by boat id. */
+    private Map<String, List<LocalDate>> raceDatesByBoat()
+    {
+        Map<String, List<LocalDate>> dates = new java.util.HashMap<>();
+        for (Race race : races.values())
+        {
+            if (race.date() == null)
+                continue;
+            for (Division d : race.divisions())
+                for (Finisher f : d.finishers())
+                    dates.computeIfAbsent(f.boatId(), k -> new ArrayList<>()).add(race.date());
+        }
+        return dates;
+    }
+
+    /**
+     * The alias match that would rename an existing boat, or empty if none applies. A rename
+     * alias (with dates) applies only if the boat raced within its period (or has no races),
+     * so another boat that later used the same sail number and name is left alone. And an
+     * alias does not move a boat onto a canonical boat that exists only with a different
+     * design: that is a different boat sharing the name, not a stale record of this one.
+     */
+    private Optional<Aliases.BoatMatch> aliasMatchForBoat(Boat b, List<LocalDate> raceDates)
+    {
+        String normName = IdGenerator.normaliseName(b.name());
+        Optional<Aliases.BoatMatch> match = aliases.lookupBoat(b.sailNumber(), normName,
+            a -> raceDates.isEmpty() || raceDates.stream().anyMatch(a::inUseOn));
+        if (match.isEmpty() || match.get().normName() == null || b.designId() == null)
+            return match;
+        String canonSail = match.get().normSailNumber() != null ? match.get().normSailNumber() : b.sailNumber();
+        String canonName = match.get().normName();
+        List<Boat> canonical = boats.values().stream()
+            .filter(c -> !c.id().equals(b.id()) && canonSail.equalsIgnoreCase(c.sailNumber())
+                && canonName.equalsIgnoreCase(IdGenerator.normaliseName(c.name())))
+            .toList();
+        if (!canonical.isEmpty() && canonical.stream().noneMatch(c -> c.designId() == null || c.designId().equals(b.designId())))
+            return Optional.empty();
+        return match;
+    }
+
     private void rewriteFinisherBoatId(String oldBoatId, String newBoatId)
     {
         int updatedRaces = 0;
@@ -3459,13 +3507,16 @@ public class DataStore
                              String canonSail, String canonName) {}
             List<StalePair> staleBoatPairs = new ArrayList<>();
             boolean aliasesChanged = false;
+            Map<String, List<LocalDate>> raceDates = raceDatesByBoat();
             for (Boat b : new ArrayList<>(boats.values()))
             {
                 String normName = IdGenerator.normaliseName(b.name());
                 // Aliases.lookupBoat expects a pure normalised name; passing the design
                 // suffix concatenated here (a pre-existing bug) made this pass miss every
                 // alias-stale boat that had a designId, defeating the whole safety net.
-                var match = aliases.lookupBoat(b.sailNumber(), normName);
+                // A rename alias only applies if the boat raced in its period, and not to
+                // a boat of another design than the canonical one.
+                var match = aliasMatchForBoat(b, raceDates.getOrDefault(b.id(), List.of()));
                 if (match.isPresent() && match.get().normName() != null)
                 {
                     String canonNorm = match.get().normName();
@@ -3795,11 +3846,30 @@ public class DataStore
     private List<String> computeStaleBoatViolations()
     {
         List<String> violations = new ArrayList<>();
+        Map<String, List<LocalDate>> raceDates = raceDatesByBoat();
         for (Boat b : boats.values())
         {
             String normName = IdGenerator.normaliseName(b.name());
-            // (1) alias-stale: lookup resolves to a different canonical (sail, name).
-            var match = aliases.lookupBoat(b.sailNumber(), normName).orElse(null);
+            // (1) alias-stale: lookup resolves to a different canonical (sail, name), by the
+            // same rule as the startup repair.
+            List<LocalDate> dates = raceDates.getOrDefault(b.id(), List.of());
+            var match = aliasMatchForBoat(b, dates).orElse(null);
+            // (1b) an alias in its period, not applied because the canonical boat has another
+            // design: the same boat with its design spelt differently, or another boat that
+            // shares the name (then the alias dates may be wrong). Needs a person to decide.
+            if (match == null)
+            {
+                var byDate = aliases.lookupBoat(b.sailNumber(), normName,
+                    a -> dates.isEmpty() || dates.stream().anyMatch(a::inUseOn)).orElse(null);
+                if (byDate != null && byDate.normName() != null
+                    && (!byDate.normName().equalsIgnoreCase(normName)
+                    || (byDate.normSailNumber() != null && !byDate.normSailNumber().equalsIgnoreCase(b.sailNumber()))))
+                    violations.add(String.format(
+                        "alias-design-mismatch: boat %s (sail=%s name=%s design=%s) matches an alias of sail=%s name=%s, "
+                            + "which has another design: merge if the same boat, else check the alias dates",
+                        b.id(), b.sailNumber(), normName, b.designId(),
+                        byDate.normSailNumber() != null ? byDate.normSailNumber() : b.sailNumber(), byDate.normName()));
+            }
             if (match != null && match.normName() != null
                 && (!match.normName().equalsIgnoreCase(normName)
                 || (match.normSailNumber() != null

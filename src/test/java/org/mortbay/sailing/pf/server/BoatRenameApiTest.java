@@ -272,6 +272,24 @@ class BoatRenameApiTest
     }
 
     @Test
+    void renamingABoatOffAnotherBoatsNameLeavesThatBoatsAliasesAlone() throws Exception
+    {
+        // Kanreki with its name history, and another boat wrongly given Kanreki's identity
+        post("/api/boats/merge", """
+            {"keepId":"7709-kanreki","mergeIds":["7709-sailexchange"],
+             "renames":{"7709-sailexchange":{"direction":"until","date":"2021-10-09"}}}""");
+        store.putBoat(new Boat("7709-kanreki-neoroma430", "7709", "Kanreki", "neoroma430", List.of(), List.of(), List.of(), null, null));
+
+        ContentResponse edited = post("/api/boats/edit",
+            "{\"boatId\":\"7709-kanreki-neoroma430\",\"sailNumber\":\"7700\",\"name\":\"About Time II\"}");
+        assertEquals(200, edited.getStatus(), edited.getContentAsString());
+        String newId = (String) MAPPER.readValue(edited.getContentAsString(), Map.class).get("newBoatId");
+        // No "7709 Kanreki" alias on the renamed boat: the real Kanreki still uses that name
+        assertEquals(List.of(), store.writtenBoatAliases(store.boats().get(newId)));
+        assertEquals("sailexchange", store.writtenBoatAliases(store.boats().get("7709-kanreki")).getFirst().name());
+    }
+
+    @Test
     void mergeWithoutDateIsAPlainAlias() throws Exception
     {
         ContentResponse merged = post("/api/boats/merge", "{\"keepId\":\"7709-kanreki\",\"mergeIds\":[\"7709-sailexchange\"]}");

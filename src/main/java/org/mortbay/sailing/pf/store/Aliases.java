@@ -142,6 +142,15 @@ public class Aliases
             this(sailNumber, name, null, null, null);
         }
 
+        /**
+         * True if this alias was in use on {@code date}: from {@code from} (inclusive) until
+         * {@code until} (exclusive). An undated alias, or an unknown date, is always in use.
+         */
+        public boolean inUseOn(LocalDate date)
+        {
+            return date == null || ((from == null || !date.isBefore(from)) && (until == null || date.isBefore(until)));
+        }
+
         /** True if this alias records a rename (it has a date). */
         @JsonIgnore
         public boolean isRename()
@@ -275,9 +284,10 @@ public class Aliases
                         boolean hasSail = snn.sailNumber != null && !snn.sailNumber.isBlank();
                         boolean hasName = snn.name != null && !snn.name.isBlank();
                         if (hasSail && hasName)
+                            // Keep a rename's dates: it only matches races in its period
                             fullAliases.add(new SailNumberName(
                                 IdGenerator.normaliseSailNumber(snn.sailNumber),
-                                IdGenerator.normaliseName(snn.name)));
+                                IdGenerator.normaliseName(snn.name), null, snn.from, snn.until));
                         else if (hasSail)
                             sailOnly.add(IdGenerator.normaliseSailNumber(snn.sailNumber));
                         else if (hasName)
@@ -359,10 +369,26 @@ public class Aliases
         }
 
         /**
-         * Looks up a boat entry by sail number or by normalised name.
+         * Looks up a boat entry by sail number or by normalised name, whatever the date.
          * Returns a BoatMatch if found, empty if not.
          */
         Optional<BoatMatch> lookupBoat(String normSailNumber, String normName)
+        {
+            return lookupBoat(normSailNumber, normName, a -> true);
+        }
+
+        /**
+         * Looks up a boat entry as raced on {@code date}: a rename alias (one with dates)
+         * matches only within its period, so another boat may use the same sail number and
+         * name at other times. A null date matches any alias.
+         */
+        Optional<BoatMatch> lookupBoat(String normSailNumber, String normName, LocalDate date)
+        {
+            return lookupBoat(normSailNumber, normName, a -> a.inUseOn(date));
+        }
+
+        /** Looks up a boat entry, considering only the aliases {@code applies} accepts. */
+        Optional<BoatMatch> lookupBoat(String normSailNumber, String normName, java.util.function.Predicate<SailNumberName> applies)
         {
             // Look up sail number first then check the names
             List<IndexedBoat> entries = sailNo2Aliases.get(normSailNumber);
@@ -374,7 +400,7 @@ public class Aliases
                 {
                     for (SailNumberName alias : ib.entry.aliases())
                     {
-                        if (alias.name != null && alias.name.equalsIgnoreCase(normName))
+                        if (alias.name != null && alias.name.equalsIgnoreCase(normName) && applies.test(alias))
                             return Optional.of(new BoatMatch(
                                 ib.canonical.sailNumber(), ib.canonical.name(), ib.entry.canonicalName()));
                     }
@@ -395,7 +421,7 @@ public class Aliases
                 {
                     for (SailNumberName alias : ib.entry.aliases())
                     {
-                        if (alias.sailNumber == null) continue;
+                        if (alias.sailNumber == null || !applies.test(alias)) continue;
                         String aliasStripped = stripPrefix(alias.sailNumber);
                         if (alias.sailNumber.equalsIgnoreCase(normSailNumber)
                             || aliasStripped.equalsIgnoreCase(inputStripped))

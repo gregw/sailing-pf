@@ -2463,7 +2463,14 @@ public class AdminApiServlet extends HttpServlet
                 String oldNormName = IdGenerator.normaliseName(boat.name());
                 String newNormSail = IdGenerator.normaliseSailNumber(sail);
                 String newNormName = IdGenerator.normaliseName(name);
-                if (!oldNormSail.equalsIgnoreCase(newNormSail) || !oldNormName.equalsIgnoreCase(newNormName))
+                // Not if another boat still uses the old sail number and name (e.g. putting a
+                // boat wrongly renamed onto another's name back): the alias would claim that
+                // boat's identity, and absorb its alias entry.
+                boolean oldIdentityInUse = store.boats().values().stream().anyMatch(o -> !o.id().equals(newBoatId)
+                    && oldNormSail.equalsIgnoreCase(IdGenerator.normaliseSailNumber(o.sailNumber()))
+                    && oldNormName.equalsIgnoreCase(IdGenerator.normaliseName(o.name())));
+                if ((!oldNormSail.equalsIgnoreCase(newNormSail) || !oldNormName.equalsIgnoreCase(newNormName))
+                    && !oldIdentityInUse)
                 {
                     List<Aliases.SailNumberName> aliasEntries = List.of(
                         new Aliases.SailNumberName(oldNormSail, oldNormName, boat.name(), null, null));
