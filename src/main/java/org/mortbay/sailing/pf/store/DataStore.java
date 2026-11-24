@@ -921,6 +921,27 @@ public class DataStore
      *
      * @return the boat now holding the record
      */
+    /**
+     * Sets the design of the boat with identity {@code identityId}: every identity ID changes
+     * (it carries the design), with its results, or the boat merges into one already recorded
+     * under that design. Callers must call {@link #save()}.
+     *
+     * @return the boat, seen through the same identity (re-keyed)
+     */
+    public Boat setBoatDesign(String identityId, String designId)
+    {
+        requireStarted();
+        Boat b = boat(identityId);
+        if (b == null)
+            throw new IllegalArgumentException("Boat not found: " + identityId);
+        if (Objects.equals(b.designId(), designId))
+            return b;
+        Boat moved = redesignBoat(b, designId, "Edit");
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
+        return moved;
+    }
+
     private Boat redesignBoat(Boat b, String designId, String why)
     {
         Design design = designs.get(designId);
@@ -2384,49 +2405,6 @@ public class DataStore
         requireStarted();
         ClubLoader.removeBoatId(configDir, boatId);
         reloadClubCatalogue();
-    }
-
-    /**
-     * Returns the alias list for a boat from the alias seed.
-     */
-    public List<Aliases.SailNumberName> boatAliases(String normSailNumber, String normName)
-    {
-        requireStarted();
-        return aliases.boatAliases(normSailNumber, normName);
-    }
-
-    /**
-     * A boat's aliases as written in aliases.yaml, with any rename dates (see
-     * {@link Aliases.SailNumberName}); empty if it has none.
-     */
-    public List<Aliases.SailNumberName> writtenBoatAliases(Boat boat)
-    {
-        requireStarted();
-        return aliases.writtenBoatAliases(IdGenerator.normaliseSailNumber(boat.sailNumber()), IdGenerator.normaliseName(boat.name()));
-    }
-
-    /**
-     * Sets the rename dates of a boat's aliases (see {@link Aliases#setRenameDates}) and
-     * reloads the aliases. Returns how many changed.
-     */
-    /** Adds and removes a boat's aliases in aliases.yaml (see {@link Aliases#editBoatAliases}). */
-    public int editBoatAliases(Boat boat, List<Aliases.SailNumberName> add, List<Aliases.SailNumberName> remove)
-    {
-        requireStarted();
-        int changed = Aliases.editBoatAliases(configDir, IdGenerator.normaliseSailNumber(boat.sailNumber()),
-            IdGenerator.normaliseName(boat.name()), boat.name(), add, remove);
-        if (changed > 0)
-            reloadAliases();
-        return changed;
-    }
-
-    public int setBoatRenameDates(Boat boat, List<Aliases.SailNumberName> updates)
-    {
-        requireStarted();
-        int changed = Aliases.setRenameDates(configDir, IdGenerator.normaliseSailNumber(boat.sailNumber()), IdGenerator.normaliseName(boat.name()), updates);
-        if (changed > 0)
-            reloadAliases();
-        return changed;
     }
 
     /**

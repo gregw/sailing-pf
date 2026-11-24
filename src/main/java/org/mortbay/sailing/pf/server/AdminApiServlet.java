@@ -38,6 +38,7 @@ import org.mortbay.sailing.pf.analysis.PerformanceProfile;
 import org.mortbay.sailing.pf.analysis.PfQuality;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
 import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.BoatAlias;
 import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Design;
@@ -45,6 +46,7 @@ import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.EntryVariant;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Identity;
 import org.mortbay.sailing.pf.data.Link;
 import org.mortbay.sailing.pf.data.Race;
 import org.mortbay.sailing.pf.data.SailSysEvent;
@@ -109,8 +111,8 @@ public class AdminApiServlet extends HttpServlet
             handleBoatProfile(boatKey(path.replaceAll("^/boats/|/profile$", "")), resp);
         else if (path.matches("/boats/[^/]+/reference"))
             handleBoatReference(boatKey(path.replaceAll("^/boats/|/reference$", "")), resp);
-        else if (path.matches("/boats/[^/]+/aliases"))
-            handleBoatAliases(boatKey(path.replaceAll("^/boats/|/aliases$", "")), resp);
+        else if (path.matches("/boats/[^/]+/identities"))
+            handleBoatIdentities(path.replaceAll("^/boats/|/identities$", ""), resp);
         else if ("/boats/merge-plan".equals(path))
             handleBoatMergePlan(req, resp);
         else if (path.startsWith("/boats"))
@@ -237,12 +239,10 @@ public class AdminApiServlet extends HttpServlet
         {
             handleEditBoat(req, resp);
         }
-        else if ("/boats/aliases".equals(path))
-            handleEditBoatAliases(req, resp);
-        else if ("/boats/rename-dates".equals(path))
-        {
-            handleBoatRenameDates(req, resp);
-        }
+        else if ("/boats/identities".equals(path))
+            handleEditBoatIdentities(req, resp);
+        else if ("/boats/unlink".equals(path))
+            handleUnlinkIdentity(req, resp);
         else if ("/designs/edit".equals(path))
         {
             handleEditDesign(req, resp);
@@ -521,20 +521,25 @@ public class AdminApiServlet extends HttpServlet
                 .filter(b -> lower == null
                     || b.id().toLowerCase().contains(lower)
                     || b.name().toLowerCase().contains(lower)
-                    || renameAliases(b).stream().anyMatch(a -> renameName(b, a).toLowerCase().contains(lower)))
+                    || b.identities().values().stream().anyMatch(i -> i.name().toLowerCase().contains(lower)))
                 .collect(Collectors.toList());
 
-            // Each boat, then a row for each name it was renamed from or to (a dated alias),
-            // which opens the boat. Not in the duplicate views: the alias is the same boat.
+            // Each boat under its current identity, then a row for each of its other identities
+            // (the names it raced under before or alongside), which opens the boat. Not in the
+            // duplicate views: they are the same boat.
             List<BoatListEntry> entries = new ArrayList<>();
+            boolean anyFormer = all.stream().anyMatch(b -> b.identities().size() > 1);
+            Map<String, IdentitySpan> spans = candidateIds == null && anyFormer ? identitySpans() : Map.of();
             for (Boat b : all)
             {
                 if (lower == null || b.id().toLowerCase().contains(lower) || b.name().toLowerCase().contains(lower))
-                    entries.add(new BoatListEntry(b, null));
+                    entries.add(new BoatListEntry(b, null, null));
                 if (candidateIds == null)
-                    for (Aliases.SailNumberName a : renameAliases(b))
-                        if (lower == null || renameName(b, a).toLowerCase().contains(lower))
-                            entries.add(new BoatListEntry(b, a));
+                    for (String identityId : b.identities().keySet())
+                        if (!identityId.equals(b.id()) && (lower == null
+                            || b.identities().get(identityId).name().toLowerCase().contains(lower)
+                            || identityId.toLowerCase().contains(lower)))
+                            entries.add(new BoatListEntry(b, identityId, spans.get(identityId)));
             }
 
             if (sort != null && !sort.isBlank())
@@ -586,12 +591,15 @@ public class AdminApiServlet extends HttpServlet
                 row.put("id",         b.id());
                 row.put("sailNumber", e.sailNumber());
                 row.put("name",       e.name());
-                if (e.alias() != null)
+                if (e.identityId() != null)
                 {
-                    // A former (or later) name of boat b: shown as its own row, opening b
+                    // Another identity of boat b (a former name): its own row, opening b
                     row.put("aliasOf", b.name());
-                    if (e.alias().from() != null) row.put("aliasFrom", e.alias().from().toString());
-                    if (e.alias().until() != null) row.put("aliasUntil", e.alias().until().toString());
+                    row.put("identityId", e.identityId());
+                    LocalDate from = e.from();
+                    LocalDate until = e.until();
+                    if (from != null) row.put("aliasFrom", from.toString());
+                    if (until != null) row.put("aliasUntil", until.toString());
                 }
                 row.put("designId",   b.designId());
                 row.put("designExcluded", b.designId() != null && store.isDesignExcluded(b.designId()));
@@ -649,30 +657,97 @@ public class AdminApiServlet extends HttpServlet
         return id == null ? null : store.canonicalBoatId(id);
     }
 
-    /** A boat list row: the boat, or one of its renames (a dated alias) when alias is set. */
-    private record BoatListEntry(Boat boat, Aliases.SailNumberName alias)
+    /**
+     * A boat list row: the boat under its current identity, or one of its other identities
+     * when identityId is set (with the span of that identity's races).
+     */
+    private record BoatListEntry(Boat boat, String identityId, IdentitySpan span)
     {
+        Identity identity()
+        {
+            return identityId == null ? boat.identity() : boat.identities().get(identityId);
+        }
+
         String name()
         {
-            return alias == null ? boat.name() : renameName(boat, alias);
+            return identity().name();
         }
 
         String sailNumber()
         {
-            return alias == null || alias.sailNumber() == null ? boat.sailNumber() : alias.sailNumber();
+            return identity().sailNumber();
+        }
+
+        /** When this identity was first used: its from date, else its first race. */
+        LocalDate from()
+        {
+            Identity i = identity();
+            return i.from() != null ? i.from() : span == null ? null : span.first();
+        }
+
+        /** When this identity was last used: its until date, else its last race. */
+        LocalDate until()
+        {
+            Identity i = identity();
+            return i.until() != null ? i.until() : span == null ? null : span.last();
         }
     }
 
-    /** A boat's aliases that record a rename (have a date). */
-    private List<Aliases.SailNumberName> renameAliases(Boat b)
+    /** The first and last race an identity was entered in, and how many. */
+    record IdentitySpan(LocalDate first, LocalDate last, int races)
     {
-        return store.writtenBoatAliases(b).stream().filter(Aliases.SailNumberName::isRename).toList();
     }
 
-    /** The name a boat raced under while it had alias {@code a}. */
-    static String renameName(Boat b, Aliases.SailNumberName a)
+    /** Every identity's span of races, by identity ID (identities with no races are absent). */
+    private Map<String, IdentitySpan> identitySpans()
     {
-        return a.displayName() != null ? a.displayName() : a.name() != null ? a.name() : b.name();
+        Map<String, IdentitySpan> spans = new HashMap<>();
+        for (Race race : store.races().values())
+        {
+            if (race.date() == null || race.divisions() == null)
+                continue;
+            for (Division d : race.divisions())
+                for (Finisher f : d.finishers())
+                    spans.merge(f.identityId(), new IdentitySpan(race.date(), race.date(), 1), (a, b) -> new IdentitySpan(
+                        a.first().isBefore(b.first()) ? a.first() : b.first(),
+                        a.last().isAfter(b.last()) ? a.last() : b.last(), a.races() + b.races()));
+        }
+        return spans;
+    }
+
+    /** A boat's identities, oldest first, as JSON, with when each raced. */
+    private List<Map<String, Object>> identitiesJson(Boat boat, Map<String, IdentitySpan> spans)
+    {
+        List<Map<String, Object>> out = new ArrayList<>();
+        String current = boat.currentId();
+        boat.identities().forEach((id, i) ->
+        {
+            IdentitySpan span = spans.get(id);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", id);
+            m.put("sailNumber", i.sailNumber());
+            m.put("name", i.name());
+            m.put("current", id.equals(current));
+            if (i.from() != null) m.put("from", i.from().toString());
+            if (i.until() != null) m.put("until", i.until().toString());
+            if (span != null)
+            {
+                m.put("firstRace", span.first().toString());
+                m.put("lastRace", span.last().toString());
+                m.put("races", span.races());
+            }
+            m.put("clubIds", i.clubIds());
+            m.put("clubsCurated", i.clubsCurated());
+            m.put("aliases", i.aliases().stream().map(a ->
+            {
+                Map<String, Object> am = new LinkedHashMap<>();
+                if (a.sailNumber() != null) am.put("sailNumber", a.sailNumber());
+                if (a.name() != null) am.put("name", a.name());
+                return am;
+            }).toList());
+            out.add(m);
+        });
+        return out;
     }
 
     /**
@@ -1010,8 +1085,8 @@ public class AdminApiServlet extends HttpServlet
         // PF as at 1 July of each past season (PfHistory), oldest first
         result.put("pfHistory", cache.pfHistory().forBoat(id));
         // Renames (dated aliases), marked on the PF history
-        result.put("renames", store.writtenBoatAliases(boat).stream()
-            .filter(Aliases.SailNumberName::isRename).map(AdminApiServlet::aliasMap).toList());
+        // The boat's identities (names it raced under), marked on the PF history
+        result.put("identities", boat.identities().size() > 1 ? identitiesJson(boat, identitySpans()) : List.of());
 
         writeJson(resp, result);
     }
@@ -1040,110 +1115,32 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * GET /api/boats/{id}/aliases — returns the alias list for a boat from the alias seed.
-     * <p>
-     * Looks up the boat's normalised sail number and name in {@code aliases.yaml} via
-     * {@link org.mortbay.sailing.pf.store.DataStore#boatAliases} and returns a JSON array
-     * of objects with optional {@code sailNumber} and {@code name} fields. Returns an empty
-     * array if no aliases are configured. Returns 404 if the boat ID is not in the store.
+     * GET /api/boats/{id}/identities — the boat's identities, oldest first: each with its sail
+     * number, name, optional from/until, when it first and last raced, clubs and aliases, and
+     * which is current. 404 if no boat has the identity.
      */
-    private void handleBoatAliases(String id, HttpServletResponse resp) throws IOException
+    private void handleBoatIdentities(String id, HttpServletResponse resp) throws IOException
     {
-        Boat boat = store.boats().get(boatKey(id));
+        Boat boat = store.boat(id);
         if (boat == null)
         {
             resp.sendError(404);
             return;
         }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Aliases.SailNumberName snn : store.writtenBoatAliases(boat))
-            result.add(aliasMap(snn));
-        writeJson(resp, result);
-    }
-
-    /** An alias as JSON: sailNumber, name, and for a rename displayName and from/until. */
-    private static Map<String, Object> aliasMap(Aliases.SailNumberName snn)
-    {
-        Map<String, Object> entry = new LinkedHashMap<>();
-        if (snn.sailNumber() != null) entry.put("sailNumber", snn.sailNumber());
-        if (snn.name() != null) entry.put("name", snn.name());
-        if (snn.displayName() != null) entry.put("displayName", snn.displayName());
-        if (snn.from() != null) entry.put("from", snn.from().toString());
-        if (snn.until() != null) entry.put("until", snn.until().toString());
-        return entry;
-    }
-
-    /** A name in a boat's history and the first and last races under it; id is the boat being merged, null for the kept boat. */
-    private record NameSpan(String id, String name, LocalDate first, LocalDate last)
-    {
-        boolean id(String boatId)
-        {
-            return boatId.equals(id);
-        }
+        writeJson(resp, identitiesJson(boat, identitySpans()));
     }
 
     /**
-     * The name a boat raced under on {@code date}, from its renames (dated aliases): the
-     * alias with the earliest {@code until} after the date, else the one with the latest
-     * {@code from} on or before it, else its current name.
-     */
-    static String nameAt(Boat boat, List<Aliases.SailNumberName> renames, LocalDate date)
-    {
-        Aliases.SailNumberName before = null, from = null;
-        for (Aliases.SailNumberName a : renames)
-        {
-            if (a.until() != null && date.isBefore(a.until()) && (before == null || a.until().isBefore(before.until())))
-                before = a;
-            if (a.from() != null && !date.isBefore(a.from()) && (from == null || a.from().isAfter(from.from())))
-                from = a;
-        }
-        Aliases.SailNumberName a = before != null ? before : from;
-        return a == null ? boat.name() : renameName(boat, a);
-    }
-
-    /** The dates of a boat's races, oldest first. */
-    private List<LocalDate> raceDates(String boatId)
-    {
-        BoatDerived bd = cache.boatDerived().get(boatId);
-        java.util.Collection<String> raceIds = bd != null ? bd.raceIds() : null;
-        if (raceIds == null || raceIds.isEmpty())
-        {
-            List<String> found = new ArrayList<>();
-            for (Race race : store.races().values())
-                for (Division d : race.divisions())
-                    for (Finisher f : d.finishers())
-                        if (boatId.equals(f.boatId()))
-                            found.add(race.id());
-            raceIds = found;
-        }
-        List<LocalDate> dates = new ArrayList<>();
-        for (String raceId : raceIds)
-        {
-            Race race = store.races().get(raceId);
-            if (race != null && race.date() != null)
-                dates.add(race.date());
-        }
-        dates.sort(null);
-        return dates;
-    }
-
-    /** The first and last dates a boat raced, or null if it has no dated races. */
-    private LocalDate[] raceDateRange(String boatId)
-    {
-        List<LocalDate> dates = raceDates(boatId);
-        return dates.isEmpty() ? null : new LocalDate[]{dates.getFirst(), dates.getLast()};
-    }
-
-    /**
-     * GET /api/boats/merge-plan?keep={id}&merge={id},{id} — for each boat to be merged into
-     * {@code keep}, whether merging records an alias (it differs in sail number or name) and
-     * the suggested rename ({@link #proposeRename}): {@code direction} "until" (it was renamed
-     * to the kept boat's name) or "from" (renamed from it), and {@code date}, null if it could
-     * not be determined. Also each boat's first and last race dates.
+     * GET /api/boats/merge-plan?keep={id}&merge={id},{id} — what merging these boats into
+     * {@code keep} would be: each boat's design and racing period (first and last race), and
+     * {@code looksLikeRename}: all the boats raced in periods that do not overlap and have
+     * compatible designs, so they look like one boat renamed (link identities) rather than
+     * misspellings (merge as spelling). {@code sameDesign} is false if two have different
+     * designs, which a link refuses.
      */
     private void handleBoatMergePlan(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
-        Boat keep = store.boats().get(boatKey(String.valueOf(req.getParameter("keep"))));
+        Boat keep = store.boat(String.valueOf(req.getParameter("keep")));
         String merge = req.getParameter("merge");
         if (keep == null || merge == null || merge.isBlank())
         {
@@ -1151,131 +1148,115 @@ public class AdminApiServlet extends HttpServlet
             writeJson(resp, Map.of("error", "keep and merge are required"));
             return;
         }
-        LocalDate[] keepRange = raceDateRange(keep.id());
-        List<LocalDate> keepDates = raceDates(keep.id());
-        List<Aliases.SailNumberName> renames = store.writtenBoatAliases(keep).stream()
-            .filter(Aliases.SailNumberName::isRename).toList();
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("keepId", keep.id());
-        result.put("keepName", keep.name());
-        result.put("keepFirstRace", keepRange == null ? null : keepRange[0].toString());
-        result.put("keepLastRace", keepRange == null ? null : keepRange[1].toString());
-        // One name history for the merged result: the kept boat's names (from its renames),
-        // then each boat being merged. A boat is renamed to the next name in it, or from the
-        // previous one, so merging several names at once puts each next to its neighbours.
-        List<Boat> merged = new ArrayList<>();
+        Map<String, IdentitySpan> spans = identitySpans();
+        List<Boat> all = new ArrayList<>();
+        all.add(keep);
         for (String id : merge.split(","))
         {
-            Boat mb = store.boats().get(boatKey(id.trim()));
-            if (mb != null && !mb.id().equals(keep.id()))
-                merged.add(mb);
+            Boat b = store.boat(id.trim());
+            if (b != null && !store.canonicalBoatId(b.id()).equals(store.canonicalBoatId(keep.id())))
+                all.add(b);
         }
-        List<NameSpan> spans = new ArrayList<>();
-        Map<String, List<LocalDate>> keepByName = new LinkedHashMap<>();
-        for (LocalDate d : keepDates)
-            keepByName.computeIfAbsent(nameAt(keep, renames, d), k -> new ArrayList<>()).add(d);
-        keepByName.forEach((name, ds) -> spans.add(new NameSpan(null, name, ds.getFirst(), ds.getLast())));
-        for (Boat mb : merged)
-        {
-            LocalDate[] range = raceDateRange(mb.id());
-            if (range != null)
-                spans.add(new NameSpan(mb.id(), mb.name(), range[0], range[1]));
-        }
-        spans.sort(Comparator.comparing(NameSpan::first));
-        NameSpan current = spans.stream().filter(sp -> sp.id() == null && sp.name().equals(keep.name())).findFirst()
-            .orElse(keepRange == null ? null : new NameSpan(null, keep.name(), keepRange[0], keepRange[1]));
-
         List<Map<String, Object>> boats = new ArrayList<>();
-        for (Boat mb : merged)
+        List<IdentitySpan> periods = new ArrayList<>();
+        java.util.Set<String> designs = new java.util.HashSet<>();
+        for (Boat b : all)
         {
-            LocalDate[] range = raceDateRange(mb.id());
-            NameSpan self = range == null ? null : new NameSpan(mb.id(), mb.name(), range[0], range[1]);
-            boolean until = true;
-            LocalDate date = null;
-            NameSpan other = current;
-            if (self != null && current != null)
+            IdentitySpan period = null;
+            for (String identityId : b.identities().keySet())
             {
-                if (self.first().isAfter(current.last()))
-                {
-                    // Raced after the kept name: renamed from the name before it
-                    until = false;
-                    other = spans.stream().filter(sp -> !sp.id(mb.id()) && sp.first().isBefore(self.first()))
-                        .reduce((a, b) -> b).orElse(current);
-                    if (other.last().isBefore(self.first()))
-                        date = self.first();
-                }
-                else if (self.last().isBefore(current.first()))
-                {
-                    // Raced before the kept name: renamed to the name after it
-                    other = spans.stream().filter(sp -> !sp.id(mb.id()) && sp.first().isAfter(self.first()))
-                        .findFirst().orElse(current);
-                    if (self.last().isBefore(other.first()))
-                        date = other.first();
-                }
-                else
-                    until = !self.first().isAfter(current.first());   // overlapping: no date
+                IdentitySpan sp = spans.get(identityId);
+                if (sp != null)
+                    period = period == null ? sp : new IdentitySpan(
+                        sp.first().isBefore(period.first()) ? sp.first() : period.first(),
+                        sp.last().isAfter(period.last()) ? sp.last() : period.last(), period.races() + sp.races());
             }
+            if (period != null)
+                periods.add(period);
+            if (b.designId() != null)
+                designs.add(b.designId());
             Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", mb.id());
-            m.put("sailNumber", mb.sailNumber());
-            m.put("name", mb.name());
-            m.put("firstRace", range == null ? null : range[0].toString());
-            m.put("lastRace", range == null ? null : range[1].toString());
-            m.put("alias", mergeAlias(keep, mb) != null);
-            m.put("direction", until ? "until" : "from");
-            m.put("date", date == null ? null : date.toString());
-            // The name next to this one in the history, the boat it was renamed to (until) or
-            // from (from), with the races under that name.
-            m.put("otherName", other == null ? keep.name() : other.name());
-            m.put("otherFirstRace", other == null ? null : other.first().toString());
-            m.put("otherLastRace", other == null ? null : other.last().toString());
+            m.put("id", b.id());
+            m.put("sailNumber", b.sailNumber());
+            m.put("name", b.name());
+            m.put("designId", b.designId());
+            m.put("identities", b.identities().size());
+            m.put("firstRace", period == null ? null : period.first().toString());
+            m.put("lastRace", period == null ? null : period.last().toString());
             boats.add(m);
         }
+        periods.sort(Comparator.comparing(IdentitySpan::first));
+        boolean overlap = false;
+        for (int i = 1; i < periods.size(); i++)
+            overlap |= !periods.get(i).first().isAfter(periods.get(i - 1).last());
+        boolean sameDesign = designs.size() <= 1;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("keepId", keep.id());
         result.put("boats", boats);
+        result.put("sameDesign", sameDesign);
+        result.put("looksLikeRename", sameDesign && !overlap && periods.size() == all.size());
         writeJson(resp, result);
     }
 
     /**
-     * The alias recorded when {@code merged} is merged into {@code keep}, or null if they have
-     * the same sail number and name.
-     */
-    private static Aliases.SailNumberName mergeAlias(Boat keep, Boat merged)
-    {
-        String sail = IdGenerator.normaliseSailNumber(merged.sailNumber());
-        String name = IdGenerator.normaliseName(merged.name());
-        if (sail.equalsIgnoreCase(IdGenerator.normaliseSailNumber(keep.sailNumber()))
-            && name.equalsIgnoreCase(IdGenerator.normaliseName(keep.name())))
-            return null;
-        return new Aliases.SailNumberName(sail, name);
-    }
-
-    /**
-     * POST /api/boats/rename-dates — sets when a boat's aliases were in use. Body:
-     * {@code {boatId, aliases: [{sailNumber, name, from, until}]}}; each alias is matched by
-     * sail number and name, and its dates replaced (absent or blank clears them, leaving a
-     * plain alias).
+     * POST /api/boats/identities — edits a boat's identities. Body: {@code {boatId, current?,
+     * identities: [{id, from?, until?, aliases?: [{sailNumber?, name?}]}]}}: each listed
+     * identity gets those dates (absent or blank clears them) and, if given, exactly those
+     * aliases; {@code current} makes that identity the current one (the boat's name). Aliases
+     * affect future imports only: existing boats are not merged or split.
      */
     @SuppressWarnings("unchecked")
-    private void handleBoatRenameDates(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    private void handleEditBoatIdentities(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         try
         {
             Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
-            Boat boat = store.boats().get(boatKey(String.valueOf(body.get("boatId"))));
+            Boat boat = store.boat(String.valueOf(body.get("boatId")));
             if (boat == null)
             {
                 resp.setStatus(404);
                 writeJson(resp, Map.of("error", "Boat not found: " + body.get("boatId")));
                 return;
             }
-            List<Aliases.SailNumberName> updates = new ArrayList<>();
-            List<Map<String, Object>> aliases = (List<Map<String, Object>>) body.get("aliases");
-            if (aliases != null)
-                for (Map<String, Object> a : aliases)
-                    updates.add(new Aliases.SailNumberName((String) a.get("sailNumber"), (String) a.get("name"), null,
-                        parseOptionalDate(a.get("from")), parseOptionalDate(a.get("until"))));
-            int changed = store.setBoatRenameDates(boat, updates);
-            writeJson(resp, Map.of("ok", true, "changed", changed));
+            Map<String, Identity> identities = new LinkedHashMap<>(boat.identities());
+            if (body.get("identities") instanceof List<?> list)
+            {
+                for (Map<String, Object> e : (List<Map<String, Object>>) list)
+                {
+                    String id = (String) e.get("id");
+                    Identity i = identities.get(id);
+                    if (i == null)
+                        throw new IllegalArgumentException(id + " is not an identity of " + boat.id());
+                    i = i.withDates(parseOptionalDate(e.get("from")), parseOptionalDate(e.get("until")));
+                    if (e.get("aliases") instanceof List<?> aliases)
+                    {
+                        List<BoatAlias> parsed = new ArrayList<>();
+                        for (Map<String, Object> a : (List<Map<String, Object>>) aliases)
+                        {
+                            String sail = (String) a.get("sailNumber");
+                            String name = (String) a.get("name");
+                            if ((sail == null || sail.isBlank()) && (name == null || name.isBlank()))
+                                continue;
+                            BoatAlias alias = new BoatAlias(sail, name);
+                            if (parsed.stream().noneMatch(alias::sameAs) && !alias.sameAs(new BoatAlias(i.sailNumber(), i.name())))
+                                parsed.add(alias);
+                        }
+                        i = i.withAliases(parsed);
+                    }
+                    identities.put(id, i);
+                }
+            }
+            Object current = body.get("current");
+            if (current instanceof String c && identities.containsKey(c) && !c.equals(boat.currentId()))
+            {
+                Identity moved = identities.remove(c);
+                identities.put(c, moved);
+            }
+            Boat updated = boat.withIdentities(identities).withLastUpdated(java.time.Instant.now()).withLoadedAt(null);
+            store.putBoat(updated);
+            store.save();
+            cache.refreshIndexes();
+            writeJson(resp, Map.of("ok", true, "boatId", store.canonicalBoatId(updated.id())));
         }
         catch (IllegalArgumentException | java.time.format.DateTimeParseException e)
         {
@@ -1285,37 +1266,21 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * POST /api/boats/aliases — adds and removes a boat's aliases. Body: {@code {boatId,
-     * add: [{sailNumber, name, from, until}], remove: [{sailNumber, name}]}}; an alias gives a
-     * sail number, a name or both. Only future imports are affected: existing boats are not
-     * merged or split.
+     * POST /api/boats/unlink — an identity leaves its boat and becomes a boat of its own, with
+     * its results. Body: {@code {identityId}}.
      */
     @SuppressWarnings("unchecked")
-    private void handleEditBoatAliases(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    private void handleUnlinkIdentity(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         try
         {
             Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
-            Boat boat = store.boats().get(boatKey(String.valueOf(body.get("boatId"))));
-            if (boat == null)
-            {
-                resp.setStatus(404);
-                writeJson(resp, Map.of("error", "Boat not found: " + body.get("boatId")));
-                return;
-            }
-            List<Aliases.SailNumberName> add = new ArrayList<>();
-            List<Aliases.SailNumberName> remove = new ArrayList<>();
-            if (body.get("add") instanceof List<?> l)
-                for (Map<String, Object> a : (List<Map<String, Object>>) l)
-                    add.add(new Aliases.SailNumberName((String) a.get("sailNumber"), (String) a.get("name"), null,
-                        parseOptionalDate(a.get("from")), parseOptionalDate(a.get("until"))));
-            if (body.get("remove") instanceof List<?> l)
-                for (Map<String, Object> a : (List<Map<String, Object>>) l)
-                    remove.add(new Aliases.SailNumberName((String) a.get("sailNumber"), (String) a.get("name")));
-            int changed = store.editBoatAliases(boat, add, remove);
-            writeJson(resp, Map.of("ok", true, "changed", changed));
+            Boat alone = store.unlinkIdentity(String.valueOf(body.get("identityId")));
+            store.save();
+            cache.refreshIndexes();
+            writeJson(resp, Map.of("ok", true, "boatId", alone.id()));
         }
-        catch (IllegalArgumentException | java.time.format.DateTimeParseException e)
+        catch (IllegalArgumentException e)
         {
             resp.setStatus(400);
             writeJson(resp, Map.of("error", e.getMessage()));
@@ -2183,17 +2148,12 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
-     * POST /api/boats/merge — merges two or more duplicate boat records into one.
-     * <p>
-     * Reads a JSON body with {@code keepId} (the canonical boat to retain) and
-     * {@code mergeIds} (list of boat IDs to fold in). Before merging, collects alias entries
-     * for any merged boat whose normalised sail number or name differs from the keep boat.
-     * Calls {@link org.mortbay.sailing.pf.store.DataStore#mergeBoats} to rewrite all race
-     * finisher references from merged IDs to {@code keepId} and delete the merged boat records.
-     * Saves the store, then appends the new alias entries to {@code aliases.yaml} and reloads
-     * the alias seed so future imports honour the merge automatically.
-     * Returns 400 for validation errors, 404 if any ID is not found, 500 on unexpected error.
-     * On success returns {@code updatedRaces} and {@code updatedFinishers} counts.
+     * POST /api/boats/merge — merges boats into one. Body: {@code {keepId, mergeIds, link}}.
+     * With {@code link} (the boats are one boat renamed) their identities join the kept boat
+     * unchanged, each keeping its results, and the most recently raced becomes current; they
+     * must be of the same design. Without it (misspellings) each merged boat's names become
+     * aliases of the kept identity and its results move to it. Returns the kept boat's ID,
+     * which after a link may be another identity.
      */
     @SuppressWarnings("unchecked")
     private void handleMergeBoats(HttpServletRequest req, HttpServletResponse resp) throws IOException
@@ -2203,10 +2163,7 @@ public class AdminApiServlet extends HttpServlet
             Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
             String keepId = (String) body.get("keepId");
             List<String> mergeIds = (List<String>) body.get("mergeIds");
-            // mergeId -> {direction: "until"|"from", date}: the merged boat was renamed
-            Map<String, Map<String, Object>> renames = body.get("renames") instanceof Map<?, ?> r
-                ? (Map<String, Map<String, Object>>) r : Map.of();
-
+            boolean link = Boolean.TRUE.equals(body.get("link"));
             if (keepId == null || keepId.isBlank())
             {
                 resp.setStatus(400);
@@ -2225,67 +2182,42 @@ public class AdminApiServlet extends HttpServlet
                 writeJson(resp, Map.of("error", "keepId must not appear in mergeIds"));
                 return;
             }
-
-            // Build alias specs before merging (while we still have all boat records)
-            Boat keepBoat = store.boats().get(boatKey(keepId));
-            if (keepBoat == null)
+            if (store.boat(keepId) == null)
             {
                 resp.setStatus(404);
                 writeJson(resp, Map.of("error", "Keep boat not found: " + keepId));
                 return;
             }
-            // Build alias entries from merged boats before merging (while we still have all boat records)
-            String keepNormSail = IdGenerator.normaliseSailNumber(keepBoat.sailNumber());
-            List<Aliases.SailNumberName> newAliases = new ArrayList<>();
             for (String mergeId : mergeIds)
             {
-                Boat mb = store.boats().get(boatKey(mergeId));
-                if (mb == null)
+                if (store.boat(mergeId) == null)
                 {
                     resp.setStatus(404);
                     writeJson(resp, Map.of("error", "Merge boat not found: " + mergeId));
                     return;
                 }
-                // Record alias entry if sail number or name differs from the keep boat; with a
-                // rename date, it also keeps the name the boat raced under and when.
-                Aliases.SailNumberName alias = mergeAlias(keepBoat, mb);
-                if (alias != null)
-                {
-                    Map<String, Object> rename = renames.get(mergeId);
-                    LocalDate date = rename == null ? null : parseOptionalDate(rename.get("date"));
-                    if (date != null)
-                    {
-                        boolean from = "from".equals(rename.get("direction"));
-                        alias = new Aliases.SailNumberName(alias.sailNumber(), alias.name(), mb.name(),
-                            from ? date : null, from ? null : date);
-                    }
-                    newAliases.add(alias);
-                }
             }
 
-            DataStore.MergeResult result = store.mergeBoats(keepId, mergeIds);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("ok", true);
+            if (link)
+            {
+                Boat linked = store.linkBoats(keepId, mergeIds);
+                result.put("linked", true);
+                result.put("keptId", linked.id());
+            }
+            else
+            {
+                DataStore.MergeResult merged = store.mergeBoats(keepId, mergeIds);
+                for (String mergeId : mergeIds)
+                    store.removeBoatFromClubConfig(mergeId);
+                result.put("updatedRaces", merged.updatedRaces());
+                result.put("updatedFinishers", merged.updatedFinishers());
+                result.put("keptId", store.canonicalBoatId(keepId));
+            }
             store.save();
-
-            // Remove merged-away boatIds from club config (keepId retains its own entries)
-            for (String mergeId : mergeIds)
-            {
-                store.removeBoatFromClubConfig(mergeId);
-            }
-
-            // Update aliases.yaml and reload the alias seed so future imports honour the merge
-            if (!newAliases.isEmpty())
-            {
-                Aliases.addAliases(store.configDir(), keepNormSail, keepBoat.name(), newAliases);
-                store.reloadAliases();
-            }
-
             cache.refreshIndexes();
-
-            writeJson(resp, Map.of(
-                "ok", true,
-                "updatedRaces", result.updatedRaces(),
-                "updatedFinishers", result.updatedFinishers()
-            ));
+            writeJson(resp, result);
         }
         catch (IllegalArgumentException e)
         {
@@ -2415,7 +2347,7 @@ public class AdminApiServlet extends HttpServlet
                 writeJson(resp, Map.of("error", "boatId is required"));
                 return;
             }
-            Boat boat = store.boats().get(boatKey(boatId));
+            Boat boat = store.boat(boatId);
             if (boat == null)
             {
                 resp.setStatus(404);
@@ -2469,16 +2401,14 @@ public class AdminApiServlet extends HttpServlet
 
             List<Link> links = body.containsKey("links") ? parseLinks(body.get("links"), boat.links()) : boat.links();
 
-            // Compute the new boat ID
-            Design design = designId != null ? store.designs().get(designId) : null;
-            String newBoatId = IdGenerator.generateBoatId(sail, name, design);
-            boolean idChanged = !newBoatId.equals(boatId);
-
-            // Check for collision with an existing different boat
-            if (idChanged && store.boats().containsKey(newBoatId))
+            // Sail number and name are the edited identity's; design and links the boat's
+            Design newDesign = designId != null ? store.designs().get(designId) : null;
+            String newIdentityId = IdGenerator.generateBoatId(sail, name, newDesign);
+            Boat holder = store.boat(newIdentityId);
+            if (holder != null && !store.canonicalBoatId(newIdentityId).equals(store.canonicalBoatId(boatId)))
             {
                 resp.setStatus(409);
-                writeJson(resp, Map.of("error", "A boat with ID " + newBoatId + " already exists. Merge first, then edit."));
+                writeJson(resp, Map.of("error", "A boat with ID " + newIdentityId + " already exists. Merge first, then edit."));
                 return;
             }
 
@@ -2489,119 +2419,27 @@ public class AdminApiServlet extends HttpServlet
             if (wasModified)
                 store.setBoatModified(boatId, false);
 
-            // Create updated boat record
-            Boat updated = new Boat(newBoatId, sail, name, designId, clubIds,
-                boat.certificates(), boat.sources(), links, java.time.Instant.now(), null);
-            store.putBoat(updated);
-            if (modified)
-                store.setBoatModified(newBoatId, true);
-
-            int updatedRaces = 0;
-            int updatedFinishers = 0;
-            if (idChanged)
-            {
-                // Remove old boat record
-                store.removeBoat(boatId);
-
-                // Repoint all race finisher references
-                for (Race race : List.copyOf(store.races().values()))
-                {
-                    boolean changed = false;
-                    List<Division> newDivisions = new ArrayList<>();
-                    for (Division div : race.divisions())
-                    {
-                        List<Finisher> newFinishers = new ArrayList<>();
-                        for (Finisher f : div.finishers())
-                        {
-                            if (f.boatId().equals(boatId))
-                            {
-                                newFinishers.add(f.withBoatId(newBoatId));
-                                changed = true;
-                                updatedFinishers++;
-                            }
-                            else
-                            {
-                                newFinishers.add(f);
-                            }
-                        }
-                        newDivisions.add(new Division(div.name(), List.copyOf(newFinishers)));
-                    }
-                    if (changed)
-                    {
-                        store.putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
-                            race.number(), race.name(), List.copyOf(newDivisions),
-                            race.source(), race.lastUpdated(), null));
-                        updatedRaces++;
-                    }
-                }
-
-                // Create alias so future imports of the old identity resolve to the new
-                String oldNormSail = IdGenerator.normaliseSailNumber(boat.sailNumber());
-                String oldNormName = IdGenerator.normaliseName(boat.name());
-                String newNormSail = IdGenerator.normaliseSailNumber(sail);
-                String newNormName = IdGenerator.normaliseName(name);
-                // Not if another boat still uses the old sail number and name (e.g. putting a
-                // boat wrongly renamed onto another's name back): the alias would claim that
-                // boat's identity, and absorb its alias entry.
-                boolean oldIdentityInUse = store.boats().values().stream().anyMatch(o -> !o.id().equals(newBoatId)
-                    && oldNormSail.equalsIgnoreCase(IdGenerator.normaliseSailNumber(o.sailNumber()))
-                    && oldNormName.equalsIgnoreCase(IdGenerator.normaliseName(o.name())));
-                if ((!oldNormSail.equalsIgnoreCase(newNormSail) || !oldNormName.equalsIgnoreCase(newNormName))
-                    && !oldIdentityInUse)
-                {
-                    List<Aliases.SailNumberName> aliasEntries = List.of(
-                        new Aliases.SailNumberName(oldNormSail, oldNormName, boat.name(), null, null));
-                    Aliases.addAliases(store.configDir(), newNormSail, name, aliasEntries);
-                    store.reloadAliases();
-                }
-            }
-
-            // Write design override to design.yaml if design was changed
-            if (body.containsKey("designId") && !Objects.equals(designId, boat.designId()))
-            {
-                if (designId != null)
-                {
-                    Design d = store.designs().get(designId);
-                    String canonicalName = d != null ? d.canonicalName() : designId;
-                    store.addDesignOverride(sail, name, designId, canonicalName);
-                }
-            }
-
-            // Write club override to clubs.yaml
+            Boat current = boat;
+            if (!Objects.equals(designId, boat.designId()))
+                current = store.setBoatDesign(current.id(), designId);
+            if (!sail.equals(current.sailNumber()) || !name.equals(current.name()))
+                current = store.renameIdentity(current.id(), sail, name);
             if (clubIdsTouched)
             {
-                if (!clubIds.isEmpty())
-                {
-                    // Keep legacy sail+name override pointing at the primary club so re-creations
-                    // pick up at least the primary affiliation
-                    String primaryClubId = clubIds.getFirst();
-                    if (!Objects.equals(primaryClubId, boat.primaryClubId()))
-                        store.addClubOverride(sail, name, primaryClubId);
-                    // BoatId-based override (takes priority over sail+name on future imports)
-                    store.setBoatClubsOverrideById(newBoatId, clubIds);
-                    if (idChanged)
-                        store.removeBoatFromClubConfig(boatId);
-                }
-                else
-                {
-                    store.setBoatNoClubById(newBoatId);
-                    if (idChanged)
-                        store.removeBoatFromClubConfig(boatId);
-                }
+                List<String> chosen = clubIds;
+                current = current.updateIdentity(i -> i.withCuratedClubIds(chosen));
             }
-            else if (idChanged)
-            {
-                // Club not edited but ID changed — remap existing boatId-based entries
-                store.remapBoatIdInClubConfig(boatId, newBoatId);
-            }
+            current = current.withLinks(links).withLastUpdated(java.time.Instant.now()).withLoadedAt(null);
+            store.putBoat(current);
+            if (modified)
+                store.setBoatModified(current.id(), true);
 
             store.save();
             cache.refreshIndexes();
 
-            writeJson(resp, Map.of("ok", true, "newBoatId", newBoatId,
-                "idChanged", idChanged, "updatedRaces", updatedRaces,
-                "updatedFinishers", updatedFinishers,
-                "modifiedChanged", modified != wasModified));
+            boolean idChanged = !current.id().equals(boatId);
+            writeJson(resp, Map.of("ok", true, "newBoatId", current.id(),
+                "idChanged", idChanged, "modifiedChanged", modified != wasModified));
         }
         catch (Exception e)
         {

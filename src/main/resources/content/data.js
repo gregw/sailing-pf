@@ -899,8 +899,8 @@ async function loadDetail(entity, id, item, {scroll = true} = {}) {
         }
 
         const aliasDiv = document.getElementById('aliases-boats');
-        const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
-        aliasDiv.innerHTML = aliases && aliases.length > 0 ? renderBoatAliases(aliases, data) : '';
+        const identities = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/identities');
+        aliasDiv.innerHTML = renderBoatIdentities(identities);
 
         // Store loaded boat data for possible reuse (edit flow is selection-driven now)
         state.lastDetailBoat = data;
@@ -969,35 +969,47 @@ function renderClubDetail(club) {
         </dl>`;
 }
 
-function renderBoatAliases(aliases, boat) {
-    if (!aliases || aliases.length === 0) return '';
-    const rows = aliases.map(a => {
-        const sail = a.sailNumber ? esc(a.sailNumber) : '';
-        const name = esc(a.displayName || a.name || '');
-        const used = a.from || a.until ? esc(renameWhen(a.from, a.until)) : '<span style="color:#999">any time</span>';
-        return `<tr><td>${sail}</td><td>${name}</td><td>${used}</td></tr>`;
+/**
+ * The boat's identities (the names it raced under), oldest first, with when each raced, its
+ * clubs and its aliases; a single identity with no aliases shows nothing.
+ */
+function renderBoatIdentities(identities) {
+    if (!Array.isArray(identities) || identities.length === 0) return '';
+    const hasAliases = identities.some(i => i.aliases && i.aliases.length > 0);
+    if (identities.length === 1 && !hasAliases) return '';
+    const rows = identities.map(i => {
+        const when = identityWhen(i);
+        const aliases = (i.aliases || []).map(aliasText).join(', ');
+        return `<tr${i.current ? ' style="font-weight:bold;"' : ''}><td>${esc(i.sailNumber || '')}</td><td>${esc(i.name || '')}</td>
+            <td>${when}</td><td>${i.races || 0}</td><td>${esc((i.clubIds || []).join(', '))}</td><td>${aliases}</td></tr>`;
     }).join('');
-    return renderNameHistory(aliases, boat) + `<strong>Aliases</strong>
+    return renderNameHistory(identities) + `<strong>Identities</strong>
       <table style="width:auto;margin-top:0.4rem;">
-        <thead><tr><th>Sail #</th><th>Name</th><th>Used</th></tr></thead>
+        <thead><tr><th>Sail #</th><th>Name</th><th>Raced</th><th>Races</th><th>Clubs</th><th>Aliases</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
 }
 
+/** An alias as text: "sail name", or just the sail number or the name. */
+function aliasText(a) {
+    return esc([a.sailNumber, a.name].filter(Boolean).join(' '));
+}
+
+/** When an identity was used: its from/until dates, else its first and last race. */
+function identityWhen(i) {
+    const from = i.from || i.firstRace;
+    const until = i.until || i.lastRace;
+    if (!from && !until) return '<span style="color:#999">no races</span>';
+    return esc((from || '…') + ' to ' + (until || '…'));
+}
+
 /**
- * The names a boat has raced under, in order, from its dated aliases (renames): e.g.
- * "Sail Exchange until 2021-08-14, then Kanreki". Empty if it has no renames.
+ * The names a boat has raced under, in order: e.g. "About Time, then Sail Exchange, then
+ * Kanreki". Empty if it has one identity.
  */
-function renderNameHistory(aliases, boat) {
-    const renames = aliases.filter(a => a.from || a.until);
-    if (renames.length === 0 || !boat) return '';
-    const label = a => esc([a.displayName || a.name || boat.name, a.sailNumber && a.sailNumber !== boat.sailNumber ? '(' + a.sailNumber + ')' : '']
-        .filter(Boolean).join(' '));
-    const before = renames.filter(a => a.until).sort((x, y) => x.until.localeCompare(y.until));
-    const after = renames.filter(a => a.from).sort((x, y) => x.from.localeCompare(y.from));
-    const parts = before.map(a => `${label(a)} until ${esc(a.until)}`);
-    parts.push(`<strong>${esc(boat.name)}</strong>`);
-    after.forEach(a => parts.push(`${label(a)} from ${esc(a.from)}`));
+function renderNameHistory(identities) {
+    if (identities.length < 2) return '';
+    const parts = identities.map(i => i.current ? `<strong>${esc(i.name)}</strong>` : esc(i.name));
     return `<div style="margin-bottom:0.5rem;">Name history: ${parts.join(', then ')}</div>`;
 }
 
@@ -1124,25 +1136,14 @@ function renderPfHistoryChart(data) {
     }
     // A vertical line at each rename (a new owner or crew is where a step would show), the
     // former name to its left and the new name to its right.
-    const renames = (data.renames || []).filter(a => a.from || a.until);
-    const aliasName = a => a.displayName || a.name;
-    // The name on a date, as the server's nameAt: the alias with the earliest until after
-    // the date, else the one with the latest from on or before it, else the current name.
-    const nameAt = date => {
-        let before = null, from = null;
-        for (const a of renames) {
-            if (a.until && date < a.until && (!before || a.until < before.until)) before = a;
-            if (a.from && date >= a.from && (!from || a.from > from.from)) from = a;
-        }
-        const a = before || from;
-        return a ? aliasName(a) : data.boatName;
-    };
-    const dayBefore = date => {
-        const d = new Date(date + 'T00:00:00Z');
-        d.setUTCDate(d.getUTCDate() - 1);
-        return d.toISOString().slice(0, 10);
-    };
-    const splits = [...new Set(renames.map(a => a.from || a.until))].sort();
+    // A split where the boat started racing under its next identity (its from date, else its
+    // first race), the former name to the left and the new name to the right.
+    const ids = data.identities || [];
+    const splitList = [];
+    for (let k = 1; k < ids.length; k++) {
+        const at = ids[k].from || ids[k].firstRace;
+        if (at) splitList.push({ x: at, before: ids[k - 1].name, after: ids[k].name });
+    }
     const label = (x, text, left) => ({ xref: 'x', yref: 'paper', x, y: 1, yanchor: 'bottom',
         xanchor: left ? 'right' : 'left', xshift: left ? -3 : 3,
         showarrow: false, font: { size: 10, color: '#555' }, text: esc(text) });
@@ -1151,9 +1152,9 @@ function renderPfHistoryChart(data) {
         yaxis: { title: 'PF', tickformat: '.3f' },
         height: 300,
         margin: { t: 20, b: 50, l: 60, r: 20 },
-        shapes: splits.map(x => ({ type: 'line', xref: 'x', yref: 'paper', x0: x, x1: x,
+        shapes: splitList.map(sp => ({ type: 'line', xref: 'x', yref: 'paper', x0: sp.x, x1: sp.x,
             y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } })),
-        annotations: splits.flatMap(x => [label(x, nameAt(dayBefore(x)), true), label(x, nameAt(x), false)])
+        annotations: splitList.flatMap(sp => [label(sp.x, sp.before, true), label(sp.x, sp.after, false)])
     };
     Plotly.newPlot(container, traces, layout, { responsive: true })
         .then(() => Plotly.Plots.resize(container));
@@ -1546,7 +1547,7 @@ async function keepLatestBoat(ids) {
     const plan = await fetchJson('/api/boats/merge-plan?keep=' + encodeURIComponent(ids[0])
         + '&merge=' + encodeURIComponent(ids.slice(1).join(',')));
     if (!plan || !plan.boats) return;
-    let latestId = ids[0], latest = plan.keepLastRace || '';
+    let latestId = ids[0], latest = '';
     for (const b of plan.boats)
         if ((b.lastRace || '') > latest) { latest = b.lastRace; latestId = b.id; }
     const radio = document.querySelector(`#merge-radio-list-boats input[name="merge-keep-boats"][value="${CSS.escape(latestId)}"]`);
@@ -1554,9 +1555,10 @@ async function keepLatestBoat(ids) {
 }
 
 /**
- * Fills the boat merge panel with a rename date for each boat being merged whose name or
- * sail number differs from the kept boat's, suggested from the dates of their races. A date
- * records the old name and when it was used; cleared, the merge is a plain alias.
+ * Fills the boat merge panel with each boat's racing period and a "Treat as rename" tick:
+ * ticked, the boats are linked as one boat's identities, each name keeping its results;
+ * unticked, they are merged as misspellings (their names become aliases). Ticked by default
+ * when their periods do not overlap; not offered for boats of different designs.
  */
 async function loadMergeRenames() {
     const div = document.getElementById('merge-renames-boats');
@@ -1568,44 +1570,23 @@ async function loadMergeRenames() {
     const plan = await fetchJson('/api/boats/merge-plan?keep=' + encodeURIComponent(keep.value)
         + '&merge=' + encodeURIComponent(merge.join(',')));
     if (!plan || !plan.boats) return;
-    const range = (f, l) => f ? ` (raced ${f}${l && l !== f ? ' to ' + l : ''})` : ' (no races)';
-    const rows = plan.boats.filter(b => b.alias).map(b => {
-        const older = b.direction === 'until';
-        // The kept boat's name next to this one in its name history (it may have had several)
-        const other = `${esc(b.otherName || plan.keepName)}${range(b.otherFirstRace, b.otherLastRace)}`;
-        const text = older
-            ? `${esc(b.name)}${range(b.firstRace, b.lastRace)} was renamed ${other} on`
-            : `${other} was renamed ${esc(b.name)}${range(b.firstRace, b.lastRace)} on`;
-        return `<div style="margin:0.3rem 0 0.3rem 1.5rem;font-size:0.9rem;">${text}
-            <input type="date" class="merge-rename-date" data-id="${esc(b.id)}" data-direction="${b.direction}" value="${b.date || ''}">
-            ${b.date ? '' : '<span style="color:#777;">— could not be determined from the races</span>'}</div>`;
-    });
-    if (rows.length === 0) return;
-    // Ticked when any rename date was found; untick for a plain merge.
-    const looksLikeRename = plan.boats.some(b => b.alias && b.date);
+    const range = b => b.firstRace ? `raced ${b.firstRace}${b.lastRace && b.lastRace !== b.firstRace ? ' to ' + b.lastRace : ''}` : 'no races';
+    const rows = [...plan.boats].sort((x, y) => (x.firstRace || '').localeCompare(y.firstRace || '')).map(b =>
+        `<div style="margin:0.2rem 0 0.2rem 1.5rem;font-size:0.9rem;">${esc(b.name)}: ${esc(range(b))}${b.designId ? '' : ' (no design)'}</div>`);
+    const tickable = plan.sameDesign;
     div.innerHTML = `<label style="display:block;margin-top:0.5rem;font-weight:bold;font-size:0.9rem;">
-            <input type="checkbox" id="merge-treat-as-rename" ${looksLikeRename ? 'checked' : ''}
-                onchange="updateMergeRenameDates()"> Treat as rename</label>
-        <div id="merge-rename-rows">${rows.join('')}</div>`;
-    updateMergeRenameDates();
+            <input type="checkbox" id="merge-treat-as-rename" ${plan.looksLikeRename ? 'checked' : ''} ${tickable ? '' : 'disabled'}>
+            Treat as rename</label>
+        <div style="color:#777;font-size:0.85rem;margin-left:1.5rem;">${tickable
+            ? 'Ticked: one boat under several names, each keeping its results (link identities). Unticked: misspellings, merged into the kept name.'
+            : 'The boats have different designs: they can only be merged as misspellings.'}</div>
+        ${rows.join('')}`;
 }
 
-/** Shows the rename dates only while "Treat as rename" is ticked. */
-function updateMergeRenameDates() {
+/** True when the boat merge panel's "Treat as rename" is ticked: link identities. */
+function mergeAsLink() {
     const tick = document.getElementById('merge-treat-as-rename');
-    const rows = document.getElementById('merge-rename-rows');
-    if (tick && rows) rows.style.display = tick.checked ? '' : 'none';
-}
-
-/** The rename dates entered in the boat merge panel: {mergeId: {direction, date}}. */
-function mergeRenames() {
-    const renames = {};
-    const tick = document.getElementById('merge-treat-as-rename');
-    if (!tick || !tick.checked) return renames;
-    document.querySelectorAll('#merge-renames-boats .merge-rename-date').forEach(input => {
-        if (input.value) renames[input.dataset.id] = { direction: input.dataset.direction, date: input.value };
-    });
-    return renames;
+    return !!(tick && tick.checked && !tick.disabled);
 }
 
 function hideMergePanel(entity) {
@@ -1724,11 +1705,11 @@ async function performMerge(entity) {
     const statusEl = document.getElementById('merge-status-' + entity);
     statusEl.textContent = 'Merging…';
 
-    const renames = entity === 'boats' ? mergeRenames() : {};
+    const link = entity === 'boats' && mergeAsLink();
     const result = await fetchJson('/api/' + entity + '/merge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keepId, mergeIds, renames })
+        body: JSON.stringify({ keepId, mergeIds, ...(entity === 'boats' && { link }) })
     });
 
     if (!result) {
@@ -1736,15 +1717,16 @@ async function performMerge(entity) {
         return;
     }
     if (entity === 'boats') {
-        statusEl.textContent =
-            'Merged. Updated ' + result.updatedRaces + ' race(s), ' + result.updatedFinishers + ' finisher record(s).';
+        statusEl.textContent = result.linked
+            ? 'Linked: one boat with each name as an identity.'
+            : 'Merged. Updated ' + result.updatedRaces + ' race(s), ' + result.updatedFinishers + ' finisher record(s).';
     } else {
         statusEl.textContent = 'Merged. Updated ' + result.updatedBoats + ' boat(s).';
     }
     clearSelection(entity);
     hideMergePanel(entity);
     await loadList(entity, 0);
-    if (entity === 'boats') await showBoat(keepId);
+    if (entity === 'boats') await showBoat(result.keptId || keepId);
 }
 
 /**
@@ -1778,7 +1760,7 @@ async function requestMerge(entity) {
     const result = await fetchJson('/api/' + entity + '/merge-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keepId, mergeIds, ...(entity === 'boats' && { renames: mergeRenames() }),
+        body: JSON.stringify({ keepId, mergeIds, ...(entity === 'boats' && { link: mergeAsLink() }),
             ...(email && { email }), ...(message && { message }) })
     });
 
@@ -2258,173 +2240,114 @@ function showEditPanel() {
     applyMergeAuthState();
 }
 
-/** The aliases of the boat being edited, as loaded, so a save sends only changed dates. */
-let editingBoatAliases = [];
+/** The identities of the boat being edited, as loaded (with edits held until Save). */
+let editingBoatIdentities = [];
 
 /**
- * Lists the edited boat's aliases, each with when it was in use: a rename has a date (the
- * name was used before it, or from it); with none it is a plain alias, used any time.
- */
-let editingBoatCurrent = null;   // the boat's sail number and name when the edit panel opened
-let editingBoatRemoved = new Set(); // indexes of editingBoatAliases marked for removal
-let editingBoatAdded = [];          // aliases to add: {sailNumber, name, from, until}
-
-/**
- * Fills the edit panel's Aliases table: the boat's current sail number and name, then each
- * alias (a sail number, a name, or both), each with optional from/until dates, and a row to
- * add one. The radio picks which sail number and name is current: picking an alias fills in
- * the Sail # and Name fields, and the old identity becomes an alias, whose dates can then be
- * set. Aliases can be removed (applied on Save).
+ * Fills the edit panel's Identities table: each name the boat raced under, oldest first, with
+ * when it raced, optional from/until dates, its aliases (other sail numbers and names it was
+ * entered as, which future imports match) and a radio for the current identity (the boat's
+ * name). An identity other than the one being edited can be unlinked into a boat of its own.
+ * The Sail # and Name fields above edit the identity the panel was opened for.
  */
 async function loadEditBoatAliases(boatId) {
     const div = document.getElementById('edit-boat-aliases');
     if (!div) return;
     div.innerHTML = '';
-    editingBoatAliases = [];
-    editingBoatRemoved = new Set();
-    editingBoatAdded = [];
-    editingBoatCurrent = {
-        sailNumber: document.getElementById('edit-boat-sail').value,
-        name: document.getElementById('edit-boat-name').value
-    };
-    const aliases = await fetchJson('/api/boats/' + encodeURIComponent(boatId) + '/aliases');
+    editingBoatIdentities = [];
+    const identities = await fetchJson('/api/boats/' + encodeURIComponent(boatId) + '/identities');
     if (editingBoatId !== boatId) return;
-    editingBoatAliases = Array.isArray(aliases) ? aliases : [];
-    editingBoatAliases.forEach(a => { a.editFrom = a.from || ''; a.editUntil = a.until || ''; });
-    renderEditBoatAliases();
-}
-
-/** An alias as shown: "sail name", or "sail # 1234" / "name Foo" for a partial alias. */
-function aliasLabel(a) {
-    const name = a.displayName || a.name;
-    if (a.sailNumber && name) return esc(a.sailNumber + ' ' + name);
-    return a.sailNumber ? 'sail # ' + esc(a.sailNumber) : 'name ' + esc(name || '');
+    editingBoatIdentities = (Array.isArray(identities) ? identities : []).map(i => ({
+        ...i, editFrom: i.from || '', editUntil: i.until || '',
+        editAliases: (i.aliases || []).map(a => ({ sailNumber: a.sailNumber || null, name: a.name || null }))
+    }));
+    renderEditBoatIdentities();
 }
 
 /** Keeps the dates typed so far across a re-render of the table. */
-function captureEditAliasDates() {
-    const read = (k, field) => document.getElementById(`edit-alias-${field}-${k}`)?.value || '';
-    editingBoatAliases.forEach((a, i) => { a.editFrom = read(i, 'from'); a.editUntil = read(i, 'until'); });
-    if (editingBoatCurrent) {
-        editingBoatCurrent.editFrom = read('current', 'from');
-        editingBoatCurrent.editUntil = read('current', 'until');
-    }
+function captureEditIdentityDates() {
+    editingBoatIdentities.forEach((i, k) => {
+        i.editFrom = document.getElementById('edit-identity-from-' + k)?.value || '';
+        i.editUntil = document.getElementById('edit-identity-until-' + k)?.value || '';
+    });
 }
 
-function renderEditBoatAliases() {
+function renderEditBoatIdentities() {
     const div = document.getElementById('edit-boat-aliases');
-    if (!div || !editingBoatCurrent) return;
-    const key = editAliasCurrentKey();
-    const date = (k, field, v) => `<input type="date" id="edit-alias-${field}-${k}" value="${esc(v || '')}">`;
-    const row = (k, a, label, extra) => {
-        const removed = k !== 'current' && editingBoatRemoved.has(Number(k));
-        // Only a full sail number and name can be the boat's current identity
-        const canBeCurrent = k === 'current' || (a.sailNumber && a.name);
-        return `<tr style="${removed ? 'text-decoration:line-through;color:#999;' : ''}">
-        <td><input type="radio" name="edit-alias-current" value="${k}"${k === key ? ' checked' : ''}
-            ${canBeCurrent && !removed ? '' : 'disabled'} onchange="onEditAliasCurrent()" title="Current sail number and name"></td>
-        <td style="padding-right:0.6rem;">${label}</td>
-        <td>${date(k, 'from', a.editFrom)}</td><td>${date(k, 'until', a.editUntil)}</td>
-        <td>${extra}</td></tr>`;
-    };
-    const cur = editingBoatCurrent;
+    if (!div) return;
+    const currentKey = document.querySelector('#edit-boat-aliases input[name="edit-identity-current"]:checked')?.value;
+    const rows = editingBoatIdentities.map((i, k) => {
+        const isCurrent = currentKey != null ? currentKey === String(k) : i.current;
+        const aliases = i.editAliases.map((al, n) =>
+            `<span style="white-space:nowrap;">${aliasText(al)} <button type="button" title="Remove this alias"
+                onclick="captureEditIdentityDates(); editingBoatIdentities[${k}].editAliases.splice(${n}, 1); renderEditBoatIdentities();">✕</button></span>`).join(' ');
+        const unlink = i.id === editingBoatId ? ''
+            : `<button type="button" onclick="unlinkEditIdentity(${k})" title="Make this name a boat of its own, with its results">Unlink</button>`;
+        return `<tr>
+          <td><input type="radio" name="edit-identity-current" value="${k}"${isCurrent ? ' checked' : ''} title="The boat's current name"></td>
+          <td style="padding-right:0.6rem;${i.id === editingBoatId ? 'font-weight:bold;' : ''}">${esc([i.sailNumber, i.name].filter(Boolean).join(' '))}
+            <div style="color:#777;font-size:0.85em;">${identityWhen(i)}${i.races ? ', ' + i.races + ' races' : ''}</div></td>
+          <td><input type="date" id="edit-identity-from-${k}" value="${esc(i.editFrom)}"></td>
+          <td><input type="date" id="edit-identity-until-${k}" value="${esc(i.editUntil)}"></td>
+          <td>${aliases}
+            <span style="white-space:nowrap;"><input type="text" id="edit-alias-sail-${k}" placeholder="Sail #" style="width:5em">
+            <input type="text" id="edit-alias-name-${k}" placeholder="Name" style="width:8em">
+            <button type="button" onclick="addEditIdentityAlias(${k})">Add</button></span></td>
+          <td>${unlink}</td></tr>`;
+    }).join('');
     div.innerHTML = `<table style="border-collapse:collapse;">
         <tr style="color:#777;"><th style="font-weight:normal;text-align:left;">Current</th><th></th>
-            <th style="font-weight:normal;text-align:left;">From</th><th style="font-weight:normal;text-align:left;">Until</th><th></th></tr>
-        ${row('current', cur, esc([cur.sailNumber, cur.name].filter(Boolean).join(' ')), '')}
-        ${editingBoatAliases.map((a, i) => row(String(i), a, aliasLabel(a),
-            `<button type="button" onclick="toggleEditAliasRemoved(${i})">${editingBoatRemoved.has(i) ? 'Undo' : 'Remove'}</button>`)).join('')}
-        ${editingBoatAdded.map((a, i) => `<tr style="color:#060;"><td></td><td style="padding-right:0.6rem;">${aliasLabel(a)} (new)</td>
-            <td>${esc(a.from || '')}</td><td>${esc(a.until || '')}</td>
-            <td><button type="button" onclick="editingBoatAdded.splice(${i}, 1); captureEditAliasDates(); renderEditBoatAliases();">Remove</button></td></tr>`).join('')}
-        <tr><td></td><td style="padding-right:0.6rem;white-space:nowrap;">
-            <input type="text" id="edit-alias-new-sail" placeholder="Sail #" style="width:6em">
-            <input type="text" id="edit-alias-new-name" placeholder="Name" style="width:10em"></td>
-            <td><input type="date" id="edit-alias-new-from"></td><td><input type="date" id="edit-alias-new-until"></td>
-            <td><button type="button" onclick="addEditAlias()">Add</button></td></tr>
-        </table>
-        <div style="color:#777;">An alias needs a sail #, a name or both. Dates are optional: blank = any time.
-            Changes apply on Save, and to future imports only: existing boats are not merged or split.</div>`;
-    onEditAliasCurrent(false);
+          <th style="font-weight:normal;text-align:left;">From</th><th style="font-weight:normal;text-align:left;">Until</th>
+          <th style="font-weight:normal;text-align:left;">Aliases</th><th></th></tr>
+        ${rows}</table>
+        <div style="color:#777;">Dates are optional (blank: as raced). An alias is another sail # and/or name this
+          identity was entered as; aliases affect future imports only. Changes apply on Save.</div>`;
 }
 
-function toggleEditAliasRemoved(i) {
-    captureEditAliasDates();
-    if (editingBoatRemoved.has(i)) editingBoatRemoved.delete(i); else editingBoatRemoved.add(i);
-    if (editAliasCurrentKey() === String(i)) {
-        // A removed alias cannot be current: back to the boat's own identity
-        document.querySelector('#edit-boat-aliases input[name="edit-alias-current"][value="current"]').checked = true;
-        onEditAliasCurrent();
-    }
-    renderEditBoatAliases();
-}
-
-function addEditAlias() {
+function addEditIdentityAlias(k) {
     const v = id => document.getElementById(id)?.value.trim() || '';
-    const a = { sailNumber: v('edit-alias-new-sail') || null, name: v('edit-alias-new-name') || null,
-        from: v('edit-alias-new-from') || null, until: v('edit-alias-new-until') || null };
-    if (!a.sailNumber && !a.name) return;
-    captureEditAliasDates();
-    editingBoatAdded.push(a);
-    renderEditBoatAliases();
+    const alias = { sailNumber: v('edit-alias-sail-' + k) || null, name: v('edit-alias-name-' + k) || null };
+    if (!alias.sailNumber && !alias.name) return;
+    captureEditIdentityDates();
+    editingBoatIdentities[k].editAliases.push(alias);
+    renderEditBoatIdentities();
 }
 
-/** The key ("current" or an alias index) of the identity picked as current. */
-function editAliasCurrentKey() {
-    return document.querySelector('#edit-boat-aliases input[name="edit-alias-current"]:checked')?.value || 'current';
-}
-
-/**
- * Picking an identity as current: fill in Sail # and Name (unless just re-rendering), and
- * only the other rows take dates.
- */
-function onEditAliasCurrent(fill = true) {
-    const key = editAliasCurrentKey();
-    const picked = key === 'current' ? editingBoatCurrent : editingBoatAliases[Number(key)];
-    if (fill && picked) {
-        if (picked.sailNumber) document.getElementById('edit-boat-sail').value = picked.sailNumber;
-        document.getElementById('edit-boat-name').value = picked.displayName || picked.name || '';
-    }
-    document.querySelectorAll('#edit-boat-aliases input[type="date"]').forEach(input => {
-        input.disabled = input.id.endsWith('-' + key);
+async function unlinkEditIdentity(k) {
+    const i = editingBoatIdentities[k];
+    if (!i || !confirm(`Make ${i.name} a boat of its own, with its ${i.races || 0} results?`)) return;
+    const r = await fetchJson('/api/boats/unlink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identityId: i.id })
     });
-}
-
-/** The aliases to add and remove on Save: {add: [...], remove: [{sailNumber, name}]}. */
-function editedAliases() {
-    return {
-        add: editingBoatAdded,
-        remove: [...editingBoatRemoved].map(i => editingBoatAliases[i])
-            .map(a => ({ sailNumber: a.sailNumber || null, name: a.name || null }))
-    };
+    if (!r || !r.ok) {
+        document.getElementById('edit-status-boats').textContent = 'Unlink failed: ' + ((r && r.error) || 'see console');
+        return;
+    }
+    document.getElementById('edit-status-boats').textContent = i.name + ' is now a boat of its own.';
+    loadEditBoatAliases(editingBoatId);
+    loadList('boats', 0);
 }
 
 /**
- * The aliases whose dates changed, plus the old current identity when another was picked
- * (it is an alias after the save): [{sailNumber, name, from, until}].
+ * The identity edits to send on Save: {current, identities: [{id, from, until, aliases}]},
+ * or null if nothing changed.
  */
-function changedAliasDates() {
-    captureEditAliasDates();
+function editedIdentities() {
+    if (editingBoatIdentities.length === 0) return null;
+    captureEditIdentityDates();
+    const key = (a) => (a.sailNumber || '') + '|' + (a.name || '');
     const changed = [];
-    const key = editAliasCurrentKey();
-    editingBoatAliases.forEach((a, i) => {
-        if (String(i) === key || editingBoatRemoved.has(i)) return;
-        const from = a.editFrom || null, until = a.editUntil || null;
-        if ((a.from || null) !== from || (a.until || null) !== until)
-            changed.push({ sailNumber: a.sailNumber || null, name: a.name || null, from, until });
+    editingBoatIdentities.forEach(i => {
+        const sameAliases = JSON.stringify((i.aliases || []).map(key)) === JSON.stringify(i.editAliases.map(key));
+        if ((i.from || '') !== i.editFrom || (i.until || '') !== i.editUntil || !sameAliases)
+            changed.push({ id: i.id, from: i.editFrom || null, until: i.editUntil || null, aliases: i.editAliases });
     });
-    if (key !== 'current' && editingBoatCurrent) {
-        const from = editingBoatCurrent.editFrom || null, until = editingBoatCurrent.editUntil || null;
-        if (from || until)
-            changed.push({ sailNumber: editingBoatCurrent.sailNumber || null, name: editingBoatCurrent.name || null, from, until });
-    }
-    return changed;
-}
-
-function hideEditPanel() {
-    const panel = document.getElementById('edit-panel-boats');
-    if (panel) panel.style.display = 'none';
-    editingBoatId = null;
+    const k = document.querySelector('#edit-boat-aliases input[name="edit-identity-current"]:checked')?.value;
+    const picked = k != null ? editingBoatIdentities[Number(k)] : null;
+    const current = picked && !picked.current ? picked.id : null;
+    return changed.length === 0 && !current ? null : { current, identities: changed };
 }
 
 async function showBoatClubPanel() {
@@ -2517,7 +2440,20 @@ async function saveBoatEdit() {
     const statusEl = document.getElementById('edit-status-boats');
     statusEl.textContent = 'Saving…';
 
-    const aliasDates = changedAliasDates();
+    // Identity edits first (dates, aliases, current), while the identity IDs they name are
+    // unchanged; the edit below may rename the edited identity or change the design.
+    const identityEdits = editedIdentities();
+    if (identityEdits) {
+        const r = await fetchJson('/api/boats/identities', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ boatId: editingBoatId, ...identityEdits })
+        });
+        if (!r || !r.ok) {
+            statusEl.textContent = 'Save failed: ' + ((r && r.error) || 'see console');
+            return;
+        }
+    }
 
     const body = {
         boatId: editingBoatId,
@@ -2538,32 +2474,6 @@ async function saveBoatEdit() {
     if (!result || !result.ok) {
         statusEl.textContent = 'Save failed: ' + ((result && result.error) || 'see console');
         return;
-    }
-
-    // Aliases after the edit: a change of sail number or name (e.g. picking another current
-    // identity) moves the aliases to the boat's new identity, old one included.
-    const aliasEdits = editedAliases();
-    if (aliasEdits.add.length > 0 || aliasEdits.remove.length > 0) {
-        const r = await fetchJson('/api/boats/aliases', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ boatId: result.newBoatId || editingBoatId, ...aliasEdits })
-        });
-        if (!r || !r.ok) {
-            statusEl.textContent = 'Boat saved, but aliases failed: ' + ((r && r.error) || 'see console');
-            return;
-        }
-    }
-    if (aliasDates.length > 0) {
-        const r = await fetchJson('/api/boats/rename-dates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ boatId: result.newBoatId || editingBoatId, aliases: aliasDates })
-        });
-        if (!r || !r.ok) {
-            statusEl.textContent = 'Boat saved, but alias dates failed: ' + ((r && r.error) || 'see console');
-            return;
-        }
     }
 
     let msg = 'Saved.';
@@ -2590,8 +2500,7 @@ async function requestBoatEdit() {
         modified: document.getElementById('edit-boat-modified').checked,
         clubIds: getEditingBoatClubIds(),
         links: textToLinks(document.getElementById('edit-boat-links').value),
-        aliasDates: changedAliasDates(),
-        aliases: editedAliases(),
+        identities: editedIdentities(),
         ...(email && { email }),
         ...(message && { message })
     };
