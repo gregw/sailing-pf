@@ -476,7 +476,8 @@ public class AdminApiServlet extends HttpServlet
      * on sail # and design where one's normalised name is a substring of the other's, e.g.
      * "azzuro" inside "komatsuazzuro"); {@code rename} (likely renames: same sail # and design,
      * different normalised name, racing periods that do not overlap — see
-     * {@link #renameCandidates}). Omit or send an empty value for no de-dup filter.
+     * {@link #renameCandidates}); {@code sameCert} (boats carrying the same certificate — see
+     * {@link #sameCertificateCandidates}). Omit or send an empty value for no de-dup filter.
      * The {@code showExcluded} flag (default false) hides boats that are
      * individually excluded or whose design is excluded. The {@code excludeNulls} flag removes
      * rows where the sort column is null.
@@ -751,8 +752,75 @@ public class AdminApiServlet extends HttpServlet
                 yield hits;
             }
             case "rename" -> renameCandidates();
+            case "sameCert" -> sameCertificateCandidates();
             default -> null; // unknown value → no filter, same as omitted
         };
+    }
+
+    /**
+     * Boats carrying the same certificate as another boat: the same certificate number (ORC,
+     * AMS), or for other certificates (IRC, and those whose number is made up from the year and
+     * rating) the same year, variant and rating together with the same sail number or name.
+     * Finds one boat entered with different details, e.g. under two designs.
+     */
+    /**
+     * True for a number the certifying body issued (ORC "261233", AMS "28136-ns"), false for
+     * one made up from the year and rating ("irc-inferred-2022-1.2700", "ty-ams-2026-0.8980"),
+     * which unrelated boats with the same rating share.
+     */
+    static boolean isRealCertificateNumber(String number)
+    {
+        return number != null && !number.isBlank() && Character.isDigit(number.trim().charAt(0));
+    }
+
+    Set<String> sameCertificateCandidates()
+    {
+        // A certificate with a real number (ORC, AMS) is one boat's, whatever its details; any
+        // other (IRC, and numbers made up from the year and rating) is matched by system, year,
+        // variant and rating, which boats of a one-design class share, so it also needs the
+        // same sail number or name.
+        Map<String, Set<String>> byNumber = new HashMap<>();
+        Map<String, List<Boat>> byRating = new HashMap<>();
+        for (Boat b : store.boats().values())
+        {
+            for (Certificate c : b.certificates())
+            {
+                if (isRealCertificateNumber(c.certificateNumber()))
+                    byNumber.computeIfAbsent(c.system() + "|" + c.certificateNumber().trim(), k -> new HashSet<>()).add(b.id());
+                else
+                {
+                    String key = c.system() + "|" + c.year() + "|" + c.nonSpinnaker() + "|" + c.twoHanded()
+                        + "|" + String.format("%.4f", c.value());
+                    List<Boat> list = byRating.computeIfAbsent(key, k -> new ArrayList<>());
+                    if (!list.contains(b))
+                        list.add(b);
+                }
+            }
+        }
+        Set<String> hits = new HashSet<>();
+        for (Set<String> ids : byNumber.values())
+            if (ids.size() > 1)
+                hits.addAll(ids);
+        for (List<Boat> grp : byRating.values())
+        {
+            for (int i = 0; i < grp.size(); i++)
+            {
+                Boat a = grp.get(i);
+                for (int j = i + 1; j < grp.size(); j++)
+                {
+                    Boat b = grp.get(j);
+                    boolean sameSail = IdGenerator.normaliseSailNumber(a.sailNumber())
+                        .equalsIgnoreCase(IdGenerator.normaliseSailNumber(b.sailNumber()));
+                    boolean sameName = IdGenerator.normaliseName(a.name()).equals(IdGenerator.normaliseName(b.name()));
+                    if (sameSail || sameName)
+                    {
+                        hits.add(a.id());
+                        hits.add(b.id());
+                    }
+                }
+            }
+        }
+        return hits;
     }
 
     /**

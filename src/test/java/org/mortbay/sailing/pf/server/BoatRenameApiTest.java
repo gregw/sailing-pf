@@ -290,6 +290,29 @@ class BoatRenameApiTest
     }
 
     @Test
+    void sameCertificateFilter() throws Exception
+    {
+        org.mortbay.sailing.pf.data.Certificate irc = new org.mortbay.sailing.pf.data.Certificate(
+            "IRC", 2023, 1.061, false, false, false, false, null, null);
+        org.mortbay.sailing.pf.data.Certificate orc = new org.mortbay.sailing.pf.data.Certificate(
+            "ORC", 2024, 1.05, false, false, false, false, "261233", null);
+        // One boat under two designs, sharing its IRC certificate
+        store.putBoat(new Boat("6755-ausreo-first447", "6755", "Ausreo", "first447", List.of(), List.of(irc), List.of(), null, null));
+        store.putBoat(new Boat("6755-ausreo-first477", "6755", "Ausreo", "first477", List.of(), List.of(irc), List.of(), null, null));
+        // The same IRC rating on unrelated boats (a one-design class): not a match
+        store.putBoat(new Boat("1-alpha-j70", "1", "Alpha", "j70", List.of(), List.of(irc), List.of(), null, null));
+        // The same ORC certificate number under different details: a match
+        store.putBoat(new Boat("2-beta-x", "2", "Beta", "x", List.of(), List.of(orc), List.of(), null, null));
+        store.putBoat(new Boat("3-gamma-y", "3", "Gamma", "y", List.of(), List.of(orc), List.of(), null, null));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) MAPPER.readValue(
+            get("/api/boats?dupeFilter=sameCert&size=100"), Map.class).get("items");
+        assertEquals(java.util.Set.of("6755-ausreo-first447", "6755-ausreo-first477", "2-beta-x", "3-gamma-y"),
+            rows.stream().map(r -> (String) r.get("id")).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
     void mergeWithoutDateIsAPlainAlias() throws Exception
     {
         ContentResponse merged = post("/api/boats/merge", "{\"keepId\":\"7709-kanreki\",\"mergeIds\":[\"7709-sailexchange\"]}");
