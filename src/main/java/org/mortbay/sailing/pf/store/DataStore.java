@@ -2322,8 +2322,10 @@ public class DataStore
             allLinks.add(mb.links());
         }
         keep = keep.withCertificates(addCerts);
+        // The same boat: modified if any of its records said so
+        boolean modified = keepBoat.modified() || toMerge.stream().anyMatch(Boat::modified);
         Boat merged = keepBoat.withIdentity(keep).withDesignId(designId).withLinks(Link.merge(allLinks))
-            .withLastUpdated(Instant.now()).withLoadedAt(null);
+            .withModified(modified).withLastUpdated(Instant.now()).withLoadedAt(null);
 
         for (Boat mb : toMerge)
             removeBoat(mb.id());

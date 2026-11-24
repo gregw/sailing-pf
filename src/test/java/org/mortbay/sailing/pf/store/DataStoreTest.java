@@ -982,6 +982,26 @@ class DataStoreTest {
     }
 
     @Test
+    void mergeDesignsKeepsModifiedFlag(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putDesign(new Design("old", "Old Class", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("keep", "Keep Class", List.of(), List.of(), null, false, null));
+
+        // Moved alone, and moved onto a boat already recorded under the kept design
+        store.putBoat(new Boat("AUS1-foo-old", "AUS1", "Foo", "old", null, List.of(), List.of("test"), null, null));
+        store.putBoat(new Boat("AUS2-bar-old", "AUS2", "Bar", "old", null, List.of(), List.of("test"), null, null));
+        store.putBoat(new Boat("AUS2-bar-keep", "AUS2", "Bar", "keep", null, List.of(), List.of("test"), null, null));
+        store.setBoatModified("AUS1-foo-old", true);
+        store.setBoatModified("AUS2-bar-old", true);
+
+        store.mergeDesigns("keep", List.of("old"));
+
+        assertTrue(store.isBoatModified("AUS1-foo-keep"), "moved boat stays modified");
+        assertTrue(store.isBoatModified("AUS2-bar-keep"), "boat merged into stays modified");
+    }
+
+    @Test
     void mergeDesignsCollisionMergesBoats(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
