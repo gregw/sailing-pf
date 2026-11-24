@@ -238,6 +238,21 @@ class BoatIdentityStoreTest
     }
 
     @Test
+    void aSailLessEntryUnderAFormerNameFindsThatIdentity(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(aboutTimeThenKanreki());
+
+        Boat found = store.findBoatByNameAndClub("About Time", "cyca.com.au").orElseThrow();
+        assertEquals(ABOUT_TIME, found.id(), "seen through the identity it was entered as");
+        assertEquals(KANREKI, store.canonicalBoatId(found.id()));
+        assertTrue(store.findBoatByNameAndClub("About Time", "myc.org.au").isEmpty(),
+            "About Time raced at CYCA, not MYC");
+        assertEquals(KANREKI, store.findBoatByNameAndClub("Kanreki", "myc.org.au").orElseThrow().id());
+    }
+
+    @Test
     void identityMatchesItsNameAndAliases()
     {
         Identity i = new Identity("7709", "Kanreki", null, null, List.of(), false,

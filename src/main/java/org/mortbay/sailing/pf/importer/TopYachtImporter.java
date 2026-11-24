@@ -701,7 +701,7 @@ public class TopYachtImporter
                 if (isMeasurementHandicapSystem(sa.system()))
                 {
                     // Re-read boat in case a previous iteration updated it
-                    boat = store.boats().get(boat.id());
+                    boat = store.boat(boat.id());
                     String cn = inferCertificate(boat, sa.system(), date.getYear(), sa.ahcValue(), divNS, sa.twoHanded(), sa.windwardLeeward());
                     if (certNumber == null)
                         certNumber = cn;
@@ -1183,7 +1183,7 @@ public class TopYachtImporter
             String certNumber = null;
             if (isMeasurementHandicapSystem(handicapSystem) && row.ahcValue() != null)
             {
-                boat = store.boats().get(boat.id());
+                boat = store.boat(boat.id());
                 certNumber = inferCertificate(boat, handicapSystem, year, row.ahcValue(),
                     nonSpinnaker, twoHanded, windwardLeeward);
             }

@@ -416,13 +416,6 @@ public class DataStore
         return Optional.empty();
     }
 
-    /**
-     * Read-only lookup by name + club, used by importers whose results pages omit the
-     * sail number column. Returns the boat only when there is exactly one match
-     * (case-insensitive on normalised name) among boats belonging to {@code clubId}.
-     * Candidates whose stored design is currently ignored are skipped, mirroring the
-     * orphan-tolerance in {@link #findOrCreateBoat}.
-     */
     public Optional<Boat> findBoatByNameAndClub(String rawName, String clubId)
     {
         requireStarted();
@@ -431,16 +424,22 @@ public class DataStore
         String normName = IdGenerator.normaliseName(rawName);
         if (normName.isEmpty())
             return Optional.empty();
+        // Each identity that raced at the club under this name (or a name alias), seen through it
         List<Boat> matches = new ArrayList<>();
         for (Boat candidate : boats.values())
         {
-            if (!normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
-                continue;
-            if (!candidate.hasClub(clubId))
-                continue;
             if (isDesignIgnored(candidate.designId()))
                 continue;
-            matches.add(candidate);
+            for (Map.Entry<String, Identity> e : candidate.identities().entrySet())
+            {
+                Identity i = e.getValue();
+                if (i.clubIds().contains(clubId) && (normName.equals(IdGenerator.normaliseName(i.name()))
+                    || i.aliases().stream().anyMatch(a -> a.sailNumber() == null && normName.equals(a.normName()))))
+                {
+                    matches.add(candidate.withId(e.getKey()));
+                    break;
+                }
+            }
         }
         // Name-equivalence fallback: only when exact-name pass found nothing in this club.
         // Same logic as findBoat -- protects unique exact hits from being widened.
@@ -451,15 +450,17 @@ public class DataStore
             {
                 for (Boat candidate : boats.values())
                 {
-                    if (normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
-                        continue;
-                    if (!candidate.hasClub(clubId))
-                        continue;
                     if (isDesignIgnored(candidate.designId()))
                         continue;
-                    if (!matchKey.equals(IdGenerator.nameMatchKey(candidate.name())))
-                        continue;
-                    matches.add(candidate);
+                    for (Map.Entry<String, Identity> e : candidate.identities().entrySet())
+                    {
+                        Identity i = e.getValue();
+                        if (i.clubIds().contains(clubId) && matchKey.equals(IdGenerator.nameMatchKey(i.name())))
+                        {
+                            matches.add(candidate.withId(e.getKey()));
+                            break;
+                        }
+                    }
                 }
             }
         }

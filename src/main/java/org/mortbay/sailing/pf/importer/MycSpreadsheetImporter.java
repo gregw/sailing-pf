@@ -522,7 +522,7 @@ public class MycSpreadsheetImporter
         List<Boat> prefixed = new ArrayList<>();
         for (String id : ids)
         {
-            Boat b = store.boats().get(id);
+            Boat b = store.boat(id);
             if (b == null || b.sailNumber() == null)
                 continue;
             String other = b.sailNumber().toUpperCase(Locale.ROOT);
@@ -542,8 +542,10 @@ public class MycSpreadsheetImporter
     private void indexBoatsByName()
     {
         boatsByName.clear();
+        // Every identity's name, to the identity: a row under a former name is that identity
         for (Boat b : store.boats().values())
-            boatsByName.computeIfAbsent(IdGenerator.normaliseName(b.name()), k -> new LinkedHashSet<>()).add(b.id());
+            b.identities().forEach((id, i) ->
+                boatsByName.computeIfAbsent(IdGenerator.normaliseName(i.name()), k -> new LinkedHashSet<>()).add(id));
     }
 
     private void excludeReplacedSailSysRaces()
