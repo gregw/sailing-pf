@@ -2209,8 +2209,6 @@ public class AdminApiServlet extends HttpServlet
             else
             {
                 DataStore.MergeResult merged = store.mergeBoats(keepId, mergeIds);
-                for (String mergeId : mergeIds)
-                    store.removeBoatFromClubConfig(mergeId);
                 result.put("updatedRaces", merged.updatedRaces());
                 result.put("updatedFinishers", merged.updatedFinishers());
                 result.put("keptId", store.canonicalBoatId(keepId));
@@ -2412,12 +2410,8 @@ public class AdminApiServlet extends HttpServlet
                 return;
             }
 
-            // The modified flag is keyed by sail + name: clear it under the old identity before
-            // the edit and set it under the new one after.
-            boolean wasModified = store.isBoatModified(boatId);
+            boolean wasModified = boat.modified();
             boolean modified = newModified != null ? newModified : wasModified;
-            if (wasModified)
-                store.setBoatModified(boatId, false);
 
             Boat current = boat;
             if (!Objects.equals(designId, boat.designId()))
@@ -2429,10 +2423,9 @@ public class AdminApiServlet extends HttpServlet
                 List<String> chosen = clubIds;
                 current = current.updateIdentity(i -> i.withCuratedClubIds(chosen));
             }
-            current = current.withLinks(links).withLastUpdated(java.time.Instant.now()).withLoadedAt(null);
+            current = current.withLinks(links).withModified(modified)
+                .withLastUpdated(java.time.Instant.now()).withLoadedAt(null);
             store.putBoat(current);
-            if (modified)
-                store.setBoatModified(current.id(), true);
 
             store.save();
             cache.refreshIndexes();

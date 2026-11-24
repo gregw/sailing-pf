@@ -85,6 +85,22 @@ class V2MigrationTest
             - "100-alpha-j24"
             """);
         write(v1.resolve("myc-archive/a.xlsx"), "x");
+        // Corum: overridden to a Mumm 36 (entered as a Farr Mumm 36), and modified
+        write(v1.resolve("imported/boats/1088-corum-farrmumm36.json"), boat("1088-corum-farrmumm36", "1088", "Corum", "farrmumm36", ""));
+        write(v1.resolve("imported/races/myc.org.au/s/r5.json"), race("r5", "2021-01-09", "SailSys", "1088-corum-farrmumm36"));
+        write(v1.resolve("config/design.yaml"), """
+            modifiedBoats:
+            - sailNumber: "1088"
+              name: "Corum"
+            boatDesignOverrides:
+            - designId: "mumm36"
+              canonicalName: "Mumm 36"
+              boats:
+              - sailNumber: "1088"
+                name: "Corum"
+                from: null
+                until: null
+            """);
 
         Path v2 = tempDir.resolve("v2");
         V2Migration.Report report = V2Migration.convert(v1, v2);
@@ -113,6 +129,18 @@ class V2MigrationTest
         assertTrue(alpha.identity().matches("100", "alfa"), "an undated alias");
         assertTrue(alpha.identity().clubsCurated(), "noclub: an empty curated club list");
         assertTrue(alpha.identity().clubIds().isEmpty());
+
+        Boat corum = store.boat("1088-corum-mumm36");
+        assertEquals("mumm36", corum.designId(), "the override's design");
+        assertTrue(corum.modified());
+        assertTrue(corum.identity().enteredAs("1088", "corum", "farrmumm36"), "results of any design are Corum's");
+        assertEquals("1088-corum-mumm36", identityOf(store, "r5"), "its result moved with it");
+        assertTrue(Files.exists(v2.resolve("designs/mumm36.json")), "the override's design is created");
+        assertEquals("1088-corum-mumm36",
+            store.findOrCreateBoat("1088", "Corum", "Farr Mumm 36", LocalDate.of(2025, 1, 4), "test").id());
+        String designYaml = Files.readString(v2.resolve("config/design.yaml"));
+        assertFalse(designYaml.contains("boatDesignOverrides") || designYaml.contains("modifiedBoats"), designYaml);
+        assertFalse(Files.readString(v2.resolve("config/aliases.yaml")).contains("kanreki"));
 
         assertThrows(IllegalArgumentException.class, () -> V2Migration.convert(v1, v2), "will not overwrite");
     }

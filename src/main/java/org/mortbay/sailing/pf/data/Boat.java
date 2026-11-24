@@ -35,11 +35,13 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  * <p>
  * A boat's design is the same through all its identities: a modified boat is a new boat.
  */
-@JsonPropertyOrder({"designId", "links", "identities", "lastUpdated"})
+@JsonPropertyOrder({"designId", "modified", "links", "identities", "lastUpdated"})
 @JsonIgnoreProperties(value = {"id"}, allowSetters = true) // not written; read from v1 files
 public record Boat(
     String id,
     String designId,    // normalised design ID, nullable
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    boolean modified,   // modified from its design: keeps its own RF, not pulled toward the design's
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     List<Link> links,   // external web pages about this boat (ORC certificate links are derived, not stored)
     Map<String, Identity> identities, // identity ID -> identity, oldest first; the last is current
@@ -67,8 +69,15 @@ public record Boat(
                 List<Certificate> certificates, List<String> sources, List<Link> links,
                 Instant lastUpdated, Instant loadedAt)
     {
-        this(id, designId, links, singleIdentity(id, new Identity(sailNumber, name, clubIds, certificates, sources)),
+        this(id, designId, false, links, singleIdentity(id, new Identity(sailNumber, name, clubIds, certificates, sources)),
             lastUpdated, loadedAt);
+    }
+
+    /** A boat that is not modified from its design. */
+    public Boat(String id, String designId, List<Link> links, Map<String, Identity> identities,
+                Instant lastUpdated, Instant loadedAt)
+    {
+        this(id, designId, false, links, identities, lastUpdated, loadedAt);
     }
 
     /** A boat with one identity and no links. */
@@ -86,6 +95,7 @@ public record Boat(
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
     static Boat fromJson(
         @JsonProperty("designId") String designId,
+        @JsonProperty("modified") boolean modified,
         @JsonProperty("links") List<Link> links,
         @JsonProperty("identities") LinkedHashMap<String, Identity> identities,
         @JsonProperty("lastUpdated") Instant lastUpdated,
@@ -101,9 +111,10 @@ public record Boat(
         {
             List<String> clubs = v1ClubIds != null && !v1ClubIds.isEmpty() ? v1ClubIds
                 : v1ClubId != null && !v1ClubId.isBlank() ? List.of(v1ClubId) : List.of();
-            return new Boat(v1Id, v1SailNumber, v1Name, designId, clubs, v1Certificates, v1Sources, links, lastUpdated, null);
+            return new Boat(v1Id, v1SailNumber, v1Name, designId, clubs, v1Certificates, v1Sources, links, lastUpdated, null)
+                .withModified(modified);
         }
-        return new Boat(null, designId, links, identities, lastUpdated, null);
+        return new Boat(null, designId, modified, links, identities, lastUpdated, null);
     }
 
     private static Map<String, Identity> singleIdentity(String id, Identity identity)
@@ -152,7 +163,7 @@ public record Boat(
     /** The same boat seen through another of its identities. */
     public Boat withId(String identityId)
     {
-        return Objects.equals(identityId, id) ? this : new Boat(identityId, designId, links, identities, lastUpdated, loadedAt);
+        return Objects.equals(identityId, id) ? this : new Boat(identityId, designId, modified, links, identities, lastUpdated, loadedAt);
     }
 
     /** This boat with the identity it is seen through replaced. */
@@ -169,7 +180,7 @@ public record Boat(
     {
         Map<String, Identity> m = new LinkedHashMap<>(identities);
         m.put(identityId, identity);
-        return new Boat(id, designId, links, m, lastUpdated, loadedAt);
+        return new Boat(id, designId, modified, links, m, lastUpdated, loadedAt);
     }
 
     /** This boat with the identity it is seen through changed by {@code change}. */
@@ -185,7 +196,7 @@ public record Boat(
     public Boat withIdentities(Map<String, Identity> newIdentities)
     {
         String through = newIdentities.containsKey(id) ? id : null;
-        return new Boat(through, designId, links, newIdentities, lastUpdated, loadedAt);
+        return new Boat(through, designId, modified, links, newIdentities, lastUpdated, loadedAt);
     }
 
     /** Every identity changed by {@code change} (e.g. to filter certificates). */
@@ -193,7 +204,7 @@ public record Boat(
     {
         Map<String, Identity> m = new LinkedHashMap<>();
         identities.forEach((k, v) -> m.put(k, change.apply(v)));
-        return new Boat(id, designId, links, m, lastUpdated, loadedAt);
+        return new Boat(id, designId, modified, links, m, lastUpdated, loadedAt);
     }
 
     // --- The identity seen through ---
@@ -286,22 +297,27 @@ public record Boat(
     @Override
     public Boat withLoadedAt(Instant t)
     {
-        return new Boat(id, designId, links, identities, lastUpdated, t);
+        return new Boat(id, designId, modified, links, identities, lastUpdated, t);
     }
 
     public Boat withLinks(List<Link> newLinks)
     {
-        return new Boat(id, designId, newLinks, identities, lastUpdated, loadedAt);
+        return new Boat(id, designId, modified, newLinks, identities, lastUpdated, loadedAt);
     }
 
     public Boat withDesignId(String newDesignId)
     {
-        return new Boat(id, newDesignId, links, identities, lastUpdated, loadedAt);
+        return new Boat(id, newDesignId, modified, links, identities, lastUpdated, loadedAt);
+    }
+
+    public Boat withModified(boolean newModified)
+    {
+        return new Boat(id, designId, newModified, links, identities, lastUpdated, loadedAt);
     }
 
     public Boat withLastUpdated(Instant t)
     {
-        return new Boat(id, designId, links, identities, t, loadedAt);
+        return new Boat(id, designId, modified, links, identities, t, loadedAt);
     }
 
     /** This boat with only the certificates {@code keep} accepts, in every identity. */
@@ -317,7 +333,7 @@ public record Boat(
             return true;
         if (!(o instanceof Boat b))
             return false;
-        return Objects.equals(id, b.id) && Objects.equals(designId, b.designId)
+        return Objects.equals(id, b.id) && Objects.equals(designId, b.designId) && modified == b.modified
             && Objects.equals(links, b.links) && Objects.equals(identities, b.identities)
             && Objects.equals(lastUpdated, b.lastUpdated);
     }
@@ -325,13 +341,13 @@ public record Boat(
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, designId, links, identities, lastUpdated);
+        return Objects.hash(id, designId, modified, links, identities, lastUpdated);
     }
 
     @Override
     public String toString()
     {
-        return "Boat{id='" + id + "', designId='" + designId + "', identities=" + identities
+        return "Boat{id='" + id + "', designId='" + designId + "'" + (modified ? ", modified" : "") + ", identities=" + identities
             + ", links=" + links + ", lastUpdated=" + lastUpdated + '}';
     }
 }

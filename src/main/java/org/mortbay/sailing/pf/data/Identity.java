@@ -116,7 +116,7 @@ public record Identity(
     public Identity withAlias(BoatAlias alias)
     {
         if (alias == null || aliases.stream().anyMatch(alias::sameAs)
-            || alias.sameAs(new BoatAlias(sailNumber, name)))
+            || alias.designId() == null && alias.sameAs(new BoatAlias(sailNumber, name)))
             return this;
         List<BoatAlias> a = new ArrayList<>(aliases);
         a.add(alias);
@@ -134,6 +134,29 @@ public record Identity(
         List<String> c = new ArrayList<>(clubIds);
         c.add(clubId);
         return withClubIds(c);
+    }
+
+    /**
+     * True if an entry with this sail number, normalised name and design is this identity
+     * though the design is not the boat's: an alias with an entered design covering it, whose
+     * sail number (or the identity's, for a name-only alias) and name (or the identity's, for a
+     * sail-number-only alias) are the entry's.
+     */
+    public boolean enteredAs(String sailNumber, String normName, String entryDesignId)
+    {
+        if (sailNumber == null || normName == null)
+            return false;
+        String key = IdGenerator.sailKey(sailNumber);
+        for (BoatAlias a : aliases)
+        {
+            if (!a.coversDesign(entryDesignId))
+                continue;
+            String aliasSail = a.sailNumber() != null ? a.sailNumber() : this.sailNumber;
+            String aliasName = a.name() != null ? a.normName() : IdGenerator.normaliseName(name);
+            if (key.equals(IdGenerator.sailKey(aliasSail)) && normName.equals(aliasName))
+                return true;
+        }
+        return false;
     }
 
     /** True if this identity's own sail number and name (not an alias) are these. */

@@ -42,6 +42,10 @@ import org.mortbay.sailing.pf.importer.IdGenerator;
  *       to it. If another v1 boat already has that identity's ID, it joins the boat.</li>
  *   <li>{@code clubs.yaml} per-boat club overrides and {@code noclub} become the identity's
  *       clubs, set by hand (curated).</li>
+ *   <li>{@code design.yaml}: {@code modifiedBoats} become the boat's modified flag; an undated
+ *       {@code boatDesignOverrides} entry becomes the boat's design (re-keying its identities
+ *       and results) and an alias saying its results of any design are this boat, as the
+ *       override did. Dated overrides are reported (a design change makes a new boat).</li>
  *   <li>The easily re-imported races are purged, to be re-imported under v2 matching: the
  *       MYC archive and the BWPS importer's (BWPS, Sydney Hobart, Gold Coast), with the
  *       certificates those importers derived.</li>
@@ -90,6 +94,8 @@ public final class V2Migration
         int finishersMoved;
         int boatsJoined;
         int curatedClubs;
+        int modified;
+        int designOverrides;
         final List<String> notes = new ArrayList<>();
 
         @Override
@@ -103,6 +109,8 @@ public final class V2Migration
                 .append("  finishers moved to them:  ").append(finishersMoved).append('\n')
                 .append("  boats joined (same ID):   ").append(boatsJoined).append('\n')
                 .append("  identities, curated clubs: ").append(curatedClubs).append('\n')
+                .append("  boats modified:           ").append(modified).append('\n')
+                .append("  design overrides applied: ").append(designOverrides).append('\n')
                 .append("  races kept:               ").append(racesKept).append('\n')
                 .append("  races purged:             ").append(racesPurged).append('\n')
                 .append("  certificates purged:      ").append(certificatesPurged).append('\n');
@@ -214,6 +222,7 @@ public final class V2Migration
 
         applyAliases(v1.resolve("config"), boats, races, report);
         applyClubOverrides(v1.resolve("config"), boats, report);
+        applyDesignConfig(v1.resolve("config"), v2.resolve("designs"), boats, races, report);
 
         // Write boats (named by current identity) and races
         Path boatsDir = Files.createDirectories(v2.resolve("boats"));
@@ -228,6 +237,7 @@ public final class V2Migration
         }
         report.racesKept = races.size();
 
+        stripBoatConfig(v2.resolve("config"));
         Files.writeString(v2.resolve(DataStore.FORMAT_FILE), DataStore.FORMAT + "\n");
         Files.createDirectories(v2.resolve("log"));
         Files.writeString(v2.resolve("log/migration-v2.txt"), report.toString());
@@ -398,6 +408,189 @@ public final class V2Migration
         Map<String, Identity> out = new LinkedHashMap<>();
         order.forEach(id -> out.put(id, identities.get(id)));
         return out;
+    }
+
+    /**
+     * Removes the per-boat sections from the v2 copy of the config, now held on the boats:
+     * aliases.yaml boats, design.yaml modifiedBoats and boatDesignOverrides, clubs.yaml per-club
+     * boat lists, boatClubOverrides and noclub.
+     */
+    private static void stripBoatConfig(Path configDir) throws IOException
+    {
+        strip(configDir.resolve("aliases.yaml"), List.of("boats"), null);
+        strip(configDir.resolve("design.yaml"), List.of("modifiedBoats", "boatDesignOverrides"), null);
+        strip(configDir.resolve("clubs.yaml"), List.of("boatClubOverrides", "noclub"), "boats");
+    }
+
+    /** Removes top-level {@code keys}, and {@code perClubKey} from each entry of {@code clubs}. */
+    private static void strip(Path file, List<String> keys, String perClubKey) throws IOException
+    {
+        if (!Files.exists(file))
+            return;
+        JsonNode root = YAML.readTree(file.toFile());
+        if (!(root instanceof com.fasterxml.jackson.databind.node.ObjectNode obj))
+            return;
+        keys.forEach(obj::remove);
+        if (perClubKey != null && obj.get("clubs") instanceof com.fasterxml.jackson.databind.node.ObjectNode clubs)
+            clubs.elements().forEachRemaining(c ->
+            {
+                if (c instanceof com.fasterxml.jackson.databind.node.ObjectNode co)
+                    co.remove(perClubKey);
+            });
+        YAML.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), obj);
+    }
+
+    /** design.yaml's modifiedBoats and boatDesignOverrides, onto the boats they name. */
+    private static void applyDesignConfig(Path configDir, Path designsDir, Map<String, Boat> boats,
+                                          List<RaceFile> races, Report report) throws IOException
+    {
+        Path file = configDir.resolve("design.yaml");
+        if (!Files.exists(file))
+            return;
+        JsonNode root = YAML.readTree(file.toFile());
+        for (JsonNode m : root.path("modifiedBoats"))
+        {
+            String sail = text(m, "sailNumber");
+            String name = text(m, "name");
+            for (String key : boatsNamed(boats, sail, name))
+            {
+                boats.put(key, boats.get(key).withModified(true));
+                report.modified++;
+            }
+        }
+        for (JsonNode o : root.path("boatDesignOverrides"))
+        {
+            String designId = text(o, "designId");
+            String canonicalName = text(o, "canonicalName");
+            if (designId == null)
+                continue;
+            Path designFile = designsDir.resolve(designId + ".json");
+            if (!Files.exists(designFile))
+            {
+                Files.createDirectories(designsDir);
+                Files.writeString(designFile, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(Map.of(
+                    "id", designId, "canonicalName", canonicalName != null ? canonicalName : designId,
+                    "aliases", List.of(), "sources", List.of("DesignOverride"))));
+            }
+            for (JsonNode b : o.path("boats"))
+            {
+                String sail = text(b, "sailNumber");
+                String name = text(b, "name");
+                if (text(b, "from") != null || text(b, "until") != null)
+                {
+                    report.notes.add("dated design override " + sail + " " + name + " -> " + designId
+                        + " not applied: a design change makes a new boat");
+                    continue;
+                }
+                List<String> keys = boatsNamed(boats, sail, name);
+                if (keys.isEmpty())
+                    report.notes.add("design override " + sail + " " + name + " -> " + designId + ": no such boat");
+                for (String key : keys)
+                {
+                    Boat boat = boats.get(key);
+                    Map<String, Identity> ids = new LinkedHashMap<>(boat.identities());
+                    ids.replaceAll((id, i) -> i.isNamed(sail, IdGenerator.normaliseName(name))
+                        ? i.withAlias(new BoatAlias(i.sailNumber(), i.name(), BoatAlias.ANY_DESIGN)) : i);
+                    boat = boat.withIdentities(ids);
+                    boats.put(key, boat);
+                    if (!designId.equals(boat.designId()))
+                        redesign(key, designId, boats, races, report);
+                    report.designOverrides++;
+                }
+            }
+        }
+    }
+
+    /** The keys of the boats with an identity of this sail number and name. */
+    private static List<String> boatsNamed(Map<String, Boat> boats, String sail, String name)
+    {
+        if (sail == null || name == null)
+            return List.of();
+        String normName = IdGenerator.normaliseName(name);
+        return boats.entrySet().stream()
+            .filter(e -> e.getValue().identities().values().stream().anyMatch(i -> i.isNamed(sail, normName)))
+            .map(Map.Entry::getKey).toList();
+    }
+
+    /**
+     * Moves the boat at {@code key} to {@code designId}: its identity IDs (which carry the
+     * design) change, with their results; a boat already holding one of the new IDs joins it.
+     */
+    private static void redesign(String key, String designId, Map<String, Boat> boats, List<RaceFile> races, Report report)
+    {
+        Boat b = boats.get(key);
+        Map<String, Identity> rekeyed = new LinkedHashMap<>();
+        Map<String, String> renames = new HashMap<>();
+        for (Map.Entry<String, Identity> e : b.identities().entrySet())
+        {
+            String newId = renameId(e.getValue().sailNumber(), e.getValue().name(), designId);
+            rekeyed.put(newId, e.getValue());
+            if (!newId.equals(e.getKey()))
+                renames.put(e.getKey(), newId);
+        }
+        List<List<org.mortbay.sailing.pf.data.Link>> links = new ArrayList<>(List.of(b.links()));
+        boolean modified = b.modified();
+        for (String newId : renames.values())
+        {
+            for (Map.Entry<String, Boat> other : new ArrayList<>(boats.entrySet()))
+            {
+                if (other.getKey().equals(key) || !other.getValue().hasIdentity(newId))
+                    continue;
+                // Already recorded under the design: the same boat; its identities join
+                Boat o = other.getValue();
+                o.identities().forEach((id, i) -> rekeyed.merge(id, i, (mine, theirs) -> mine
+                    .withCertificates(concat(mine.certificates(), theirs.certificates()))
+                    .withSources(concat(mine.sources(), theirs.sources()))));
+                links.add(o.links());
+                modified |= o.modified();
+                boats.remove(other.getKey());
+                report.boatsJoined++;
+                report.notes.add("design override: " + other.getKey() + " joins " + key + " (" + designId + ")");
+            }
+        }
+        if (!renames.isEmpty())
+            moveFinishers(renames, races);
+        boats.put(key, new Boat(null, designId, modified, org.mortbay.sailing.pf.data.Link.merge(links),
+            orderByLastRace(rekeyed, races), b.lastUpdated(), null));
+    }
+
+    private static <T> List<T> concat(List<T> a, List<T> b)
+    {
+        List<T> out = new ArrayList<>(a);
+        b.stream().filter(x -> !out.contains(x)).forEach(out::add);
+        return out;
+    }
+
+    /** Rewrites the results entered as the keys of {@code renames} to their values. */
+    private static void moveFinishers(Map<String, String> renames, List<RaceFile> races)
+    {
+        for (int i = 0; i < races.size(); i++)
+        {
+            RaceFile rf = races.get(i);
+            Race race = rf.race();
+            if (race.divisions() == null)
+                continue;
+            boolean changed = false;
+            List<Division> divisions = new ArrayList<>();
+            for (Division d : race.divisions())
+            {
+                List<Finisher> fs = new ArrayList<>();
+                for (Finisher f : d.finishers())
+                {
+                    String to = renames.get(f.identityId());
+                    if (to != null)
+                    {
+                        f = f.withBoatId(to);
+                        changed = true;
+                    }
+                    fs.add(f);
+                }
+                divisions.add(new Division(d.name(), fs));
+            }
+            if (changed)
+                races.set(i, new RaceFile(rf.relative(), new Race(race.id(), race.clubId(), race.seriesIds(),
+                    race.date(), race.number(), race.name(), divisions, race.source(), race.lastUpdated(), null)));
+        }
     }
 
     /** clubs.yaml per-boat overrides (and noclub) become the identity's curated clubs. */

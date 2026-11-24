@@ -335,10 +335,14 @@ public class DataStore
         return Collections.unmodifiableMap(designs);
     }
 
+    /**
+     * True if the boat with identity {@code boatId} has been set, by hand, to have no club under
+     * that identity (an empty curated club list): importers then leave its clubs alone.
+     */
     public boolean isExplicitlyNoClub(String boatId)
     {
-        List<String> override = clubCatalogue.resolveBoatIdOverride(boatId);
-        return override != null && override.isEmpty();
+        Boat b = boatId == null ? null : boat(boatId);
+        return b != null && b.identity().clubsCurated() && b.identity().clubIds().isEmpty();
     }
 
     /**
@@ -516,7 +520,7 @@ public class DataStore
         }
         Boat boat = findOrCreateBoatUnfolded(rawSailNo, rawName, rawDesign, date, source);
         if (modified && boat != null && markModified(boat))
-            reloadDesignCatalogue();
+            boat = boat(boat.id());
         return foldModifiedDesign(boat);
     }
 
@@ -540,15 +544,6 @@ public class DataStore
         final String normName = name;
 
         String designId = aliases.resolveDesignAlias(IdGenerator.normaliseName(rawDesign));
-        String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name, date);
-        if (overrideDesignId != null && !designId.equalsIgnoreCase(overrideDesignId))
-        {
-            LOG.info("Boat {}/{}: design overridden {} → {}", sailNo, name,
-                rawDesign == null ? "null" : rawDesign, overrideDesignId);
-            sourceDesign += "->" + designId;
-            designId = overrideDesignId;
-            rawDesign = designs.containsKey(designId) ? designs.get(designId).canonicalName() : overrideDesignId;
-        }
         // If the resolved design is ignored -- via the curated {@code ignored:} list in
         // design.yaml or via the runtime user-toggled set -- treat the incoming boat as
         // design-less for matching purposes, otherwise a new designless record would get
@@ -581,6 +576,9 @@ public class DataStore
             else if (isNotBlank(candidate.designId()))
             {
                 if (Objects.equals(designId, candidate.designId()))
+                    return candidate;
+                // Entered as another design, which an alias says is this boat's
+                if (candidate.identity().enteredAs(normSailNo, normName, designId))
                     return candidate;
                 // Another design: another boat, unless the entry matched one of its aliases
                 // (a spelling someone merged into it), which says it is this boat
@@ -684,28 +682,8 @@ public class DataStore
                 return existingById;
             }
 
-            // BoatId-based override takes priority over legacy sail+name override
-            List<String> boatIdOverride = clubCatalogue.resolveBoatIdOverride(newBoatId);
-            List<String> newClubIds;
-            if (boatIdOverride != null)
-            {
-                newClubIds = boatIdOverride;
-                LOG.info("Boat {}: boatId club override → {}", newBoatId,
-                    boatIdOverride.isEmpty() ? "no-club" : boatIdOverride);
-            }
-            else
-            {
-                String sailNameOverride = clubCatalogue.resolveClubOverride(normSailNo, rawName);
-                if (sailNameOverride != null)
-                {
-                    newClubIds = List.of(sailNameOverride);
-                    LOG.info("Boat {}/{}: sail+name club override → {}", normSailNo, rawName, sailNameOverride);
-                }
-                else
-                {
-                    newClubIds = List.of();
-                }
-            }
+            // A new boat has no club yet: importers add the clubs it races at
+            List<String> newClubIds = List.of();
             Boat newBoat = new Boat(
                 newBoatId,
                 normSailNo,
@@ -813,24 +791,15 @@ public class DataStore
         return canonicalId != null ? canonicalId : designId;
     }
 
-    /**
-     * As {@link #resolveDesignId(String)} for a class name reported for this boat, but first
-     * applying a boat design override from design.yaml ({@code boatDesignOverrides}) — as
-     * {@link #findOrCreateBoat} does — so e.g. a "Sydney 36" reported for a boat overridden
-     * to the MkII resolves to the MkII.
-     */
     public String resolveDesignId(String className, Boat boat, LocalDate date)
     {
         requireStarted();
-        if (boat != null)
-        {
-            String override = designCatalogue.resolveDesignOverride(
-                IdGenerator.normaliseSailNumber(boat.sailNumber()),
-                IdGenerator.normaliseName(boat.name()), date);
-            if (override != null)
-                return override;
-        }
-        return resolveDesignId(className);
+        String resolved = resolveDesignId(className);
+        // A boat whose results are entered as another design (an alias says so) is its own
+        if (boat != null && boat.designId() != null && !boat.designId().equals(resolved)
+            && boat.identity().enteredAs(boat.sailNumber(), IdGenerator.normaliseName(boat.name()), resolved))
+            return boat.designId();
+        return resolved;
     }
 
     /** The word "modified" (optionally followed by digits, as in "Modified2") in a design name. */
@@ -881,12 +850,11 @@ public class DataStore
         return name.isEmpty() ? null : name;
     }
 
-    /** Ticks the boat modified in design.yaml; true if it was not already (catalogue needs a reload). */
     private boolean markModified(Boat b)
     {
-        if (designCatalogue.isModifiedBoat(b.sailNumber(), b.name()))
+        if (b.modified())
             return false;
-        Designs.setModifiedBoat(configDir, b.sailNumber(), b.name(), true);
+        setBoatModified(b.id(), true);
         return true;
     }
 
@@ -904,23 +872,14 @@ public class DataStore
         String base = baseOfModifiedDesign(modifiedDesignId);
         if (base == null)
             return b;
-        boolean catalogueChanged = Designs.retargetDesignOverrides(configDir, modifiedDesignId, base,
-            designs.get(base).canonicalName());
-        catalogueChanged |= markModified(b);
-        if (catalogueChanged)
-            reloadDesignCatalogue();
+        if (markModified(b))
+            b = boat(b.id());
         Boat folded = redesignBoat(b, base, "Modified-design fold");
         if (boats.values().stream().noneMatch(o -> modifiedDesignId.equals(o.designId())))
             removeDesign(modifiedDesignId);
         return folded;
     }
 
-    /**
-     * Moves a boat to {@code designId}: re-keys it to the id for that design (repointing race
-     * finishers and club config), or merges it into the boat already at that id.
-     *
-     * @return the boat now holding the record
-     */
     /**
      * Sets the design of the boat with identity {@code identityId}: every identity ID changes
      * (it carries the design), with its results, or the boat merges into one already recorded
@@ -975,14 +934,10 @@ public class DataStore
         }
         LOG.info("{}: updating designId {} → {} for boat {}", why, b.designId(), designId, b.id());
         String through = renames.getOrDefault(b.id(), b.id());
-        Boat updated = new Boat(through, designId, b.links(), rekeyed, Instant.now(), null);
+        Boat updated = new Boat(through, designId, b.modified(), b.links(), rekeyed, Instant.now(), null);
         removeBoat(b.id());
         putBoat(updated);
-        renames.forEach((oldId, newId) ->
-        {
-            rewriteFinisherBoatId(oldId, newId);
-            ClubLoader.remapBoatId(configDir, oldId, newId);
-        });
+        renames.forEach(this::rewriteFinisherBoatId);
         return updated;
     }
 
@@ -1833,28 +1788,21 @@ public class DataStore
             l.onDesignChanged(id);
     }
 
-    /**
-     * True if the boat is flagged as modified from its design ({@code modifiedBoats:} in
-     * {@code design.yaml}, by sail number + name): it keeps its own reference factor, is not
-     * pulled toward the design's, and does not count toward the design's.
-     */
+    /** True if the boat with identity {@code boatId} is modified from its design. */
     public boolean isBoatModified(String boatId)
     {
-        Boat boat = boatId == null ? null : boats.get(boatId);
-        return boat != null && designCatalogue.isModifiedBoat(boat.sailNumber(), boat.name());
+        Boat boat = boatId == null ? null : boat(boatId);
+        return boat != null && boat.modified();
     }
 
+    /** Marks the boat with identity {@code boatId} modified from its design, or not. */
     public void setBoatModified(String boatId, boolean flag)
     {
         requireStarted();
-        Boat boat = boats.get(boatId);
-        if (boat == null)
+        Boat boat = boat(boatId);
+        if (boat == null || boat.modified() == flag)
             return;
-        Designs.setModifiedBoat(configDir, boat.sailNumber(), boat.name(), flag);
-        reloadDesignCatalogue();
-        InvalidationListener l = invalidationListener;
-        if (l != null)
-            l.onBoatChanged(boatId);
+        putBoat(boat.withModified(flag).withLastUpdated(Instant.now()).withLoadedAt(null));
     }
 
     /**
@@ -2188,16 +2136,6 @@ public class DataStore
     }
 
     /**
-     * Writes a boat design override to design.yaml and reloads the design catalogue.
-     */
-    public void addDesignOverride(String sailNumber, String name, String designId, String canonicalName)
-    {
-        requireStarted();
-        Designs.addDesignOverride(configDir, sailNumber, name, designId, canonicalName);
-        reloadDesignCatalogue();
-    }
-
-    /**
      * Reloads the design catalogue from disk.
      */
     public void reloadDesignCatalogue()
@@ -2207,16 +2145,6 @@ public class DataStore
         // Re-stamp catalogue-derived flags on every in-memory Design (e.g. noSpinnaker).
         designs.replaceAll((id, d) -> d.noSpinnaker() == designCatalogue.isNoSpinnaker(id)
             ? d : d.withNoSpinnaker(designCatalogue.isNoSpinnaker(id)));
-    }
-
-    /**
-     * Writes a boat club override to clubs.yaml and reloads the club catalogue.
-     */
-    public void addClubOverride(String sailNumber, String name, String clubId)
-    {
-        requireStarted();
-        ClubLoader.addClubOverride(configDir, sailNumber, name, clubId);
-        reloadClubCatalogue();
     }
 
     /**
@@ -2357,57 +2285,6 @@ public class DataStore
     }
 
     /**
-     * Assigns a boatId to a specific club in clubs.yaml and reloads the catalogue.
-     */
-    public void setBoatClubOverrideById(String boatId, String clubId)
-    {
-        requireStarted();
-        ClubLoader.setBoatClub(configDir, boatId, clubId);
-        reloadClubCatalogue();
-    }
-
-    /**
-     * Assigns a boatId to a list of clubs in clubs.yaml and reloads the catalogue.
-     * An empty list moves the boatId to the {@code noclub} list.
-     */
-    public void setBoatClubsOverrideById(String boatId, List<String> clubIds)
-    {
-        requireStarted();
-        ClubLoader.setBoatClubs(configDir, boatId, clubIds);
-        reloadClubCatalogue();
-    }
-
-    /**
-     * Marks a boatId as explicitly having no club in clubs.yaml and reloads the catalogue.
-     */
-    public void setBoatNoClubById(String boatId)
-    {
-        requireStarted();
-        ClubLoader.setBoatNoClub(configDir, boatId);
-        reloadClubCatalogue();
-    }
-
-    /**
-     * Renames a boatId in clubs.yaml noclub/boats lists and reloads the catalogue.
-     */
-    public void remapBoatIdInClubConfig(String oldBoatId, String newBoatId)
-    {
-        requireStarted();
-        ClubLoader.remapBoatId(configDir, oldBoatId, newBoatId);
-        reloadClubCatalogue();
-    }
-
-    /**
-     * Removes a boatId from clubs.yaml noclub/boats lists and reloads the catalogue.
-     */
-    public void removeBoatFromClubConfig(String boatId)
-    {
-        requireStarted();
-        ClubLoader.removeBoatId(configDir, boatId);
-        reloadClubCatalogue();
-    }
-
-    /**
      * Returns a list of stale-boat violations detected after the startup repair passes have
      * run. Each violation is a human-readable string identifying a boat whose stored identity
      * disagrees with the current configuration (aliases.yaml, design.yaml boatDesignOverrides,
@@ -2472,9 +2349,13 @@ public class DataStore
             {
                 Identity m = e.getValue();
                 mergedIdentityIds.add(e.getKey());
-                keep = keep.withAlias(new BoatAlias(m.sailNumber(), m.name()));
+                // Entered as another design: the alias says so, so those results still come here
+                String entered = mb.designId() != null && !Objects.equals(mb.designId(), keepBoat.designId())
+                    ? mb.designId() : null;
+                keep = keep.withAlias(new BoatAlias(m.sailNumber(), m.name(), entered));
                 for (BoatAlias a : m.aliases())
-                    keep = keep.withAlias(a);
+                    keep = keep.withAlias(a.designId() == null && entered != null
+                        ? new BoatAlias(a.sailNumber(), a.name(), entered) : a);
                 for (Certificate c : m.certificates())
                     if (certMap.putIfAbsent(certKey(c), c) == null)
                         addCerts.add(c);
@@ -2541,7 +2422,8 @@ public class DataStore
             all.putAll(lb.identities());
             allLinks.add(lb.links());
         }
-        Boat result = new Boat(null, designId, Link.merge(allLinks), orderByLastRace(all), Instant.now(), null);
+        boolean modified = keepBoat.modified() || linked.stream().anyMatch(Boat::modified);
+        Boat result = new Boat(null, designId, modified, Link.merge(allLinks), orderByLastRace(all), Instant.now(), null);
         for (Boat lb : linked)
             removeBoat(lb.id());
         removeBoat(keepBoat.id());
@@ -2568,7 +2450,7 @@ public class DataStore
         Map<String, Identity> rest = new LinkedHashMap<>(b.identities());
         Identity leaving = rest.remove(identityId);
         Boat remaining = b.withIdentities(rest).withLastUpdated(Instant.now()).withLoadedAt(null);
-        Boat alone = new Boat(identityId, b.designId(), List.of(), Map.of(identityId, leaving), Instant.now(), null);
+        Boat alone = new Boat(identityId, b.designId(), b.modified(), List.of(), Map.of(identityId, leaving), Instant.now(), null);
         removeBoat(b.id());
         putBoat(remaining);
         putBoat(alone);
@@ -2615,11 +2497,10 @@ public class DataStore
         Map<String, Identity> m = new LinkedHashMap<>();
         for (Map.Entry<String, Identity> e : b.identities().entrySet())
             m.put(e.getKey().equals(identityId) ? newId : e.getKey(), e.getKey().equals(identityId) ? renamed : e.getValue());
-        Boat updated = new Boat(newId, b.designId(), b.links(), m, Instant.now(), null);
+        Boat updated = new Boat(newId, b.designId(), b.modified(), b.links(), m, Instant.now(), null);
         removeBoat(b.id());
         putBoat(updated);
         rewriteFinisherBoatId(identityId, newId);
-        ClubLoader.remapBoatId(configDir, identityId, newId);
         return updated;
     }
 
@@ -3379,24 +3260,6 @@ public class DataStore
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
         aliases = Aliases.load(configDir);
         designCatalogue = Designs.load(configDir);
-        designCatalogue.overrideDesigns().forEach((normId, canonicalName) ->
-        {
-            Design existing = designs.get(normId);
-            if (existing == null)
-            {
-                Design d = new Design(normId, canonicalName, List.of(),
-                    List.of("DesignOverride"), Instant.now(), false, null);
-                putDesign(d);
-                LOG.info("Created design {} ('{}') from boatDesignOverrides in design.yaml", normId, canonicalName);
-            }
-            else if (!existing.sources().contains("DesignOverride"))
-            {
-                putDesign(new Design(existing.id(), existing.canonicalName(),
-                    existing.aliases(), addSource(existing.sources(), "DesignOverride"),
-                    existing.links(), existing.lastUpdated(), existing.noSpinnaker(), null));
-            }
-        });
-
         // Stamp the catalogue-derived noSpinnaker flag onto every Design now that both the
         // designs map and the catalogue are loaded. Subsequent toggles re-stamp via reloadDesignCatalogue().
         designs.replaceAll((id, d) -> d.noSpinnaker() == designCatalogue.isNoSpinnaker(id)
@@ -3413,25 +3276,6 @@ public class DataStore
 
         migrateTopYachtIds();
         migrateTopYachtDivisionMerge();
-
-        // noclub correction: boats that have a persisted clubId but are listed in the noclub
-        // config get their clubs cleared. This fixes boats that were assigned a club before the
-        // noclub entry was added, or before the importer guard was in place.
-        {
-            List<Boat> noclubViolations = boats.values().stream()
-                .filter(b -> !b.clubIds().isEmpty() && isExplicitlyNoClub(b.id()))
-                .toList();
-            if (!noclubViolations.isEmpty())
-            {
-                LOG.warn("Correcting {} boat(s) with a club that are listed in noclub", noclubViolations.size());
-                for (Boat b : noclubViolations)
-                {
-                    LOG.warn("noclub correction: clearing clubIds {} from boat {}", b.clubIds(), b.id());
-                    putBoat(b.mapIdentities(i -> i.withClubIds(List.of()))
-                        .withLastUpdated(Instant.now()).withLoadedAt(null));
-                }
-            }
-        }
 
         // Race-derived ORC removal: ORC handicaps copied from race results by earlier importer
         // versions are on many different ORC ratings, not 600/GPH; only official ORC certs are kept.
@@ -3468,40 +3312,6 @@ public class DataStore
                     Boat b = boats.get(e.getKey());
                     if (b != null)
                         redesignBoat(b, e.getValue(), "Design alias correction");
-                }
-            }
-        }
-
-        // Design override correction: boats whose stored designId disagrees with an active
-        // boatDesignOverrides entry in design.yaml are migrated to the override design. This
-        // repairs boats created before the override was added (e.g. MYC12 / San Toy /
-        // radford12 → radford12catrig; 1088 / Corum / farrmumm36 → farr36modified).
-        // Date is passed as null so only undated/currently-active overrides apply; dated
-        // overrides encode "boat changed design between X and Y" and are only consulted at
-        // import time.
-        {
-            List<Map.Entry<String, String>> designOverrideUpdates = new ArrayList<>();
-            for (Boat b : boats.values())
-            {
-                String overrideId = designCatalogue.resolveDesignOverride(
-                    b.sailNumber(), IdGenerator.normaliseName(b.name()), null);
-                if (overrideId == null)
-                    continue;
-                if (overrideId.equals(b.designId()))
-                    continue;
-                if (!designs.containsKey(overrideId))
-                    continue;
-                designOverrideUpdates.add(Map.entry(b.id(), overrideId));
-            }
-            if (!designOverrideUpdates.isEmpty())
-            {
-                LOG.info("Correcting {} boat(s) with stale designId vs design override at startup",
-                    designOverrideUpdates.size());
-                for (Map.Entry<String, String> e : designOverrideUpdates)
-                {
-                    Boat b = boats.get(e.getKey());
-                    if (b != null)
-                        redesignBoat(b, e.getValue(), "Design override correction");
                 }
             }
         }
@@ -3582,29 +3392,6 @@ public class DataStore
             }
         }
 
-        // Second noclub correction pass: the earlier pass at the top of this method
-        // catches the simple case where a boat already at its final boatId is in noclub.
-        // But the design alias / design override / auto-fix-stale / design upgrade passes
-        // can REGENERATE a boat under a new boatId (the noclub target). Re-run the noclub
-        // correction so the post-migration boats also pick up their noclub assignment.
-        {
-            List<Boat> noclubViolations = boats.values().stream()
-                .filter(b -> !b.clubIds().isEmpty() && isExplicitlyNoClub(b.id()))
-                .toList();
-            if (!noclubViolations.isEmpty())
-            {
-                LOG.warn("Correcting {} post-migration boat(s) with a club that are in noclub",
-                    noclubViolations.size());
-                for (Boat b : noclubViolations)
-                {
-                    LOG.warn("noclub correction (post-migration): clearing clubIds {} from boat {}",
-                        b.clubIds(), b.id());
-                    putBoat(b.mapIdentities(i -> i.withClubIds(List.of()))
-                        .withLastUpdated(Instant.now()).withLoadedAt(null));
-                }
-            }
-        }
-
         // Post-repair sanity scan: re-check every boat after all repair passes have run
         // and remember any residual violations. These get logged as ERROR and surfaced via
         // findStaleBoatViolations() (and ultimately /api/health). An empty list means the
@@ -3651,23 +3438,6 @@ public class DataStore
         for (Boat b : boats.values())
         {
             String normName = IdGenerator.normaliseName(b.name());
-            // (2) design-override drift.
-            String overrideId = designCatalogue.resolveDesignOverride(
-                b.sailNumber(), normName, null);
-            if (overrideId != null && !overrideId.equals(b.designId())
-                && designs.containsKey(overrideId))
-            {
-                violations.add(String.format(
-                    "design-override drift on %s: stored designId=%s but override expects %s",
-                    b.id(), b.designId(), overrideId));
-            }
-            // (3) stale noclub assignment.
-            if (!b.clubIds().isEmpty() && isExplicitlyNoClub(b.id()))
-            {
-                violations.add(String.format(
-                    "noclub violation on %s: clubIds=%s but boatId is in noclub list",
-                    b.id(), b.clubIds()));
-            }
             // (4) design alias drift: stored designId is itself an alias.
             if (b.designId() != null)
             {

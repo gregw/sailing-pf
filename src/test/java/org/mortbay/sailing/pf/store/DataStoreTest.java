@@ -129,16 +129,6 @@ class DataStoreTest {
                 new Finisher("40-x-farr40modified", Duration.ofMinutes(60), false, null)))),
             null, null, null));
         store.stop();
-        // A design override targeting the modified design moves to the base
-        Files.createDirectories(tempDir.resolve("config"));
-        Files.writeString(tempDir.resolve("config/design.yaml"), """
-            boatDesignOverrides:
-            - designId: "farr40modified"
-              canonicalName: "Farr 40 Modified"
-              boats:
-              - sailNumber: "40"
-                name: "X"
-            """);
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
@@ -155,12 +145,10 @@ class DataStoreTest {
         assertNotNull(store2.designs().get("magic25"));
         assertTrue(store2.isBoatModified("25-m-magic25"));
 
-        String yaml = Files.readString(tempDir.resolve("config/design.yaml"));
-        assertFalse(yaml.contains("farr40modified"), yaml);
-        assertTrue(yaml.contains("designId: \"farr40\""), yaml);
+        store2.save();
         store2.stop();
 
-        // Restart is stable: the override now names the base design
+        // Restart is stable: the boat keeps the base design and its modified flag
         DataStore store3 = new DataStore(tempDir);
         store3.start();
         assertEquals("farr40", store3.boats().get("40-x-farr40").designId());
@@ -1164,38 +1152,24 @@ class DataStoreTest {
     // --- Design override ---
 
     @Test
-    void findOrCreateBoatAppliesDesignOverride(@TempDir Path tempDir) throws Exception {
-        // Create config/design.yaml with an override: 6499/Supernova → sydney36mkii
-        Path configDir = tempDir.resolve("config");
-        Files.createDirectories(configDir);
-        Files.writeString(configDir.resolve("design.yaml"),
-            """
-            excluded: []
-            ignored: []
-            boatDesignOverrides:
-              - designId: "sydney36mkii"
-                canonicalName: "Sydney 36 MkII"
-                boats:
-                  - sailNumber: "6499"
-                    name: "Supernova"
-            """);
-
+    void findOrCreateBoatHonoursAnEnteredDesignAlias(@TempDir Path tempDir) throws Exception {
+        // Supernova is a Sydney 36 MkII whose results are entered as "Sydney 36": an alias of
+        // its identity says entries of any design are this boat
         DataStore store = new DataStore(tempDir);
         store.start();
-
-        // Create an existing "sydney36" design (the wrong one, from raw data)
         store.putDesign(new Design("sydney36", "Sydney 36", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("sydney36mkii", "Sydney 36 MkII", List.of(), List.of(), null, false, null));
+        store.putBoat(new Boat("6499-supernova-sydney36mkii", "6499", "Supernova", "sydney36mkii",
+            List.of(), List.of(), List.of(), null, null).updateIdentity(i -> i.withAlias(
+                new org.mortbay.sailing.pf.data.BoatAlias("6499", "Supernova", org.mortbay.sailing.pf.data.BoatAlias.ANY_DESIGN))));
 
-        // The override should have auto-created "sydney36mkii" at startup
-        assertNotNull(store.designs().get("sydney36mkii"), "override design should be auto-created");
-
-        // Call findOrCreateBoat with raw design "Sydney 36" — override should kick in
         Boat boat = store.findOrCreateBoat("6499", "Supernova", "Sydney 36");
 
-        assertEquals("sydney36mkii", boat.designId(),
-            "design override should replace sydney36 with sydney36mkii");
-        assertEquals("6499-supernova-sydney36mkii", boat.id(),
-            "boat ID should use the overridden design");
+        assertEquals("6499-supernova-sydney36mkii", boat.id(), "entered as a Sydney 36, still the MkII");
+        assertEquals(1, store.boats().size());
+        assertEquals("sydney36mkii", store.resolveDesignId("Sydney 36", boat, LocalDate.of(2026, 9, 26)),
+            "the boat's design wins over the reported class");
+        assertEquals("sydney36", store.resolveDesignId("Sydney 36", null, LocalDate.of(2026, 9, 26)));
     }
 
     /**
@@ -1883,30 +1857,6 @@ class DataStoreTest {
         Race stored = store.races().get(race.id());
         for (Finisher f : stored.divisions().stream().flatMap(d -> d.finishers().stream()).toList())
             assertEquals("MYC12-santoy".equals(f.boatId()), f.nonSpinnaker(), f.boatId());
-        store.stop();
-    }
-
-    @Test
-    void resolveDesignIdAppliesBoatDesignOverrides(@TempDir Path tempDir) throws IOException
-    {
-        Files.createDirectories(tempDir.resolve("config"));
-        Files.writeString(tempDir.resolve("config/design.yaml"), """
-            boatDesignOverrides:
-            - designId: "sydney36mkii"
-              canonicalName: "Sydney 36 MkII"
-              boats:
-              - sailNumber: "6499"
-                name: "Supernova"
-            """);
-        DataStore store = new DataStore(tempDir);
-        store.start();
-        Boat supernova = new Boat("6499-supernova-sydney36mkii", "6499", "Supernova", "sydney36mkii",
-            List.of(), List.of(), List.of(), null, null);
-        LocalDate date = LocalDate.of(2026, 9, 26);
-        assertEquals("sydney36mkii", store.resolveDesignId("Sydney 36", supernova, date),
-            "the boat's override wins over the reported class");
-        assertEquals("sydney36", store.resolveDesignId("Sydney 36", null, date));
-        assertEquals("sydney36", store.resolveDesignId("Sydney 36"));
         store.stop();
     }
 

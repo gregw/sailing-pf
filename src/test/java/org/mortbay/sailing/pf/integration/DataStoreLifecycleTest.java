@@ -106,6 +106,16 @@ class DataStoreLifecycleTest
         OKAVANGO_CANON,
         SANTOY_CANON);
 
+    /** Sets a boat's design, with an alias saying its results of any design are this boat. */
+    private static void setDesignEnteredAsAny(DataStore store, String boatId, String designId, String designName)
+    {
+        if (store.designs().get(designId) == null)
+            store.putDesign(new org.mortbay.sailing.pf.data.Design(designId, designName, List.of(), List.of(), null, false, null));
+        Boat b = store.setBoatDesign(boatId, designId);
+        store.putBoat(b.updateIdentity(i -> i.withAlias(new org.mortbay.sailing.pf.data.BoatAlias(
+            i.sailNumber(), i.name(), org.mortbay.sailing.pf.data.BoatAlias.ANY_DESIGN))).withLoadedAt(null));
+    }
+
     @Test
     void fullLifecycleStaysClean(@TempDir Path tempDir) throws Exception
     {
@@ -172,10 +182,10 @@ class DataStoreLifecycleTest
                 List.of(new Aliases.SailNumberName("1088", "nortonwhitecorum")));
             store.reloadAliases();
         }
-        // Force a design override 1088 Corum → mumm36. After the next restart, the
-        // "Design override correction" pass should migrate 1088-corum-farrmumm36
-        // → 1088-corum-mumm36. (Not a "… Modified" design: those fold to their base design.)
-        store.addDesignOverride("1088", "Corum", "mumm36", "Mumm 36");
+        // Corum is a Mumm 36, though entered as a Farr Mumm 36: its design is set, and an alias
+        // says its results of any design are Corum's (what a v1 design override converts to).
+        // (Not a "… Modified" design: those fold to their base design.)
+        setDesignEnteredAsAny(store, CORUM_STALE_PLAIN, "mumm36", "Mumm 36");
 
         // (c) Okavango: figure out what sail-number variants the importer actually created,
         // then merge them all into the canonical (which already exists from Phase 1, created
@@ -207,13 +217,11 @@ class DataStoreLifecycleTest
             store.reloadAliases();
         }
 
-        // (d) Santoy: force design override MYC12 San Toy → radford12catrig.
-        store.addDesignOverride("MYC12", "San Toy", "radford12catrig", "Radford 12 Cat Rig");
+        // (d) Santoy: a Radford 12 Cat Rig, though entered as a Radford 12.
+        setDesignEnteredAsAny(store, SANTOY_STALE, "radford12catrig", "Radford 12 Cat Rig");
 
-        // (e) Noclub for the Corum canonical that will exist AFTER the design override
-        // migration. Set it by the post-migration boatId; the override correction at
-        // startup will use this to clear clubIds.
-        store.setBoatNoClubById(CORUM_CANON);
+        // (e) Corum has no club: an empty club list set by hand.
+        store.putBoat(store.boat(CORUM_CANON).updateIdentity(i -> i.withCuratedClubIds(List.of())).withLoadedAt(null));
 
         store.save();
         Set<String> phase2Ids = new TreeSet<>(store.boats().keySet());

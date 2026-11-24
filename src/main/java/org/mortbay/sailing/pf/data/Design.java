@@ -31,6 +31,8 @@ public record Design(
 
     public Design
     {
+        if (aliases == null)
+            aliases = List.of();
         if (sources == null)
             sources = List.of();
         links = Link.normalise(links);
