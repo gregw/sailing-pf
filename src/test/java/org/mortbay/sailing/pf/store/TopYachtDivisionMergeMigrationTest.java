@@ -58,6 +58,7 @@ class TopYachtDivisionMergeMigrationTest
             + "        urls:\n"
             + "          - \"https://tes.topyacht.net.au/results/2025/mirw/index.htm\"\n";
         Files.writeString(file, yaml);
+        V2Migration.clubsFromYaml(root.resolve("config"), root.resolve("clubs"));
     }
 
     /**
@@ -81,8 +82,10 @@ class TopYachtDivisionMergeMigrationTest
 
     private void writeClubJson(Path root, List<Series> series) throws IOException
     {
-        Club club = new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
         Path file = root.resolve("clubs").resolve(CLUB + ".json");
+        // Keep the club's settings (from the clubs.yaml fixture), with these series
+        Club club = Files.exists(file) ? MAPPER.readValue(file.toFile(), Club.class).withSeries(series)
+            : new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), club);
     }

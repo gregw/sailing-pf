@@ -49,6 +49,9 @@ import org.mortbay.sailing.pf.importer.IdGenerator;
  *   <li>{@code design.yaml}'s design flags (excluded, ignored, noSpinnaker, oneDesign) and
  *       designYears go onto the design files (a flagged design not yet held is created), and
  *       design.yaml is retired.</li>
+ *   <li>{@code clubs.yaml}'s club settings (long name, state, email, excluded, aliases, results
+ *       feeds) and series types go into the club files (a club with no file gets one), and
+ *       clubs.yaml is retired.</li>
  *   <li>{@code aliases.yaml} design aliases join the design files' aliases (a design named
  *       there but not yet held is created), and aliases.yaml is retired.</li>
  *   <li>The easily re-imported races are purged, to be re-imported under v2 matching: the
@@ -103,6 +106,7 @@ public final class V2Migration
         int designOverrides;
         int designAliases;
         int designFlags;
+        int clubsWritten;
         final List<String> notes = new ArrayList<>();
 
         @Override
@@ -120,6 +124,7 @@ public final class V2Migration
                 .append("  design overrides applied: ").append(designOverrides).append('\n')
                 .append("  design aliases moved:     ").append(designAliases).append('\n')
                 .append("  design flags moved:       ").append(designFlags).append('\n')
+                .append("  clubs from clubs.yaml:    ").append(clubsWritten).append('\n')
                 .append("  races kept:               ").append(racesKept).append('\n')
                 .append("  races purged:             ").append(racesPurged).append('\n')
                 .append("  certificates purged:      ").append(certificatesPurged).append('\n');
@@ -234,6 +239,7 @@ public final class V2Migration
         applyDesignConfig(v1.resolve("config"), v2.resolve("designs"), boats, races, report);
         moveDesignAliases(v1.resolve("config"), v2.resolve("designs"), report);
         moveDesignFlags(v1.resolve("config"), v2.resolve("designs"), report);
+        moveClubSettings(v1.resolve("config"), v2.resolve("clubs"), report);
 
         // Write boats (named by current identity) and races
         Path boatsDir = Files.createDirectories(v2.resolve("boats"));
@@ -431,7 +437,7 @@ public final class V2Migration
     {
         Files.deleteIfExists(configDir.resolve("aliases.yaml"));
         Files.deleteIfExists(configDir.resolve("design.yaml"));
-        strip(configDir.resolve("clubs.yaml"), List.of("boatClubOverrides", "noclub"), "boats");
+        Files.deleteIfExists(configDir.resolve("clubs.yaml"));
     }
 
     /** Removes top-level {@code keys}, and {@code perClubKey} from each entry of {@code clubs}. */
@@ -510,6 +516,44 @@ public final class V2Migration
                     report.designOverrides++;
                 }
             }
+        }
+    }
+
+    /**
+     * Writes the club files for a v1 {@code clubs.yaml} in {@code configDir} into {@code clubsDir}:
+     * each club's settings and series types, keeping the series of an existing club file.
+     * Also used by tests to set up clubs from a clubs.yaml fixture.
+     */
+    public static void clubsFromYaml(Path configDir, Path clubsDir) throws IOException
+    {
+        moveClubSettings(configDir, clubsDir, new Report());
+    }
+
+    /** clubs.yaml's club settings and series types into the club files. */
+    private static void moveClubSettings(Path configDir, Path clubsDir, Report report) throws IOException
+    {
+        if (!Files.exists(configDir.resolve("clubs.yaml")))
+            return;
+        Map<String, org.mortbay.sailing.pf.data.Club> seed = ClubLoader.load(configDir);
+        Map<String, org.mortbay.sailing.pf.data.SeriesType> types = ClubLoader.loadCatalogue(configDir).seriesTypes();
+        Files.createDirectories(clubsDir);
+        for (org.mortbay.sailing.pf.data.Club c : seed.values())
+        {
+            Path file = clubsDir.resolve(org.mortbay.sailing.pf.importer.IdGenerator.sanitizeIdForFilesystem(c.id()) + ".json");
+            org.mortbay.sailing.pf.data.Club json = Files.exists(file)
+                ? JSON.readValue(file.toFile(), org.mortbay.sailing.pf.data.Club.class) : null;
+            Map<String, org.mortbay.sailing.pf.data.SeriesType> clubTypes = new TreeMap<>();
+            types.forEach((seriesId, type) ->
+            {
+                if (seriesId.startsWith(c.id() + "/"))
+                    clubTypes.put(seriesId, type);
+            });
+            org.mortbay.sailing.pf.data.Club merged = new org.mortbay.sailing.pf.data.Club(c.id(),
+                json != null && json.shortName() != null ? json.shortName() : c.shortName(),
+                c.longName(), c.state(), c.excluded(), c.email(), c.aliases(), c.topyachtGroups(), c.sailsysEvents(),
+                json != null ? json.series() : List.of(), clubTypes, null);
+            JSON.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), merged);
+            report.clubsWritten++;
         }
     }
 

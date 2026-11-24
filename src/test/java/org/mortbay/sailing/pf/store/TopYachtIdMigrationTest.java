@@ -47,6 +47,7 @@ class TopYachtIdMigrationTest
         Path file = root.resolve("config/clubs.yaml");
         Files.createDirectories(file.getParent());
         Files.writeString(file, body);
+        V2Migration.clubsFromYaml(root.resolve("config"), root.resolve("clubs"));
     }
 
     /**
@@ -66,8 +67,10 @@ class TopYachtIdMigrationTest
 
     private void writeClubJson(Path root, List<Series> series) throws IOException
     {
-        Club club = new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
         Path file = root.resolve("clubs").resolve(CLUB + ".json");
+        // Keep the club's settings (from the clubs.yaml fixture), with these series
+        Club club = Files.exists(file) ? MAPPER.readValue(file.toFile(), Club.class).withSeries(series)
+            : new Club(CLUB, "TYC", null, null, false, null, List.of(), List.of(), List.of(), series, null);
         Files.createDirectories(file.getParent());
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), club);
     }

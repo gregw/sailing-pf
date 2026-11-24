@@ -1562,19 +1562,7 @@ public class TopYachtImporter
     {
         Club club = store.clubs().get(clubId);
         if (club == null)
-        {
-            // Club not yet persisted -- initialise from seed so series can be recorded
-            Club seed = store.clubSeed().get(clubId);
-            if (seed == null)
-                return;
-            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
-                seed.email(),
-                seed.aliases() != null ? seed.aliases() : List.of(),
-                seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
-                seed.sailsysEvents() != null ? seed.sailsysEvents() : List.of(),
-                List.of(), null);
-            store.putClub(club);
-        }
+            return;
 
         List<Series> series = new ArrayList<>(club.series());
         int idx = -1;
@@ -1610,9 +1598,7 @@ public class TopYachtImporter
             series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
         }
 
-        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
-            List.copyOf(series), null));
+        store.putClub(club.withSeries(List.copyOf(series)).withLoadedAt(null));
     }
 
     private static Duration parseElapsed(String text)

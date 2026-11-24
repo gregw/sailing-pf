@@ -103,9 +103,8 @@ public class DataStore
     private Map<String, String> identityIndex; // every identity ID -> the key of its boat in boats
     private Map<String, Design> designs;
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
-    private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
+    private Map<String, SeriesType> seriesTypeIndex; // series id -> type set on its club; null when stale
     private Map<String, String> designNameIndex; // design name/alias (normalised) -> design id; null when stale
-    private ClubLoader.ClubCatalogue clubCatalogue;  // lookup-only club overrides from clubs.yaml
     private List<Maker> makers;
     private boolean makersDirty;
 
@@ -322,10 +321,10 @@ public class DataStore
         return Collections.unmodifiableMap(clubs);
     }
 
+    /** All clubs (every club now has a record; kept for callers written for the clubs.yaml seed). */
     public Map<String, Club> clubSeed()
     {
-        requireStarted();
-        return Collections.unmodifiableMap(clubSeed);
+        return clubs();
     }
 
     public Map<String, Design> designs()
@@ -1021,7 +1020,7 @@ public class DataStore
             || isExplicitlyNoClub(boat.id()))
             return boat;
         Club organising = organisingClubId == null ? null
-            : Optional.ofNullable(clubs().get(organisingClubId)).orElse(clubSeed().get(organisingClubId));
+            : clubs().get(organisingClubId);
         Club club = organising != null && clubCode.trim().equalsIgnoreCase(organising.shortName())
             ? organising
             : findUniqueClubByShortName(clubCode, null, context);
@@ -1044,18 +1043,7 @@ public class DataStore
         requireStarted();
         Club club = clubs().get(clubId);
         if (club == null)
-        {
-            Club seed = clubSeed().get(clubId);
-            if (seed == null)
-                return;
-            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
-                seed.email(),
-                seed.aliases() != null ? seed.aliases() : List.of(),
-                seed.topyachtGroups() != null ? seed.topyachtGroups() : List.of(),
-                seed.sailsysEvents() != null ? seed.sailsysEvents() : List.of(),
-                List.of(), null);
-            putClub(club);
-        }
+            return;
 
         List<Series> series = new ArrayList<>(club.series() != null ? club.series() : List.of());
         int idx = -1;
@@ -1081,9 +1069,7 @@ public class DataStore
         {
             series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
         }
-        putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
-            club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
-            List.copyOf(series), null));
+        putClub(club.withSeries(List.copyOf(series)).withLoadedAt(null));
     }
 
     /**
@@ -1099,7 +1085,7 @@ public class DataStore
         requireStarted();
         List<Club> allClubs = Stream.concat(
                 clubs.values().stream(),
-                clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+                Stream.<Club>empty())
             .toList();
         List<Club> nonExcluded = allClubs.stream().filter(c -> !isClubExcluded(c.id())).toList();
 
@@ -1191,7 +1177,7 @@ public class DataStore
         // Search persisted clubs first; fall back to seed stubs
         List<Club> matches = Stream.concat(
                 clubs.values().stream(),
-                clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+                Stream.<Club>empty())
             .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
             .filter(c -> blankState
                 ? (c.state() == null || c.state().isBlank())
@@ -1274,6 +1260,7 @@ public class DataStore
     public void putClub(Club club)
     {
         requireStarted();
+        seriesTypeIndex = null;
         clubs.put(club.id(), club);
         InvalidationListener l = invalidationListener;
         if (l != null) l.onClubChanged(club.id());
@@ -1501,8 +1488,6 @@ public class DataStore
         for (Design md : toMerge)
             removeDesign(md.id());
 
-        if (!movedIdentities.isEmpty())
-            reloadClubCatalogue();
 
         LOG.info("mergeDesigns: kept={} merged={} updatedBoats={} updatedRaces={} updatedFinishers={}",
             keepId, mergeIds, updatedBoats, updatedRaces, updatedFinishers);
@@ -1534,10 +1519,7 @@ public class DataStore
     {
         requireStarted();
         Club club = clubs.get(clubId);
-        if (club != null)
-            return club.excluded();
-        Club seed = clubSeed.get(clubId);
-        return seed != null && seed.excluded();
+        return club != null && club.excluded();
     }
 
     /**
@@ -1553,7 +1535,7 @@ public class DataStore
         String lower = shortName.toLowerCase();
         List<Club> allIncludingExcluded = Stream.concat(
                 clubs.values().stream(),
-                clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+                Stream.<Club>empty())
             .filter(c -> lower.equalsIgnoreCase(c.shortName())
                       || lower.equalsIgnoreCase(c.longName())
                       || c.aliases().stream().anyMatch(lower::equalsIgnoreCase))
@@ -1562,54 +1544,26 @@ public class DataStore
             && allIncludingExcluded.stream().allMatch(c -> isClubExcluded(c.id()));
     }
 
-    /**
-     * Toggles the excluded flag on a club. The flag is YAML-owned: this writes
-     * {@code clubs.yaml} (auto-creating the entry if needed) and refreshes the
-     * in-memory seed and the corresponding entry in the persisted clubs map.
-     */
     public void setClubExcluded(String clubId, boolean excluded)
     {
-        requireStarted();
-        Club existing = clubs.get(clubId);
-        Club seed = clubSeed.get(clubId);
-        if (existing == null && seed == null)
-            throw new IllegalArgumentException("Unknown club: " + clubId);
-
-        String shortNameIfNew = existing != null ? existing.shortName()
-            : seed.shortName();
-        boolean changed = ClubLoader.setClubExcluded(configDir, clubId, shortNameIfNew, excluded);
-        if (!changed)
-            return;
-
-        clubSeed = ClubLoader.load(configDir);
-        if (existing != null)
-            clubs.put(clubId, enrichWithSeed(existing));
+        updateClub(clubId, c -> c.withExcluded(excluded));
     }
 
-    /**
-     * Updates the YAML-owned metadata fields ({@code longName}, {@code state}, {@code email})
-     * for a club. Each value is written verbatim -- passing {@code null} clears the field.
-     * Auto-creates the YAML entry if missing. Refreshes the in-memory seed and the
-     * corresponding entry in the persisted clubs map.
-     */
-    public void updateClubMeta(String clubId, String longName, String state, String email)
+    /** Changes a club's record, marking it for saving; fails for an unknown club. */
+    private void updateClub(String clubId, java.util.function.UnaryOperator<Club> change)
     {
         requireStarted();
         Club existing = clubs.get(clubId);
-        Club seed = clubSeed.get(clubId);
-        if (existing == null && seed == null)
+        if (existing == null)
             throw new IllegalArgumentException("Unknown club: " + clubId);
+        Club updated = change.apply(existing);
+        if (!updated.equals(existing))
+            putClub(updated.withLoadedAt(null));
+    }
 
-        String shortNameIfNew = existing != null ? existing.shortName()
-            : seed.shortName();
-        boolean changed = ClubLoader.updateClubMeta(configDir, clubId, shortNameIfNew,
-            longName, state, email);
-        if (!changed)
-            return;
-
-        clubSeed = ClubLoader.load(configDir);
-        if (existing != null)
-            clubs.put(clubId, enrichWithSeed(existing));
+    public void updateClubMeta(String clubId, String longName, String state, String email)
+    {
+        updateClub(clubId, c -> c.withMeta(longName, state, email));
     }
 
     /**
@@ -1629,71 +1583,14 @@ public class DataStore
         return ClubLoader.cleanSailsysEvents(events);
     }
 
-    /**
-     * Updates the YAML-owned {@code sailsys} events for a club. A null or empty list clears
-     * the field. Auto-creates the YAML entry if missing.
-     */
     public void updateClubSailsysEvents(String clubId, List<SailSysEvent> sailsysEvents)
     {
-        requireStarted();
-        Club existing = clubs.get(clubId);
-        Club seed = clubSeed.get(clubId);
-        if (existing == null && seed == null)
-            throw new IllegalArgumentException("Unknown club: " + clubId);
-
-        String shortNameIfNew = existing != null ? existing.shortName() : seed.shortName();
-        if (!ClubLoader.updateClubSailsysEvents(configDir, clubId, shortNameIfNew, sailsysEvents))
-            return;
-
-        clubSeed = ClubLoader.load(configDir);
-        if (existing != null)
-            clubs.put(clubId, enrichWithSeed(existing));
+        updateClub(clubId, c -> c.withSailsysEvents(cleanSailsysEvents(sailsysEvents)));
     }
 
-    /**
-     * Updates the YAML-owned {@code topyacht} groups for a club. A null or empty
-     * list clears the field. Auto-creates the YAML entry if missing.
-     */
     public void updateClubTopyachtGroups(String clubId, List<TopYachtGroup> topyachtGroups)
     {
-        requireStarted();
-        Club existing = clubs.get(clubId);
-        Club seed = clubSeed.get(clubId);
-        if (existing == null && seed == null)
-            throw new IllegalArgumentException("Unknown club: " + clubId);
-
-        String shortNameIfNew = existing != null ? existing.shortName()
-            : seed.shortName();
-        boolean changed = ClubLoader.updateClubTopyachtGroups(configDir, clubId,
-            shortNameIfNew, topyachtGroups);
-        if (!changed)
-            return;
-
-        clubSeed = ClubLoader.load(configDir);
-        if (existing != null)
-            clubs.put(clubId, enrichWithSeed(existing));
-    }
-
-    /**
-     * Returns a copy of {@code json} with the YAML-owned fields populated from the matching
-     * entry in {@link #clubSeed}. If no seed entry exists, leaves the YAML fields empty and
-     * logs a warning -- the club exists in JSON but has no clubs.yaml entry.
-     */
-    private Club enrichWithSeed(Club json)
-    {
-        Club seed = clubSeed.get(json.id());
-        if (seed == null)
-        {
-            LOG.warn("Club {} loaded from JSON has no entry in clubs.yaml -- YAML-owned fields will be empty",
-                json.id());
-            return new Club(json.id(), json.shortName(),
-                null, null, false, null, List.of(), List.of(), List.of(),
-                json.series(), json.loadedAt());
-        }
-        return new Club(json.id(), json.shortName(),
-            seed.longName(), seed.state(), seed.excluded(), seed.email(),
-            seed.aliases(), seed.topyachtGroups(), seed.sailsysEvents(),
-            json.series(), json.loadedAt());
+        updateClub(clubId, c -> c.withTopyachtGroups(cleanTopyachtGroups(topyachtGroups)));
     }
 
     /** Returns true if the boat has been manually excluded from analysis via the admin UI. */
@@ -1882,7 +1779,6 @@ public class DataStore
     private void cascadeIgnoreDesign(String ignoredId)
     {
         String note = "Ignored:" + ignoredId;
-        boolean clubConfigChanged = false;
         for (Boat boat : List.copyOf(boats.values()))
         {
             if (!ignoredId.equals(boat.designId()))
@@ -1891,11 +1787,8 @@ public class DataStore
             // already recorded without it); its identities note why
             Boat noted = boat.mapIdentities(i -> i.withSource(note)).withLoadedAt(null);
             putBoat(noted);
-            Boat moved = redesignBoat(boat(noted.id()), null, "Ignore cascade");
-            clubConfigChanged |= !moved.identities().keySet().equals(noted.identities().keySet());
+            redesignBoat(boat(noted.id()), null, "Ignore cascade");
         }
-        if (clubConfigChanged)
-            reloadClubCatalogue();
         InvalidationListener l = invalidationListener;
         if (l != null) l.onAllChanged();
     }
@@ -2164,15 +2057,6 @@ public class DataStore
     }
 
     /**
-     * Reloads the club catalogue from disk.
-     */
-    public void reloadClubCatalogue()
-    {
-        requireStarted();
-        clubCatalogue = ClubLoader.loadCatalogue(configDir);
-    }
-
-    /**
      * The type of a series: as set in clubs.yaml {@code seriesTypes}, otherwise derived from
      * the series name ({@link SeriesType#fromName}). {@link SeriesType#UNKNOWN} if the series
      * is not held.
@@ -2186,18 +2070,32 @@ public class DataStore
     /** As {@link #seriesType(String)}, looking in {@code clubIdHint}'s series first. */
     private SeriesType seriesType(String seriesId, String clubIdHint)
     {
-        SeriesType explicit = clubCatalogue.seriesType(seriesId);
+        SeriesType explicit = seriesTypeIndex().get(seriesId);
         if (explicit != null)
             return explicit;
         Series series = findSeries(seriesId, clubIdHint);
         return series == null ? SeriesType.UNKNOWN : SeriesType.fromName(series.name());
     }
 
-    /** True if the series type comes from clubs.yaml rather than the series name. */
+    /** Every series type set on a club, by series id. */
+    private Map<String, SeriesType> seriesTypeIndex()
+    {
+        Map<String, SeriesType> index = seriesTypeIndex;
+        if (index == null)
+        {
+            index = new java.util.HashMap<>();
+            for (Club c : clubs.values())
+                index.putAll(c.seriesTypes());
+            seriesTypeIndex = index;
+        }
+        return index;
+    }
+
+    /** True if the series type is set on its club rather than derived from the series name. */
     public boolean isSeriesTypeSet(String seriesId)
     {
         requireStarted();
-        return clubCatalogue.seriesType(seriesId) != null;
+        return seriesTypeIndex().containsKey(seriesId);
     }
 
     private Series findSeries(String seriesId, String clubIdHint)
@@ -2262,11 +2160,16 @@ public class DataStore
         String clubId = clubs.values().stream()
             .filter(c -> c.series() != null && c.series().contains(series))
             .map(Club::id).findFirst().orElseThrow();
-        Club seed = clubSeed.get(clubId);
-        String shortNameIfNew = seed != null ? seed.shortName() : clubs.get(clubId).shortName();
-        if (!ClubLoader.setSeriesType(configDir, clubId, shortNameIfNew, seriesId, type))
+        Club club = clubs.get(clubId);
+        Map<String, SeriesType> types = new LinkedHashMap<>(club.seriesTypes());
+        if (type == null)
+            types.remove(seriesId);
+        else
+            types.put(seriesId, type);
+        if (types.equals(club.seriesTypes()))
             return List.of();
-        clubCatalogue = ClubLoader.loadCatalogue(configDir);
+        putClub(club.withSeriesTypes(types).withLoadedAt(null));
+
         List<String> affected = races.values().stream()
             .filter(r -> r.seriesIds() != null && r.seriesIds().contains(seriesId))
             .map(Race::id).toList();
@@ -2673,7 +2576,7 @@ public class DataStore
         // clubId → (path base → prefix), longest base first so nested groups match precisely
         Map<String, List<Map.Entry<String, String>>> basesByClub = new LinkedHashMap<>();
         Map<String, List<TopYachtGroup>> groupsByClub = new LinkedHashMap<>();
-        for (Club club : clubSeed.values())
+        for (Club club : clubs.values())
         {
             List<TopYachtGroup> groups = club.topyachtGroups();
             if (groups == null || groups.isEmpty())
@@ -2835,7 +2738,7 @@ public class DataStore
      */
     private void migrateTopYachtDivisionMerge()
     {
-        for (Club seed : clubSeed.values())
+        for (Club seed : List.copyOf(clubs.values()))
         {
             if (seed.topyachtGroups() == null)
                 continue;
@@ -3001,9 +2904,7 @@ public class DataStore
                     ? new Series(s.id(), TopYachtEditions.editionName(group.displayName(), s.id()), s.isCatchAll(), s.raceIds())
                     : s);
             }
-            clubs.put(clubId, new Club(updated.id(), updated.shortName(), updated.longName(),
-                updated.state(), updated.excluded(), updated.email(), updated.aliases(),
-                updated.topyachtGroups(), updated.sailsysEvents(), List.copyOf(renamed), null));
+            clubs.put(clubId, updated.withSeries(List.copyOf(renamed)).withLoadedAt(null));
         }
 
         save();
@@ -3161,9 +3062,7 @@ public class DataStore
                     name = IdGenerator.seriesSlug(newSeriesId);
                 rebuilt.add(new Series(newSeriesId, name, false, List.copyOf(e.getValue())));
             }
-            clubs.put(clubId, new Club(club.id(), club.shortName(), club.longName(), club.state(),
-                club.excluded(), club.email(), club.aliases(), club.topyachtGroups(), club.sailsysEvents(),
-                List.copyOf(rebuilt), null));
+            clubs.put(clubId, club.withSeries(List.copyOf(rebuilt)).withLoadedAt(null));
         }
     }
 
@@ -3273,15 +3172,11 @@ public class DataStore
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
         designNameIndex = null;
-        clubSeed = ClubLoader.load(configDir);
-        clubCatalogue = ClubLoader.loadCatalogue(configDir);
 
         loadExclusions();
         clubs = new LinkedHashMap<>();
         loadDir(clubsDir, Club.class).forEach(c -> clubs.put(c.id(), c));
-        // YAML is the source of truth for longName/state/excluded/email/aliases/topyacht;
-        // populate those fields on the in-memory Club records from clubSeed.
-        clubs.replaceAll((id, c) -> enrichWithSeed(c));
+        seriesTypeIndex = null;
         races = new LinkedHashMap<>();
         loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), canonicalise(r)));
 
@@ -3474,8 +3369,6 @@ public class DataStore
         boats = null;
         designs = null;
         clubs = null;
-        clubSeed = null;
-        clubCatalogue = null;
         designNameIndex = null;
         makers = null;
         makersDirty = false;

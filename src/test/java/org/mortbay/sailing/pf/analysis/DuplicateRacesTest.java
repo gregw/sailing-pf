@@ -52,6 +52,7 @@ class DuplicateRacesTest
         Files.createDirectories(tempDir.resolve("config"));
         Files.writeString(tempDir.resolve("config/clubs.yaml"),
             "clubs:\n  c.au:\n    shortName: C\n" + (seriesTypes == null ? "" : "    seriesTypes:\n" + seriesTypes));
+        org.mortbay.sailing.pf.store.V2Migration.clubsFromYaml(tempDir.resolve("config"), tempDir.resolve("clubs"));
         store = new DataStore(tempDir);
         store.start();
         store.setAutoSanityCheck(false);

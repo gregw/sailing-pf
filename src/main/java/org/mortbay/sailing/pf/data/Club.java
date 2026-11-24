@@ -1,11 +1,16 @@
 package org.mortbay.sailing.pf.data;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 /**
  * A sailing club that organises races.
@@ -17,26 +22,88 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  * series names include the season where relevant (e.g. "Main Series 2018-19").
  * One file per club: {root}/clubs/{clubId}.json
  */
+@JsonPropertyOrder({"id", "shortName", "longName", "state", "excluded", "email", "aliases",
+    "topyachtGroups", "sailsysEvents", "seriesTypes", "series"})
 public record Club(
     String id,                  // website domain or domain/path, e.g. "myc.com.au" or "rycv.com.au/ppnyc"
     String shortName,           // e.g. "MYC"
-    @JsonIgnore String longName,            // sourced from clubs.yaml
-    @JsonIgnore String state,               // sourced from clubs.yaml
-    @JsonIgnore boolean excluded,           // sourced from clubs.yaml
-    @JsonIgnore String email,               // sourced from clubs.yaml
-    @JsonIgnore List<String> aliases,       // sourced from clubs.yaml
-    @JsonIgnore List<TopYachtGroup> topyachtGroups, // sourced from clubs.yaml
-    @JsonIgnore List<SailSysEvent> sailsysEvents,   // sourced from clubs.yaml
+    @JsonInclude(JsonInclude.Include.NON_NULL) String longName,
+    @JsonInclude(JsonInclude.Include.NON_NULL) String state,
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean excluded, // left out of the analysis
+    @JsonInclude(JsonInclude.Include.NON_NULL) String email,
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> aliases,       // other names results give it
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<TopYachtGroup> topyachtGroups, // its TopYacht results feeds
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SailSysEvent> sailsysEvents,   // its SailSys results feeds
     List<Series> series,        // series run by this club
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    Map<String, SeriesType> seriesTypes, // series ID -> its spinnaker type, set by hand
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Club>
 {
+    public Club
+    {
+        aliases = aliases == null ? List.of() : aliases;
+        topyachtGroups = topyachtGroups == null ? List.of() : topyachtGroups;
+        sailsysEvents = sailsysEvents == null ? List.of() : sailsysEvents;
+        series = series == null ? List.of() : series;
+        seriesTypes = seriesTypes == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(seriesTypes));
+    }
+
+    /** A club with no series types set. */
+    public Club(String id, String shortName, String longName, String state, boolean excluded, String email,
+                List<String> aliases, List<TopYachtGroup> topyachtGroups, List<SailSysEvent> sailsysEvents,
+                List<Series> series, Instant loadedAt)
+    {
+        this(id, shortName, longName, state, excluded, email, aliases, topyachtGroups, sailsysEvents, series,
+            Map.of(), loadedAt);
+    }
 
     @Override
     public Club withLoadedAt(Instant t)
     {
         return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups,
-            sailsysEvents, series, t);
+            sailsysEvents, series, seriesTypes, t);
+    }
+
+    public Club withShortName(String name)
+    {
+        return new Club(id, name, longName, state, excluded, email, aliases, topyachtGroups, sailsysEvents, series, seriesTypes, loadedAt);
+    }
+
+    /** This club with its long name, state and email replaced. */
+    public Club withMeta(String newLongName, String newState, String newEmail)
+    {
+        return new Club(id, shortName, newLongName, newState, excluded, newEmail, aliases, topyachtGroups, sailsysEvents, series, seriesTypes, loadedAt);
+    }
+
+    public Club withExcluded(boolean flag)
+    {
+        return new Club(id, shortName, longName, state, flag, email, aliases, topyachtGroups, sailsysEvents, series, seriesTypes, loadedAt);
+    }
+
+    public Club withAliases(List<String> newAliases)
+    {
+        return new Club(id, shortName, longName, state, excluded, email, newAliases, topyachtGroups, sailsysEvents, series, seriesTypes, loadedAt);
+    }
+
+    public Club withTopyachtGroups(List<TopYachtGroup> groups)
+    {
+        return new Club(id, shortName, longName, state, excluded, email, aliases, groups, sailsysEvents, series, seriesTypes, loadedAt);
+    }
+
+    public Club withSailsysEvents(List<SailSysEvent> events)
+    {
+        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups, events, series, seriesTypes, loadedAt);
+    }
+
+    public Club withSeries(List<Series> newSeries)
+    {
+        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups, sailsysEvents, newSeries, seriesTypes, loadedAt);
+    }
+
+    public Club withSeriesTypes(Map<String, SeriesType> types)
+    {
+        return new Club(id, shortName, longName, state, excluded, email, aliases, topyachtGroups, sailsysEvents, series, types, loadedAt);
     }
 
     /**
@@ -78,14 +145,14 @@ public record Club(
             && excluded == c.excluded && Objects.equals(email, c.email)
             && Objects.equals(aliases, c.aliases) && Objects.equals(topyachtGroups, c.topyachtGroups)
             && Objects.equals(sailsysEvents, c.sailsysEvents)
-            && Objects.equals(series, c.series);
+            && Objects.equals(series, c.series) && Objects.equals(seriesTypes, c.seriesTypes);
     }
 
     @Override
     public int hashCode()
     {
         return Objects.hash(id, shortName, longName, state, excluded, email, aliases, topyachtGroups,
-            sailsysEvents, series);
+            sailsysEvents, series, seriesTypes);
     }
 
     @Override
@@ -102,6 +169,7 @@ public record Club(
             ", topyachtGroups=" + topyachtGroups +
             ", sailsysEvents=" + sailsysEvents +
             ", series=" + series +
+            ", seriesTypes=" + seriesTypes +
             '}';
     }
 }

@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DataStoreTest {
@@ -412,6 +413,7 @@ class DataStoreTest {
     {
         Files.createDirectories(tempDir.resolve("config"));
         Files.writeString(tempDir.resolve("config/clubs.yaml"), yaml);
+        V2Migration.clubsFromYaml(tempDir.resolve("config"), tempDir.resolve("clubs"));
     }
 
     /**
@@ -430,69 +432,50 @@ class DataStoreTest {
     // --- YAML as source of truth for Club metadata ---
 
     @Test
-    void clubJsonOmitsYamlOwnedFields(@TempDir Path tempDir) throws IOException
+    void clubJsonHoldsAllItsSettings(@TempDir Path tempDir) throws IOException
     {
-        writeClubsYaml(tempDir,
-            "clubs:\n  c.example:\n    shortName: CYC\n    state: NSW\n    fullName: Foo\n    email: a@b\n");
-
         DataStore store = new DataStore(tempDir);
         store.start();
-        store.putClub(new Club("c.example", "CYC", "Foo", "NSW", false, "a@b",
+        Club club = new Club("c.example", "CYC", "Foo", "NSW", false, "a@b",
             List.of("alias1"),
             List.of(new TopYachtGroup("evt", null, List.of("http://x/results/2024/evt/index.htm"))),
-            List.of(), List.of(), null));
+            List.of(), List.of(), null);
+        store.putClub(club);
         store.save();
 
         String json = Files.readString(tempDir.resolve("clubs/c.example.json"));
-        assertFalse(json.contains("\"longName\""), "longName should not be in JSON");
-        assertFalse(json.contains("\"state\""), "state should not be in JSON");
-        assertFalse(json.contains("\"excluded\""), "excluded should not be in JSON");
-        assertFalse(json.contains("\"email\""), "email should not be in JSON");
-        assertFalse(json.contains("\"aliases\""), "aliases should not be in JSON");
-        assertFalse(json.contains("\"topyachtGroups\""), "topyachtGroups should not be in JSON");
-        assertTrue(json.contains("\"shortName\""));
-        assertTrue(json.contains("\"id\""));
+        for (String field : List.of("id", "shortName", "longName", "state", "email", "aliases", "topyachtGroups"))
+            assertTrue(json.contains("\"" + field + "\""), field + " is in the club file: " + json);
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(club, store2.clubs().get("c.example"));
     }
 
     @Test
-    void setClubExcludedWritesYamlAndSurvivesReload(@TempDir Path tempDir) throws IOException
+    void setClubExcludedSurvivesReload(@TempDir Path tempDir) throws IOException
     {
-        writeClubsYaml(tempDir,
-            "clubs:\n  c.example:\n    shortName: CYC\n    fullName: Foo\n");
-
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putClub(new Club("c.example", "CYC", "Foo", null, false, null,
             List.of(), List.of(), List.of(), List.of(), null));
-        store.save();
         store.setClubExcluded("c.example", true);
-
-        String yaml = Files.readString(tempDir.resolve("config/clubs.yaml"));
-        assertTrue(yaml.contains("excluded: true"), "clubs.yaml should record excluded=true");
+        store.stop();
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
         assertTrue(store2.clubs().get("c.example").excluded());
+        assertThrows(IllegalArgumentException.class, () -> store2.setClubExcluded("unknown.example", true));
     }
 
     @Test
-    void updateClubMetaWritesYamlAndSurvivesReload(@TempDir Path tempDir) throws IOException
+    void updateClubMetaSurvivesReload(@TempDir Path tempDir) throws IOException
     {
-        writeClubsYaml(tempDir,
-            "clubs:\n  c.example:\n    shortName: CYC\n    fullName: Foo\n");
-
         DataStore store = new DataStore(tempDir);
         store.start();
         store.putClub(new Club("c.example", "CYC", "Foo", null, false, null,
             List.of(), List.of(), List.of(), List.of(), null));
-        store.save();
         store.updateClubMeta("c.example", "Foo Renamed", "VIC", "x@y");
-
-        String yaml = Files.readString(tempDir.resolve("config/clubs.yaml"));
-        assertTrue(yaml.contains("fullName: \"Foo Renamed\"") || yaml.contains("fullName: Foo Renamed"),
-            "clubs.yaml should record new fullName");
-        assertTrue(yaml.contains("state: \"VIC\"") || yaml.contains("state: VIC"));
-        assertTrue(yaml.contains("email: \"x@y\"") || yaml.contains("email: x@y"));
+        store.stop();
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
@@ -500,23 +483,6 @@ class DataStoreTest {
         assertEquals("Foo Renamed", reloaded.longName());
         assertEquals("VIC", reloaded.state());
         assertEquals("x@y", reloaded.email());
-    }
-
-    @Test
-    void setClubExcludedOnOrphanAutoCreatesYamlEntry(@TempDir Path tempDir) throws IOException
-    {
-        // No clubs.yaml at all — the club exists only in JSON.
-        DataStore store = new DataStore(tempDir);
-        store.start();
-        store.putClub(new Club("orphan.example", "ORF", null, null, false, null,
-            List.of(), List.of(), List.of(), List.of(), null));
-        store.save();
-        store.setClubExcluded("orphan.example", true);
-
-        String yaml = Files.readString(tempDir.resolve("config/clubs.yaml"));
-        assertTrue(yaml.contains("orphan.example"), "YAML should auto-create orphan club entry");
-        assertTrue(yaml.contains("ORF"), "YAML should preserve shortName");
-        assertTrue(yaml.contains("excluded: true"));
     }
 
     // --- findOrCreateBoat ---
@@ -1751,7 +1717,7 @@ class DataStoreTest {
     }
 
     @Test
-    void setSeriesTypeWritesYamlAndOverridesName(@TempDir Path tempDir) throws IOException
+    void setSeriesTypePersistsOnTheClubAndOverridesName(@TempDir Path tempDir) throws IOException
     {
         writeClubsYaml(tempDir, "clubs:\n  myc.com.au:\n    shortName: MYC\n");
         Race race = buildRace();
@@ -1766,9 +1732,9 @@ class DataStoreTest {
         assertEquals(List.of(race.id()), changed);
         assertTrue(allNonSpin(store, race.id()));
         assertTrue(store.isSeriesTypeSet(seriesId));
-        String yaml = Files.readString(tempDir.resolve("config/clubs.yaml"));
-        assertTrue(yaml.contains("myc.com.au/club-championship: \"ns\""), yaml);
         store.stop();
+        assertTrue(Files.readString(tempDir.resolve("clubs/myc.com.au.json")).contains(seriesId),
+            "the series type is in the club file");
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();

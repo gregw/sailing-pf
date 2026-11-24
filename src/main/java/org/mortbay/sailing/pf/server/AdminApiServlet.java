@@ -1712,20 +1712,10 @@ public class AdminApiServlet extends HttpServlet
             if (sailsysChanged)
                 store.updateClubSailsysEvents(clubId, newSailsysEvents);
 
-            // shortName is JSON-owned — rewrite the Club JSON record. Re-fetch first so
-            // we pick up any YAML-side updates from the call above.
+            // Re-fetch first so the edits above are kept
             if (shortNameChanged)
-            {
-                Club fresh = store.clubs().get(clubId);
-                if (fresh == null)
-                    fresh = store.clubSeed().get(clubId);
-                Club updated = new Club(fresh.id(), newShortName,
-                    fresh.longName(), fresh.state(), fresh.excluded(), fresh.email(),
-                    fresh.aliases(), fresh.topyachtGroups(), fresh.sailsysEvents(),
-                    fresh.series(), null);
-                store.putClub(updated);
-                store.save();
-            }
+                store.putClub(store.clubs().get(clubId).withShortName(newShortName).withLoadedAt(null));
+            store.save();
 
             if (cache != null)
                 cache.refreshIndexes();

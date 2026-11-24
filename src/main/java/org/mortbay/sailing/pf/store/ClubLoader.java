@@ -987,6 +987,12 @@ class ClubLoader
          * empty list    → explicit no-club
          * non-empty list → explicit list of clubIds (first entry is primary)
          */
+        /** Every series type set in clubs.yaml, by series id. */
+        Map<String, SeriesType> seriesTypes()
+        {
+            return seriesTypes;
+        }
+
         List<String> resolveBoatIdOverride(String boatId)
         {
             if (boatId == null)
