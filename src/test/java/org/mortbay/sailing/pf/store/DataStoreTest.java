@@ -642,6 +642,20 @@ class DataStoreTest {
     // --- Alias seed integration ---
 
     @Test
+    void anExplicitDesignAliasWinsOverALeftoverDesignOfThatName(@TempDir Path tempDir) {
+        // "Laser" is listed as an ILCA alias, though a leftover "laser" design record remains
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putDesign(new Design("ilca", "ILCA", List.of("Laser"), List.of(), null, false, null));
+        store.putDesign(new Design("laser", "Laser", List.of(), List.of(), null, false, null));
+        store.putBoat(new Boat("148667-vercingetorix-ilca", "148667", "Vercingetorix", "ilca", List.of(), List.of(), List.of(), null, null));
+
+        assertEquals("148667-vercingetorix-ilca", store.findOrCreateBoat("148667", "Vercingetorix", "Laser").id());
+        assertEquals("ilca", store.resolveDesignId("Laser"));
+        assertEquals("ilca", store.findOrCreateBoat("200", "Another", "Laser").designId());
+    }
+
+    @Test
     void findOrCreateBoatResolvesADesignAlias(@TempDir Path tempDir) {
         // The Sydney 36 CR design file lists "Sydney 36 OD" as an alias
         DataStore store = new DataStore(tempDir);

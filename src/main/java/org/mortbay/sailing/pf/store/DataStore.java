@@ -105,6 +105,7 @@ public class DataStore
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, SeriesType> seriesTypeIndex; // series id -> type set on its club; null when stale
     private Map<String, String> designNameIndex; // design name/alias (normalised) -> design id; null when stale
+    private Map<String, String> designAliasIndex; // design alias (normalised) -> design id, aliases only
     private List<Maker> makers;
     private boolean makersDirty;
 
@@ -779,6 +780,9 @@ public class DataStore
         if (className == null || className.isBlank())
             return null;
         String designId = IdGenerator.normaliseDesignName(className);
+        String aliased = designAliasOf(designId);
+        if (aliased != null)
+            return aliased;
         if (designs.containsKey(designId))
             return designId;
         for (Design d : designs.values())
@@ -947,6 +951,9 @@ public class DataStore
         String designId = IdGenerator.normaliseDesignName(className);
         if (isDesignIgnored(designId))
             return null;
+        String aliased = designAliasOf(designId);
+        if (aliased != null && designs.containsKey(aliased))
+            return designs.get(aliased);
         Design design = designs.get(designId);
         if (design != null)
             return design;
@@ -1275,9 +1282,24 @@ public class DataStore
     {
         if (normName == null || normName.isBlank())
             return normName;
+        String aliased = designAliasOf(normName);
+        if (aliased != null)
+            return aliased;
         if (designs.containsKey(normName))
             return normName;
         return designNameIndex().getOrDefault(normName, normName);
+    }
+
+    /**
+     * The design that lists this normalised name among its aliases, if it is not that design's
+     * own name: an explicit alias wins over a (leftover) design of the same name, as "Laser" is
+     * an ILCA though a "laser" design record remains.
+     */
+    private String designAliasOf(String normName)
+    {
+        designNameIndex();
+        String id = designAliasIndex.get(normName);
+        return id == null || id.equals(normName) ? null : id;
     }
 
     /** The canonical name of a design, or null if there is no such design. */
@@ -1293,18 +1315,29 @@ public class DataStore
         if (index == null)
         {
             index = new java.util.HashMap<>();
+            Map<String, String> aliasIndex = new java.util.HashMap<>();
+            // Aliases first: an explicit alias wins over another design's own name
             for (Design d : designs.values())
             {
-                List<String> names = new ArrayList<>(d.aliases());
-                names.add(d.canonicalName());
-                for (String n : names)
+                for (String n : d.aliases())
                 {
                     if (n == null || n.isBlank())
                         continue;
-                    index.putIfAbsent(IdGenerator.normaliseName(n), d.id());
-                    index.putIfAbsent(IdGenerator.normaliseDesignName(n), d.id());
+                    for (String key : List.of(IdGenerator.normaliseName(n), IdGenerator.normaliseDesignName(n)))
+                    {
+                        aliasIndex.putIfAbsent(key, d.id());
+                        index.putIfAbsent(key, d.id());
+                    }
                 }
             }
+            for (Design d : designs.values())
+            {
+                if (d.canonicalName() == null || d.canonicalName().isBlank())
+                    continue;
+                index.putIfAbsent(IdGenerator.normaliseName(d.canonicalName()), d.id());
+                index.putIfAbsent(IdGenerator.normaliseDesignName(d.canonicalName()), d.id());
+            }
+            designAliasIndex = aliasIndex;
             designNameIndex = index;
         }
         return index;
