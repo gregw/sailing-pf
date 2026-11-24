@@ -72,8 +72,9 @@ record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
                 }
             }
             if (changed)
-                store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
-                    boat.clubIds(), List.copyOf(certs), boat.sources(), boat.links(), boat.lastUpdated(), null));
+                store.putBoat(boat.mapIdentities(i -> i.withCertificates(i.certificates().stream()
+                    .map(c -> dxtId.equals(c.certificateNumber()) && c.ageYear() == null ? c.withAgeYear(ageYear) : c)
+                    .toList())).withLoadedAt(null));
         }
     }
 
@@ -145,15 +146,14 @@ record OrcCertRow(String dxtId, String yachtName, String sailNo, String vppYear,
         Boat boat = store.findOrCreateBoat(sailNo, yachtName.trim(), className, null, SOURCE);
 
         // Upsert certificate: remove old cert with same dxtId first, then add new one
-        List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
+        List<Certificate> updatedCerts = new ArrayList<>(boat.identity().certificates());
         updatedCerts.removeIf(c -> dxtId.equals(c.certificateNumber()));
         updatedCerts.add(new Certificate("ORC",
             year, tcf, nonSpinnaker, twoHanded, club, false, dxtId, expiryDate, parseAge(age)));
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
-        store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubIds(),
-            List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
+        store.putBoat(boat.updateIdentity(i -> i.withCertificates(updatedCerts).withSource(SOURCE))
+            .withLastUpdated(Instant.now()).withLoadedAt(null));
     }
 
     /** Parses a yyyy-MM-dd date, ignoring any trailing time part; null if absent or invalid. */

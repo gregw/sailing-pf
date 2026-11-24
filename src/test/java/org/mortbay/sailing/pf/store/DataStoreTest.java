@@ -719,13 +719,12 @@ class DataStoreTest {
     }
 
     @Test
-    void findOrCreateBoatResolvesAliasFromSeedToExistingCanonicalBoat(@TempDir Path tempDir) {
-        // aliases.yaml maps MYC7 / "1060" → canonical name "Day Dreaming"
-        // Pre-populate the canonical boat; searching by "1060" should find it
+    void findOrCreateBoatResolvesAnIdentityAliasToItsBoat(@TempDir Path tempDir) {
+        // Day Dreaming (MYC7) has also been entered as "1060": an alias of its identity
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat canonical = new Boat("MYC7-daydreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), null, null);
-        store.putBoat(canonical);
+        store.putBoat(withAlias(new Boat("MYC7-daydreaming", "MYC7", "Day Dreaming", null, null, List.of(), List.of(), null, null),
+            "MYC7", "1060"));
 
         Boat found = store.findOrCreateBoat("MYC7", "1060", null);
 
@@ -733,25 +732,16 @@ class DataStoreTest {
         assertEquals(1, store.boats().size());
     }
 
-    @Test
-    void findOrCreateBoatCreatesWithCanonicalNameWhenAliasEncounteredFirst(@TempDir Path tempDir) {
-        // aliases.yaml maps MYC7 / "1060" → canonical "Day Dreaming"
-        // No boat yet — first encounter via an alias name should create with canonical name + alias recorded
-        DataStore store = new DataStore(tempDir);
-        store.start();
-
-        Boat boat = store.findOrCreateBoat("MYC7", "1060", null);
-
-        assertEquals("MYC7-daydreaming", boat.id());
-        assertEquals("Day Dreaming", boat.name());
-        assertEquals(1, store.boats().size());
+    private static Boat withAlias(Boat b, String sail, String name)
+    {
+        return b.updateIdentity(i -> i.withAlias(new org.mortbay.sailing.pf.data.BoatAlias(sail, name)));
     }
 
     /**
      * When two boats share the same sail+name but have different designs, an incoming
-     * design-less record can't be unambiguously matched. The existing behaviour is to
-     * return null. The added behaviour is to also append a tab-separated record describing
-     * the conflict to {@code <dataRoot>/log/ambiguous-boats.log} so an admin can review.
+     * design-less record can't be unambiguously matched: a new (design-less) boat is created,
+     * to be merged or linked by hand, and a tab-separated record describing the conflict is
+     * appended to {@code <dataRoot>/log/ambiguous-boats.log} so an admin can review.
      */
     @Test
     void findOrCreateBoatLogsAmbiguousMatchToFile(@TempDir Path tempDir) throws Exception
@@ -771,9 +761,10 @@ class DataStoreTest {
         store.putBoat(boatA);
         store.putBoat(boatB);
 
-        // Design-less third record cannot pick between them — returns null.
+        // Design-less third record cannot pick between them: a new boat
         Boat result = store.findOrCreateBoat("AUS1234", "Raging Bull", null, null, "sailsys");
-        assertNull(result);
+        assertEquals("1234-ragingbull", result.id());
+        assertEquals(3, store.boats().size());
 
         // The ambiguous-match log should have been created and contain a single record
         // naming the source, normalised sail+name, "(none)" for the missing design, and
@@ -796,12 +787,11 @@ class DataStoreTest {
     @Test
     void findBoatResolvesSailAliasToCanonicalBoat(@TempDir Path tempDir)
     {
-        // aliases.yaml maps A350-absolut with sail alias "R350"
+        // Absolut (A350) has also been entered under sail R350: a sail-number alias
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat canonical = new Boat("A350-absolut", "A350", "Absolut", null, null,
-            List.of(), List.of(), null, null);
-        store.putBoat(canonical);
+        store.putBoat(withAlias(new Boat("A350-absolut", "A350", "Absolut", null, null,
+            List.of(), List.of(), null, null), "R350", null));
 
         Boat found = store.findBoat("R350", "Absolut").orElse(null);
 
@@ -814,12 +804,10 @@ class DataStoreTest {
     @Test
     void findBoatResolvesNameAliasToCanonicalBoat(@TempDir Path tempDir)
     {
-        // aliases.yaml maps MYC7-daydreaming with name alias "1060"
         DataStore store = new DataStore(tempDir);
         store.start();
-        Boat canonical = new Boat("MYC7-daydreaming", "MYC7", "Day Dreaming", null, null,
-            List.of(), List.of(), null, null);
-        store.putBoat(canonical);
+        store.putBoat(withAlias(new Boat("MYC7-daydreaming", "MYC7", "Day Dreaming", null, null,
+            List.of(), List.of(), null, null), null, "1060"));
 
         Boat found = store.findBoat("MYC7", "1060").orElse(null);
 
@@ -890,14 +878,16 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        // Importer creates the canonical boat using its canonical sail/name.
+        // Importer creates the boat; it is later known to have raced as sail R350 too.
         Boat created = store.findOrCreateBoat("A350", "Absolut", null);
+        store.putBoat(withAlias(created, "R350", null));
 
-        // A later fetch sees the alias sail "R350" and looks up read-only.
         Boat found = store.findBoat("R350", "Absolut").orElse(null);
+        Boat imported = store.findOrCreateBoat("R350", "Absolut", null);
 
         assertNotNull(found);
         assertEquals(created.id(), found.id());
+        assertEquals(created.id(), imported.id());
     }
 
     // --- findUniqueClubByShortName ---
@@ -1568,7 +1558,7 @@ class DataStoreTest {
     // --- Name-equivalence matching (matchKey + suffix-strip) ---
 
     @Test
-    void findOrCreateBoatMergesStickyAndStickyII(@TempDir Path tempDir) throws IOException
+    void findOrCreateBoatMatchesStickyIIToSticky(@TempDir Path tempDir) throws IOException
     {
         writeEmptyAliasesYaml(tempDir);
         DataStore store = new DataStore(tempDir);
@@ -1577,18 +1567,18 @@ class DataStoreTest {
         Boat first = store.findOrCreateBoat("12345", "Sticky", "J/24");
         assertEquals("12345-sticky-j24", first.id());
 
+        // Name-equivalence: the same boat; its name is kept, the new spelling is an alias
         Boat second = store.findOrCreateBoat("12345", "Sticky II", "J/24");
-        // Phase 1.5 picks the existing boat and renames it to "Sticky II" (longer body).
-        assertEquals("12345-stickyii-j24", second.id());
-        assertEquals("Sticky II", second.name());
-        // Only the merged record remains.
-        assertNull(store.boats().get("12345-sticky-j24"));
-        assertEquals(1, store.boats().values().stream()
-            .filter(b -> "12345".equals(b.sailNumber())).count());
+        assertEquals("12345-sticky-j24", second.id());
+        assertEquals("Sticky", second.name());
+        assertTrue(second.identity().matches("12345", "stickyii"), "Sticky II is an alias");
+        assertEquals(1, store.boats().size());
+        // and a later entry as Sticky II matches it directly
+        assertEquals("12345-sticky-j24", store.findOrCreateBoat("12345", "Sticky II", "J/24").id());
     }
 
     @Test
-    void findOrCreateBoatPrefersArabicOverRomanNumerals(@TempDir Path tempDir) throws IOException
+    void findOrCreateBoatMatchesSticky2ToStickyII(@TempDir Path tempDir) throws IOException
     {
         writeEmptyAliasesYaml(tempDir);
         DataStore store = new DataStore(tempDir);
@@ -1596,14 +1586,12 @@ class DataStoreTest {
 
         store.findOrCreateBoat("12345", "Sticky II", "J/24");
         Boat arabic = store.findOrCreateBoat("12345", "Sticky 2", "J/24");
-        // Body tie → numeral wins; Arabic preferred over Roman → "Sticky 2".
-        assertEquals("12345-sticky2-j24", arabic.id());
-        assertEquals("Sticky 2", arabic.name());
-        assertNull(store.boats().get("12345-stickyii-j24"));
+        assertEquals("12345-stickyii-j24", arabic.id(), "the same boat: no automatic rename");
+        assertEquals(1, store.boats().size());
     }
 
     @Test
-    void findOrCreateBoatMergesTheGoatAndGoat(@TempDir Path tempDir) throws IOException
+    void findOrCreateBoatMatchesTheGoatToGoat(@TempDir Path tempDir) throws IOException
     {
         writeEmptyAliasesYaml(tempDir);
         DataStore store = new DataStore(tempDir);
@@ -1611,10 +1599,8 @@ class DataStoreTest {
 
         store.findOrCreateBoat("99", "Goat", "Adams 10");
         Boat result = store.findOrCreateBoat("99", "The Goat", "Adams 10");
-        // Canonical is the longer "The Goat".
-        assertEquals("99-thegoat-adams10", result.id());
-        assertEquals("The Goat", result.name());
-        assertNull(store.boats().get("99-goat-adams10"));
+        assertEquals("99-goat-adams10", result.id());
+        assertEquals(1, store.boats().size());
     }
 
     @Test
@@ -1673,112 +1659,36 @@ class DataStoreTest {
         assertEquals(2, store.boats().size());
     }
 
-    @Test
-    void startupRepairRenamesStandardSuffixSurvivor(@TempDir Path tempDir) throws IOException
-    {
-        writeEmptyAliasesYaml(tempDir);
-        // Pre-seed a boat that was persisted before normaliseName started stripping suffixes.
-        DataStore seed = new DataStore(tempDir);
-        seed.start();
-        seed.putBoat(new Boat("AUS5-foobargm-tp52", "AUS5", "Foobar - GM", "tp52",
-            List.of(), List.of(), List.of("Legacy"), null, null));
-        seed.save();
-        seed.stop();
-
-        DataStore store = new DataStore(tempDir);
-        store.start();
-        // Phase A: suffix-strip renames boat in place.
-        assertNull(store.boats().get("AUS5-foobargm-tp52"));
-        Boat renamed = store.boats().get("AUS5-foobar-tp52");
-        assertNotNull(renamed);
-        assertEquals("Foobar", renamed.name());
-    }
-
-    @Test
-    void startupRepairCollapsesPreExistingDuplicates(@TempDir Path tempDir) throws IOException
-    {
-        writeEmptyAliasesYaml(tempDir);
-        // Pre-seed two boats sharing sail+design but with name-equivalent variants.
-        DataStore seed = new DataStore(tempDir);
-        seed.start();
-        seed.putBoat(new Boat("99-sticky-j24", "99", "Sticky", "j24",
-            List.of(), List.of(), List.of("Legacy"), null, null));
-        seed.putBoat(new Boat("99-stickyii-j24", "99", "Sticky II", "j24",
-            List.of(), List.of(), List.of("Legacy"), null, null));
-        seed.save();
-        seed.stop();
-
-        DataStore store = new DataStore(tempDir);
-        store.start();
-        // Phase B: equivalence collapse. Canonical = "Sticky II" (longer body).
-        assertNull(store.boats().get("99-sticky-j24"));
-        Boat kept = store.boats().get("99-stickyii-j24");
-        assertNotNull(kept);
-        assertEquals("Sticky II", kept.name());
-        // Long-term, the original "Sticky" name is stored as an alias so future imports
-        // continue to land here.
-        Aliases.Loaded aliases = Aliases.load(tempDir.resolve("config"));
-        assertTrue(aliases.lookupBoat("99", "sticky").isPresent(),
-            "alias for 'sticky' should resolve to canonical 'Sticky II'");
-    }
-
     /**
-     * A rename alias (7700 About Time → 7709 Kanreki, until 2018-07-28) only claims the boat
-     * that raced under that name in its period. Later boats the owner also called About Time,
-     * of other designs, keep their own identity, at startup and on import.
+     * Kanreki's boat has an About Time identity (its name when a Cookson 12). Later boats the
+     * owner also called About Time, of other designs, are other boats: an import of one goes to
+     * its own record (matched by design), never to Kanreki.
      */
     @Test
-    void renameAliasOnlyAppliesInItsPeriod(@TempDir Path tempDir) throws IOException
+    void aFormerNameOfOneBoatIsStillFreeForBoatsOfOtherDesigns(@TempDir Path tempDir) throws IOException
     {
-        Files.createDirectories(tempDir.resolve("config"));
-        Files.writeString(tempDir.resolve("config/aliases.yaml"), """
-            boats:
-              "7709-kanreki":
-                canonicalName: "Kanreki"
-                aliases:
-                - sailNumber: "7700"
-                  name: "abouttime"
-                  displayName: "About Time"
-                  until: "2018-07-28"
-            designs: {}
-            """);
-        DataStore seed = new DataStore(tempDir);
-        seed.start();
-        seed.setAutoSanityCheck(false);
-        seed.putBoat(new Boat("7709-kanreki-cookson12", "7709", "Kanreki", "cookson12", List.of(), List.of(), List.of(), null, null));
-        seed.putBoat(new Boat("7700-abouttime-cookson12", "7700", "About Time", "cookson12", List.of(), List.of(), List.of(), null, null));
-        seed.putBoat(new Boat("7700-abouttime-cookson50", "7700", "About Time", "cookson50", List.of(), List.of(), List.of(), null, null));
-        seed.putBoat(new Boat("7700-abouttime-neoroma430", "7700", "About Time", "neoroma430", List.of(), List.of(), List.of(), null, null));
-        aliasRace(seed, LocalDate.of(2004, 1, 3), "7700-abouttime-cookson12");
-        aliasRace(seed, LocalDate.of(2018, 3, 3), "7700-abouttime-cookson50");   // in the period, but another design
-        aliasRace(seed, LocalDate.of(2022, 3, 5), "7700-abouttime-neoroma430");  // after the period
-        aliasRace(seed, LocalDate.of(2025, 3, 1), "7709-kanreki-cookson12");
-        seed.save();
-        seed.stop();
-
         DataStore store = new DataStore(tempDir);
         store.start();
-        assertNull(store.boats().get("7700-abouttime-cookson12"), "the Cookson 12 About Time is Kanreki");
-        assertNotNull(store.boats().get("7700-abouttime-cookson50"), "another design keeps its identity");
-        assertNotNull(store.boats().get("7700-abouttime-neoroma430"), "after the rename the name is free");
-        // The Cookson 50 raced in the alias period: flagged for a person to decide, not renamed
-        assertEquals(1, store.findStaleBoatViolations().size(), store.findStaleBoatViolations().toString());
-        assertTrue(store.findStaleBoatViolations().getFirst().contains("7700-abouttime-cookson50"));
+        store.putDesign(new Design("cookson12", "Cookson 12", List.of(), List.of(), null, false, null));
+        store.putDesign(new Design("neoroma430", "NeoRoma 430", List.of(), List.of(), null, false, null));
+        java.util.Map<String, org.mortbay.sailing.pf.data.Identity> ids = new java.util.LinkedHashMap<>();
+        ids.put("7700-abouttime-cookson12", new org.mortbay.sailing.pf.data.Identity("7700", "About Time", List.of(), List.of(), List.of("test")));
+        ids.put("7709-kanreki-cookson12", new org.mortbay.sailing.pf.data.Identity("7709", "Kanreki", List.of(), List.of(), List.of("test")));
+        store.putBoat(new Boat(null, "cookson12", List.of(), ids, null, null));
+        store.putBoat(new Boat("7700-abouttime-neoroma430", "7700", "About Time", "neoroma430", List.of(), List.of(), List.of(), null, null));
 
-        // Imports: About Time before the rename is Kanreki; after it, the NeoRoma's own record
-        assertEquals("7709-kanreki-cookson12",
-            store.findOrCreateBoat("7700", "About Time", "Cookson 12", LocalDate.of(2005, 1, 8), "test").id());
+        assertEquals("7700-abouttime-cookson12",
+            store.findOrCreateBoat("7700", "About Time", "Cookson 12", LocalDate.of(2005, 1, 8), "test").id(),
+            "the Cookson 12 About Time is Kanreki's former identity");
+        assertEquals("7709-kanreki-cookson12", store.canonicalBoatId("7700-abouttime-cookson12"));
         assertEquals("7700-abouttime-neoroma430",
             store.findOrCreateBoat("7700", "About Time", "NeoRoma 430", LocalDate.of(2023, 1, 7), "test").id());
-        assertNotNull(store.boats().get("7700-abouttime-cookson50"));
+        Boat cookson50 = store.findOrCreateBoat("7700", "About Time", "Cookson 50", LocalDate.of(2019, 1, 5), "test");
+        assertEquals("7700-abouttime-cookson50", cookson50.id(), "a new boat, not Kanreki");
+        assertEquals(3, store.boats().size());
     }
 
-    private static void aliasRace(DataStore store, LocalDate date, String boatId)
-    {
-        store.putRace(new Race("club-" + date + "-0001", "club", List.of("club/s"), date, 1, null,
-            List.of(new Division("Div", List.of(new Finisher(boatId, Duration.ofHours(1), false, null)))),
-            "test", null, null));
-    }
+
 
     @Test
     void findBoatUsesNameEquivalenceFallback(@TempDir Path tempDir) throws IOException

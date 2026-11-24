@@ -150,6 +150,93 @@ class BoatIdentityStoreTest
         assertTrue(e.getMessage().contains("v1 database"), e.getMessage());
     }
 
+    private static Boat single(String id, String sail, String name)
+    {
+        return new Boat(id, sail, name, "cookson12", List.of("cyca.com.au"), List.of(), List.of("test"), null, null);
+    }
+
+    @Test
+    void mergeAsSpellingMakesAnAliasAndMovesTheResults(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(single(KANREKI, "7709", "Kanreki"));
+        store.putBoat(single("7709-kanreky-cookson12", "7709", "Kanreky"));
+        store.putRace(race(LocalDate.of(2024, 5, 4), "7709-kanreky-cookson12"));
+
+        store.mergeBoats(KANREKI, List.of("7709-kanreky-cookson12"));
+
+        assertEquals(List.of(KANREKI), List.copyOf(store.boats().keySet()));
+        Boat k = store.boat(KANREKI);
+        assertEquals(1, k.identities().size());
+        assertTrue(k.identity().matches("7709", "kanreky"), "the misspelling is an alias");
+        Finisher f = store.races().values().iterator().next().divisions().getFirst().finishers().getFirst();
+        assertEquals(KANREKI, f.identityId(), "its result now entered as Kanreki");
+        // A later import of the misspelling finds Kanreki
+        assertEquals(KANREKI, store.findOrCreateBoat("7709", "Kanreky", "Cookson 12", LocalDate.of(2025, 1, 4), "test").id());
+    }
+
+    @Test
+    void linkKeepsEachIdentityAndItsResults(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(single(KANREKI, "7709", "Kanreki"));
+        store.putBoat(single(ABOUT_TIME, "7700", "About Time"));
+        store.putRace(race(LocalDate.of(2004, 1, 3), ABOUT_TIME));
+        store.putRace(race(LocalDate.of(2024, 1, 6), KANREKI));
+
+        // Linked either way round, the most recently raced identity is current
+        Boat linked = store.linkBoats(ABOUT_TIME, List.of(KANREKI));
+
+        assertEquals(KANREKI, linked.id());
+        assertEquals(List.of(ABOUT_TIME, KANREKI), List.copyOf(linked.identities().keySet()));
+        assertEquals(List.of(KANREKI), List.copyOf(store.boats().keySet()));
+        for (Race r : store.races().values())
+        {
+            Finisher f = r.divisions().getFirst().finishers().getFirst();
+            assertEquals(KANREKI, f.boatId(), "every result counted for the boat");
+            assertEquals(r.date().getYear() == 2004 ? ABOUT_TIME : KANREKI, f.identityId(), "entered as it was");
+        }
+
+        // Unlinking puts About Time back as a boat of its own, with its result
+        store.unlinkIdentity(ABOUT_TIME);
+        assertEquals(2, store.boats().size());
+        assertEquals(ABOUT_TIME, store.canonicalBoatId(ABOUT_TIME));
+        Race at2004 = store.races().values().stream().filter(r -> r.date().getYear() == 2004).findFirst().orElseThrow();
+        assertEquals(ABOUT_TIME, at2004.divisions().getFirst().finishers().getFirst().boatId());
+    }
+
+    @Test
+    void linkRefusesBoatsOfDifferentDesigns(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(single(KANREKI, "7709", "Kanreki"));
+        store.putBoat(new Boat("7700-abouttime-neoroma430", "7700", "About Time", "neoroma430", List.of(), List.of(), List.of(), null, null));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> store.linkBoats(KANREKI, List.of("7700-abouttime-neoroma430")));
+    }
+
+    @Test
+    void renamingAnIdentityKeepsTheOldNameAsAnAliasAndMovesItsResults(@TempDir Path tempDir)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(aboutTimeThenKanreki());
+        store.putRace(race(LocalDate.of(2004, 1, 3), ABOUT_TIME));
+
+        Boat renamed = store.renameIdentity(ABOUT_TIME, "7700", "About Time Too");
+
+        String newId = "7700-abouttimetoo-cookson12";
+        assertEquals(newId, renamed.id(), "an identity ID carries the boat's design");
+        assertTrue(renamed.identity().matches("7700", "abouttime"), "old name kept as an alias");
+        assertEquals(KANREKI, store.canonicalBoatId(newId));
+        Finisher f = store.races().values().iterator().next().divisions().getFirst().finishers().getFirst();
+        assertEquals(newId, f.identityId());
+        assertEquals(KANREKI, f.boatId());
+    }
+
     @Test
     void identityMatchesItsNameAndAliases()
     {

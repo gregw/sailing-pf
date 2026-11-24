@@ -981,12 +981,12 @@ public class SailSysImporter
 
         // Assign club if missing and not explicitly marked no-club in config
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);
-        if (boatClub != null && boat.clubIds().isEmpty() && !store.isExplicitlyNoClub(boat.id()))
+        if (boatClub != null && boat.identity().clubIds().isEmpty() && !boat.identity().clubsCurated()
+            && !store.isExplicitlyNoClub(boat.id()))
         {
-            store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                boat.designId(), List.of(boatClub.id()),
-                boat.certificates(), addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
-            boat = store.boats().get(boat.id());
+            store.putBoat(boat.updateIdentity(i -> i.withClubIds(List.of(boatClub.id())).withSource(SOURCE))
+                .withLastUpdated(Instant.now()).withLoadedAt(null));
+            boat = store.boat(boat.id());
         }
 
         return boat;
@@ -1037,7 +1037,7 @@ public class SailSysImporter
                                       boolean nonSpinnaker, boolean twoHanded)
     {
         // Always read the freshest version of the boat in case another cert was just added
-        Boat current = store.boats().get(boat.id());
+        Boat current = store.boat(boat.id());
         if (current == null) current = boat;
 
         for (Certificate c : current.certificates())
@@ -1058,13 +1058,9 @@ public class SailSysImporter
         Certificate cert = new Certificate(system, year, value,
             nonSpinnaker, twoHanded, false, false, certNum, null);
 
-        List<Certificate> certs = new ArrayList<>(current.certificates());
-        certs.add(cert);
-        store.putBoat(new Boat(current.id(), current.sailNumber(), current.name(),
-            current.designId(), current.clubIds(),
-            List.copyOf(certs),
-            addSource(current.sources(), SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "")), current.links(),
-            Instant.now(), null));
+        String certSource = SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "");
+        store.putBoat(current.updateIdentity(i -> i.withCertificate(cert).withSource(certSource))
+            .withLastUpdated(Instant.now()).withLoadedAt(null));
 
         LOG.debug("SailSys: inferred {} cert {} (value={} year={}) for boat {}",
             system, certNum, value, year, current.id());

@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -27,6 +28,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Identity;
+import org.mortbay.sailing.pf.data.BoatAlias;
 import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.data.Design;
@@ -352,31 +355,31 @@ public class DataStore
      */
     public Optional<Boat> findBoat(String rawSailNo, String rawName)
     {
+        requireStarted();
         String sailNo = IdGenerator.normaliseSailNumber(rawSailNo);
         String name = IdGenerator.normaliseName(rawName);
-
-        Aliases.BoatMatch aliased = aliases.lookupBoat(sailNo, name).orElse(null);
-        if (aliased != null)
-        {
-            if (aliased.normSailNumber() != null)
-                sailNo = aliased.normSailNumber();
-            if (aliased.normName() != null)
-                name = aliased.normName();
-        }
-
         boolean haveSail = !sailNo.isEmpty();
         boolean haveName = !name.isEmpty();
         if (!haveSail && !haveName)
             return Optional.empty();
 
+        String key = IdGenerator.sailKey(sailNo);
         List<Boat> matches = new ArrayList<>();
         for (Boat candidate : boats.values())
         {
-            if (haveSail && !sailNo.equalsIgnoreCase(candidate.sailNumber()))
-                continue;
-            if (haveName && !name.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
-                continue;
-            matches.add(candidate);
+            for (Map.Entry<String, Identity> e : candidate.identities().entrySet())
+            {
+                Identity i = e.getValue();
+                boolean hit = haveSail && haveName ? i.matches(sailNo, name)
+                    : haveSail ? key.equals(IdGenerator.sailKey(i.sailNumber()))
+                    : name.equals(IdGenerator.normaliseName(i.name()))
+                        || i.aliases().stream().anyMatch(al -> name.equals(al.normName()));
+                if (hit)
+                {
+                    matches.add(candidate.withId(e.getKey()));
+                    break;
+                }
+            }
         }
 
         // Name-equivalence fallback: only consulted when the exact-name pass finds nothing,
@@ -389,13 +392,16 @@ public class DataStore
             {
                 for (Boat candidate : boats.values())
                 {
-                    if (!sailNo.equalsIgnoreCase(candidate.sailNumber()))
-                        continue;
-                    if (haveName && name.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
-                        continue;  // already in the exact pass
-                    if (!matchKey.equals(IdGenerator.nameMatchKey(candidate.name())))
-                        continue;
-                    matches.add(candidate);
+                    for (Map.Entry<String, Identity> e : candidate.identities().entrySet())
+                    {
+                        Identity i = e.getValue();
+                        if (key.equals(IdGenerator.sailKey(i.sailNumber()))
+                            && matchKey.equals(IdGenerator.nameMatchKey(i.name())))
+                        {
+                            matches.add(candidate.withId(e.getKey()));
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -404,8 +410,7 @@ public class DataStore
             return Optional.of(matches.getFirst());
         if (matches.size() > 1)
             LOG.debug("findBoat ambiguous: sailNo='{}' name='{}' → {} candidates: {}",
-                sailNo, name, matches.size(),
-                matches.stream().map(Boat::id).toList());
+                sailNo, name, matches.size(), matches.stream().map(Boat::id).toList());
         return Optional.empty();
     }
 
@@ -526,69 +531,13 @@ public class DataStore
         // visible Boat.name field consistent with the normalised ID.
         rawName = IdGenerator.stripStandardSuffixes(rawName);
 
-        String sailNo = IdGenerator.normaliseSailNumber(rawSailNo);
+        // The sail number without an AUS country/fleet prefix or leading zeros: "AUS1234" and
+        // "1234" are the same boat, recorded as 1234
+        String sailNo = IdGenerator.sailKey(rawSailNo);
         String name = IdGenerator.normaliseName(rawName);
 
-        // A rename alias applies only to races in its period (date null: any alias)
-        Aliases.BoatMatch aliased = aliases.lookupBoat(sailNo, name, date).orElse(null);
-        if (aliased != null)
-        {
-            sourceDesign += ":" + sailNo + " " + name + "=>" + aliased;
-            String canonSail = aliased.normSailNumber() != null ? aliased.normSailNumber() : sailNo;
-            String canonName = aliased.normName() != null ? aliased.normName() : name;
-            // Active stale-record scan: if the alias maps (sailNo, name) to a different
-            // canonical, look for any orphan boat already in the store under the pre-alias
-            // identity and merge / rename it into the canonical now. Without this, an
-            // aliases.yaml edit only heals stale records at the next restart, which leaves
-            // a window where an importer can run beforehand and observe stale duplicates.
-            if (!canonSail.equalsIgnoreCase(sailNo) || !canonName.equalsIgnoreCase(name))
-            {
-                List<Boat> orphans = new ArrayList<>();
-                for (Boat b : boats.values())
-                {
-                    if (sailNo.equalsIgnoreCase(b.sailNumber())
-                        && name.equalsIgnoreCase(IdGenerator.normaliseName(b.name())))
-                        orphans.add(b);
-                }
-                // Only boats the alias applies to: not another boat that used the same
-                // sail number and name at other times, or that has another design.
-                if (!orphans.isEmpty())
-                {
-                    Map<String, List<LocalDate>> raceDates = raceDatesByBoat();
-                    orphans.removeIf(o -> aliasMatchForBoat(o, raceDates.getOrDefault(o.id(), List.of())).isEmpty());
-                }
-                for (Boat orphan : orphans)
-                {
-                    Design d = orphan.designId() != null ? designs.get(orphan.designId()) : null;
-                    String canonDisplay = aliased.canonicalDisplayName() != null
-                        ? aliased.canonicalDisplayName() : orphan.name();
-                    String targetId = IdGenerator.generateBoatId(canonSail, canonDisplay, d);
-                    if (targetId.equals(orphan.id()))
-                        continue;
-                    if (boats.containsKey(targetId))
-                    {
-                        LOG.info("Active stale-boat scan: merging orphan {} into canonical {} during findOrCreateBoat",
-                            orphan.id(), targetId);
-                        mergeBoats(targetId, List.of(orphan.id()));
-                    }
-                    else
-                    {
-                        LOG.info("Active stale-boat scan: renaming orphan {} → {} during findOrCreateBoat",
-                            orphan.id(), targetId);
-                        Boat renamed = new Boat(targetId, canonSail, canonDisplay,
-                            orphan.designId(), orphan.clubIds(), orphan.certificates(),
-                            orphan.sources(), orphan.links(), Instant.now(), null);
-                        removeBoat(orphan.id());
-                        putBoat(renamed);
-                        rewriteFinisherBoatId(orphan.id(), targetId);
-                        ClubLoader.remapBoatId(configDir, orphan.id(), targetId);
-                    }
-                }
-            }
-            sailNo = canonSail;
-            name = canonName;
-            rawName = aliased.canonicalDisplayName() != null ? aliased.canonicalDisplayName() : rawName;
-        }
+        final String normSailNo = sailNo;
+        final String normName = name;
 
         String designId = aliases.resolveDesignAlias(IdGenerator.normaliseName(rawDesign));
         String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name, date);
@@ -610,124 +559,124 @@ public class DataStore
             rawDesign = null;
         }
 
-        final String normSailNo = sailNo;
-        final String normName = name;
 
-        // Phase 1: Search for existing boat by sail+name, checking design compatibility.
-        List<Boat> matches = new ArrayList<>();
-        for (Boat candidate : boats.values())
+        // Identities whose sail number and name (or aliases) match the entry: each boat seen
+        // through its matching identity. Design decides between boats sharing a name.
+        List<Boat> designed = new ArrayList<>();
+        List<Boat> otherDesign = new ArrayList<>();
+        for (Boat candidate : identitiesMatching(normSailNo, normName))
         {
-            if (!normSailNo.equalsIgnoreCase(candidate.sailNumber()))
-                continue;
-            if (!normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
-                continue;
-            // Candidate's stored design is now marked ignored -- the boat is effectively
-            // a stale orphan that should not influence matching. Treat it as invisible
-            // so an unambiguous design-bearing match can win.
+            // A boat whose design is now ignored is a stale orphan: invisible to matching
             if (isDesignIgnored(candidate.designId()))
                 continue;
-
-            // Found a sail+name match, let's consider the designs.
-
             if (isBlank(designId))
             {
-                // We don't have a design, so if the candidate does, so it is a potential match...
-                // but may be one of many.
+                // No design on the entry: a design-less boat is the one; designed ones are
+                // candidates (one is the boat, several are ambiguous)
                 if (isNotBlank(candidate.designId()))
-                    matches.add(candidate);
+                    designed.add(candidate);
                 else
-                    // A matching boat without a design must be the only one.
                     return candidate;
             }
             else if (isNotBlank(candidate.designId()))
             {
-                // They are different designs, so they are different boats.
-                if (!Objects.equals(designId, candidate.designId()))
-                    continue;
-
-                // they are the same design, so this is the boat.
-                return candidate;
+                if (Objects.equals(designId, candidate.designId()))
+                    return candidate;
+                // Another design: another boat, unless the entry matched one of its aliases
+                // (a spelling someone merged into it), which says it is this boat
+                if (!candidate.identity().isNamed(normSailNo, normName))
+                    otherDesign.add(candidate);
             }
             else
             {
-                // We have a design, but the candidate does not, so we need to merge the boats
+                // The entry has a design the matching boat lacks: the boat takes it
                 Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
-                String resolvedDesignId = design != null ? design.id() : designId;
-                String boatId = IdGenerator.generateBoatId(normSailNo, normName, design);
-
-                // Preserve the existing display name to avoid case-variant flip-flopping
-                Boat upgraded = new Boat(
-                    boatId,
-                    normSailNo,
-                    candidate.name(),
-                    resolvedDesignId,
-                    candidate.clubIds(),
-                    candidate.certificates(),
-                    addSource(candidate.sources(), sourceDesign), candidate.links(), Instant.now(), candidate.loadedAt());
-                String oldId = candidate.id();
-                removeBoat(oldId);
-                putBoat(upgraded);
-                rewriteFinisherBoatId(oldId, boatId);
-                LOG.info("Upgraded boat {} → {} (updated finisher references)", oldId, boatId);
-
-                // return the merged boat because there cannot be two candidates without a design.
+                Boat upgraded = redesignBoat(candidate, design != null ? design.id() : designId, "Design upgrade");
+                LOG.info("Upgraded boat {} → {} with design {}", candidate.id(), upgraded.id(), upgraded.designId());
                 return upgraded;
             }
         }
+        if (designed.size() == 1)
+            return designed.getFirst();
+        // Design-free fallback: no boat of the entry's design has this sail number and name, but
+        // exactly one boat of another design has it as an alias: the entry's design is taken to
+        // be misreported (logged). Several such boats: a new boat, below.
+        if (designed.isEmpty() && otherDesign.size() == 1)
+        {
+            Boat only = otherDesign.getFirst();
+            LOG.info("Boat {}/{} entered as design {} matches {} of design {}: taken as that boat",
+                normSailNo, normName, designId, only.id(), only.designId());
+            return only;
+        }
 
-        // Phase 1.5: name-equivalence fallback. If no exact-name match was found above,
-        // try to find a boat sharing the same sail + design whose name collapses to the
-        // same equivalence class under nameMatchKey (e.g. "Sticky II" ≡ "Sticky 2",
-        // "The Goat" ≡ "Goat"). The match key requires whitespace before any trailing
-        // numeral and an article + space prefix, so embedded letter runs ("Tivoli",
-        // "Thelma") are safe. When a unique candidate is found, possibly rename it to
-        // the longer / Arabic-preferred canonical and persist the equivalence as an
-        // alias so subsequent imports stay sticky.
-        if (matches.isEmpty())
+        // Name-equivalence fallback ("Sticky II" = "Sticky 2", "The Goat" = "Goat"): an
+        // identity with the same sail number whose name collapses to the same key, of a
+        // compatible design. A unique hit takes the entry's name as an alias.
+        if (designed.isEmpty() && otherDesign.isEmpty())
         {
             String matchKey = IdGenerator.nameMatchKey(rawName);
             if (!matchKey.isEmpty())
             {
                 List<Boat> keyHits = new ArrayList<>();
-                for (Boat candidate : boats.values())
+                String key = IdGenerator.sailKey(normSailNo);
+                for (Boat b : boats.values())
                 {
-                    if (!normSailNo.equalsIgnoreCase(candidate.sailNumber()))
+                    if (isDesignIgnored(b.designId()))
                         continue;
-                    if (isDesignIgnored(candidate.designId()))
+                    if (isNotBlank(designId) && isNotBlank(b.designId()) && !Objects.equals(designId, b.designId()))
                         continue;
-                    if (normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
-                        continue;  // exact-name candidates were already considered above
-                    if (!matchKey.equals(IdGenerator.nameMatchKey(candidate.name())))
-                        continue;
-                    // Same design-compatibility rule as Phase 1: same design, or at least
-                    // one side has no design. Conflicting designs → different boats.
-                    if (isNotBlank(designId) && isNotBlank(candidate.designId())
-                        && !Objects.equals(designId, candidate.designId()))
-                        continue;
-                    keyHits.add(candidate);
+                    for (Map.Entry<String, Identity> e : b.identities().entrySet())
+                    {
+                        Identity i = e.getValue();
+                        if (key.equals(IdGenerator.sailKey(i.sailNumber()))
+                            && matchKey.equals(IdGenerator.nameMatchKey(i.name())))
+                        {
+                            keyHits.add(b.withId(e.getKey()));
+                            break;
+                        }
+                    }
                 }
                 if (keyHits.size() == 1)
-                    return applyMatchKeyResult(keyHits.getFirst(), rawName, designId, rawDesign, sourceDesign);
+                {
+                    Boat hit = keyHits.getFirst();
+                    BoatAlias entryAlias = new BoatAlias(rawSailNo, rawName);
+                    Boat aliased = hit.updateIdentity(i -> i.withAlias(entryAlias))
+                        .withLoadedAt(null);
+                    if (!aliased.equals(hit))
+                    {
+                        putBoat(aliased);
+                        LOG.info("Name-equivalence: '{}' is {} ('{}'), added as an alias", rawName, hit.id(), hit.name());
+                    }
+                    if (isBlank(aliased.designId()) && isNotBlank(designId))
+                        return redesignBoat(aliased, designId, "Design upgrade");
+                    return aliased;
+                }
                 if (keyHits.size() > 1)
                 {
                     LOG.warn("Ambiguous name-equivalence match: sailNo={} matchKey={} → {} candidates: {}",
-                        normSailNo, matchKey, keyHits.size(),
-                        keyHits.stream().map(Boat::id).toList());
+                        normSailNo, matchKey, keyHits.size(), keyHits.stream().map(Boat::id).toList());
                     logAmbiguousMatch(source, normSailNo, normName, designId, keyHits);
-                    return null;
                 }
             }
         }
+        else
+        {
+            // Several boats of other designs share the sail number and name, and the entry
+            // does not say which: a new boat, to be merged or linked by hand
+            List<Boat> candidates = designed.isEmpty() ? otherDesign : designed;
+            LOG.warn("Ambiguous boat match: sailNo={} name={} design={} -- {} candidates with different designs; new boat",
+                normSailNo, normName, designId, candidates.size());
+            logAmbiguousMatch(source, normSailNo, normName, designId, candidates);
+        }
 
-        // If we have no matches, then create the new boat
-        if (matches.isEmpty())
+        // No match (or an ambiguous one): a new boat with one identity
         {
             Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
             String newBoatId = IdGenerator.generateBoatId(normSailNo, normName, design);
 
             // Defensive: if a boat with this ID already exists (e.g. due to name case
             // variants that normalise to the same ID), return it instead of overwriting.
-            Boat existingById = boats.get(newBoatId);
+            Boat existingById = boat(newBoatId);
             if (existingById != null)
             {
                 LOG.debug("Boat ID {} already exists (existing name='{}', incoming name='{}'), returning existing",
@@ -771,15 +720,26 @@ public class DataStore
             return newBoat;
         }
 
-        // If we only have 1 match, then let's assume we are of the same design
-        if (matches.size() == 1)
-            return matches.getFirst();
+    }
 
-        // We have multiple boats with the same sailNo, name but different designs, so we don't know which one this is?
-        LOG.warn("Ambiguous boat match: sailNo={} name={} design={} -- {} candidates with different designs",
-            normSailNo, normName, designId, matches.size());
-        logAmbiguousMatch(source, normSailNo, normName, designId, matches);
-        return null;
+    /** Each boat with an identity matching this sail number and name, seen through that identity. */
+    private List<Boat> identitiesMatching(String sailNo, String normName)
+    {
+        List<Boat> out = new ArrayList<>();
+        if (isBlank(sailNo) || isBlank(normName))
+            return out;
+        for (Boat b : boats.values())
+        {
+            for (Map.Entry<String, Identity> e : b.identities().entrySet())
+            {
+                if (e.getValue().matches(sailNo, normName))
+                {
+                    out.add(b.withId(e.getKey()));
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -828,91 +788,6 @@ public class DataStore
     {
         if (source == null) return ":" + rawDesign;
         return rawDesign != null && !rawDesign.isBlank() ? source + ":" + rawDesign : source;
-    }
-
-    /**
-     * Apply a Phase-1.5 name-equivalence hit: pick the canonical display name from the
-     * incoming raw name and the candidate's stored name (see {@link IdGenerator#preferredDisplayName}),
-     * possibly upgrade the candidate's design when the incoming side carries one and the
-     * candidate didn't, and rename the candidate in place if the canonical name (or the
-     * upgraded design) changes the boat id. The supplanted names are persisted to
-     * {@code aliases.yaml} so subsequent imports of the old variants still resolve here.
-     * <p>
-     * Returns the boat (possibly renamed/upgraded) that the caller should treat as the
-     * found match.
-     */
-    private Boat applyMatchKeyResult(Boat candidate, String incomingRaw,
-                                     String designId, String rawDesign, String sourceDesign)
-    {
-        // Incoming name first so it wins on body-length ties (fresher data preferred when
-        // length is equal -- e.g. case-only variants).
-        String canonicalName = IdGenerator.preferredDisplayName(
-            java.util.Arrays.asList(incomingRaw, candidate.name()));
-
-        // Decide the final design: keep candidate's if present; otherwise adopt incoming.
-        String finalDesignId = candidate.designId();
-        Design finalDesign = null;
-        boolean designUpgraded = false;
-        if (isBlank(finalDesignId) && isNotBlank(designId))
-        {
-            finalDesign = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign)
-                : findOrCreateDesign(designId);
-            finalDesignId = finalDesign != null ? finalDesign.id() : designId;
-            designUpgraded = true;
-        }
-        else if (isNotBlank(finalDesignId))
-        {
-            finalDesign = designs.get(finalDesignId);
-        }
-
-        String newBoatId = IdGenerator.generateBoatId(candidate.sailNumber(), canonicalName, finalDesign);
-        String canonNormName = IdGenerator.normaliseName(canonicalName);
-        String candidateNormName = IdGenerator.normaliseName(candidate.name());
-        String incomingNormName = IdGenerator.normaliseName(incomingRaw);
-
-        List<Aliases.SailNumberName> aliasesToAdd = new ArrayList<>();
-        if (!candidateNormName.equals(canonNormName))
-            aliasesToAdd.add(new Aliases.SailNumberName(candidate.sailNumber(), candidateNormName));
-        if (!incomingNormName.equals(canonNormName) && !incomingNormName.equals(candidateNormName))
-            aliasesToAdd.add(new Aliases.SailNumberName(candidate.sailNumber(), incomingNormName));
-
-        List<String> mergedSources = addSource(candidate.sources(), sourceDesign);
-        boolean displayChanged = !canonicalName.equals(candidate.name());
-        boolean idChanged = !newBoatId.equals(candidate.id());
-
-        Boat result;
-        if (!idChanged && !displayChanged && !designUpgraded && mergedSources.equals(candidate.sources()))
-        {
-            // Nothing to update on the boat record; still persist aliases below if any.
-            result = candidate;
-        }
-        else
-        {
-            Boat updated = new Boat(newBoatId, candidate.sailNumber(), canonicalName, finalDesignId,
-                candidate.clubIds(), candidate.certificates(), mergedSources, candidate.links(), Instant.now(), null);
-            if (idChanged)
-            {
-                String oldId = candidate.id();
-                removeBoat(oldId);
-                putBoat(updated);
-                rewriteFinisherBoatId(oldId, newBoatId);
-                ClubLoader.remapBoatId(configDir, oldId, newBoatId);
-                LOG.info("Name-equivalence rename: {} ('{}') → {} ('{}') after incoming '{}'",
-                    oldId, candidate.name(), newBoatId, canonicalName, incomingRaw);
-            }
-            else
-            {
-                putBoat(updated);
-                if (displayChanged)
-                    LOG.info("Name-equivalence display rename: {} '{}' → '{}'",
-                        candidate.id(), candidate.name(), canonicalName);
-            }
-            result = updated;
-        }
-
-        if (!aliasesToAdd.isEmpty())
-            Aliases.addAliases(configDir, candidate.sailNumber(), canonicalName, aliasesToAdd);
-        return result;
     }
 
     /** Finds or creates a design by class name -- used internally by findOrCreateBoat. */
@@ -1048,27 +923,45 @@ public class DataStore
      */
     private Boat redesignBoat(Boat b, String designId, String why)
     {
-        String newBoatId = IdGenerator.generateBoatId(b.sailNumber(), b.name(), designs.get(designId));
-        if (newBoatId.equals(b.id()))
+        Design design = designs.get(designId);
+        Map<String, Identity> rekeyed = new LinkedHashMap<>();
+        Map<String, String> renames = new LinkedHashMap<>();
+        for (Map.Entry<String, Identity> e : b.identities().entrySet())
         {
-            Boat updated = new Boat(b.id(), b.sailNumber(), b.name(), designId,
-                b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
-            putBoat(updated);
-            return updated;
+            Identity i = e.getValue();
+            String newId = design != null ? IdGenerator.generateBoatId(i.sailNumber(), i.name(), design)
+                : renameBoatId(i.sailNumber(), i.name(), designId);
+            rekeyed.put(newId, i);
+            if (!newId.equals(e.getKey()))
+                renames.put(e.getKey(), newId);
         }
-        if (boats.containsKey(newBoatId))
+        // Another boat already at a new ID (the same boat recorded under the design): merge into it
+        for (String newId : renames.values())
         {
-            LOG.info("{}: merging {} into {} (designId {} → {})", why, b.id(), newBoatId, b.designId(), designId);
-            mergeBoats(newBoatId, List.of(b.id()));
-            return boats.get(newBoatId);
+            String other = identityIndex.get(newId);
+            if (other != null && !b.hasIdentity(newId))
+            {
+                LOG.info("{}: merging {} into {} (designId {} → {})", why, b.id(), newId, b.designId(), designId);
+                mergeBoats(newId, List.of(b.id()));
+                Boat merged = boat(newId);
+                if (!Objects.equals(merged.designId(), designId))
+                {
+                    merged = merged.withDesignId(designId).withLoadedAt(null);
+                    putBoat(merged);
+                }
+                return merged;
+            }
         }
         LOG.info("{}: updating designId {} → {} for boat {}", why, b.designId(), designId, b.id());
-        Boat updated = new Boat(newBoatId, b.sailNumber(), b.name(), designId,
-            b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
+        String through = renames.getOrDefault(b.id(), b.id());
+        Boat updated = new Boat(through, designId, b.links(), rekeyed, Instant.now(), null);
         removeBoat(b.id());
         putBoat(updated);
-        rewriteFinisherBoatId(b.id(), newBoatId);
-        ClubLoader.remapBoatId(configDir, b.id(), newBoatId);
+        renames.forEach((oldId, newId) ->
+        {
+            rewriteFinisherBoatId(oldId, newId);
+            ClubLoader.remapBoatId(configDir, oldId, newId);
+        });
         return updated;
     }
 
@@ -1159,9 +1052,8 @@ public class DataStore
             : findUniqueClubByShortName(clubCode, null, context);
         if (club == null)
             return boat;
-        Boat updated = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
-            List.of(club.id()), boat.certificates(), addSource(boat.sources(), source),
-            boat.links(), Instant.now(), null);
+        Boat updated = boat.updateIdentity(i -> i.withClubIds(List.of(club.id())).withSource(source))
+            .withLastUpdated(Instant.now()).withLoadedAt(null);
         putBoat(updated);
         return updated;
     }
@@ -1561,100 +1453,40 @@ public class DataStore
             List.copyOf(allAliases), List.copyOf(allSources), mergedLinks, Instant.now(),
             keepDesign.noSpinnaker(), null));
 
-        // Repoint all boats whose designId references a merged-away design; fix boat IDs too
+        // Move all boats of a merged-away design to the kept one: their identity IDs change
+        // (or they merge into a boat already recorded under the kept design), results follow
         Set<String> mergeIdSet = new HashSet<>(mergeIds);
-        Map<String, String> boatIdRemap = new LinkedHashMap<>();
-        int updatedBoats = 0;
-        for (Boat boat : List.copyOf(boats.values()))
-        {
-            if (!mergeIdSet.contains(boat.designId()))
-                continue;
-            String newId = IdGenerator.generateBoatId(boat.sailNumber(), boat.name(), keepDesign);
-            Boat toWrite;
-            if (!newId.equals(boat.id()))
-            {
-                removeBoat(boat.id());
-                boatIdRemap.put(boat.id(), newId);
-
-                Boat existingAtNewId = boats.get(newId);
-                if (existingAtNewId != null)
-                {
-                    // Collision: merge the renamed boat into the existing one
-                    Map<String, Certificate> certMap = new LinkedHashMap<>();
-                    for (Certificate c : existingAtNewId.certificates()) certMap.put(certKey(c), c);
-                    for (Certificate c : boat.certificates()) certMap.putIfAbsent(certKey(c), c);
-
-                    Set<String> mergedSources = new LinkedHashSet<>(existingAtNewId.sources());
-                    mergedSources.addAll(boat.sources());
-
-                    List<String> mergedClubIds = mergeClubIds(existingAtNewId.clubIds(), boat.clubIds());
-                    toWrite = new Boat(newId, existingAtNewId.sailNumber(), existingAtNewId.name(), keepId,
-                        mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources), Link.merge(existingAtNewId.links(), boat.links()), Instant.now(), null);
-                }
-                else
-                {
-                    toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                        boat.clubIds(), boat.certificates(), boat.sources(), boat.links(), boat.lastUpdated(), null);
-                }
-            }
-            else
-            {
-                toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                    boat.clubIds(), boat.certificates(), boat.sources(), boat.links(), boat.lastUpdated(), null);
-            }
-            putBoat(toWrite);
-            updatedBoats++;
-        }
-
-        // Repoint race finishers for remapped boat IDs
+        List<Boat> affected = boats.values().stream().filter(b -> mergeIdSet.contains(b.designId())).toList();
+        Set<String> movedIdentities = new HashSet<>();
+        for (Boat boat : affected)
+            for (Map.Entry<String, Identity> e : boat.identities().entrySet())
+                if (!e.getKey().equals(IdGenerator.generateBoatId(e.getValue().sailNumber(), e.getValue().name(), keepDesign)))
+                    movedIdentities.add(e.getKey());
         int updatedRaces = 0;
         int updatedFinishers = 0;
-        if (!boatIdRemap.isEmpty())
+        for (Race race : races.values())
         {
-            for (Race race : List.copyOf(races.values()))
+            if (race.divisions() == null)
+                continue;
+            long n = race.divisions().stream().flatMap(d -> d.finishers().stream())
+                .filter(f -> movedIdentities.contains(f.identityId())).count();
+            if (n > 0)
             {
-                boolean changed = false;
-                List<Division> newDivisions = new ArrayList<>();
-                for (Division div : race.divisions())
-                {
-                    List<Finisher> newFinishers = new ArrayList<>();
-                    for (Finisher f : div.finishers())
-                    {
-                        String remapped = boatIdRemap.get(f.boatId());
-                        if (remapped != null)
-                        {
-                            newFinishers.add(f.withBoatId(remapped));
-                            changed = true;
-                            updatedFinishers++;
-                        }
-                        else
-                            newFinishers.add(f);
-                    }
-                    newDivisions.add(new Division(div.name(), newFinishers));
-                }
-                if (changed)
-                {
-                    putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
-                        race.number(), race.name(),
-                        newDivisions, race.source(), race.lastUpdated(), null));
-                    updatedRaces++;
-                }
+                updatedRaces++;
+                updatedFinishers += (int)n;
             }
         }
+        for (Boat boat : affected)
+            if (boat(boat.id()) != null)
+                redesignBoat(boat(boat.id()), keepId, "Design merge");
+        int updatedBoats = affected.size();
 
         // Delete merged-away design files
         for (Design md : toMerge)
             removeDesign(md.id());
 
-        // Remap boatId-based club config for any boats that got a new ID
-        if (!boatIdRemap.isEmpty())
-        {
-            for (Map.Entry<String, String> remap : boatIdRemap.entrySet())
-            {
-                ClubLoader.remapBoatId(configDir, remap.getKey(), remap.getValue());
-            }
+        if (!movedIdentities.isEmpty())
             reloadClubCatalogue();
-        }
 
         LOG.info("mergeDesigns: kept={} merged={} updatedBoats={} updatedRaces={} updatedFinishers={}",
             keepId, mergeIds, updatedBoats, updatedRaces, updatedFinishers);
@@ -2046,55 +1878,14 @@ public class DataStore
         boolean clubConfigChanged = false;
         for (Boat boat : List.copyOf(boats.values()))
         {
-            if (!ignoredId.equals(boat.designId())) continue;
-            String newId = IdGenerator.generateBoatId(boat.sailNumber(), boat.name(), null);
-            Boat target = boats.get(newId);
-            if (target != null && !target.id().equals(boat.id()))
-            {
-                // Collision: merge boat INTO the existing target (prefer target's clubId
-                // and existing certificates; union sources).
-                Map<String, Certificate> certMap = new LinkedHashMap<>();
-                for (Certificate c : target.certificates()) certMap.put(certKey(c), c);
-                for (Certificate c : boat.certificates())   certMap.putIfAbsent(certKey(c), c);
-                Set<String> mergedSources = new LinkedHashSet<>(target.sources());
-                mergedSources.addAll(boat.sources());
-                mergedSources.add(note);
-                List<String> mergedClubIds = mergeClubIds(target.clubIds(), boat.clubIds());
-                Boat merged = new Boat(newId, target.sailNumber(), target.name(), null,
-                    mergedClubIds, List.copyOf(certMap.values()), List.copyOf(mergedSources), Link.merge(target.links(), boat.links()),
-                    Instant.now(), null);
-                removeBoat(boat.id());
-                putBoat(merged);
-                rewriteFinisherBoatId(boat.id(), newId);
-                // Merged-away boat: remove its club config entry (target keeps its own)
-                ClubLoader.removeBoatId(configDir, boat.id());
-                clubConfigChanged = true;
-                LOG.info("Ignore cascade: merged {} into {} (design {} ignored)",
-                    boat.id(), newId, ignoredId);
-            }
-            else
-            {
-                // Simple rename: strip the design suffix in place.
-                Boat updated = new Boat(newId, boat.sailNumber(), boat.name(), null,
-                    boat.clubIds(), boat.certificates(),
-                    addSource(boat.sources(), note), boat.links(), Instant.now(), null);
-                if (!newId.equals(boat.id()))
-                {
-                    removeBoat(boat.id());
-                    putBoat(updated);
-                    rewriteFinisherBoatId(boat.id(), newId);
-                    ClubLoader.remapBoatId(configDir, boat.id(), newId);
-                    clubConfigChanged = true;
-                    LOG.info("Ignore cascade: renamed {} to {} (design {} ignored)",
-                        boat.id(), newId, ignoredId);
-                }
-                else
-                {
-                    // Boat id already has no suffix (shouldn't really happen since the
-                    // match was on designId) -- just annotate the sources.
-                    putBoat(updated);
-                }
-            }
+            if (!ignoredId.equals(boat.designId()))
+                continue;
+            // The boat loses the design (re-keying its identities, or merging into the boat
+            // already recorded without it); its identities note why
+            Boat noted = boat.mapIdentities(i -> i.withSource(note)).withLoadedAt(null);
+            putBoat(noted);
+            Boat moved = redesignBoat(boat(noted.id()), null, "Ignore cascade");
+            clubConfigChanged |= !moved.identities().keySet().equals(noted.identities().keySet());
         }
         if (clubConfigChanged)
             reloadClubCatalogue();
@@ -2670,73 +2461,216 @@ public class DataStore
     public record DesignMergeResult(int updatedBoats, int updatedRaces, int updatedFinishers) {}
 
     /**
-     * Merges a set of duplicate boats into one canonical boat.
-     * <ul>
-     *   <li>All names and aliases from the merged-away boats are added to the keep boat's
-     *       aliases list.</li>
-     *   <li>Certificates are merged (duplicates by system+year+variant are dropped).</li>
-     *   <li>All {@link Finisher} records in all races that reference a merged-away boat ID
-     *       are repointed to the keep boat ID.</li>
-     *   <li>The merged-away boat files are deleted from disk.</li>
-     * </ul>
-     * Callers must call {@link #save()} after this method to persist the changes.
+     * Merge as spelling: the boats {@code mergeIds} are misspellings of identity {@code keepId}.
+     * Every identity of a merged boat becomes an alias of that identity (with its aliases),
+     * its certificates, sources and clubs join it, its results are moved to it, and the merged
+     * boats are removed. Links join the kept boat; a design-less kept boat takes the first
+     * design found. Callers must call {@link #save()} after this method.
      *
-     * @param keepId    ID of the canonical boat to keep
-     * @param mergeIds  IDs of the boats to merge into keepId (must not include keepId)
-     * @return summary of the number of races and finisher records updated
+     * @param keepId   any identity ID of the boat to keep: the identity the others are spellings of
+     * @param mergeIds identity IDs of the boats to merge into it (not of the kept boat)
+     * @return the number of races and finisher records updated
      */
     public MergeResult mergeBoats(String keepId, List<String> mergeIds)
     {
         requireStarted();
-        Boat keepBoat = boats.get(keepId);
+        Boat keepBoat = boat(keepId);
         if (keepBoat == null)
             throw new IllegalArgumentException("Keep boat not found: " + keepId);
+        List<Boat> toMerge = mergeBoatsOf(keepBoat, mergeIds);
 
-        List<Boat> toMerge = new ArrayList<>();
-        for (String id : mergeIds)
-        {
-            Boat b = boats.get(id);
-            if (b == null)
-                throw new IllegalArgumentException("Merge boat not found: " + id);
-            toMerge.add(b);
-        }
-
-        // Merge certificates -- deduplicate by system+year+variant; keep boat's certs take priority
+        Identity keep = keepBoat.identity();
         Map<String, Certificate> certMap = new LinkedHashMap<>();
         for (Certificate c : keepBoat.certificates())
             certMap.put(certKey(c), c);
-        for (Boat mb : toMerge)
-            for (Certificate c : mb.certificates())
-                certMap.putIfAbsent(certKey(c), c);
-
-        // Prefer a non-null designId from any of the boats; union all club ids
-        String designId = keepBoat.designId() != null ? keepBoat.designId()
-            : toMerge.stream().map(Boat::designId).filter(Objects::nonNull).findFirst().orElse(null);
-        List<String> mergedClubIds = keepBoat.clubIds();
-        for (Boat mb : toMerge)
-        {
-            mergedClubIds = mergeClubIds(mergedClubIds, mb.clubIds());
-        }
-
-        Set<String> mergedSources = new LinkedHashSet<>(keepBoat.sources());
-        for (Boat mb : toMerge)
-            mergedSources.addAll(mb.sources());
+        List<Certificate> addCerts = new ArrayList<>(keep.certificates());
+        Set<String> mergedIdentityIds = new HashSet<>();
+        String designId = keepBoat.designId();
         List<List<Link>> allLinks = new ArrayList<>();
         allLinks.add(keepBoat.links());
         for (Boat mb : toMerge)
+        {
+            for (Map.Entry<String, Identity> e : mb.identities().entrySet())
+            {
+                Identity m = e.getValue();
+                mergedIdentityIds.add(e.getKey());
+                keep = keep.withAlias(new BoatAlias(m.sailNumber(), m.name()));
+                for (BoatAlias a : m.aliases())
+                    keep = keep.withAlias(a);
+                for (Certificate c : m.certificates())
+                    if (certMap.putIfAbsent(certKey(c), c) == null)
+                        addCerts.add(c);
+                for (String src : m.sources())
+                    keep = keep.withSource(src);
+                if (!keep.clubsCurated())
+                    keep = keep.withClubIds(mergeClubIds(keep.clubIds(), m.clubIds()));
+            }
+            if (designId == null)
+                designId = mb.designId();
             allLinks.add(mb.links());
-        List<Link> mergedLinks = Link.merge(allLinks);
-        Boat mergedBoat = new Boat(keepBoat.id(), keepBoat.sailNumber(), keepBoat.name(),
-            designId, mergedClubIds,
-            List.copyOf(certMap.values()), List.copyOf(mergedSources), mergedLinks, Instant.now(), null);
-        putBoat(mergedBoat);
+        }
+        keep = keep.withCertificates(addCerts);
+        Boat merged = keepBoat.withIdentity(keep).withDesignId(designId).withLinks(Link.merge(allLinks))
+            .withLastUpdated(Instant.now()).withLoadedAt(null);
 
-        // Repoint all finisher records that reference a merged-away boat ID
-        Set<String> mergeIdSet = new HashSet<>(mergeIds);
+        for (Boat mb : toMerge)
+            removeBoat(mb.id());
+        putBoat(merged);
+        int[] counts = moveFinishers(mergedIdentityIds, keepId);
+
+        LOG.info("mergeBoats: kept={} merged={} updatedRaces={} updatedFinishers={}",
+            keepId, mergeIds, counts[0], counts[1]);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
+        return new MergeResult(counts[0], counts[1]);
+    }
+
+    /**
+     * Link identities (a rename): the boats {@code linkIds} are the boat {@code keepId} under
+     * other names. Their identities join it unchanged (results stay with the identity they were
+     * entered as), ordered by when each last raced, so the most recently raced becomes current.
+     * Their certificates go with their identities; links join. The boats must be of the same
+     * design (a design-less boat takes the other's). Callers must call {@link #save()}.
+     */
+    public Boat linkBoats(String keepId, List<String> linkIds)
+    {
+        requireStarted();
+        Boat keepBoat = boat(keepId);
+        if (keepBoat == null)
+            throw new IllegalArgumentException("Keep boat not found: " + keepId);
+        List<Boat> toLink = mergeBoatsOf(keepBoat, linkIds);
+        String designId = keepBoat.designId();
+        for (Boat lb : toLink)
+        {
+            if (designId == null)
+                designId = lb.designId();
+            else if (lb.designId() != null && !designId.equals(lb.designId()))
+                throw new IllegalArgumentException("Cannot link " + lb.id() + " (" + lb.designId() + ") to "
+                    + keepBoat.id() + " (" + designId + "): a boat has one design; merge or redesign first");
+        }
+        // A design-less boat joining a designed one is re-keyed to the design first
+        List<Boat> linked = new ArrayList<>();
+        if (keepBoat.designId() == null && designId != null)
+            keepBoat = redesignBoat(keepBoat, designId, "Link");
+        for (Boat lb : toLink)
+            linked.add(lb.designId() == null && designId != null ? redesignBoat(lb, designId, "Link") : lb);
+
+        Map<String, Identity> all = new LinkedHashMap<>(keepBoat.identities());
+        List<List<Link>> allLinks = new ArrayList<>();
+        allLinks.add(keepBoat.links());
+        for (Boat lb : linked)
+        {
+            all.putAll(lb.identities());
+            allLinks.add(lb.links());
+        }
+        Boat result = new Boat(null, designId, Link.merge(allLinks), orderByLastRace(all), Instant.now(), null);
+        for (Boat lb : linked)
+            removeBoat(lb.id());
+        removeBoat(keepBoat.id());
+        putBoat(result);
+        LOG.info("linkBoats: {} now has identities {}", result.id(), result.identities().keySet());
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
+        return result;
+    }
+
+    /**
+     * Unlink an identity: it leaves its boat and becomes a boat of its own (same design, its
+     * own certificates, sources and clubs; no links), with its results. Callers must call
+     * {@link #save()}.
+     */
+    public Boat unlinkIdentity(String identityId)
+    {
+        requireStarted();
+        Boat b = boat(identityId);
+        if (b == null)
+            throw new IllegalArgumentException("Boat not found: " + identityId);
+        if (b.identities().size() < 2)
+            throw new IllegalArgumentException(identityId + " is the boat's only identity");
+        Map<String, Identity> rest = new LinkedHashMap<>(b.identities());
+        Identity leaving = rest.remove(identityId);
+        Boat remaining = b.withIdentities(rest).withLastUpdated(Instant.now()).withLoadedAt(null);
+        Boat alone = new Boat(identityId, b.designId(), List.of(), Map.of(identityId, leaving), Instant.now(), null);
+        removeBoat(b.id());
+        putBoat(remaining);
+        putBoat(alone);
+        recanonicalise(b.identities().keySet());
+        LOG.info("unlinkIdentity: {} left boat {}", identityId, remaining.id());
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
+        return alone;
+    }
+
+    /**
+     * Changes the sail number and/or name of one identity: its ID changes, the old sail number
+     * and name become an alias of it (unless another boat still uses them), and its results
+     * move to the new ID. Fails if another boat already has the new ID (merge first).
+     *
+     * @return the boat, seen through the renamed identity
+     */
+    public Boat renameIdentity(String identityId, String newSailNumber, String newName)
+    {
+        requireStarted();
+        Boat b = boat(identityId);
+        if (b == null)
+            throw new IllegalArgumentException("Boat not found: " + identityId);
+        Identity old = b.identity();
+        String newId = IdGenerator.generateBoatId(newSailNumber, newName, designs.get(b.designId()));
+        if (b.designId() != null && !designs.containsKey(b.designId()))
+            newId = renameBoatId(newSailNumber, newName, b.designId());
+        if (newId.equals(identityId))
+        {
+            Boat updated = b.withIdentity(old.withSailNumberName(newSailNumber, newName)).withLoadedAt(null);
+            putBoat(updated);
+            return updated;
+        }
+        String other = identityIndex.get(newId);
+        if (other != null && !b.hasIdentity(newId))
+            throw new IllegalArgumentException("A boat with ID " + newId + " already exists. Merge first, then edit.");
+        String oldSail = old.sailNumber();
+        String oldName = old.name();
+        boolean oldInUse = boats.values().stream().anyMatch(o -> !o.hasIdentity(identityId)
+            && o.identities().values().stream().anyMatch(i -> i.matches(oldSail, IdGenerator.normaliseName(oldName))));
+        Identity renamed = old.withSailNumberName(newSailNumber, newName);
+        if (!oldInUse)
+            renamed = renamed.withAlias(new BoatAlias(oldSail, oldName));
+        Map<String, Identity> m = new LinkedHashMap<>();
+        for (Map.Entry<String, Identity> e : b.identities().entrySet())
+            m.put(e.getKey().equals(identityId) ? newId : e.getKey(), e.getKey().equals(identityId) ? renamed : e.getValue());
+        Boat updated = new Boat(newId, b.designId(), b.links(), m, Instant.now(), null);
+        removeBoat(b.id());
+        putBoat(updated);
+        rewriteFinisherBoatId(identityId, newId);
+        ClubLoader.remapBoatId(configDir, identityId, newId);
+        return updated;
+    }
+
+    /** The boats of {@code ids} (not {@code keep} itself), each once. */
+    private List<Boat> mergeBoatsOf(Boat keep, List<String> ids)
+    {
+        Map<String, Boat> out = new LinkedHashMap<>();
+        for (String id : ids)
+        {
+            Boat b = boat(id);
+            if (b == null)
+                throw new IllegalArgumentException("Boat not found: " + id);
+            String key = canonicalBoatId(id);
+            if (key.equals(canonicalBoatId(keep.id())))
+                throw new IllegalArgumentException(id + " is already an identity of " + keep.id());
+            out.putIfAbsent(key, boats.get(key));
+        }
+        return List.copyOf(out.values());
+    }
+
+    /** Moves the results entered as any of {@code fromIdentityIds} to identity {@code toId}. */
+    private int[] moveFinishers(Set<String> fromIdentityIds, String toId)
+    {
         int updatedRaces = 0;
         int updatedFinishers = 0;
         for (Race race : List.copyOf(races.values()))
         {
+            if (race.divisions() == null)
+                continue;
             boolean changed = false;
             List<Division> newDivisions = new ArrayList<>();
             for (Division div : race.divisions())
@@ -2744,37 +2678,48 @@ public class DataStore
                 List<Finisher> newFinishers = new ArrayList<>();
                 for (Finisher f : div.finishers())
                 {
-                    if (mergeIdSet.contains(f.boatId()))
+                    if (fromIdentityIds.contains(f.identityId()))
                     {
-                        newFinishers.add(f.withBoatId(keepId));
+                        newFinishers.add(f.withBoatId(toId));
                         changed = true;
                         updatedFinishers++;
                     }
                     else
-                    {
                         newFinishers.add(f);
-                    }
                 }
                 newDivisions.add(new Division(div.name(), newFinishers));
             }
             if (changed)
             {
                 putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
-                    race.number(), race.name(),
-                    newDivisions, race.source(), race.lastUpdated(), null));
+                    race.number(), race.name(), newDivisions, race.source(), race.lastUpdated(), null));
                 updatedRaces++;
             }
         }
+        return new int[]{updatedRaces, updatedFinishers};
+    }
 
-        // Delete merged-away boat files
-        for (Boat mb : toMerge)
-            removeBoat(mb.id());
-
-        LOG.info("mergeBoats: kept={} merged={} updatedRaces={} updatedFinishers={}",
-            keepId, mergeIds, updatedRaces, updatedFinishers);
-        InvalidationListener l = invalidationListener;
-        if (l != null) l.onAllChanged();
-        return new MergeResult(updatedRaces, updatedFinishers);
+    /**
+     * The identities ordered by the date each last raced, oldest first, so the most recently
+     * raced is last (current). Identities with no races keep their order, before those raced.
+     */
+    private Map<String, Identity> orderByLastRace(Map<String, Identity> identities)
+    {
+        Map<String, LocalDate> last = new java.util.HashMap<>();
+        for (Race race : races.values())
+        {
+            if (race.date() == null || race.divisions() == null)
+                continue;
+            for (Division d : race.divisions())
+                for (Finisher f : d.finishers())
+                    if (identities.containsKey(f.identityId()))
+                        last.merge(f.identityId(), race.date(), (x, y) -> x.isAfter(y) ? x : y);
+        }
+        List<String> order = new ArrayList<>(identities.keySet());
+        order.sort(Comparator.comparing((String id) -> last.get(id), Comparator.nullsFirst(Comparator.naturalOrder())));
+        Map<String, Identity> out = new LinkedHashMap<>();
+        order.forEach(id -> out.put(id, identities.get(id)));
+        return out;
     }
 
     private static String certKey(Certificate c)
@@ -2787,46 +2732,6 @@ public class DataStore
      * Called when a boat is upgraded (e.g. design added to ID) so that existing race
      * finisher records continue to point to the correct boat.
      */
-    /** The dates each boat raced, by boat id. */
-    private Map<String, List<LocalDate>> raceDatesByBoat()
-    {
-        Map<String, List<LocalDate>> dates = new java.util.HashMap<>();
-        for (Race race : races.values())
-        {
-            if (race.date() == null)
-                continue;
-            for (Division d : race.divisions())
-                for (Finisher f : d.finishers())
-                    dates.computeIfAbsent(f.boatId(), k -> new ArrayList<>()).add(race.date());
-        }
-        return dates;
-    }
-
-    /**
-     * The alias match that would rename an existing boat, or empty if none applies. A rename
-     * alias (with dates) applies only if the boat raced within its period (or has no races),
-     * so another boat that later used the same sail number and name is left alone. And an
-     * alias does not move a boat onto a canonical boat that exists only with a different
-     * design: that is a different boat sharing the name, not a stale record of this one.
-     */
-    private Optional<Aliases.BoatMatch> aliasMatchForBoat(Boat b, List<LocalDate> raceDates)
-    {
-        String normName = IdGenerator.normaliseName(b.name());
-        Optional<Aliases.BoatMatch> match = aliases.lookupBoat(b.sailNumber(), normName,
-            a -> raceDates.isEmpty() || raceDates.stream().anyMatch(a::inUseOn));
-        if (match.isEmpty() || match.get().normName() == null || b.designId() == null)
-            return match;
-        String canonSail = match.get().normSailNumber() != null ? match.get().normSailNumber() : b.sailNumber();
-        String canonName = match.get().normName();
-        List<Boat> canonical = boats.values().stream()
-            .filter(c -> !c.id().equals(b.id()) && canonSail.equalsIgnoreCase(c.sailNumber())
-                && canonName.equalsIgnoreCase(IdGenerator.normaliseName(c.name())))
-            .toList();
-        if (!canonical.isEmpty() && canonical.stream().noneMatch(c -> c.designId() == null || c.designId().equals(b.designId())))
-            return Optional.empty();
-        return match;
-    }
-
     private void rewriteFinisherBoatId(String oldBoatId, String newBoatId)
     {
         int updatedRaces = 0;
@@ -3544,8 +3449,8 @@ public class DataStore
                 for (Boat b : noclubViolations)
                 {
                     LOG.warn("noclub correction: clearing clubIds {} from boat {}", b.clubIds(), b.id());
-                    putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
-                        List.of(), b.certificates(), b.sources(), b.links(), Instant.now(), null));
+                    putBoat(b.mapIdentities(i -> i.withClubIds(List.of()))
+                        .withLastUpdated(Instant.now()).withLoadedAt(null));
                 }
             }
         }
@@ -3560,9 +3465,8 @@ public class DataStore
             {
                 LOG.info("Removing race-derived ORC certificates from {} boat(s)", withRaceOrc.size());
                 for (Boat b : withRaceOrc)
-                    putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(), b.clubIds(),
-                        b.certificates().stream().filter(c -> !c.isRaceDerivedOrc()).toList(),
-                        b.sources(), b.links(), Instant.now(), null));
+                    putBoat(b.withCertificatesFiltered(c -> !c.isRaceDerivedOrc())
+                        .withLastUpdated(Instant.now()).withLoadedAt(null));
             }
         }
 
@@ -3647,96 +3551,6 @@ public class DataStore
             emptyModified.forEach(this::removeDesign);
         }
 
-        // Auto-fix stale boats: if the alias seed maps a boat's name to a different canonical
-        // name and the canonical boat already exists, merge the stale boat into it.
-        // This repairs boats that were created before the alias entry was added and prevents
-        // them from persisting across imports via the direct boats.get(boatId) fast path.
-        // After merging we also consolidate aliases.yaml: an orphan alias entry keyed by the
-        // stale (sail, name) -- typically left over from a previous merge -- gets absorbed into
-        // the canonical entry, otherwise the next import would re-resolve the stale identity
-        // and recreate the JSON boat record.
-        {
-            record StalePair(String staleId, String canonId,
-                             String staleSail, String staleName,
-                             String canonSail, String canonName) {}
-            List<StalePair> staleBoatPairs = new ArrayList<>();
-            boolean aliasesChanged = false;
-            Map<String, List<LocalDate>> raceDates = raceDatesByBoat();
-            for (Boat b : new ArrayList<>(boats.values()))
-            {
-                String normName = IdGenerator.normaliseName(b.name());
-                // Aliases.lookupBoat expects a pure normalised name; passing the design
-                // suffix concatenated here (a pre-existing bug) made this pass miss every
-                // alias-stale boat that had a designId, defeating the whole safety net.
-                // A rename alias only applies if the boat raced in its period, and not to
-                // a boat of another design than the canonical one.
-                var match = aliasMatchForBoat(b, raceDates.getOrDefault(b.id(), List.of()));
-                if (match.isPresent() && match.get().normName() != null)
-                {
-                    String canonNorm = match.get().normName();
-                    if (!canonNorm.equals(normName))
-                    {
-                        String canonSail = match.get().normSailNumber() != null
-                            ? match.get().normSailNumber() : b.sailNumber();
-                        String displayName = match.get().canonicalDisplayName() != null
-                            ? match.get().canonicalDisplayName() : b.name();
-                        // Use b.designId() (the string) directly instead of looking up the
-                        // Design object: if the catalog doesn't have a matching Design (e.g.
-                        // design file missing on disk, or excluded design after a config
-                        // change) we still want to preserve the design suffix on the renamed
-                        // boatId, otherwise the rename produces an inconsistent record where
-                        // the id has no suffix but the designId field still does.
-                        String canonId = renameBoatId(canonSail, displayName, b.designId());
-                        if (boats.containsKey(canonId))
-                        {
-                            Boat canonical = boats.get(canonId);
-                            staleBoatPairs.add(new StalePair(b.id(), canonId,
-                                b.sailNumber(), normName,
-                                canonSail, canonical.name()));
-                        }
-                        else if (!canonId.equals(b.id()))
-                        {
-                            // No canonical record exists yet. Rename the stale boat in place:
-                            // change its id and sail/name to the canonical form, rewrite finisher
-                            // refs in races, remap its club override entry, and absorb any orphan
-                            // alias. Equivalent to what the next import would have done; doing it
-                            // at startup eliminates the recurring warning. A subsequent stale boat
-                            // mapping to the same canonical falls into the merge branch above
-                            // because this one now occupies canonId.
-                            LOG.info("Auto-renaming stale boat {} → {} (canonical sail per alias seed)",
-                                b.id(), canonId);
-                            Boat renamed = new Boat(canonId, canonSail, displayName, b.designId(),
-                                b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
-                            String oldId = b.id();
-                            removeBoat(oldId);
-                            putBoat(renamed);
-                            rewriteFinisherBoatId(oldId, canonId);
-                            ClubLoader.remapBoatId(configDir, oldId, canonId);
-                            Aliases.addAliases(configDir, canonSail, displayName,
-                                List.of(new Aliases.SailNumberName(b.sailNumber(), normName)));
-                            aliasesChanged = true;
-                        }
-                    }
-                }
-            }
-            if (!staleBoatPairs.isEmpty())
-            {
-                LOG.info("Auto-fixing {} stale boat(s) at startup", staleBoatPairs.size());
-                for (StalePair pair : staleBoatPairs)
-                {
-                    LOG.info("Auto-merging stale boat {} into canonical {}", pair.staleId(), pair.canonId());
-                    mergeBoats(pair.canonId(), List.of(pair.staleId()));
-                    // Consolidate aliases.yaml so the orphan entry that resolved to the stale
-                    // identity is absorbed into the canonical entry.
-                    Aliases.addAliases(configDir, pair.canonSail(), pair.canonName(),
-                        List.of(new Aliases.SailNumberName(pair.staleSail(), pair.staleName())));
-                    aliasesChanged = true;
-                }
-            }
-            if (aliasesChanged)
-                aliases = Aliases.load(configDir);
-        }
-
         // Cascade ignore for every design already in the ignored list. setDesignIgnored
         // fires cascadeIgnoreDesign only when a user toggles a design ignored at runtime;
         // designs born on the ignored list in design.yaml (e.g. TopYacht's "D1"/"D2"
@@ -3790,148 +3604,6 @@ public class DataStore
             }
         }
 
-        // Name normalisation pass (Phase A): rename any boat whose stored display name
-        // carries a decorative suffix (now stripped by normaliseName). Before this change,
-        // "Foobar - GM" produced boatId ".../foobargm" and stored name "Foobar - GM";
-        // now the same input would produce ".../foobar". Rename existing records to match
-        // so the IDs are stable across imports. Merge into an existing target if one is
-        // already there at the new id.
-        {
-            boolean aliasesChangedA = false;
-            for (Boat b : new ArrayList<>(boats.values()))
-            {
-                String cleaned = IdGenerator.stripStandardSuffixes(b.name());
-                if (cleaned == null || cleaned.equals(b.name()))
-                    continue;
-                String newId = renameBoatId(b.sailNumber(), cleaned, b.designId());
-                if (newId.equals(b.id()))
-                    continue;
-                if (boats.containsKey(newId))
-                {
-                    LOG.info("Suffix-strip merge: '{}' ({}) → existing '{}'", b.name(), b.id(), newId);
-                    mergeBoats(newId, List.of(b.id()));
-                }
-                else
-                {
-                    LOG.info("Suffix-strip rename: '{}' ({}) → '{}' ({})", b.name(), b.id(), cleaned, newId);
-                    Boat renamed = new Boat(newId, b.sailNumber(), cleaned, b.designId(),
-                        b.clubIds(), b.certificates(), b.sources(), b.links(), Instant.now(), null);
-                    String oldId = b.id();
-                    removeBoat(oldId);
-                    putBoat(renamed);
-                    rewriteFinisherBoatId(oldId, newId);
-                    ClubLoader.remapBoatId(configDir, oldId, newId);
-                    // Persist the original suffixed name as an alias so any importer still
-                    // emitting "Foobar - GM" continues to resolve to this boat.
-                    Aliases.addAliases(configDir, b.sailNumber(), cleaned,
-                        List.of(new Aliases.SailNumberName(b.sailNumber(),
-                            IdGenerator.normaliseName(b.name()))));
-                    aliasesChangedA = true;
-                }
-            }
-            if (aliasesChangedA)
-                aliases = Aliases.load(configDir);
-        }
-
-        // Name-equivalence collapse (Phase B): group remaining boats by (sail, designId,
-        // nameMatchKey) and merge each non-trivial group into one canonical boat. Handles
-        // pre-existing duplicates introduced before findOrCreateBoat learned about
-        // nameMatchKey (e.g. "Sticky" and "Sticky II" both already on disk).
-        {
-            record Key(String sail, String designId, String matchKey) {}
-            Map<Key, List<Boat>> groups = new LinkedHashMap<>();
-            for (Boat b : boats.values())
-            {
-                String mk = IdGenerator.nameMatchKey(b.name());
-                if (mk.isEmpty())
-                    continue;
-                Key key = new Key(b.sailNumber(),
-                    b.designId() == null ? "" : b.designId(), mk);
-                groups.computeIfAbsent(key, k -> new ArrayList<>()).add(b);
-            }
-            boolean aliasesChangedB = false;
-            for (Map.Entry<Key, List<Boat>> e : groups.entrySet())
-            {
-                List<Boat> group = e.getValue();
-                if (group.size() < 2)
-                    continue;
-
-                String canonicalName = IdGenerator.preferredDisplayName(
-                    group.stream().map(Boat::name).toList());
-                String canonNorm = IdGenerator.normaliseName(canonicalName);
-
-                // Pick the boat whose normalised name already equals the canonical; if
-                // none, rename the first member to the canonical so we have a stable
-                // target before merging the rest into it.
-                Boat keep = null;
-                for (Boat b : group)
-                {
-                    if (canonNorm.equalsIgnoreCase(IdGenerator.normaliseName(b.name())))
-                    {
-                        keep = b;
-                        break;
-                    }
-                }
-                if (keep == null)
-                {
-                    Boat first = group.getFirst();
-                    String newId = renameBoatId(first.sailNumber(), canonicalName, first.designId());
-                    if (boats.containsKey(newId) && !newId.equals(first.id()))
-                    {
-                        // A separate boat already occupies the canonical id (e.g. created in
-                        // a parallel branch). Use that one as keep and merge "first" into it.
-                        keep = boats.get(newId);
-                    }
-                    else
-                    {
-                        Boat renamed = new Boat(newId, first.sailNumber(), canonicalName,
-                            first.designId(), first.clubIds(), first.certificates(),
-                            first.sources(), first.links(), Instant.now(), null);
-                        String oldId = first.id();
-                        if (!newId.equals(oldId))
-                        {
-                            removeBoat(oldId);
-                            putBoat(renamed);
-                            rewriteFinisherBoatId(oldId, newId);
-                            ClubLoader.remapBoatId(configDir, oldId, newId);
-                            LOG.info("Name-equivalence canonical rename: {} ('{}') → {} ('{}')",
-                                oldId, first.name(), newId, canonicalName);
-                        }
-                        else
-                        {
-                            putBoat(renamed);
-                        }
-                        keep = renamed;
-                    }
-                }
-
-                List<String> mergeIds = new ArrayList<>();
-                List<Aliases.SailNumberName> aliasEntries = new ArrayList<>();
-                for (Boat b : group)
-                {
-                    if (b.id().equals(keep.id()))
-                        continue;
-                    mergeIds.add(b.id());
-                    String absorbedNorm = IdGenerator.normaliseName(b.name());
-                    if (!absorbedNorm.equalsIgnoreCase(canonNorm))
-                        aliasEntries.add(new Aliases.SailNumberName(b.sailNumber(), absorbedNorm));
-                }
-                if (!mergeIds.isEmpty())
-                {
-                    LOG.info("Name-equivalence collapse: merging {} into {} (canonical='{}')",
-                        mergeIds, keep.id(), canonicalName);
-                    mergeBoats(keep.id(), mergeIds);
-                }
-                if (!aliasEntries.isEmpty())
-                {
-                    Aliases.addAliases(configDir, keep.sailNumber(), canonicalName, aliasEntries);
-                    aliasesChangedB = true;
-                }
-            }
-            if (aliasesChangedB)
-                aliases = Aliases.load(configDir);
-        }
-
         // Second noclub correction pass: the earlier pass at the top of this method
         // catches the simple case where a boat already at its final boatId is in noclub.
         // But the design alias / design override / auto-fix-stale / design upgrade passes
@@ -3949,8 +3621,8 @@ public class DataStore
                 {
                     LOG.warn("noclub correction (post-migration): clearing clubIds {} from boat {}",
                         b.clubIds(), b.id());
-                    putBoat(new Boat(b.id(), b.sailNumber(), b.name(), b.designId(),
-                        List.of(), b.certificates(), b.sources(), b.links(), Instant.now(), null));
+                    putBoat(b.mapIdentities(i -> i.withClubIds(List.of()))
+                        .withLastUpdated(Instant.now()).withLoadedAt(null));
                 }
             }
         }
@@ -3958,9 +3630,7 @@ public class DataStore
         // Post-repair sanity scan: re-check every boat after all repair passes have run
         // and remember any residual violations. These get logged as ERROR and surfaced via
         // findStaleBoatViolations() (and ultimately /api/health). An empty list means the
-        // dataset is clean. The four known violation patterns are:
-        //   (1) a boat whose (sail, name) resolves via aliases.lookupBoat to a different
-        //       canonical (alias-stale orphan that no pass managed to merge);
+        // dataset is clean. The known violation patterns are:
         //   (2) a boat whose designId disagrees with an undated boatDesignOverrides entry;
         //   (3) a boat with non-empty clubIds that is listed in noclub;
         //   (4) a boat whose stored designId is currently in the design-alias map
@@ -4000,41 +3670,9 @@ public class DataStore
     private List<String> computeStaleBoatViolations()
     {
         List<String> violations = new ArrayList<>();
-        Map<String, List<LocalDate>> raceDates = raceDatesByBoat();
         for (Boat b : boats.values())
         {
             String normName = IdGenerator.normaliseName(b.name());
-            // (1) alias-stale: lookup resolves to a different canonical (sail, name), by the
-            // same rule as the startup repair.
-            List<LocalDate> dates = raceDates.getOrDefault(b.id(), List.of());
-            var match = aliasMatchForBoat(b, dates).orElse(null);
-            // (1b) an alias in its period, not applied because the canonical boat has another
-            // design: the same boat with its design spelt differently, or another boat that
-            // shares the name (then the alias dates may be wrong). Needs a person to decide.
-            if (match == null)
-            {
-                var byDate = aliases.lookupBoat(b.sailNumber(), normName,
-                    a -> dates.isEmpty() || dates.stream().anyMatch(a::inUseOn)).orElse(null);
-                if (byDate != null && byDate.normName() != null
-                    && (!byDate.normName().equalsIgnoreCase(normName)
-                    || (byDate.normSailNumber() != null && !byDate.normSailNumber().equalsIgnoreCase(b.sailNumber()))))
-                    violations.add(String.format(
-                        "alias-design-mismatch: boat %s (sail=%s name=%s design=%s) matches an alias of sail=%s name=%s, "
-                            + "which has another design: merge if the same boat, else check the alias dates",
-                        b.id(), b.sailNumber(), normName, b.designId(),
-                        byDate.normSailNumber() != null ? byDate.normSailNumber() : b.sailNumber(), byDate.normName()));
-            }
-            if (match != null && match.normName() != null
-                && (!match.normName().equalsIgnoreCase(normName)
-                || (match.normSailNumber() != null
-                && !match.normSailNumber().equalsIgnoreCase(b.sailNumber()))))
-            {
-                violations.add(String.format(
-                    "alias-stale boat %s (sail=%s name=%s) should resolve to canonical sail=%s name=%s",
-                    b.id(), b.sailNumber(), normName,
-                    match.normSailNumber() != null ? match.normSailNumber() : b.sailNumber(),
-                    match.normName()));
-            }
             // (2) design-override drift.
             String overrideId = designCatalogue.resolveDesignOverride(
                 b.sailNumber(), normName, null);

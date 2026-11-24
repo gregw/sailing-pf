@@ -1240,11 +1240,8 @@ public class TopYachtImporter
             nonSpinnaker ? "-ns" : "", twoHanded ? "-2h" : "", windwardLeeward ? "-wl" : "",
             year, tcf);
         Certificate inferred = new Certificate(system, year, tcf, nonSpinnaker, twoHanded, false, windwardLeeward, certNumber, null);
-        List<Certificate> certs = new ArrayList<>(boat.certificates());
-        certs.add(inferred);
-        store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubIds(), List.copyOf(certs),
-            addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
+        store.putBoat(boat.updateIdentity(i -> i.withCertificate(inferred).withSource(SOURCE))
+            .withLastUpdated(Instant.now()).withLoadedAt(null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;
     }

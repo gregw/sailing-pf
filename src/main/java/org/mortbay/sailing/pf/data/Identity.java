@@ -7,6 +7,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.mortbay.sailing.pf.importer.IdGenerator;
 
 /**
  * A boat under one sail number and name: one of the boat's identities. Its ID (the key in
@@ -85,6 +86,14 @@ public record Identity(
         return new Identity(sailNumber, name, from, until, clubIds, clubsCurated, aliases, newCertificates, sources);
     }
 
+    /** This identity with {@code certificate} added. */
+    public Identity withCertificate(Certificate certificate)
+    {
+        List<Certificate> c = new ArrayList<>(certificates);
+        c.add(certificate);
+        return withCertificates(c);
+    }
+
     public Identity withSources(List<String> newSources)
     {
         return new Identity(sailNumber, name, from, until, clubIds, clubsCurated, aliases, certificates, newSources);
@@ -127,31 +136,41 @@ public record Identity(
         return withClubIds(c);
     }
 
-    /**
-     * True if an entry with this normalised sail number and name is this identity: its own
-     * sail number and name, a full alias, or a pairing of its sail numbers (its own and
-     * sail-number-only aliases) with its names (its own and name-only aliases).
-     */
-    public boolean matches(String normSailNumber, String normName)
+    /** True if this identity's own sail number and name (not an alias) are these. */
+    public boolean isNamed(String sailNumber, String normName)
     {
-        if (normSailNumber == null || normName == null)
+        return sailNumber != null && normName != null
+            && IdGenerator.sailKey(sailNumber).equals(IdGenerator.sailKey(this.sailNumber))
+            && normName.equals(IdGenerator.normaliseName(name));
+    }
+
+    /**
+     * True if an entry with this sail number and normalised name is this identity: its own
+     * sail number and name, a full alias, or a pairing of its sail numbers (its own and
+     * sail-number-only aliases) with its names (its own and name-only aliases). Sail numbers
+     * compare by {@link IdGenerator#sailKey} (AUS1234 is 1234).
+     */
+    public boolean matches(String sailNumber, String normName)
+    {
+        if (sailNumber == null || normName == null)
             return false;
+        String key = IdGenerator.sailKey(sailNumber);
         java.util.Set<String> sails = new java.util.HashSet<>();
         java.util.Set<String> names = new java.util.HashSet<>();
-        sails.add(org.mortbay.sailing.pf.importer.IdGenerator.normaliseSailNumber(sailNumber));
-        names.add(org.mortbay.sailing.pf.importer.IdGenerator.normaliseName(name));
+        sails.add(IdGenerator.sailKey(this.sailNumber));
+        names.add(IdGenerator.normaliseName(name));
         for (BoatAlias a : aliases)
         {
             if (a.sailNumber() != null && a.name() != null)
             {
-                if (normSailNumber.equalsIgnoreCase(a.normSailNumber()) && normName.equals(a.normName()))
+                if (key.equals(IdGenerator.sailKey(a.sailNumber())) && normName.equals(a.normName()))
                     return true;
             }
             else if (a.sailNumber() != null)
-                sails.add(a.normSailNumber());
+                sails.add(IdGenerator.sailKey(a.sailNumber()));
             else
                 names.add(a.normName());
         }
-        return sails.stream().anyMatch(normSailNumber::equalsIgnoreCase) && names.contains(normName);
+        return sails.contains(key) && names.contains(normName);
     }
 }

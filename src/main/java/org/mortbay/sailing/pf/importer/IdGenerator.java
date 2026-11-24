@@ -111,6 +111,31 @@ public class IdGenerator
         return raw.toUpperCase(Locale.ENGLISH).replaceAll("[^A-Z0-9]", "");
     }
 
+    /** Australian country/fleet sail-number prefixes: "AUS5656" and "5656" are the same boat. */
+    private static final java.util.List<String> AUS_PREFIXES = java.util.List.of("JAUS", "EAUS", "VAUS", "SAUS", "AUS");
+
+    /**
+     * The key two sail numbers are compared by: the normalised sail number without an
+     * Australian country/fleet prefix or leading zeros, so "AUS5656", "5656", "0103" and
+     * "AUS00103" collapse to "5656" and "103". "JAUS" is tried before "AUS" so "JAUS103" is
+     * "103", not "US103". A prefix is only stripped when a digit follows it.
+     */
+    public static String sailKey(String rawOrNormSail)
+    {
+        String s = normaliseSailNumber(rawOrNormSail);
+        for (String prefix : AUS_PREFIXES)
+        {
+            if (s.startsWith(prefix) && s.length() > prefix.length() && Character.isDigit(s.charAt(prefix.length())))
+            {
+                s = s.substring(prefix.length());
+                break;
+            }
+        }
+        while (s.length() > 1 && s.charAt(0) == '0' && Character.isDigit(s.charAt(1)))
+            s = s.substring(1);
+        return s;
+    }
+
     /**
      * Generate a boat ID from sail number, name, and optional design.
      * <p>

@@ -766,11 +766,10 @@ public class BwpsImporter
                 LOG.debug("{}: yacht page club '{}' for {} matches no club", source, details.club(), boat.id());
             else if (boat.clubIds().isEmpty())
             {
-                if (!store.isExplicitlyNoClub(boat.id()))
+                if (!store.isExplicitlyNoClub(boat.id()) && !boat.identity().clubsCurated())
                 {
-                    boat = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
-                        List.of(club.id()), boat.certificates(), addSource(boat.sources(), source), boat.links(),
-                        Instant.now(), null);
+                    boat = boat.updateIdentity(i -> i.withClubIds(List.of(club.id())).withSource(source))
+                        .withLastUpdated(Instant.now()).withLoadedAt(null);
                     store.putBoat(boat);
                     LOG.info("{}: club of {} set to {} from its yacht page", source, boat.id(), club.id());
                 }
@@ -833,11 +832,8 @@ public class BwpsImporter
             source.toLowerCase(Locale.ENGLISH),
             system.toLowerCase(Locale.ENGLISH), year, tcf, twoHanded ? "-dh" : "");
         Certificate inferred = new Certificate(system, year, tcf, false, twoHanded, false, false, certNumber, null);
-        List<Certificate> certs = new ArrayList<>(boat.certificates());
-        certs.add(inferred);
-        store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubIds(), List.copyOf(certs),
-            addSource(boat.sources(), source), boat.links(), Instant.now(), null));
+        store.putBoat(boat.updateIdentity(i -> i.withCertificate(inferred).withSource(source))
+            .withLastUpdated(Instant.now()).withLoadedAt(null));
         LOG.debug("{}: inferred {} cert {} (TCF={} twoHanded={}) for boat {}",
             source, system, certNumber, tcf, twoHanded, boat.id());
         return certNumber;

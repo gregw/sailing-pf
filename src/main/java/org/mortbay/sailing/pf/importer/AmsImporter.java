@@ -164,7 +164,7 @@ public class AmsImporter
         // Upsert: remove all existing AMS certs whose certNo starts with this base number
         // (covers the bare certNo plus the -ns and -2h suffixed variants)
         final String trimmedCertNo = certNo.trim();
-        List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
+        List<Certificate> updatedCerts = new ArrayList<>(boat.identity().certificates());
         updatedCerts.removeIf(c -> "AMS".equals(c.system())
                                    && c.year() == year
                                    && c.certificateNumber() != null
@@ -185,9 +185,8 @@ public class AmsImporter
 
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
-        store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubIds(),
-                List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), boat.links(), Instant.now(), null));
+        store.putBoat(boat.updateIdentity(i -> i.withCertificates(updatedCerts).withSource(SOURCE))
+            .withLastUpdated(Instant.now()).withLoadedAt(null));
     }
 
     private Double parseRating(String value, String boatName, String kind)
