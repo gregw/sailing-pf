@@ -4725,9 +4725,7 @@ races:
     \ slowest/fastest elapsed-time ratio 4.0x (fastest 1580s, slowest 6370s) — likely\
     \ merged courses or bad timing data"
 - id: "unknown-2025-03-01-0001"
-  reason: "sanity-check: huge-time-spread — division 'Division 1': slowest/fastest\
-    \ elapsed-time ratio 3.3x (fastest 2457s, slowest 8048s) — likely merged courses\
-    \ or bad timing data"
+  reason: "series-pattern: name='Race  1' series='Historic Skiffs 2025'"
 - id: "unknown-2024-03-10-0010"
   reason: "sanity-check: huge-time-spread — division 'Class - Waszp': slowest/fastest\
     \ elapsed-time ratio 10.3x (fastest 140s, slowest 1440s) — likely merged courses\
@@ -5672,15 +5670,15 @@ races:
     \ ratio 3.4x (fastest 1694s, slowest 5760s) — likely merged courses or bad timing\
     \ data"
 - id: "rqys.com.au-2023-11-19-0003"
-  reason: "Lasers"
+  reason: "series-pattern: name='Race  3' series='2023/24 Laser Metropolitan Championships'"
 - id: "rqys.com.au-2023-11-19-0004"
-  reason: "Lasers"
+  reason: "series-pattern: name='Race  4' series='2023/24 Laser Metropolitan Championships'"
 - id: "rqys.com.au-2023-11-19-0005"
-  reason: "Lasers"
+  reason: "series-pattern: name='Race  5' series='2023/24 Laser Metropolitan Championships'"
 - id: "rqys.com.au-2023-11-18-0001"
-  reason: "Lasers"
+  reason: "series-pattern: name='Race  1' series='2023/24 Laser Metropolitan Championships'"
 - id: "rqys.com.au-2023-11-18-0002"
-  reason: "Lasers"
+  reason: "series-pattern: name='Race  2' series='2023/24 Laser Metropolitan Championships'"
 - id: "unknown-2025-09-13-0001"
   reason: "series-pattern: name='Club Championship Race 1' series='VYC ILCA Laser\
     \ 2025-26 Racing'"
@@ -5843,7 +5841,7 @@ races:
   reason: "series-pattern: name='Race  8' series='OTB Frostbite Series 2026 - Southern\
     \ Course'"
 - id: "myc.org.au-2019-03-01-0001"
-  reason: "Replaced by MYC spreadsheet import"
+  reason: "series-pattern: name='Race  1' series='Friday Twilights - Single Race Demo'"
 - id: "cyca.com.au-2019-12-26-0001"
   reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
     \ ratio 3.4x (fastest 153024s, slowest 517260s) — likely merged courses or bad\
@@ -5860,6 +5858,1350 @@ races:
   reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
     \ ratio 4.2x (fastest 153610s, slowest 642237s) — likely merged courses or bad\
     \ timing data"
+- id: "ncyc.net.au-2019-05-18-0001"
+  reason: "series-pattern: name='Race  1' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-05-18-0002"
+  reason: "series-pattern: name='Race  2' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-05-25-0003"
+  reason: "series-pattern: name='Race  3' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-05-25-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-05-25-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-06-15-0007"
+  reason: "series-pattern: name='Race  7' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-06-15-0008"
+  reason: "series-pattern: name='Race  8' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-06-22-0009"
+  reason: "series-pattern: name='Race  9' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-06-22-0010"
+  reason: "series-pattern: name='Race  10' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-06-22-0011"
+  reason: "series-pattern: name='Race  11' series='Laser Winter Series 2019'"
+- id: "ncyc.net.au-2019-10-18-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-10-18-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-10-18-0006"
+  reason: "series-pattern: name='Race  6' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-10-25-0007"
+  reason: "series-pattern: name='Race  7' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-10-25-0008"
+  reason: "series-pattern: name='Race  8' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-10-25-0009"
+  reason: "series-pattern: name='Race  9' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-01-0010"
+  reason: "series-pattern: name='Race  10' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-01-0011"
+  reason: "series-pattern: name='Race  11' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-01-0012"
+  reason: "series-pattern: name='Race  12' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-15-0016"
+  reason: "series-pattern: name='Race  16' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-15-0017"
+  reason: "series-pattern: name='Race  17' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-15-0018"
+  reason: "series-pattern: name='Race  18' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-22-0019"
+  reason: "series-pattern: name='Race  19' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-22-0020"
+  reason: "series-pattern: name='Race  20' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-22-0021"
+  reason: "series-pattern: name='Race  21' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-29-0022"
+  reason: "series-pattern: name='Race  22' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-29-0023"
+  reason: "series-pattern: name='Race  23' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-11-29-0024"
+  reason: "series-pattern: name='Race  24' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-12-13-0028"
+  reason: "series-pattern: name='Race  28' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-12-13-0029"
+  reason: "series-pattern: name='Race  29' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2019-12-13-0030"
+  reason: "series-pattern: name='Race  30' series='Laser Spring Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-14-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-14-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-14-0006"
+  reason: "series-pattern: name='Race  6' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-21-0007"
+  reason: "series-pattern: name='Race  7' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-21-0008"
+  reason: "series-pattern: name='Race  8' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-21-0009"
+  reason: "series-pattern: name='Race  9' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-28-0010"
+  reason: "series-pattern: name='Race  10' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-28-0011"
+  reason: "series-pattern: name='Race  11' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-02-28-0012"
+  reason: "series-pattern: name='Race  12' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-03-13-0016"
+  reason: "series-pattern: name='Race  16' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-03-13-0017"
+  reason: "series-pattern: name='Race  17' series='Laser Summer Series (2019 - 2020)'"
+- id: "ncyc.net.au-2020-03-13-0018"
+  reason: "series-pattern: name='Race  18' series='Laser Summer Series (2019 - 2020)'"
+- id: "unknown-2020-01-31-0001"
+  reason: "series-pattern: name='Race  1' series='Skiffs'"
+- id: "unknown-2020-01-31-0002"
+  reason: "series-pattern: name='Race  2' series='Skiffs'"
+- id: "unknown-2020-09-12-0001"
+  reason: "series-pattern: name='Season Opener 1' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-09-12-0002"
+  reason: "series-pattern: name='Season Opener 2' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-09-19-0003"
+  reason: "series-pattern: name='Club Championship 1' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-09-19-0004"
+  reason: "series-pattern: name='Club Championship 2' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-10-0007"
+  reason: "series-pattern: name='Short Course 1' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-10-0008"
+  reason: "series-pattern: name='Short Course 2' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-10-0009"
+  reason: "series-pattern: name='Short Course 3' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-17-0010"
+  reason: "series-pattern: name='Pointscore Race 8' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-17-0011"
+  reason: "series-pattern: name='Pointscore Race 9' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-24-0012"
+  reason: "series-pattern: name='Pointscore Race 10' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-24-0013"
+  reason: "series-pattern: name='Pointscore Race  11' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-31-0014"
+  reason: "series-pattern: name='Club Championship 3' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-10-31-0015"
+  reason: "series-pattern: name='Club Championship 4' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-11-14-0018"
+  reason: "series-pattern: name='Club Championship 5' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-11-14-0019"
+  reason: "series-pattern: name='Club Championship 6' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-11-21-0020"
+  reason: "series-pattern: name='Ian Nicholson Trophy 1' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2020-11-21-0021"
+  reason: "series-pattern: name='Ian Nicholson Trophy 2' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2020-12-05-0024"
+  reason: "series-pattern: name='Ian Nicholson Trophy 3' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2020-12-05-0025"
+  reason: "series-pattern: name='Ian Nicholson Trophy 4' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2020-12-12-0026"
+  reason: "series-pattern: name='Club Championship 7' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-12-12-0027"
+  reason: "series-pattern: name='Club Championship 8' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-12-19-0028"
+  reason: "series-pattern: name='Ian Nicholson Trophy 5' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2020-12-19-0029"
+  reason: "series-pattern: name='Ian Nicholson Trophy 6' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2021-01-09-0030"
+  reason: "series-pattern: name='Sil Rohu Trophy 1' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-09-0031"
+  reason: "series-pattern: name='Sil Rohu Trophy 2' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-16-0032"
+  reason: "series-pattern: name='Sil Rohu Trophy 3' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-16-0033"
+  reason: "series-pattern: name='Sil Rohu Trophy 4' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-23-0034"
+  reason: "series-pattern: name='Short Course Race 4' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-23-0035"
+  reason: "series-pattern: name='Short Course Race 5' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-23-0036"
+  reason: "series-pattern: name='Short Course Race 6' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-01-30-0037"
+  reason: "series-pattern: name='Sil Rohu Trophy 5' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-02-06-0039"
+  reason: "series-pattern: name='Vaucluse Regatta 1' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-02-06-0040"
+  reason: "series-pattern: name='Vaucluse Regatta 2' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-02-20-0043"
+  reason: "series-pattern: name='Club Championship 9' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-02-20-0044"
+  reason: "series-pattern: name='Club Championship 10' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-02-27-0045"
+  reason: "series-pattern: name='Laser Handicap Start 1' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2021-02-27-0046"
+  reason: "series-pattern: name='Laser Handicap Start 2' series='VYC Laser 2020-21\
+    \ Racing'"
+- id: "unknown-2021-03-06-0047"
+  reason: "series-pattern: name='Club Championship 11' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-03-06-0048"
+  reason: "series-pattern: name='Club Championship 12' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-03-13-0049"
+  reason: "series-pattern: name='Short Course 7' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-03-13-0050"
+  reason: "series-pattern: name='Short Course 8' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-03-13-0051"
+  reason: "series-pattern: name='Short Course 9' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-03-27-0054"
+  reason: "series-pattern: name='Club Championship 13' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2021-03-27-0055"
+  reason: "series-pattern: name='Club Championship 14' series='VYC Laser 2020-21 Racing'"
+- id: "unknown-2020-09-20-0001"
+  reason: "series-pattern: name='Race  1' series='Laser Fleet 20/9/20'"
+- id: "unknown-2020-09-20-0002"
+  reason: "series-pattern: name='Race  2' series='Laser Fleet 20/9/20'"
+- id: "unknown-2020-09-20-0003"
+  reason: "series-pattern: name='Race  3' series='Laser Fleet 20/9/20'"
+- id: "unknown-2020-09-20-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Fleet 20/9/20'"
+- id: "unknown-2020-09-20-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Fleet 20/9/20'"
+- id: "rqys.com.au-2020-10-03-0001"
+  reason: "series-pattern: name='Race  1' series='18 Foot Skiffs Regatta '"
+- id: "rqys.com.au-2020-10-03-0002"
+  reason: "series-pattern: name='Race  2' series='18 Foot Skiffs Regatta '"
+- id: "rqys.com.au-2020-10-04-0003"
+  reason: "series-pattern: name='Race  3' series='18 Foot Skiffs Regatta '"
+- id: "rqys.com.au-2020-10-04-0004"
+  reason: "series-pattern: name='Race  4' series='18 Foot Skiffs Regatta '"
+- id: "rqys.com.au-2020-10-04-0005"
+  reason: "series-pattern: name='Race  5' series='18 Foot Skiffs Regatta '"
+- id: "unknown-2020-11-21-0001"
+  reason: "series-pattern: name='Race 1 short course - SOUTH - 9-14 knots - Fine (at\
+    \ Port Hunter)' series='2020-21 NSW State Titles - 16ft & 13ft Skiffs'"
+- id: "unknown-2020-11-21-0002"
+  reason: "series-pattern: name='Race 2 short course  -  SOUTH - 9-14 knots - Fine\
+    \ (at Port Hunter)' series='2020-21 NSW State Titles - 16ft & 13ft Skiffs'"
+- id: "unknown-2020-11-22-0003"
+  reason: "series-pattern: name='Race 3 long course - EAST - 8-12 knots - Mostly fine,\
+    \ but becoming cloudy with light rain after the finish (at Port Hunter)' series='2020-21\
+    \ NSW State Titles - 16ft & 13ft Skiffs'"
+- id: "unknown-2020-12-05-0004"
+  reason: "series-pattern: name='Race 4 - short course - Compass Bearing 030 degrees\
+    \ -  8-14 knots - Cloudy (at Lake Illawarra)' series='2020-21 NSW State Titles\
+    \ - 16ft & 13ft Skiffs'"
+- id: "unknown-2020-12-05-0005"
+  reason: "series-pattern: name='Race  5 - short course - Compass Bearing 015 degrees\
+    \  - 8-11 knots - Cloudy (at Lake Illawarra)' series='2020-21 NSW State Titles\
+    \ - 16ft & 13ft Skiffs'"
+- id: "unknown-2020-12-06-0006"
+  reason: "series-pattern: name='Race 6 - long course - Compass Bearing 300 degrees\
+    \ - gusty 10-26 knots - Fine (at Lake Illawarra)' series='2020-21 NSW State Titles\
+    \ - 16ft & 13ft Skiffs'"
+- id: "ncyc.net.au-2020-12-04-0001"
+  reason: "series-pattern: name='Race  1' series='Laser Spring Series (2020 - 2021)'"
+- id: "ncyc.net.au-2020-12-04-0002"
+  reason: "series-pattern: name='Race  2' series='Laser Spring Series (2020 - 2021)'"
+- id: "ncyc.net.au-2020-12-04-0003"
+  reason: "series-pattern: name='Race  3' series='Laser Spring Series (2020 - 2021)'"
+- id: "ncyc.net.au-2020-12-11-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Spring Series (2020 - 2021)'"
+- id: "ncyc.net.au-2020-12-11-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Spring Series (2020 - 2021)'"
+- id: "ncyc.net.au-2020-12-11-0006"
+  reason: "series-pattern: name='Race  6' series='Laser Spring Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-01-29-0001"
+  reason: "series-pattern: name='Race  1' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-01-29-0002"
+  reason: "series-pattern: name='Race  2' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-01-29-0003"
+  reason: "series-pattern: name='Race  3' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-05-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-05-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-05-0006"
+  reason: "series-pattern: name='Race  6' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-12-0007"
+  reason: "series-pattern: name='Race  7' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-12-0008"
+  reason: "series-pattern: name='Race  8' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-12-0009"
+  reason: "series-pattern: name='Race  9' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-19-0010"
+  reason: "series-pattern: name='Race  10' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-19-0011"
+  reason: "series-pattern: name='Race  11' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-19-0012"
+  reason: "series-pattern: name='Race  12' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-26-0013"
+  reason: "series-pattern: name='Race  13' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-26-0014"
+  reason: "series-pattern: name='Race  14' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-02-26-0015"
+  reason: "series-pattern: name='Race  15' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-03-05-0016"
+  reason: "series-pattern: name='Race  16' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-03-05-0017"
+  reason: "series-pattern: name='Race  17' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-03-05-0018"
+  reason: "series-pattern: name='Race  18' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-03-19-0022"
+  reason: "series-pattern: name='Race  22' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-03-19-0023"
+  reason: "series-pattern: name='Race  23' series='Laser Summer Series (2020 - 2021)'"
+- id: "ncyc.net.au-2021-03-19-0024"
+  reason: "series-pattern: name='Race  24' series='Laser Summer Series (2020 - 2021)'"
+- id: "unknown-2021-04-03-0001"
+  reason: "series-pattern: name='Race  1 short course at Gosford - Compass Bearing\
+    \ 045 degrees  -  5-10 knots - Fine' series='2020-21 Australian Championships\
+    \ - 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-03-0002"
+  reason: "series-pattern: name='Race  2 short course at Gosford  - Compass Bearing\
+    \ 055 degrees -  6-11 knots  -  Fine' series='2020-21 Australian Championships\
+    \ - 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-03-0003"
+  reason: "series-pattern: name='Race  3 short course at Gosford -  Compass Bearing\
+    \ 055 degrees -  6-11 knots - Fine' series='2020-21 Australian Championships -\
+    \ 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-04-0004"
+  reason: "series-pattern: name='Race 4 short course at Gosford -  Compass Bearing\
+    \ 075 degrees shifting to 055 degrees after 1st lap -  4-8 knots  - Fine (some\
+    \ high cloud)' series='2020-21 Australian Championships - 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-04-0005"
+  reason: "series-pattern: name='Race 5 short course at Gosford -  Compass Bearing\
+    \ 045 degrees -  3-8 knots -  Fine (some high cloud)' series='2020-21 Australian\
+    \ Championships - 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-05-0006"
+  reason: "series-pattern: name='Race 6 short course at Gosford -  Compass Bearing\
+    \ 145 degrees -  8-11 knots  - Fine' series='2020-21 Australian Championships\
+    \ - 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-05-0007"
+  reason: "series-pattern: name='Race 7 short course at Gosford -  Compass Bearing\
+    \ 155 degrees -  4-8 knots -  Fine' series='2020-21 Australian Championships -\
+    \ 16ft & 13ft Skiffs'"
+- id: "unknown-2021-04-05-0008"
+  reason: "series-pattern: name='Race 8 short course at Gosford -  Compass Bearing\
+    \ 160 degrees -  3-7 knots -  Fine' series='2020-21 Australian Championships -\
+    \ 16ft & 13ft Skiffs'"
+- id: "rqys.com.au-2021-07-11-0001"
+  reason: "series-pattern: name='Race  1' series='QLA Winter Laser Regatta 2021'"
+- id: "rqys.com.au-2021-07-11-0002"
+  reason: "series-pattern: name='Race  2' series='QLA Winter Laser Regatta 2021'"
+- id: "rqys.com.au-2021-07-11-0003"
+  reason: "series-pattern: name='Race  3' series='QLA Winter Laser Regatta 2021'"
+- id: "rqys.com.au-2021-07-11-0004"
+  reason: "series-pattern: name='Race  4' series='QLA Winter Laser Regatta 2021'"
+- id: "unknown-2021-10-23-0001"
+  reason: "series-pattern: name='Race  1 - Season Opener Meat Tray Cup Race 1' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2021-10-23-0002"
+  reason: "series-pattern: name='Race  2 - Season Opener Meat Tray Cup Race 2' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2021-10-30-0003"
+  reason: "series-pattern: name='Race  3 - Club Championship Race 1' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2021-10-30-0004"
+  reason: "series-pattern: name='Race 4 - Club Championship Race 2' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2021-11-06-0005"
+  reason: "series-pattern: name='Race  5 - Founders Cup Race 1' series='VYC ILCA Laser\
+    \ 2021-22 Racing'"
+- id: "unknown-2021-11-06-0006"
+  reason: "series-pattern: name='Race  6 - Founders Cup Race 2' series='VYC ILCA Laser\
+    \ 2021-22 Racing'"
+- id: "unknown-2021-12-04-0012"
+  reason: "series-pattern: name='Race  12 - Ian Nicholson Trophy Race 1' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2021-12-04-0013"
+  reason: "series-pattern: name='Race  13 - Ian Nicholson Trophy Race 2' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2021-12-18-0016"
+  reason: "series-pattern: name='Race  16 - Ian Nicholson Trophy Race 3' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2021-12-18-0017"
+  reason: "series-pattern: name='Race  17 - Ian Nicholson Trophy Race 4' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-08-0018"
+  reason: "series-pattern: name='Race  18 - Ian Nicholson Trophy Race 5' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-08-0019"
+  reason: "series-pattern: name='Race  19 -  Ian Nicholson Trophy Race 6' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-15-0020"
+  reason: "series-pattern: name='Race  20 - Sil Rohu Trophy Race 1' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2022-01-15-0021"
+  reason: "series-pattern: name='Race  21 - Sil Rohu Trophy Race 2' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2022-01-22-0022"
+  reason: "series-pattern: name='Race  22 - Short Course Series Race 1' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-22-0023"
+  reason: "series-pattern: name='Race  23 - Short Course Series Race 2' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-22-0024"
+  reason: "series-pattern: name='Race  24 - Short Course Series Race 3' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-29-0025"
+  reason: "series-pattern: name='Race  25 - Club Championship Race 7' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-01-29-0026"
+  reason: "series-pattern: name='Race  26 - Club Championship Race 8' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-02-05-0027"
+  reason: "series-pattern: name='Race  27 - Sil Rohu Trophy Race 3' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2022-02-05-0028"
+  reason: "series-pattern: name='Race  28 - Sil Rohu Trophy Race 4' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2022-02-12-0029"
+  reason: "series-pattern: name='Race  29 - Club Championship Race 9' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-02-12-0030"
+  reason: "series-pattern: name='Race  30 - Club Championship Race 10' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-03-05-0033"
+  reason: "series-pattern: name='Race  33 -  Sil Rohu Trophy Race 5' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2022-03-05-0034"
+  reason: "series-pattern: name='Race  34 - Sil Rohu Trophy Race 6' series='VYC ILCA\
+    \ Laser 2021-22 Racing'"
+- id: "unknown-2022-03-12-0035"
+  reason: "series-pattern: name='Race  35 - Club Championship Race 11' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-03-12-0036"
+  reason: "series-pattern: name='Race  36 - Club Championship Race 12' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-04-02-0040"
+  reason: "series-pattern: name='Race  40 - Club Championship Race 13' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-04-02-0041"
+  reason: "series-pattern: name='Race  41 - Club Championship Race 14' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-04-09-0042"
+  reason: "series-pattern: name='Race  42 - Club Championship Race 15' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "unknown-2022-04-09-0043"
+  reason: "series-pattern: name='Race  43 - Club Championship Race 16' series='VYC\
+    \ ILCA Laser 2021-22 Racing'"
+- id: "rqys.com.au-2022-04-02-0001"
+  reason: "series-pattern: name='Race  1' series='Laser Queensland State Championships\
+    \ 2022'"
+- id: "rqys.com.au-2022-04-02-0002"
+  reason: "series-pattern: name='Race  2' series='Laser Queensland State Championships\
+    \ 2022'"
+- id: "rqys.com.au-2022-04-03-0003"
+  reason: "series-pattern: name='Race  3' series='Laser Queensland State Championships\
+    \ 2022'"
+- id: "rqys.com.au-2022-04-03-0004"
+  reason: "series-pattern: name='Race  4' series='Laser Queensland State Championships\
+    \ 2022'"
+- id: "rqys.com.au-2022-04-03-0005"
+  reason: "series-pattern: name='Race  5' series='Laser Queensland State Championships\
+    \ 2022'"
+- id: "unknown-2022-03-19-0038"
+  reason: "series-pattern: name='Race 38 - Season Pointscore' series='VYC ILCA Laser\
+    \ 2021-22 Racing'"
+- id: "unknown-2022-03-19-0037"
+  reason: "series-pattern: name='Race 37 - Season Pointscore' series='VYC ILCA Laser\
+    \ 2021-22 Racing'"
+- id: "unknown-2022-09-10-0001"
+  reason: "series-pattern: name='Graham Read Trophy' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2022-09-10-0002"
+  reason: "series-pattern: name='Graham Read Trophy' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2022-09-17-0003"
+  reason: "series-pattern: name='Laser Club Championship Race 1' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-09-17-0004"
+  reason: "series-pattern: name='Laser Club Championship Race 2' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-09-24-0005"
+  reason: "series-pattern: name='Founders Trophy Heat 1 (short course)' series='VYC\
+    \ ILCA Laser 2022-23 Racing'"
+- id: "unknown-2022-09-24-0006"
+  reason: "series-pattern: name='Founders Trophy Heat 2 (short course)' series='VYC\
+    \ ILCA Laser 2022-23 Racing'"
+- id: "unknown-2022-09-24-0007"
+  reason: "series-pattern: name='Founders Trophy Heat 3 (short course)' series='VYC\
+    \ ILCA Laser 2022-23 Racing'"
+- id: "unknown-2022-10-08-0008"
+  reason: "series-pattern: name='Laser Club Championship Race 3' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-10-08-0009"
+  reason: "series-pattern: name='Laser Club Championship Race 4' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-10-29-0013"
+  reason: "series-pattern: name='Laser Club Championship Race 5' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-10-29-0014"
+  reason: "series-pattern: name='Laser Club Championship Race 6' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-11-05-0015"
+  reason: "series-pattern: name='Founders Trophy Heat 4 (short course)' series='VYC\
+    \ ILCA Laser 2022-23 Racing'"
+- id: "unknown-2022-11-05-0016"
+  reason: "series-pattern: name='Founders Trophy Heat 5 (short course)' series='VYC\
+    \ ILCA Laser 2022-23 Racing'"
+- id: "unknown-2022-11-05-0017"
+  reason: "series-pattern: name='Founders Trophy Heat 6 (short course)' series='VYC\
+    \ ILCA Laser 2022-23 Racing'"
+- id: "unknown-2022-11-26-0020"
+  reason: "series-pattern: name='Laser Club Championship Race 7' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-11-26-0021"
+  reason: "series-pattern: name='Laser Club Championship Race 8' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2022-12-03-0022"
+  reason: "series-pattern: name='Ian Nicholson Trophy 1' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2022-12-03-0023"
+  reason: "series-pattern: name='Ian Nicholson Trophy 2' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2022-12-10-0024"
+  reason: "series-pattern: name='John McCulloch Race 3' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2022-12-10-0025"
+  reason: "series-pattern: name='John McCulloch Race 4' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-01-07-0027"
+  reason: "series-pattern: name='Ian Nicholson Trophy 3' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-01-07-0028"
+  reason: "series-pattern: name='Ian Nicholson Trophy 4' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-01-14-0029"
+  reason: "series-pattern: name='Laser Club Championship Race 9' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-01-14-0030"
+  reason: "series-pattern: name='Laser Club Championship Race 10' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-01-21-0031"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 1' series='VYC ILCA Laser\
+    \ 2022-23 Racing'"
+- id: "unknown-2023-01-21-0032"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 2' series='VYC ILCA Laser\
+    \ 2022-23 Racing'"
+- id: "unknown-2023-01-21-0033"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 3' series='VYC ILCA Laser\
+    \ 2022-23 Racing'"
+- id: "unknown-2023-01-28-0034"
+  reason: "series-pattern: name='Ian Nicholson Trophy 5' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-01-28-0035"
+  reason: "series-pattern: name='Ian Nicholson Trophy 6' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-02-04-0036"
+  reason: "series-pattern: name='Laser Club Championship Race 11' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-02-04-0037"
+  reason: "series-pattern: name='Laser Club Championship Race 12' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-02-11-0038"
+  reason: "series-pattern: name='Ian Nicholson Trophy 7' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-02-11-0039"
+  reason: "series-pattern: name='Ian Nicholson Trophy 8' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-02-18-0040"
+  reason: "series-pattern: name='Sil Rohu Trophy 1' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-02-18-0041"
+  reason: "series-pattern: name='Sil Rohu Trophy 2' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-03-04-0043"
+  reason: "series-pattern: name='Laser Club Championship Race 13' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-03-04-0044"
+  reason: "series-pattern: name='Laser Club Championship Race 14' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-03-11-0045"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 3' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-03-11-0046"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 4' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-03-18-0047"
+  reason: "series-pattern: name='Laser Club Championship Race 15' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-03-18-0048"
+  reason: "series-pattern: name='Laser Club Championship Race 16' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-03-25-0049"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 5' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-03-25-0050"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 6' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2023-04-01-0051"
+  reason: "series-pattern: name='Laser Club Championship Race 17' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "unknown-2023-04-01-0052"
+  reason: "series-pattern: name='Laser Club Championship Race 18' series='VYC ILCA\
+    \ Laser 2022-23 Racing'"
+- id: "rqys.com.au-2022-10-08-0001"
+  reason: "series-pattern: name='Race  1' series='2022/23 Laser Metropolitan Championships'"
+- id: "unknown-2022-10-15-0010"
+  reason: "series-pattern: name='John McCulloch Race 1' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "unknown-2022-10-15-0011"
+  reason: "series-pattern: name='John McCulloch Race 2' series='VYC ILCA Laser 2022-23\
+    \ Racing'"
+- id: "rqys.com.au-2022-10-08-0002"
+  reason: "series-pattern: name='Race  2' series='2022/23 Laser Metropolitan Championships'"
+- id: "rqys.com.au-2022-10-09-0003"
+  reason: "series-pattern: name='Race  3' series='2022/23 Laser Metropolitan Championships'"
+- id: "rqys.com.au-2022-10-22-0001"
+  reason: "series-pattern: name='Race  1' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-22-0002"
+  reason: "series-pattern: name='Race  2' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-22-0003"
+  reason: "series-pattern: name='Race  3' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-22-0004"
+  reason: "series-pattern: name='Race  4' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-23-0005"
+  reason: "series-pattern: name='Race  5' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-23-0006"
+  reason: "series-pattern: name='Race  6' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-23-0007"
+  reason: "series-pattern: name='Race  7' series='WASZP Queensland State Championships\
+    \ '"
+- id: "rqys.com.au-2022-10-23-0008"
+  reason: "series-pattern: name='Race  8' series='WASZP Queensland State Championships\
+    \ '"
+- id: "unknown-2023-03-04-0001"
+  reason: "series-pattern: name='Race  1' series='Historic Skiffs 2023'"
+- id: "rqys.com.au-2023-07-07-0001"
+  reason: "series-pattern: name='Race  1' series='South Pacific Laser Masters 2023'"
+- id: "rqys.com.au-2023-07-07-0002"
+  reason: "series-pattern: name='Race  2' series='South Pacific Laser Masters 2023'"
+- id: "rqys.com.au-2023-07-08-0003"
+  reason: "series-pattern: name='Race  3' series='South Pacific Laser Masters 2023'"
+- id: "rqys.com.au-2023-07-08-0004"
+  reason: "series-pattern: name='Race  4' series='South Pacific Laser Masters 2023'"
+- id: "rqys.com.au-2023-07-09-0005"
+  reason: "series-pattern: name='Race  5' series='South Pacific Laser Masters 2023'"
+- id: "rqys.com.au-2023-07-09-0006"
+  reason: "series-pattern: name='Race  6' series='South Pacific Laser Masters 2023'"
+- id: "unknown-2023-09-09-0001"
+  reason: "series-pattern: name='Founders Trophy Heat 1 (short course)' series='VYC\
+    \ ILCA Laser 2023-24 Racing'"
+- id: "unknown-2023-09-09-0002"
+  reason: "series-pattern: name='Founders Trophy Heat 2 (short course)' series='VYC\
+    \ ILCA Laser 2023-24 Racing'"
+- id: "unknown-2023-09-09-0003"
+  reason: "series-pattern: name='Founders Trophy Heat 3 (short course)' series='VYC\
+    \ ILCA Laser 2023-24 Racing'"
+- id: "unknown-2023-09-23-0006"
+  reason: "series-pattern: name='John McCulloch Race 1' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-09-23-0007"
+  reason: "series-pattern: name='John McCulloch Race 2' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-09-30-0008"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-09-30-0009"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-10-07-0010"
+  reason: "series-pattern: name='Club Championship Race 3' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-10-07-0011"
+  reason: "series-pattern: name='Club Championship Race 4' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-10-14-0012"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-10-14-0013"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-10-28-0015"
+  reason: "series-pattern: name='Club Championship Race 5' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-10-28-0016"
+  reason: "series-pattern: name='Club Championship Race 6' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-11-04-0017"
+  reason: "series-pattern: name='Club Championship Race 7' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-11-04-0018"
+  reason: "series-pattern: name='Club Championship Race 8' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-11-11-0019"
+  reason: "series-pattern: name='Battle of the Sound (VYC) Race 1' series='VYC ILCA\
+    \ Laser 2023-24 Racing'"
+- id: "unknown-2023-11-11-0020"
+  reason: "series-pattern: name='Battle of the Sound (VYC) Race 2' series='VYC ILCA\
+    \ Laser 2023-24 Racing'"
+- id: "unknown-2023-11-18-0021"
+  reason: "series-pattern: name='Sil Rohu Trophy 1' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-11-18-0022"
+  reason: "series-pattern: name='Sil Rohu Trophy 2' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-12-02-0025"
+  reason: "series-pattern: name='John McCulloch Race 3' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-12-02-0026"
+  reason: "series-pattern: name='John McCulloch Race 4' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2023-12-09-0027"
+  reason: "series-pattern: name='Founders Trophy Heat 4 (short course)' series='VYC\
+    \ ILCA Laser 2023-24 Racing'"
+- id: "unknown-2023-12-09-0028"
+  reason: "series-pattern: name='Founders Trophy Heat 5 (short course)' series='VYC\
+    \ ILCA Laser 2023-24 Racing'"
+- id: "unknown-2023-12-09-0029"
+  reason: "series-pattern: name='Founders Trophy Heat 6 (short course)' series='VYC\
+    \ ILCA Laser 2023-24 Racing'"
+- id: "unknown-2023-12-16-0030"
+  reason: "series-pattern: name='Club Championship Race 9' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2023-12-16-0031"
+  reason: "series-pattern: name='Club Championship Race 10' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-13-0032"
+  reason: "series-pattern: name='Ian Nicholson Trophy Race 3' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-13-0033"
+  reason: "series-pattern: name='Ian Nicholson Trophy Race 4' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-20-0034"
+  reason: "series-pattern: name='Club Championship Race 11' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-20-0035"
+  reason: "series-pattern: name='Club Championship Race 12' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-27-0036"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 1' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-27-0037"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 2' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-01-27-0038"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 3' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-03-0039"
+  reason: "series-pattern: name='Ian Nicholson Trophy Race 5' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-03-0040"
+  reason: "series-pattern: name='Ian Nicholson Trophy Race 6' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-10-0041"
+  reason: "series-pattern: name='Ian Nicholson Trophy Race 7' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-10-0042"
+  reason: "series-pattern: name='Ian Nicholson Trophy Race 8' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-17-0043"
+  reason: "series-pattern: name='Club Championship Race 13' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-17-0044"
+  reason: "series-pattern: name='Club Championship Race 14' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-02-24-0045"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 3' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2024-02-24-0046"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 4' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2024-03-16-0049"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 5' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2024-03-16-0050"
+  reason: "series-pattern: name='Sil Rohu Trophy Race 6' series='VYC ILCA Laser 2023-24\
+    \ Racing'"
+- id: "unknown-2024-03-23-0051"
+  reason: "series-pattern: name='Club Championship Race 15' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-03-23-0052"
+  reason: "series-pattern: name='Club Championship Race 16' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-04-06-0053"
+  reason: "series-pattern: name='Club Championship Race 17' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "unknown-2024-04-06-0054"
+  reason: "series-pattern: name='Club Championship Race 18' series='VYC ILCA Laser\
+    \ 2023-24 Racing'"
+- id: "iycsailing.asn.au-2023-10-08-0001"
+  reason: "series-pattern: name='CC1' series='Youth Skiffs Club Championship 23/24'"
+- id: "iycsailing.asn.au-2023-10-29-0002"
+  reason: "series-pattern: name='CC2' series='Youth Skiffs Club Championship 23/24'"
+- id: "iycsailing.asn.au-2023-12-17-0004"
+  reason: "series-pattern: name='CC4' series='Youth Skiffs Club Championship 23/24'"
+- id: "iycsailing.asn.au-2024-01-28-0005"
+  reason: "series-pattern: name='CC5' series='Youth Skiffs Club Championship 23/24'"
+- id: "iycsailing.asn.au-2024-02-18-0006"
+  reason: "series-pattern: name='CC6' series='Youth Skiffs Club Championship 23/24'"
+- id: "iycsailing.asn.au-2024-03-03-0007"
+  reason: "series-pattern: name='CC7' series='Youth Skiffs Club Championship 23/24'"
+- id: "gossail.com.au-2023-10-07-0001"
+  reason: "series-pattern: name='ILCA CC1' series='2023-24 ILCA Club Championship'"
+- id: "gossail.com.au-2023-11-04-0002"
+  reason: "series-pattern: name='ILCA CC2' series='2023-24 ILCA Club Championship'"
+- id: "gossail.com.au-2023-12-16-0003"
+  reason: "series-pattern: name='ILCA CC3' series='2023-24 ILCA Club Championship'"
+- id: "gossail.com.au-2024-01-20-0004"
+  reason: "series-pattern: name='ILCA CC4' series='2023-24 ILCA Club Championship'"
+- id: "gossail.com.au-2024-02-17-0005"
+  reason: "series-pattern: name='ILCA CC5' series='2023-24 ILCA Club Championship'"
+- id: "gossail.com.au-2024-03-16-0006"
+  reason: "series-pattern: name='ILCA CC6' series='2023-24 ILCA Club Championship'"
+- id: "gossail.com.au-2023-09-16-0001"
+  reason: "series-pattern: name='ILCA Pointscore 1' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2023-09-23-0002"
+  reason: "series-pattern: name='ILCA Pointscore 2' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2023-09-30-0003"
+  reason: "series-pattern: name='ILCA Pointscore 3' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2023-10-21-0004"
+  reason: "series-pattern: name='ILCA Pointscore 4/Sprint Series 1' series='2023-24\
+    \ ILCA Pointscore'"
+- id: "gossail.com.au-2023-10-21-0005"
+  reason: "series-pattern: name='ILCA Sprint Series 2' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2023-10-28-0006"
+  reason: "series-pattern: name='ILCA Pointscore 5' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2023-11-25-0010"
+  reason: "series-pattern: name='ILCA Pointscore 8' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2023-12-02-0011"
+  reason: "series-pattern: name='ILCA Pointscore 9/Sprint Series 5' series='2023-24\
+    \ ILCA Pointscore'"
+- id: "gossail.com.au-2023-12-02-0012"
+  reason: "series-pattern: name='ILCA Sprint Series 6' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-01-06-0014"
+  reason: "series-pattern: name='ILCA Pointscore 11' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-01-13-0015"
+  reason: "series-pattern: name='ILCA Pointscore 12/Sprint Series 7' series='2023-24\
+    \ ILCA Pointscore'"
+- id: "gossail.com.au-2024-01-13-0016"
+  reason: "series-pattern: name='ILCA Sprint Series 8' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-01-27-0017"
+  reason: "series-pattern: name='ILCA Pointscore 13/Sprint Series 9' series='2023-24\
+    \ ILCA Pointscore'"
+- id: "gossail.com.au-2024-02-03-0019"
+  reason: "series-pattern: name='ILCA Pointscore 14' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-02-10-0020"
+  reason: "series-pattern: name='ILCA Pointscore 15' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-02-24-0021"
+  reason: "series-pattern: name='ILCA Pointscore 16' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-03-02-0022"
+  reason: "series-pattern: name='ILCA Pointscore 17/Sprint Series 11' series='2023-24\
+    \ ILCA Pointscore'"
+- id: "gossail.com.au-2024-03-02-0023"
+  reason: "series-pattern: name='ILCA Sprint Series 12' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-03-09-0024"
+  reason: "series-pattern: name='ILCA Pointscore 18' series='2023-24 ILCA Pointscore'"
+- id: "gossail.com.au-2024-03-23-0025"
+  reason: "series-pattern: name='ILCA Pointscore 19' series='2023-24 ILCA Pointscore'"
+- id: "rqys.com.au-2023-10-28-0001"
+  reason: "series-pattern: name='Race  1' series='WASZP States 2023 '"
+- id: "rqys.com.au-2023-10-28-0002"
+  reason: "series-pattern: name='Race  2' series='WASZP States 2023 '"
+- id: "rqys.com.au-2023-10-28-0003"
+  reason: "series-pattern: name='Race  3' series='WASZP States 2023 '"
+- id: "rqys.com.au-2023-10-29-0004"
+  reason: "series-pattern: name='Race  4' series='WASZP States 2023 '"
+- id: "rqys.com.au-2023-10-29-0005"
+  reason: "series-pattern: name='Race  5' series='WASZP States 2023 '"
+- id: "rqys.com.au-2023-10-29-0006"
+  reason: "series-pattern: name='Race  6' series='WASZP States 2023 '"
+- id: "rqys.com.au-2023-10-29-0007"
+  reason: "series-pattern: name='Race  7' series='WASZP States 2023 '"
+- id: "rpayc.com.au-2023-11-11-0001"
+  reason: "series-pattern: name='Race  1' series='WASZP NSW Slalom Championship 2023'"
+- id: "rpayc.com.au-2023-11-11-0002"
+  reason: "series-pattern: name='Race  2' series='WASZP NSW Slalom Championship 2023'"
+- id: "rpayc.com.au-2023-11-11-0003"
+  reason: "series-pattern: name='Race  3' series='WASZP NSW Slalom Championship 2023'"
+- id: "rpayc.com.au-2023-11-11-0005"
+  reason: "series-pattern: name='Race  5' series='WASZP NSW Slalom Championship 2023'"
+- id: "rpayc.com.au-2023-11-11-0004"
+  reason: "series-pattern: name='Race  4' series='WASZP NSW Slalom Championship 2023'"
+- id: "rpayc.com.au-2023-11-11-0006"
+  reason: "series-pattern: name='Race  6' series='WASZP NSW Slalom Championship 2023'"
+- id: "rpayc.com.au-2023-11-11-0007"
+  reason: "series-pattern: name='Distance Race' series='WASZP NSW Slalom Championship\
+    \ 2023'"
+- id: "rpayc.com.au-2024-01-24-0001"
+  reason: "series-pattern: name='Race  1' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-24-0002"
+  reason: "series-pattern: name='Race  2' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-24-0003"
+  reason: "series-pattern: name='Race  3' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-24-0004"
+  reason: "series-pattern: name='Race  4' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "unknown-2024-03-02-0001"
+  reason: "series-pattern: name='Race  1' series='Historic Skiffs 2024'"
+- id: "rpayc.com.au-2024-01-26-0001"
+  reason: "series-pattern: name='Race  1' series='WASZP NSW Championship 2024'"
+- id: "rpayc.com.au-2024-01-26-0002"
+  reason: "series-pattern: name='Race  2' series='WASZP NSW Championship 2024'"
+- id: "rpayc.com.au-2024-01-26-0003"
+  reason: "series-pattern: name='Race  3' series='WASZP NSW Championship 2024'"
+- id: "rpayc.com.au-2024-01-24-0005"
+  reason: "series-pattern: name='Race  5' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-24-0006"
+  reason: "series-pattern: name='Race  6' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-24-0007"
+  reason: "series-pattern: name='Race  7' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-24-0008"
+  reason: "series-pattern: name='Race  8' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-26-0004"
+  reason: "series-pattern: name='Race  4' series='WASZP NSW Championship 2024'"
+- id: "rpayc.com.au-2024-01-27-0005"
+  reason: "series-pattern: name='Race  7' series='WASZP NSW Championship 2024'"
+- id: "rpayc.com.au-2024-01-25-0009"
+  reason: "series-pattern: name='Race  9' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-25-0010"
+  reason: "series-pattern: name='Race  10' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-25-0011"
+  reason: "series-pattern: name='Race  11' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-25-0012"
+  reason: "series-pattern: name='Race  12' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-25-0013"
+  reason: "series-pattern: name='Race  13' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rpayc.com.au-2024-01-25-0014"
+  reason: "series-pattern: name='Race  14' series='WASZP Australian Slalom Championship\
+    \ 2024'"
+- id: "rqys.com.au-2024-04-12-0001"
+  reason: "series-pattern: name='Race  1' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rpayc.com.au-2024-01-27-0001"
+  reason: "series-pattern: name='Race  5' series='WASZP NSW Championship 2024 LOW\
+    \ RIDER'"
+- id: "gossail.com.au-2024-04-06-0026"
+  reason: "series-pattern: name='Race  26' series='2023-24 ILCA Pointscore'"
+- id: "rqys.com.au-2024-04-12-0002"
+  reason: "series-pattern: name='Race  2' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-13-0003"
+  reason: "series-pattern: name='Race  3' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-13-0004"
+  reason: "series-pattern: name='Race  4' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-13-0005"
+  reason: "series-pattern: name='Race  5' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-14-0006"
+  reason: "series-pattern: name='Race  6' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-14-0007"
+  reason: "series-pattern: name='Race  7' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-14-0008"
+  reason: "series-pattern: name='Race  8' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "rqys.com.au-2024-04-15-0009"
+  reason: "series-pattern: name='Race  9' series='2024 ILCA Oceania and Australian\
+    \ Masters Championships'"
+- id: "sasc.com.au-2024-10-20-0001"
+  reason: "series-pattern: name='Gaffers Day' series='Gaffers Day 2024 - Rangers and\
+    \ Historic 18\" Skiffs'"
+- id: "rsys.com.au-2024-06-23-0001"
+  reason: "series-pattern: name='Race  1' series='Optimist Winter Inter-Club Championship\
+    \ 2024'"
+- id: "rsys.com.au-2024-06-23-0002"
+  reason: "series-pattern: name='Race  2' series='Optimist Winter Inter-Club Championship\
+    \ 2024'"
+- id: "rsys.com.au-2024-06-23-0003"
+  reason: "series-pattern: name='Race  3' series='Optimist Winter Inter-Club Championship\
+    \ 2024'"
+- id: "unknown-2024-09-14-0001"
+  reason: "series-pattern: name='Founders Trophy Heat 1' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-09-14-0002"
+  reason: "series-pattern: name='Founders Trophy Heat 2' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-09-21-0004"
+  reason: "series-pattern: name='Ian Nicholson Trophy Heat 1' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-09-21-0005"
+  reason: "series-pattern: name='Ian Nicholson Trophy Heat 2' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-09-28-0006"
+  reason: "series-pattern: name='Club Championship Race 1' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-09-28-0007"
+  reason: "series-pattern: name='Club Championship Race 2' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-10-05-0008"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-10-05-0009"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-10-12-0010"
+  reason: "series-pattern: name='John McCulloch Trophy Heat 1' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-10-12-0011"
+  reason: "series-pattern: name='John McCulloch Trophy Heat 2' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-10-19-0012"
+  reason: "series-pattern: name='Club Championship Race 3' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-10-19-0013"
+  reason: "series-pattern: name='Club Championship Race 4' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-11-02-0015"
+  reason: "series-pattern: name='Club Championship Race 5' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-11-02-0016"
+  reason: "series-pattern: name='Club Championship Race 6' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-11-16-0019"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-11-16-0020"
+  reason: "series-pattern: name='Overall Pointscore Race' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-11-23-0021"
+  reason: "series-pattern: name='Club Championship Race 7' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-11-23-0022"
+  reason: "series-pattern: name='Club Championship Race 8' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-11-30-0023"
+  reason: "series-pattern: name='John McCulloch Trophy Heat 3' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-11-30-0024"
+  reason: "series-pattern: name='John McCulloch Trophy Heat 4' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-12-14-0028"
+  reason: "series-pattern: name='Sil Rohu Trophy Heat 1' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-12-14-0029"
+  reason: "series-pattern: name='Sil Rohu Trophy Heat 2' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2024-12-21-0030"
+  reason: "series-pattern: name='Club Championship Race 9' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2024-12-21-0031"
+  reason: "series-pattern: name='Club Championship Race 10' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-11-0032"
+  reason: "series-pattern: name='Ian Nicholson Trophy Heat 3' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-11-0033"
+  reason: "series-pattern: name='Ian Nicholson Trophy Heat 4' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-18-0034"
+  reason: "series-pattern: name='Club Championship Race 11' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-18-0035"
+  reason: "series-pattern: name='Club Championship Race 12' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-25-0036"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 1' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-25-0037"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 2' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-01-25-0038"
+  reason: "series-pattern: name='Rob Orr Short Course Champ 3' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-02-08-0041"
+  reason: "series-pattern: name='John McCulloch Trophy Heat 5' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-02-08-0042"
+  reason: "series-pattern: name='John McCulloch Trophy Heat 6' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-02-15-0043"
+  reason: "series-pattern: name='Club Championship Race 13' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-02-22-0045"
+  reason: "series-pattern: name='Sil Rohu Trophy Heat 3' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2025-02-22-0046"
+  reason: "series-pattern: name='Sil Rohu Trophy Heat 4' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2025-03-08-0048"
+  reason: "series-pattern: name='Sil Rohu Trophy Heat 5' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2025-03-08-0049"
+  reason: "series-pattern: name='Sil Rohu Trophy Heat 6' series='VYC ILCA Laser 2024-25\
+    \ Racing'"
+- id: "unknown-2025-03-15-0050"
+  reason: "series-pattern: name='Club Championship Race 15' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-03-15-0051"
+  reason: "series-pattern: name='Club Championship Race 16' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-04-05-0052"
+  reason: "series-pattern: name='Club Championship Race 17' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "unknown-2025-04-05-0053"
+  reason: "series-pattern: name='Club Championship Race 18' series='VYC ILCA Laser\
+    \ 2024-25 Racing'"
+- id: "gossail.com.au-2024-09-14-0001"
+  reason: "series-pattern: name='Pointscore 1' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-09-21-0002"
+  reason: "series-pattern: name='Pointscore  2' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-09-28-0003"
+  reason: "series-pattern: name='Pointscore  3' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-10-12-0004"
+  reason: "series-pattern: name='Pointscore   4' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-10-19-0005"
+  reason: "series-pattern: name='Pointscore  5 - SS 1' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-10-19-0006"
+  reason: "series-pattern: name='Pointscore  6 - SS 2' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-10-26-0007"
+  reason: "series-pattern: name='Pointscore 7' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-11-09-0008"
+  reason: "series-pattern: name='Pointscore  8 - SS 3' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-11-09-0009"
+  reason: "series-pattern: name='Pointscore  9 - SS 4' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-11-16-0010"
+  reason: "series-pattern: name='Pointscore 10' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-11-23-0011"
+  reason: "series-pattern: name='Pointscore  11' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-11-30-0012"
+  reason: "series-pattern: name='Pointscore 12 - SS 5' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-11-30-0013"
+  reason: "series-pattern: name='Pointscore 13 - SS 6' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-12-14-0014"
+  reason: "series-pattern: name='Pointscore 14' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-12-21-0015"
+  reason: "series-pattern: name='Pointscore  15' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-01-04-0016"
+  reason: "series-pattern: name='Pointscore  16' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-01-11-0017"
+  reason: "series-pattern: name='Pointscore  17 - SS 7' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-01-11-0018"
+  reason: "series-pattern: name='Pointscore 18 - SS 8' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-02-01-0020"
+  reason: "series-pattern: name='Pointscore  20' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-02-08-0021"
+  reason: "series-pattern: name='Pointscore  21' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-02-22-0022"
+  reason: "series-pattern: name='Pointscore 22' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-03-01-0023"
+  reason: "series-pattern: name='Pointscore  23 - SS 9' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-03-01-0024"
+  reason: "series-pattern: name='Pointscore 24 - SS 10' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-03-08-0025"
+  reason: "series-pattern: name='Pointscore 25' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-03-22-0026"
+  reason: "series-pattern: name='Pointscore 26' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-03-29-0027"
+  reason: "series-pattern: name='Pointscore  27 - SS 11' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-03-29-0028"
+  reason: "series-pattern: name='Pointscore  28 - SS 12' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2025-04-05-0029"
+  reason: "series-pattern: name='Pointscore  29' series='2024-25 ILCA Pointscore'"
+- id: "gossail.com.au-2024-10-05-0001"
+  reason: "series-pattern: name='CC 1' series='2024-25 ILCA Club Championship'"
+- id: "gossail.com.au-2024-11-02-0002"
+  reason: "series-pattern: name='CC 2' series='2024-25 ILCA Club Championship'"
+- id: "gossail.com.au-2024-12-07-0003"
+  reason: "series-pattern: name='CC 3' series='2024-25 ILCA Club Championship'"
+- id: "gossail.com.au-2025-01-25-0004"
+  reason: "series-pattern: name='CC 4' series='2024-25 ILCA Club Championship'"
+- id: "gossail.com.au-2025-02-15-0005"
+  reason: "series-pattern: name='CC 5' series='2024-25 ILCA Club Championship'"
+- id: "gossail.com.au-2025-03-15-0006"
+  reason: "series-pattern: name='CC 6' series='2024-25 ILCA Club Championship'"
+- id: "rqys.com.au-2024-11-30-0001"
+  reason: "series-pattern: name='Race  1' series='2024/25 ILCA Metropolitan Championships'"
+- id: "rqys.com.au-2024-11-30-0002"
+  reason: "series-pattern: name='Race  2' series='2024/25 ILCA Metropolitan Championships'"
+- id: "rqys.com.au-2024-12-01-0003"
+  reason: "series-pattern: name='Race  3' series='2024/25 ILCA Metropolitan Championships'"
+- id: "rqys.com.au-2024-12-01-0004"
+  reason: "series-pattern: name='Race  4' series='2024/25 ILCA Metropolitan Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-18-0002"
+  reason: "series-pattern: name='Race  2' series='2025 Sail Airlie - WASZPs Sprint\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-18-0003"
+  reason: "series-pattern: name='Race  3' series='2025 Sail Airlie - WASZPs Sprint\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-18-0004"
+  reason: "series-pattern: name='Race  4' series='2025 Sail Airlie - WASZPs Sprint\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-18-0005"
+  reason: "series-pattern: name='Race  5' series='2025 Sail Airlie - WASZPs Sprint\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-18-0006"
+  reason: "series-pattern: name='Race  6' series='2025 Sail Airlie - WASZPs Sprint\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-18-0007"
+  reason: "series-pattern: name='Race  7' series='2025 Sail Airlie - WASZPs Sprint\
+    \ Championships'"
+- id: "gossail.com.au-2025-04-12-0030"
+  reason: "series-pattern: name='Passage Race' series='2024-25 ILCA Pointscore'"
+- id: "whitsundaysailingclub.com.au-2025-04-19-0001"
+  reason: "series-pattern: name='Race  1' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-19-0002"
+  reason: "series-pattern: name='Race  2' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-20-0005"
+  reason: "series-pattern: name='Race  5' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-19-0004"
+  reason: "series-pattern: name='Race  4' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-19-0003"
+  reason: "series-pattern: name='Race  3' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-20-0006"
+  reason: "series-pattern: name='Race  6' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-20-0007"
+  reason: "series-pattern: name='Race  7' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-20-0008"
+  reason: "series-pattern: name='Race  8' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-20-0009"
+  reason: "series-pattern: name='Race  9' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-21-0010"
+  reason: "series-pattern: name='Race  10' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "whitsundaysailingclub.com.au-2025-04-21-0011"
+  reason: "series-pattern: name='Race  11' series='2025 Sail Airlie - WASZPs QLD State\
+    \ Championships'"
+- id: "rsys.com.au-2025-07-27-0001"
+  reason: "series-pattern: name='Race 1 (RSYS)' series='420 & ILCA 4,6 Interclub (RSYS)'"
+- id: "rsys.com.au-2025-07-27-0002"
+  reason: "series-pattern: name='Race 2 (RSYS)' series='420 & ILCA 4,6 Interclub (RSYS)'"
+- id: "rsys.com.au-2025-07-27-0003"
+  reason: "series-pattern: name='Race 3 (RSYS)' series='420 & ILCA 4,6 Interclub (RSYS)'"
+- id: "rqys.com.au-2025-07-26-0002"
+  reason: "series-pattern: name='Race  2' series='South Pacific Laser Masters 2025'"
+- id: "rqys.com.au-2025-07-27-0003"
+  reason: "series-pattern: name='Race  3' series='South Pacific Laser Masters 2025'"
+- id: "rqys.com.au-2025-07-27-0004"
+  reason: "series-pattern: name='Race  4' series='South Pacific Laser Masters 2025'"
+- id: "rqys.com.au-2025-07-27-0005"
+  reason: "series-pattern: name='Race  5' series='South Pacific Laser Masters 2025'"
+- id: "rqys.com.au-2025-07-28-0006"
+  reason: "series-pattern: name='Race  6' series='South Pacific Laser Masters 2025'"
+- id: "mhyc.com.au-2025-10-10-0001"
+  reason: "series-pattern: name='Race  1' series='XXX DO NOT USE Friday Twilight Spinnaker\
+    \ Series 2025/26 '"
+- id: "cyca.com.au-2026-11-14-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 4.2x (fastest 22962s, slowest 97371s) — likely merged courses or bad timing\
+    \ data"
+- id: "cyca.com.au-2025-11-15-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.6x (fastest 20632s, slowest 73617s) — likely merged courses or bad timing\
+    \ data"
+- id: "cyca.com.au-2023-10-13-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 4.0x (fastest 63090s, slowest 251056s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2022-11-12-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.4x (fastest 34667s, slowest 117366s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2024-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.8x (fastest 135313s, slowest 507853s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2023-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 4.4x (fastest 155038s, slowest 674775s) — likely merged courses or bad\
+    \ timing data"
+- id: "cyca.com.au-2022-12-26-0001"
+  reason: "sanity-check: huge-time-spread -- division 'Overall': slowest/fastest elapsed-time\
+    \ ratio 3.6x (fastest 129408s, slowest 470526s) — likely merged courses or bad\
+    \ timing data"
+- id: "pmyc.asn.au-pmyc-club-club-master-series-2022-23-2023-03-25-0049"
+  reason: "sanity-check: huge-time-spread -- division 'OTB/PHS': slowest/fastest elapsed-time\
+    \ ratio 3.0x (fastest 569s, slowest 1721s) — likely merged courses or bad timing\
+    \ data"
+- id: "pmyc.asn.au-pmyc-club-club-championship-series-2022-23-2023-03-25-0005"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 3.0x (fastest 569s, slowest 1721s) — likely merged courses or bad timing\
+    \ data"
+- id: "rpayc.com.au-club-otb-centreboard-annual-pointsore-series-2022-2023-2023-03-12-0043"
+  reason: "sanity-check: huge-time-spread -- division 'OPEN/HC/WINDSURFERS/CLASS':\
+    \ slowest/fastest elapsed-time ratio 6.8x (fastest 1275s, slowest 8675s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-centreboard-annual-pointsore-series-2022-2023-2023-02-05-0036"
+  reason: "sanity-check: huge-time-spread -- division 'OPTIMIST-GREEN/HC/WINDSURFERS/CLASS':\
+    \ slowest/fastest elapsed-time ratio 10.4x (fastest 490s, slowest 5115s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-centreboard-annual-pointsore-series-2022-2023-2023-02-05-0035"
+  reason: "sanity-check: huge-time-spread -- division 'OPTIMIST-GREEN/HC/WINDSURFERS/CLASS':\
+    \ slowest/fastest elapsed-time ratio 4.9x (fastest 675s, slowest 3295s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-club-championship-2022-2023-2023-03-19-0018"
+  reason: "sanity-check: huge-time-spread -- division 'FLEET/HC/WINDSURFER/CLASS':\
+    \ slowest/fastest elapsed-time ratio 3.4x (fastest 783s, slowest 2686s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-club-championship-2022-2023-2023-03-19-0017"
+  reason: "sanity-check: huge-time-spread -- division 'FLEET/HC/WINDSURFER/CLASS':\
+    \ slowest/fastest elapsed-time ratio 3.8x (fastest 629s, slowest 2415s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-club-championship-2022-2023-2023-01-29-0012"
+  reason: "sanity-check: huge-time-spread -- division 'FLEET/HC/WINDSURFER/CLASS':\
+    \ slowest/fastest elapsed-time ratio 3.4x (fastest 1020s, slowest 3442s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-club-championship-2022-2023-2022-09-25-0002"
+  reason: "sanity-check: huge-time-spread -- division 'FLEET/HC/WINDSURFER/CLASS':\
+    \ slowest/fastest elapsed-time ratio 7.6x (fastest 313s, slowest 2388s) — likely\
+    \ merged courses or bad timing data"
+- id: "rpayc.com.au-club-otb-centreboard-summer-pointscore-2023-2023-03-12-0013"
+  reason: "sanity-check: huge-time-spread -- division 'OPTIMIST-OPEN/HC/CLASS': slowest/fastest\
+    \ elapsed-time ratio 6.3x (fastest 1383s, slowest 8675s) — likely merged courses\
+    \ or bad timing data"
+- id: "rpayc.com.au-club-otb-centreboard-summer-pointscore-2023-2023-03-05-0012"
+  reason: "sanity-check: huge-time-spread -- division 'OPTIMIST-OPEN/HC/CLASS': slowest/fastest\
+    \ elapsed-time ratio 3.0x (fastest 805s, slowest 2451s) — likely merged courses\
+    \ or bad timing data"
+- id: "rpayc.com.au-club-otb-centreboard-summer-pointscore-2023-2023-02-05-0006"
+  reason: "sanity-check: huge-time-spread -- division 'OPTIMIST-OPEN/HC/CLASS': slowest/fastest\
+    \ elapsed-time ratio 7.0x (fastest 745s, slowest 5180s) — likely merged courses\
+    \ or bad timing data"
+- id: "rpayc.com.au-club-otb-centreboard-summer-pointscore-2023-2023-02-05-0005"
+  reason: "sanity-check: huge-time-spread -- division 'OPTIMIST-OPEN/HC/CLASS': slowest/fastest\
+    \ elapsed-time ratio 3.7x (fastest 900s, slowest 3325s) — likely merged courses\
+    \ or bad timing data"
+- id: "syc.com.au-sailsandy-laser-radial-2021-02-21-0008"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 4.1x (fastest 1193s, slowest 4899s) — likely merged courses or bad timing\
+    \ data"
+- id: "syc.com.au-sailsandy-international-cadet-2021-02-20-0002"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 3.7x (fastest 1448s, slowest 5388s) — likely merged courses or bad timing\
+    \ data"
+- id: "syc.com.au-sailsandy-foiling-kite-iq-foil-waszp-2022-02-26-0003"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 3.3x (fastest 537s, slowest 1772s) — likely merged courses or bad timing\
+    \ data"
+- id: "rycv.com.au-rycv-summer-diamond-class-victorian-chamionships-2021-2021-02-20-0001"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 3.0x (fastest 1896s, slowest 5729s) — likely merged courses or bad timing\
+    \ data"
+- id: "bsyc.com.au-bsyc-club-3-bsyc-2023-24-senior-and-intermediate-consistency-series-2023-11-18-0007"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 49.7x (fastest 74s, slowest 3681s) — likely merged courses or bad timing\
+    \ data"
+- id: "bsyc.com.au-bsyc-club-1-bsyc-2023-24-youth-consistency-series-2024-03-16-0021"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 3.3x (fastest 1976s, slowest 6560s) — likely merged courses or bad timing\
+    \ data"
+- id: "bsyc.com.au-bsyc-club-intermediate-and-senior-consistency-2025-03-08-0023"
+  reason: "sanity-check: huge-time-spread -- division 'NS14 Handicap': slowest/fastest\
+    \ elapsed-time ratio 3.0x (fastest 1644s, slowest 4982s) — likely merged courses\
+    \ or bad timing data"
+- id: "bsyc.com.au-bsyc-club-ns14-state-heats-2024-25-2025-03-08-0002"
+  reason: "sanity-check: huge-time-spread -- division 'null': slowest/fastest elapsed-time\
+    \ ratio 3.0x (fastest 1644s, slowest 4982s) — likely merged courses or bad timing\
+    \ data"
 series:
 - pattern: "\\boptimist\\b"
   reason: ""

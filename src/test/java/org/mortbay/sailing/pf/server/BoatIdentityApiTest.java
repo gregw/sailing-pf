@@ -133,7 +133,10 @@ class BoatIdentityApiTest
         Map<String, Object> former = rows.stream().filter(r -> "About Time".equals(r.get("name"))).findFirst().orElseThrow();
         assertEquals("7709-kanreki", former.get("id"));
         assertEquals("Kanreki", former.get("aliasOf"));
-        assertEquals("2017-12-02", former.get("aliasUntil"), "until its last race");
+        assertEquals("2019-03-01", former.get("aliasUntil"), "the link dates the rename: the day before Kanreki first raced");
+        assertEquals(2, former.get("finishes"), "each row counts its identity's races");
+        Map<String, Object> current = rows.stream().filter(r -> "Kanreki".equals(r.get("name"))).findFirst().orElseThrow();
+        assertEquals(2, current.get("finishes"));
     }
 
     @Test
@@ -167,6 +170,24 @@ class BoatIdentityApiTest
         assertEquals(200, unlinked.getStatus(), unlinked.getContentAsString());
         assertEquals("7709-kanreki", store.canonicalBoatId("7709-kanreki"));
         assertEquals("7709-abouttime", store.canonicalBoatId("7709-abouttime"));
+    }
+
+    @Test
+    void eachIdentityHasItsOwnNameAndClubs() throws Exception
+    {
+        post("/api/boats/merge", "{\"keepId\":\"7709-kanreki\",\"mergeIds\":[\"7709-abouttime\"],\"link\":true}");
+        ContentResponse edited = post("/api/boats/identities", """
+            {"boatId":"7709-kanreki","identities":[
+              {"id":"7709-abouttime","sailNumber":"7700","name":"About Time","clubIds":["myc.org.au"]},
+              {"id":"7709-kanreki","clubIds":[]}]}""");
+        assertEquals(200, edited.getStatus(), edited.getContentAsString());
+        Boat b = store.boat("7700-abouttime");
+        assertEquals("7709-kanreki", b.currentId(), "renaming a former identity leaves the current one");
+        assertEquals(List.of("myc.org.au"), b.identity().clubIds());
+        assertTrue(b.identity().clubsCurated());
+        assertTrue(b.identity().matches("7709", "abouttime"), "the old sail number is an alias");
+        assertTrue(store.boat("7709-kanreki").identity().clubsCurated(), "no club, as set");
+        assertTrue(store.boat("7709-kanreki").identity().clubIds().isEmpty());
     }
 
     @Test

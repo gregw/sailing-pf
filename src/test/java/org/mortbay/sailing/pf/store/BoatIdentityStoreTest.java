@@ -192,6 +192,9 @@ class BoatIdentityStoreTest
         assertEquals(KANREKI, linked.id());
         assertEquals(List.of(ABOUT_TIME, KANREKI), List.copyOf(linked.identities().keySet()));
         assertEquals(List.of(KANREKI), List.copyOf(store.boats().keySet()));
+        assertEquals(LocalDate.of(2024, 1, 5), linked.identities().get(ABOUT_TIME).until(), "dated rename: until the day before");
+        assertEquals(LocalDate.of(2024, 1, 6), linked.identities().get(KANREKI).from(), "from its first race");
+        assertNull(linked.identities().get(ABOUT_TIME).from());
         for (Race r : store.races().values())
         {
             Finisher f = r.divisions().getFirst().finishers().getFirst();

@@ -2341,7 +2341,9 @@ public class DataStore
      * Link identities (a rename): the boats {@code linkIds} are the boat {@code keepId} under
      * other names. Their identities join it unchanged (results stay with the identity they were
      * entered as), ordered by when each last raced, so the most recently raced becomes current.
-     * Their certificates go with their identities; links join. The boats must be of the same
+     * Their certificates go with their identities; links join. Where one identity's races all
+     * follow another's, the rename is dated: the later one is from its first race and the
+     * earlier until the day before (dates already set are kept). The boats must be of the same
      * design (a design-less boat takes the other's). Callers must call {@link #save()}.
      */
     public Boat linkBoats(String keepId, List<String> linkIds)
@@ -2376,7 +2378,7 @@ public class DataStore
             allLinks.add(lb.links());
         }
         boolean modified = keepBoat.modified() || linked.stream().anyMatch(Boat::modified);
-        Boat result = new Boat(null, designId, modified, Link.merge(allLinks), orderByLastRace(all), Instant.now(), null);
+        Boat result = new Boat(null, designId, modified, Link.merge(allLinks), datedRenames(orderByLastRace(all)), Instant.now(), null);
         for (Boat lb : linked)
             removeBoat(lb.id());
         removeBoat(keepBoat.id());
@@ -2531,6 +2533,47 @@ public class DataStore
         order.sort(Comparator.comparing((String id) -> last.get(id), Comparator.nullsFirst(Comparator.naturalOrder())));
         Map<String, Identity> out = new LinkedHashMap<>();
         order.forEach(id -> out.put(id, identities.get(id)));
+        return out;
+    }
+
+    /**
+     * Dates the renames between identities whose races do not overlap: taken by first race,
+     * each later identity is {@code from} its first race and the one before it {@code until}
+     * the day before. Dates already set, and identities whose races overlap, are left alone.
+     */
+    private Map<String, Identity> datedRenames(Map<String, Identity> identities)
+    {
+        Map<String, LocalDate[]> span = new java.util.HashMap<>();
+        for (Race race : races.values())
+        {
+            if (race.date() == null || race.divisions() == null)
+                continue;
+            for (Division d : race.divisions())
+                for (Finisher f : d.finishers())
+                    if (identities.containsKey(f.identityId()))
+                    {
+                        LocalDate[] s = span.computeIfAbsent(f.identityId(), k -> new LocalDate[]{race.date(), race.date()});
+                        if (race.date().isBefore(s[0])) s[0] = race.date();
+                        if (race.date().isAfter(s[1])) s[1] = race.date();
+                    }
+        }
+        List<String> raced = new ArrayList<>(span.keySet());
+        raced.sort(Comparator.comparing((String id) -> span.get(id)[0]));
+        Map<String, Identity> out = new LinkedHashMap<>(identities);
+        for (int k = 1; k < raced.size(); k++)
+        {
+            String earlier = raced.get(k - 1);
+            String later = raced.get(k);
+            LocalDate renamed = span.get(later)[0];
+            if (!span.get(earlier)[1].isBefore(renamed))
+                continue;   // their races overlap: concurrent names, not a rename
+            Identity e = out.get(earlier);
+            Identity l = out.get(later);
+            if (e.until() == null)
+                out.put(earlier, e.withDates(e.from(), renamed.minusDays(1)));
+            if (l.from() == null)
+                out.put(later, l.withDates(renamed, l.until()));
+        }
         return out;
     }
 

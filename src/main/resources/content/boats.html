@@ -132,25 +132,13 @@
 
     <div id="edit-panel-boats" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
         <strong id="edit-panel-title">Edit Boat</strong>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
-            <label for="edit-boat-sail">Sail #:</label>
-            <input type="text" id="edit-boat-sail" style="font-family:monospace;padding:3px 6px;">
-            <label for="edit-boat-name">Name:</label>
-            <input type="text" id="edit-boat-name" style="font-family:monospace;padding:3px 6px;">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:760px;margin:0.5rem 0;">
             <label for="edit-boat-design">Design:</label>
             <select id="edit-boat-design" style="font-family:monospace;padding:3px 6px;"></select>
             <label for="edit-boat-modified">Modified:</label>
             <label style="font-size:0.9rem;color:#555;"><input type="checkbox" id="edit-boat-modified">
                 Boat is modified from its design — it keeps its own RF, is not pulled toward the
                 design's, and does not count toward it (nor to a one-design class RF).</label>
-            <label style="align-self:start;padding-top:4px;">Clubs:</label>
-            <div id="edit-boat-clubs" style="display:flex;flex-direction:column;gap:0.25rem;">
-                <div id="edit-boat-clubs-list" style="display:flex;flex-direction:column;gap:0.2rem;"></div>
-                <div style="display:flex;gap:0.3rem;align-items:center;">
-                    <select id="edit-boat-club-add" style="font-family:monospace;padding:3px 6px;"></select>
-                    <button type="button" onclick="addBoatClub()">Add</button>
-                </div>
-            </div>
             <label for="edit-boat-links" style="align-self:start;padding-top:4px;">Links:</label>
             <label style="font-size:0.9rem;color:#555;"><textarea id="edit-boat-links" rows="3"
                 style="width:100%;font-family:monospace;padding:3px 6px;font-size:0.85rem;"

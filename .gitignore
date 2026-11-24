@@ -1,5 +1,6 @@
 # project
 wiki
+backup
 pf-data/*
 !pf-data/config
 # holds the OAuth client secret — see pf-data/config/auth.yaml.example

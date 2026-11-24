@@ -528,11 +528,11 @@ public class AdminApiServlet extends HttpServlet
             // duplicate views: they are the same boat.
             List<BoatListEntry> entries = new ArrayList<>();
             boolean anyFormer = all.stream().anyMatch(b -> b.identities().size() > 1);
-            Map<String, IdentitySpan> spans = candidateIds == null && anyFormer ? identitySpans() : Map.of();
+            Map<String, IdentitySpan> spans = anyFormer ? identitySpans() : Map.of();
             for (Boat b : all)
             {
                 if (lower == null || b.id().toLowerCase().contains(lower) || b.name().toLowerCase().contains(lower))
-                    entries.add(new BoatListEntry(b, null, null));
+                    entries.add(new BoatListEntry(b, null, b.identities().size() > 1 ? spans.get(b.id()) : null));
                 if (candidateIds == null)
                     for (String identityId : b.identities().keySet())
                         if (!identityId.equals(b.id()) && (lower == null
@@ -578,6 +578,8 @@ public class AdminApiServlet extends HttpServlet
                 {
                     case "sailNumber" -> Comparator.comparing(BoatListEntry::sailNumber, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
                     case "name"       -> Comparator.comparing(BoatListEntry::name, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
+                    case "clubId"     -> Comparator.comparing(BoatListEntry::primaryClubId, Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER));
+                    case "finishes"   -> Comparator.comparingInt(e -> e.finishes(cache.boatDerived().get(e.boat().id())));
                     default           -> Comparator.comparing(BoatListEntry::boat, cmp);
                 };
                 entries.sort(asc ? ecmp : ecmp.reversed());
@@ -605,11 +607,13 @@ public class AdminApiServlet extends HttpServlet
                 row.put("designIgnored",  b.designId() != null && store.isDesignIgnored(b.designId()));
                 row.put("designFlags", designFlags(b.designId(), b.id()));
                 row.put("modified", store.isBoatModified(b.id()));
-                row.put("clubId", b.primaryClubId());
-                row.put("clubIds", b.clubIds());
+                // A boat of several identities: each row shows its identity's clubs and races
+                List<String> clubIds = e.clubIds();
+                row.put("clubId", e.primaryClubId());
+                row.put("clubIds", clubIds);
                 row.put("links", b.links());
-                putClubNaming(row, b.primaryClubId());
-                row.put("clubNames", clubNamings(b.clubIds()));
+                putClubNaming(row, e.primaryClubId());
+                row.put("clubNames", clubNamings(clubIds));
                 row.put("clubExcluded", !b.clubIds().isEmpty()
                     && b.clubIds().stream().allMatch(store::isClubExcluded));
                 BoatDerived bd = cache.boatDerived().get(b.id());
@@ -621,7 +625,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("pf",          pf != null && pf.spin()      != null ? factorMap(pf.spin())      : null);
                 row.put("pfNonSpin",   pf != null && pf.nonSpin()   != null ? factorMap(pf.nonSpin())   : null);
                 row.put("pfTwoHanded", pf != null && pf.twoHanded() != null ? factorMap(pf.twoHanded()) : null);
-                row.put("finishes", bd != null ? bd.raceIds().size() : 0);
+                row.put("finishes", e.finishes(bd));
                 PerformanceProfile prof = cache.profilesByBoatId().get(b.id());
                 row.put("profile", prof != null ? prof.overallScore() : null);
                 row.put("excluded", store.isBoatExcluded(b.id()));
@@ -675,6 +679,26 @@ public class AdminApiServlet extends HttpServlet
         String sailNumber()
         {
             return identity().sailNumber();
+        }
+
+        /** The row's clubs: its identity's, for a boat of several identities. */
+        List<String> clubIds()
+        {
+            return boat.identities().size() > 1 ? identity().clubIds() : boat.clubIds();
+        }
+
+        String primaryClubId()
+        {
+            List<String> c = clubIds();
+            return c.isEmpty() ? null : c.getFirst();
+        }
+
+        /** The row's finishes: its identity's races, for a boat of several identities. */
+        int finishes(BoatDerived bd)
+        {
+            if (boat.identities().size() > 1)
+                return span == null ? 0 : span.races();
+            return bd != null ? bd.raceIds().size() : 0;
         }
 
         /** When this identity was first used: its from date, else its first race. */
@@ -1199,9 +1223,11 @@ public class AdminApiServlet extends HttpServlet
 
     /**
      * POST /api/boats/identities — edits a boat's identities. Body: {@code {boatId, current?,
-     * identities: [{id, from?, until?, aliases?: [{sailNumber?, name?}]}]}}: each listed
-     * identity gets those dates (absent or blank clears them) and, if given, exactly those
-     * aliases; {@code current} makes that identity the current one (the boat's name). Aliases
+     * identities: [{id, from?, until?, aliases?: [{sailNumber?, name?}], clubIds?, sailNumber?,
+     * name?}]}}: each listed identity gets those dates (absent or blank clears them) and, if
+     * given, exactly those aliases and those clubs (curated); {@code current} makes that
+     * identity the current one (the boat's name). A changed sail number or name renames the
+     * identity (its ID changes, the old ones become an alias, its results follow). Aliases
      * affect future imports only: existing boats are not merged or split.
      */
     @SuppressWarnings("unchecked")
@@ -1242,6 +1268,15 @@ public class AdminApiServlet extends HttpServlet
                         }
                         i = i.withAliases(parsed);
                     }
+                    if (e.get("clubIds") instanceof List<?> clubs)
+                    {
+                        List<String> chosen = new ArrayList<>();
+                        for (Object o : clubs)
+                            if (o != null && !o.toString().isBlank() && !chosen.contains(o.toString().trim()))
+                                chosen.add(o.toString().trim());
+                        if (!chosen.equals(i.clubIds()) || !i.clubsCurated())
+                            i = i.withCuratedClubIds(List.copyOf(chosen));
+                    }
                     identities.put(id, i);
                 }
             }
@@ -1253,6 +1288,16 @@ public class AdminApiServlet extends HttpServlet
             }
             Boat updated = boat.withIdentities(identities).withLastUpdated(java.time.Instant.now()).withLoadedAt(null);
             store.putBoat(updated);
+            // Renames last: each changes that identity's ID
+            if (body.get("identities") instanceof List<?> list)
+                for (Map<String, Object> e : (List<Map<String, Object>>) list)
+                {
+                    Identity i = identities.get((String) e.get("id"));
+                    String sail = e.get("sailNumber") instanceof String x && !x.isBlank() ? x.trim() : i.sailNumber();
+                    String name = e.get("name") instanceof String x && !x.isBlank() ? x.trim() : i.name();
+                    if (!Objects.equals(sail, i.sailNumber()) || !Objects.equals(name, i.name()))
+                        updated = store.renameIdentity((String) e.get("id"), sail, name);
+                }
             store.save();
             cache.refreshIndexes();
             writeJson(resp, Map.of("ok", true, "boatId", store.canonicalBoatId(updated.id())));
@@ -3017,7 +3062,7 @@ public class AdminApiServlet extends HttpServlet
             Double refSec = refSecsByDivName.get(div.name());
             for (var f : div.finishers())
             {
-                BoatDerived bd = cache.boatDerived().get(f.boatId());
+                BoatDerived bd = derivedFor(f);
                 if (bd == null || f.elapsedTime() == null)
                     continue;
 
@@ -3036,8 +3081,8 @@ public class AdminApiServlet extends HttpServlet
 
                 Map<String, Object> fm = new LinkedHashMap<>();
                 fm.put("boatId", f.boatId());
-                fm.put("name", bd.boat().name());
-                fm.put("sailNumber", bd.boat().sailNumber());
+                fm.put("name", enteredAs(f).name());
+                fm.put("sailNumber", enteredAs(f).sailNumber());
                 fm.put("division", div.name());
                 fm.put("elapsed", elapsedSec);
                 fm.put("variant", fVariant);
@@ -3128,7 +3173,7 @@ public class AdminApiServlet extends HttpServlet
                 {
                     if (f.boatId() == null || byBoat.containsKey(f.boatId()))
                         continue;
-                    BoatDerived bd = cache.boatDerived().get(f.boatId());
+                    BoatDerived bd = derivedFor(f);
                     if (bd == null)
                         continue;
 
@@ -3148,8 +3193,8 @@ public class AdminApiServlet extends HttpServlet
                     Design design = designId != null ? store.designs().get(designId) : null;
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", f.boatId());
-                    row.put("name", bd.boat().name());
-                    row.put("sailNumber", bd.boat().sailNumber());
+                    row.put("name", enteredAs(f).name());
+                    row.put("sailNumber", enteredAs(f).sailNumber());
                     row.put("designId", designId);
                     row.put("designName", design != null ? design.canonicalName() : null);
                     row.put("designFlags", designFlags(designId, f.boatId()));
@@ -3517,7 +3562,7 @@ public class AdminApiServlet extends HttpServlet
                 List<Map<String, Object>> finishers = new ArrayList<>();
                 for (Finisher f : div.finishers())
                 {
-                    BoatDerived bd = cache.boatDerived().get(f.boatId());
+                    BoatDerived bd = derivedFor(f);
                     if (bd == null || f.elapsedTime() == null) continue;
 
                     BoatPf pf = bd.pf();
@@ -3536,8 +3581,8 @@ public class AdminApiServlet extends HttpServlet
                     Design design = designId != null ? store.designs().get(designId) : null;
                     Map<String, Object> fm = new LinkedHashMap<>();
                     fm.put("boatId", f.boatId());
-                    fm.put("name", bd.boat().name());
-                    fm.put("sailNumber", bd.boat().sailNumber());
+                    fm.put("name", enteredAs(f).name());
+                    fm.put("sailNumber", enteredAs(f).sailNumber());
                     fm.put("designId", designId);
                     fm.put("designName", design != null ? design.canonicalName() : null);
                     fm.put("designFlags", designFlags(designId, f.boatId()));
@@ -3716,6 +3761,32 @@ public class AdminApiServlet extends HttpServlet
             case NON_SPIN -> SeriesType.NON_SPIN.code();
             case TWO_HANDED -> SeriesType.TWO_HANDED.code();
         };
+    }
+
+    /**
+     * A finisher's boat analysis: under the boat's ID or, until the analysis next runs after a
+     * link or rename re-keyed the boat, under one of its other identity IDs.
+     */
+    private BoatDerived derivedFor(Finisher f)
+    {
+        BoatDerived bd = cache.boatDerived().get(f.boatId());
+        if (bd != null)
+            return bd;
+        Boat boat = store.boat(f.boatId());
+        if (boat != null)
+            for (String id : boat.identities().keySet())
+                if ((bd = cache.boatDerived().get(id)) != null)
+                    return bd;
+        return cache.boatDerived().get(f.identityId());
+    }
+
+    /** The identity a finisher was entered as (its sail number and name then). */
+    private Identity enteredAs(Finisher f)
+    {
+        Boat b = store.boat(f.identityId());
+        if (b == null)
+            b = store.boat(f.boatId());
+        return b != null ? b.identity() : new Identity(null, f.boatId(), null, null, List.of(), false, List.of(), List.of(), List.of());
     }
 
     private static boolean raceContainsBoat(Race r, String boatId)
@@ -4321,7 +4392,7 @@ public class AdminApiServlet extends HttpServlet
                     if (!hasAnchor) continue;
                     for (var f : div.finishers())
                     {
-                        BoatDerived other = cache.boatDerived().get(f.boatId());
+                        BoatDerived other = derivedFor(f);
                         if (other != null && other.boat().designId() != null)
                             out.add(other.boat().designId());
                     }
@@ -4462,8 +4533,8 @@ public class AdminApiServlet extends HttpServlet
                         continue;
                     String variant = (r != null && r.nonSpinnaker()) ? "nonSpin" : "spin";
 
-                    BoatDerived bd = cache.boatDerived().get(f.boatId());
-                    String name = bd != null ? bd.boat().name() : f.boatId();
+                    BoatDerived bd = derivedFor(f);
+                    String name = enteredAs(f).name();
 
                     Map<String, Object> fm = new LinkedHashMap<>();
                     fm.put("elapsed", (double)f.elapsedTime().toSeconds());

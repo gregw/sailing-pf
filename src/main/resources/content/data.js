@@ -1093,10 +1093,33 @@ function renderBoatPf(data) {
         html += '<div id="pf-residual-chart"></div>';
         setTimeout(() => {
             window._lastResiduals = data.residuals;
+            window._lastResidualIdentities = data.identities;
             renderResidualChart(data.residuals);
         }, 0);
     }
     return html;
+}
+
+/**
+ * Rename markers for a boat chart dated on x: a vertical line where the boat started racing
+ * under each later identity (its from date, else its first race), the former name to its left
+ * and the new name to its right. Splits before {@code fromDate} (a chart's cutoff) are left out.
+ */
+function renameSplits(identities, fromDate) {
+    const ids = identities || [];
+    const list = [];
+    for (let k = 1; k < ids.length; k++) {
+        const at = ids[k].from || ids[k].firstRace;
+        if (at && (!fromDate || at >= fromDate)) list.push({ x: at, before: ids[k - 1].name, after: ids[k].name });
+    }
+    const label = (x, text, left) => ({ xref: 'x', yref: 'paper', x, y: 1, yanchor: 'bottom',
+        xanchor: left ? 'right' : 'left', xshift: left ? -3 : 3,
+        showarrow: false, font: { size: 10, color: '#555' }, text: esc(text) });
+    return {
+        shapes: list.map(sp => ({ type: 'line', xref: 'x', yref: 'paper', x0: sp.x, x1: sp.x,
+            y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } })),
+        annotations: list.flatMap(sp => [label(sp.x, sp.before, true), label(sp.x, sp.after, false)])
+    };
 }
 
 // A boat's PF at each season's 1 July cutoff (data.pfHistory), with the current PF as the
@@ -1134,27 +1157,14 @@ function renderPfHistoryChart(data) {
             hoverinfo: 'text'
         });
     }
-    // A vertical line at each rename (a new owner or crew is where a step would show), the
-    // former name to its left and the new name to its right.
-    // A split where the boat started racing under its next identity (its from date, else its
-    // first race), the former name to the left and the new name to the right.
-    const ids = data.identities || [];
-    const splitList = [];
-    for (let k = 1; k < ids.length; k++) {
-        const at = ids[k].from || ids[k].firstRace;
-        if (at) splitList.push({ x: at, before: ids[k - 1].name, after: ids[k].name });
-    }
-    const label = (x, text, left) => ({ xref: 'x', yref: 'paper', x, y: 1, yanchor: 'bottom',
-        xanchor: left ? 'right' : 'left', xshift: left ? -3 : 3,
-        showarrow: false, font: { size: 10, color: '#555' }, text: esc(text) });
+    const splits = renameSplits(data.identities);
     const layout = {
         xaxis: { title: 'As at' },
         yaxis: { title: 'PF', tickformat: '.3f' },
         height: 300,
         margin: { t: 20, b: 50, l: 60, r: 20 },
-        shapes: splitList.map(sp => ({ type: 'line', xref: 'x', yref: 'paper', x0: sp.x, x1: sp.x,
-            y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } })),
-        annotations: splitList.flatMap(sp => [label(sp.x, sp.before, true), label(sp.x, sp.after, false)])
+        shapes: splits.shapes,
+        annotations: splits.annotations
     };
     Plotly.newPlot(container, traces, layout, { responsive: true })
         .then(() => Plotly.Plots.resize(container));
@@ -1165,12 +1175,14 @@ function renderResidualChart(residuals) {
     if (!container || typeof Plotly === 'undefined') return;
 
     const months = window._residualMonths || 0;
+    let cutoffStr = null;
     if (months > 0) {
         const cutoff = new Date();
         cutoff.setMonth(cutoff.getMonth() - months);
-        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        cutoffStr = cutoff.toISOString().slice(0, 10);
         residuals = residuals.filter(r => r.date >= cutoffStr);
     }
+    const splits = renameSplits(window._lastResidualIdentities, cutoffStr);
 
     const spin = residuals.filter(r => !r.nonSpinnaker);
     const nonSpin = residuals.filter(r => r.nonSpinnaker);
@@ -1223,7 +1235,9 @@ function renderResidualChart(residuals) {
             zeroline: true,
             ...(overflow ? {} : { range: [-0.2, 0.2] })
         },
-        shapes: [{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 0, y1: 0, line: { color: '#888', width: 1, dash: 'dash' } }],
+        shapes: [{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 0, y1: 0, line: { color: '#888', width: 1, dash: 'dash' } },
+            ...splits.shapes],
+        annotations: splits.annotations,
         height: overflow ? 600 : 300,
         margin: { t: 40, b: 50, l: 60, r: 20 }
     };
@@ -2090,7 +2104,6 @@ async function loadEditChoices() {
             shortName: c.shortName || '',
             longName: c.longName || ''
         }));
-        rebuildAddClubSelect();
     }
 
     // The simple single-club selector used by the bulk-edit panel still exists.
@@ -2111,103 +2124,10 @@ async function loadEditChoices() {
     }
 }
 
-/** Returns the current set of club ids selected on the edit form, in order. */
-function getEditingBoatClubIds() {
-    const list = document.getElementById('edit-boat-clubs-list');
-    if (!list) return [];
-    return Array.from(list.querySelectorAll('[data-club-id]'))
-        .map(el => el.getAttribute('data-club-id'))
-        .filter(id => id);
-}
-
-/** Renders the list of clubs currently assigned to the boat being edited. */
-function renderEditingBoatClubs(clubIds) {
-    const list = document.getElementById('edit-boat-clubs-list');
-    if (!list) return;
-    list.replaceChildren();
-    if (!clubIds || clubIds.length === 0) {
-        const empty = document.createElement('div');
-        empty.style.color = '#888';
-        empty.style.fontSize = '0.9rem';
-        empty.textContent = '— no clubs —';
-        list.appendChild(empty);
-        rebuildAddClubSelect();
-        return;
-    }
-    clubIds.forEach((id, idx) => {
-        const meta = editClubCatalogue.find(c => c.id === id);
-        const row = document.createElement('div');
-        row.setAttribute('data-club-id', id);
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '0.3rem';
-
-        const label = document.createElement('span');
-        label.style.fontFamily = 'monospace';
-        label.textContent = meta && meta.shortName
-            ? `${meta.shortName} — ${id}${idx === 0 ? '  (primary)' : ''}`
-            : `${id}${idx === 0 ? '  (primary)' : ''}`;
-        row.appendChild(label);
-
-        if (idx > 0) {
-            const primaryBtn = document.createElement('button');
-            primaryBtn.type = 'button';
-            primaryBtn.textContent = 'Make primary';
-            primaryBtn.onclick = () => {
-                const cur = getEditingBoatClubIds();
-                const i = cur.indexOf(id);
-                if (i > 0) {
-                    cur.splice(i, 1);
-                    cur.unshift(id);
-                }
-                renderEditingBoatClubs(cur);
-            };
-            row.appendChild(primaryBtn);
-        }
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.textContent = 'Remove';
-        removeBtn.onclick = () => {
-            renderEditingBoatClubs(getEditingBoatClubIds().filter(x => x !== id));
-        };
-        row.appendChild(removeBtn);
-        list.appendChild(row);
-    });
-    rebuildAddClubSelect();
-}
-
-/** Refreshes the options of the "add club" selector to exclude already-selected clubs. */
-function rebuildAddClubSelect() {
-    const sel = document.getElementById('edit-boat-club-add');
-    if (!sel) return;
-    const selected = new Set(getEditingBoatClubIds());
-    const opts = [];
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '— pick a club to add —';
-    opts.push(placeholder);
-    for (const c of editClubCatalogue) {
-        if (selected.has(c.id)) continue;
-        const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = c.shortName ? `${c.shortName} — ${c.id}` : c.id;
-        opts.push(o);
-    }
-    sel.replaceChildren(...opts);
-}
-
-/** Appends the currently-chosen club from the add-selector to the boat's club list. */
-function addBoatClub() {
-    const sel = document.getElementById('edit-boat-club-add');
-    if (!sel) return;
-    const id = sel.value.trim();
-    if (!id) return;
-    const cur = getEditingBoatClubIds();
-    if (!cur.includes(id)) {
-        cur.push(id);
-        renderEditingBoatClubs(cur);
-    }
-    sel.value = '';
+/** "SHORT — id" for a club id, from the edit catalogue. */
+function editClubLabel(id) {
+    const meta = editClubCatalogue.find(c => c.id === id);
+    return meta && meta.shortName ? `${meta.shortName} — ${id}` : id;
 }
 
 /** Opens the edit panel for the single currently-selected boat. */
@@ -2220,21 +2140,15 @@ function showEditPanel() {
     const title = document.getElementById('edit-panel-title');
     if (title) title.textContent = isWriteAllowed() ? ('Edit Boat ' + item.id)
                                                     : ('Request edit for Boat ' + item.id);
-    document.getElementById('edit-boat-sail').value = item.sailNumber || '';
-    document.getElementById('edit-boat-name').value = item.name || '';
     document.getElementById('edit-boat-modified').checked = !!item.modified;
     document.getElementById('edit-boat-links').value = linksToText(item.links);
-    loadEditBoatAliases(item.id);
-    const initialClubIds = Array.isArray(item.clubIds)
-        ? [...item.clubIds]
-        : (item.clubId ? [item.clubId] : []);
     // Populate selects before setting value so the option exists
     loadEditChoices().then(() => {
         document.getElementById('edit-boat-design').value = item.designId || '';
-        renderEditingBoatClubs(initialClubIds);
+        renderEditBoatIdentities();
     });
     document.getElementById('edit-boat-design').value = item.designId || '';
-    renderEditingBoatClubs(initialClubIds);
+    loadEditBoatAliases(item.id);
     document.getElementById('edit-status-boats').textContent = '';
     document.getElementById('edit-panel-boats').style.display = '';
     applyMergeAuthState();
@@ -2244,11 +2158,11 @@ function showEditPanel() {
 let editingBoatIdentities = [];
 
 /**
- * Fills the edit panel's Identities table: each name the boat raced under, oldest first, with
- * when it raced, optional from/until dates, its aliases (other sail numbers and names it was
- * entered as, which future imports match) and a radio for the current identity (the boat's
- * name). An identity other than the one being edited can be unlinked into a boat of its own.
- * The Sail # and Name fields above edit the identity the panel was opened for.
+ * Fills the edit panel's Identities: each sail number and name the boat raced under, oldest
+ * first, with when it raced, its sail number and name (editable: a rename), optional from/until
+ * dates, its clubs, its aliases (other sail numbers and names it was entered as, which future
+ * imports match) and a radio for the current identity (the boat's name). An identity other
+ * than the one the panel was opened for can be unlinked into a boat of its own.
  */
 async function loadEditBoatAliases(boatId) {
     const div = document.getElementById('edit-boat-aliases');
@@ -2258,59 +2172,89 @@ async function loadEditBoatAliases(boatId) {
     const identities = await fetchJson('/api/boats/' + encodeURIComponent(boatId) + '/identities');
     if (editingBoatId !== boatId) return;
     editingBoatIdentities = (Array.isArray(identities) ? identities : []).map(i => ({
-        ...i, editFrom: i.from || '', editUntil: i.until || '',
+        ...i, editSail: i.sailNumber || '', editName: i.name || '',
+        editFrom: i.from || '', editUntil: i.until || '',
+        editClubIds: [...(i.clubIds || [])],
         editAliases: (i.aliases || []).map(a => ({ sailNumber: a.sailNumber || null, name: a.name || null }))
     }));
     renderEditBoatIdentities();
 }
 
-/** Keeps the dates typed so far across a re-render of the table. */
+/** Keeps what has been typed so far across a re-render. */
 function captureEditIdentityDates() {
+    const v = id => document.getElementById(id)?.value;
     editingBoatIdentities.forEach((i, k) => {
-        i.editFrom = document.getElementById('edit-identity-from-' + k)?.value || '';
-        i.editUntil = document.getElementById('edit-identity-until-' + k)?.value || '';
+        i.editSail = v('edit-identity-sail-' + k) ?? i.editSail;
+        i.editName = v('edit-identity-name-' + k) ?? i.editName;
+        i.editFrom = v('edit-identity-from-' + k) ?? i.editFrom;
+        i.editUntil = v('edit-identity-until-' + k) ?? i.editUntil;
     });
+}
+
+/** Re-renders after an edit made by {@code change}, keeping what was typed. */
+function editIdentity(change) {
+    captureEditIdentityDates();
+    change();
+    renderEditBoatIdentities();
 }
 
 function renderEditBoatIdentities() {
     const div = document.getElementById('edit-boat-aliases');
     if (!div) return;
     const currentKey = document.querySelector('#edit-boat-aliases input[name="edit-identity-current"]:checked')?.value;
-    const rows = editingBoatIdentities.map((i, k) => {
+    const chip = (text, onclick, title) => `<span style="white-space:nowrap;margin-right:0.4rem;">${text}
+        <button type="button" title="${title}" onclick="editIdentity(() => ${onclick})">✕</button></span>`;
+    const lbl = 'color:#777;padding-right:0.5rem;vertical-align:top;padding-top:3px;';
+    const cards = editingBoatIdentities.map((i, k) => {
         const isCurrent = currentKey != null ? currentKey === String(k) : i.current;
+        const clubs = i.editClubIds.map((c, n) =>
+            `<span style="white-space:nowrap;margin-right:0.4rem;font-family:monospace;">${esc(editClubLabel(c))}${n === 0 && i.editClubIds.length > 1 ? ' (primary)' : ''}
+             ${n > 0 ? `<button type="button" title="Make primary" onclick="editIdentity(() => editingBoatIdentities[${k}].editClubIds.unshift(...editingBoatIdentities[${k}].editClubIds.splice(${n}, 1)))">↑</button>` : ''}
+             <button type="button" title="Remove this club" onclick="editIdentity(() => editingBoatIdentities[${k}].editClubIds.splice(${n}, 1))">✕</button></span>`).join('');
+        const clubOpts = editClubCatalogue.filter(c => !i.editClubIds.includes(c.id))
+            .map(c => `<option value="${esc(c.id)}">${esc(editClubLabel(c.id))}</option>`).join('');
         const aliases = i.editAliases.map((al, n) =>
-            `<span style="white-space:nowrap;">${aliasText(al)} <button type="button" title="Remove this alias"
-                onclick="captureEditIdentityDates(); editingBoatIdentities[${k}].editAliases.splice(${n}, 1); renderEditBoatIdentities();">✕</button></span>`).join(' ');
+            chip(aliasText(al), `editingBoatIdentities[${k}].editAliases.splice(${n}, 1)`, 'Remove this alias')).join('');
         const unlink = i.id === editingBoatId ? ''
             : `<button type="button" onclick="unlinkEditIdentity(${k})" title="Make this name a boat of its own, with its results">Unlink</button>`;
-        return `<tr>
-          <td><input type="radio" name="edit-identity-current" value="${k}"${isCurrent ? ' checked' : ''} title="The boat's current name"></td>
-          <td style="padding-right:0.6rem;${i.id === editingBoatId ? 'font-weight:bold;' : ''}">${esc([i.sailNumber, i.name].filter(Boolean).join(' '))}
-            <div style="color:#777;font-size:0.85em;">${identityWhen(i)}${i.races ? ', ' + i.races + ' races' : ''}</div></td>
-          <td><input type="date" id="edit-identity-from-${k}" value="${esc(i.editFrom)}"></td>
-          <td><input type="date" id="edit-identity-until-${k}" value="${esc(i.editUntil)}"></td>
-          <td>${aliases}
-            <span style="white-space:nowrap;"><input type="text" id="edit-alias-sail-${k}" placeholder="Sail #" style="width:5em">
-            <input type="text" id="edit-alias-name-${k}" placeholder="Name" style="width:8em">
-            <button type="button" onclick="addEditIdentityAlias(${k})">Add</button></span></td>
-          <td>${unlink}</td></tr>`;
+        return `<div style="border:1px solid #ddd;border-radius:4px;padding:0.4rem 0.6rem;margin-bottom:0.4rem;background:#fff;">
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+            <label title="The boat's current name"><input type="radio" name="edit-identity-current" value="${k}"${isCurrent ? ' checked' : ''}> current</label>
+            <input type="text" id="edit-identity-sail-${k}" value="${esc(i.editSail)}" placeholder="Sail #" style="width:6em;font-family:monospace;" title="Sail #">
+            <input type="text" id="edit-identity-name-${k}" value="${esc(i.editName)}" placeholder="Name" style="width:14em;font-family:monospace;${i.id === editingBoatId ? 'font-weight:bold;' : ''}" title="Name">
+            <span style="color:#777;font-size:0.85em;">${identityWhen(i)}${i.races ? ', ' + i.races + ' races' : ''}</span>
+            <span style="flex:1"></span>${unlink}
+          </div>
+          <table style="border-collapse:collapse;margin-top:0.3rem;">
+            <tr><td style="${lbl}">Dates:</td><td>
+              <input type="date" id="edit-identity-from-${k}" value="${esc(i.editFrom)}" title="From"> to
+              <input type="date" id="edit-identity-until-${k}" value="${esc(i.editUntil)}" title="Until"></td></tr>
+            <tr><td style="${lbl}">Clubs:</td><td>${clubs || '<span style="color:#888;">— no clubs —</span> '}
+              <select id="edit-identity-club-${k}" style="font-family:monospace;max-width:16em;"><option value="">— add a club —</option>${clubOpts}</select>
+              <button type="button" onclick="addEditIdentityClub(${k})">Add</button></td></tr>
+            <tr><td style="${lbl}">Aliases:</td><td>${aliases}
+              <span style="white-space:nowrap;"><input type="text" id="edit-alias-sail-${k}" placeholder="Sail #" style="width:5em">
+              <input type="text" id="edit-alias-name-${k}" placeholder="Name" style="width:8em">
+              <button type="button" onclick="addEditIdentityAlias(${k})">Add</button></span></td></tr>
+          </table></div>`;
     }).join('');
-    div.innerHTML = `<table style="border-collapse:collapse;">
-        <tr style="color:#777;"><th style="font-weight:normal;text-align:left;">Current</th><th></th>
-          <th style="font-weight:normal;text-align:left;">From</th><th style="font-weight:normal;text-align:left;">Until</th>
-          <th style="font-weight:normal;text-align:left;">Aliases</th><th></th></tr>
-        ${rows}</table>
-        <div style="color:#777;">Dates are optional (blank: as raced). An alias is another sail # and/or name this
-          identity was entered as; aliases affect future imports only. Changes apply on Save.</div>`;
+    div.innerHTML = cards + `<div style="color:#777;">Changing a sail # or name renames that identity: its results
+          follow, and the old one becomes an alias. Dates are optional (blank: as raced). Clubs set here are kept
+          as set. An alias is another sail # and/or name this identity was entered as; aliases affect future
+          imports only. Changes apply on Save.</div>`;
+}
+
+function addEditIdentityClub(k) {
+    const id = document.getElementById('edit-identity-club-' + k)?.value;
+    if (!id) return;
+    editIdentity(() => editingBoatIdentities[k].editClubIds.push(id));
 }
 
 function addEditIdentityAlias(k) {
     const v = id => document.getElementById(id)?.value.trim() || '';
     const alias = { sailNumber: v('edit-alias-sail-' + k) || null, name: v('edit-alias-name-' + k) || null };
     if (!alias.sailNumber && !alias.name) return;
-    captureEditIdentityDates();
-    editingBoatIdentities[k].editAliases.push(alias);
-    renderEditBoatIdentities();
+    editIdentity(() => editingBoatIdentities[k].editAliases.push(alias));
 }
 
 async function unlinkEditIdentity(k) {
@@ -2331,8 +2275,8 @@ async function unlinkEditIdentity(k) {
 }
 
 /**
- * The identity edits to send on Save: {current, identities: [{id, from, until, aliases}]},
- * or null if nothing changed.
+ * The identity edits to send on Save: {current, identities: [{id, from, until, aliases,
+ * clubIds?, sailNumber?, name?}]}, or null if nothing changed.
  */
 function editedIdentities() {
     if (editingBoatIdentities.length === 0) return null;
@@ -2341,8 +2285,12 @@ function editedIdentities() {
     const changed = [];
     editingBoatIdentities.forEach(i => {
         const sameAliases = JSON.stringify((i.aliases || []).map(key)) === JSON.stringify(i.editAliases.map(key));
-        if ((i.from || '') !== i.editFrom || (i.until || '') !== i.editUntil || !sameAliases)
-            changed.push({ id: i.id, from: i.editFrom || null, until: i.editUntil || null, aliases: i.editAliases });
+        const sameClubs = JSON.stringify(i.clubIds || []) === JSON.stringify(i.editClubIds);
+        const renamed = i.editSail.trim() !== (i.sailNumber || '') || i.editName.trim() !== (i.name || '');
+        if ((i.from || '') !== i.editFrom || (i.until || '') !== i.editUntil || !sameAliases || !sameClubs || renamed)
+            changed.push({ id: i.id, from: i.editFrom || null, until: i.editUntil || null, aliases: i.editAliases,
+                ...(!sameClubs && { clubIds: i.editClubIds }),
+                ...(renamed && { sailNumber: i.editSail.trim(), name: i.editName.trim() }) });
     });
     const k = document.querySelector('#edit-boat-aliases input[name="edit-identity-current"]:checked')?.value;
     const picked = k != null ? editingBoatIdentities[Number(k)] : null;
@@ -2440,8 +2388,8 @@ async function saveBoatEdit() {
     const statusEl = document.getElementById('edit-status-boats');
     statusEl.textContent = 'Saving…';
 
-    // Identity edits first (dates, aliases, current), while the identity IDs they name are
-    // unchanged; the edit below may rename the edited identity or change the design.
+    // Identity edits first (names, dates, clubs, aliases, current), while the identity IDs
+    // they name are unchanged; the edit below may change the design, re-keying them.
     const identityEdits = editedIdentities();
     if (identityEdits) {
         const r = await fetchJson('/api/boats/identities', {
@@ -2457,11 +2405,8 @@ async function saveBoatEdit() {
 
     const body = {
         boatId: editingBoatId,
-        sailNumber: document.getElementById('edit-boat-sail').value.trim(),
-        name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
         modified: document.getElementById('edit-boat-modified').checked,
-        clubIds: getEditingBoatClubIds(),
         links: textToLinks(document.getElementById('edit-boat-links').value)
     };
 
@@ -2494,11 +2439,8 @@ async function requestBoatEdit() {
     const message = document.getElementById('edit-message')?.value.trim() || '';
     const body = {
         boatId: editingBoatId,
-        sailNumber: document.getElementById('edit-boat-sail').value.trim(),
-        name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
         modified: document.getElementById('edit-boat-modified').checked,
-        clubIds: getEditingBoatClubIds(),
         links: textToLinks(document.getElementById('edit-boat-links').value),
         identities: editedIdentities(),
         ...(email && { email }),
@@ -2556,6 +2498,12 @@ function showEditDesignPanel() {
     document.getElementById('edit-status-designs').textContent = '';
     document.getElementById('edit-panel-designs').style.display = '';
     applyPanelAuthState('designs', 'edit-design', isWriteAllowed());
+}
+
+function hideEditPanel() {
+    const panel = document.getElementById('edit-panel-boats');
+    if (panel) panel.style.display = 'none';
+    editingBoatId = null;
 }
 
 function hideEditDesignPanel() {
