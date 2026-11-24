@@ -49,8 +49,10 @@ class V2MigrationTest
         Path v1 = tempDir.resolve("v1");
         String bwpsCert = "{\"system\":\"IRC\",\"year\":2022,\"value\":1.1,\"nonSpinnaker\":false,\"twoHanded\":false,"
             + "\"club\":false,\"windwardLeeward\":false,\"certificateNumber\":\"bwps-irc-2022-1.1000\",\"expiryDate\":null}";
+        String cert2020 = "{\"system\":\"IRC\",\"year\":2020,\"value\":1.105,\"nonSpinnaker\":false,\"twoHanded\":false,"
+            + "\"club\":false,\"windwardLeeward\":false,\"certificateNumber\":\"ty-irc-2020-1.1050\",\"expiryDate\":null}";
         write(v1.resolve("imported/boats/7709-kanreki-cookson12.json"),
-            boat("7709-kanreki-cookson12", "7709", "Kanreki", "cookson12", bwpsCert));
+            boat("7709-kanreki-cookson12", "7709", "Kanreki", "cookson12", bwpsCert + "," + cert2020));
         write(v1.resolve("imported/boats/100-alpha-j24.json"), boat("100-alpha-j24", "100", "Alpha", "j24", ""));
         write(v1.resolve("imported/races/myc.org.au/s/r1.json"), race("r1", "2004-01-03", "SailSys", "7709-kanreki-cookson12"));
         write(v1.resolve("imported/races/myc.org.au/s/r2.json"), race("r2", "2020-01-04", "SailSys", "7709-kanreki-cookson12"));
@@ -123,7 +125,12 @@ class V2MigrationTest
             List.copyOf(kanreki.identities().keySet()), "a renamed boat's names, oldest first");
         assertEquals(LocalDate.of(2006, 1, 1), kanreki.identities().get("7700-abouttime-cookson12").until());
         assertTrue(kanreki.identities().get("7709-kanreki-cookson12").matches("AUS7709", "kanreki"));
-        assertTrue(kanreki.certificates().isEmpty(), "the BWPS-derived certificate is purged");
+        assertEquals(1, kanreki.certificates().size(), "the BWPS-derived certificate is purged");
+        assertEquals(1, kanreki.identities().get("7709-sailexchange-cookson12").certificates().size(),
+            "the 2020 certificate is Sail Exchange's: it raced as Sail Exchange in 2020");
+        assertTrue(kanreki.identities().get("7709-kanreki-cookson12").certificates().isEmpty());
+        assertEquals(List.of("myc.org.au"), kanreki.identities().get("7700-abouttime-cookson12").clubIds(),
+            "each identity has the club it raced at");
         assertNull(store.races().get("r4"), "the Sydney Hobart race is purged");
         assertEquals("7700-abouttime-cookson12", identityOf(store, "r1"), "2004: About Time");
         assertEquals("7709-sailexchange-cookson12", identityOf(store, "r2"), "2020: Sail Exchange");

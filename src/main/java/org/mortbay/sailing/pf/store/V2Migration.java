@@ -382,8 +382,93 @@ public final class V2Migration
                         race.date(), race.number(), race.name(), divisions, race.source(), race.lastUpdated(), null)));
             }
         }
-        boats.put(key, new Boat(null, boat.designId(), boat.links(), orderByLastRace(identities, races),
+        if (!renameIds.isEmpty())
+            distribute(key, identities, renames, renameIds, races);
+        boats.put(key, new Boat(null, boat.designId(), boat.modified(), boat.links(), orderByLastRace(identities, races),
             boat.lastUpdated(), null));
+    }
+
+    /**
+     * Shares out what v1 held for the whole boat, now that it has identities: each certificate
+     * goes to the identity that raced most in its year (else the name in use that July, by the
+     * v1 rename dates); each identity's clubs are the clubs of the races it was entered in, most
+     * frequent first: the v1 clubs it raced at, and always its most frequent race club (the
+     * current identity keeps its v1 clubs if it has no races); a split-off identity's sources
+     * are its races' importers.
+     */
+    private static void distribute(String key, Map<String, Identity> identities, List<V1Alias> renames,
+                                   Map<V1Alias, String> renameIds, List<RaceFile> races)
+    {
+        Map<String, Map<String, Integer>> clubCounts = new HashMap<>();
+        Map<String, Map<Integer, Integer>> yearCounts = new HashMap<>();
+        Map<String, List<String>> raceSources = new HashMap<>();
+        for (RaceFile rf : races)
+        {
+            Race r = rf.race();
+            if (r.divisions() == null)
+                continue;
+            for (Division d : r.divisions())
+                for (Finisher f : d.finishers())
+                {
+                    String id = f.identityId();
+                    if (!identities.containsKey(id))
+                        continue;
+                    if (r.clubId() != null)
+                        clubCounts.computeIfAbsent(id, k -> new HashMap<>()).merge(r.clubId(), 1, Integer::sum);
+                    if (r.date() != null)
+                        yearCounts.computeIfAbsent(id, k -> new HashMap<>()).merge(r.date().getYear(), 1, Integer::sum);
+                    if (r.source() != null)
+                    {
+                        // The importer's name: "SailSys-7473" or "TopYacht - url" is SailSys or TopYacht
+                        String src = r.source().trim().split("[^A-Za-z]")[0];
+                        List<String> list = raceSources.computeIfAbsent(id, k -> new ArrayList<>());
+                        if (!list.contains(src))
+                            list.add(src);
+                    }
+                }
+        }
+
+        Identity own = identities.get(key);
+        List<String> v1Clubs = own.clubIds();
+        // Certificates, by the year each was for
+        Map<String, List<Certificate>> certs = new HashMap<>();
+        for (Certificate c : own.certificates())
+        {
+            String to = null;
+            int best = 0;
+            for (String id : identities.keySet())
+            {
+                int n = yearCounts.getOrDefault(id, Map.of()).getOrDefault(c.year(), 0);
+                if (n > best)
+                {
+                    best = n;
+                    to = id;
+                }
+            }
+            if (to == null)
+            {
+                V1Alias at = nameAt(renames, LocalDate.of(c.year(), 7, 1));
+                to = at == null ? key : renameIds.getOrDefault(at, key);
+            }
+            certs.computeIfAbsent(to, k -> new ArrayList<>()).add(c);
+        }
+        identities.replaceAll((id, i) ->
+        {
+            Map<String, Integer> counts = clubCounts.getOrDefault(id, Map.of());
+            List<String> ranked = counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .map(Map.Entry::getKey).toList();
+            List<String> clubs = new ArrayList<>(ranked.stream().filter(v1Clubs::contains).toList());
+            if (!ranked.isEmpty() && !clubs.contains(ranked.getFirst()))
+                clubs.addFirst(ranked.getFirst());
+            if (ranked.isEmpty() && id.equals(key))
+                clubs = new ArrayList<>(v1Clubs);
+            Identity out = i.withClubIds(clubs).withCertificates(certs.getOrDefault(id, List.of()));
+            if (!id.equals(key))
+                for (String src : raceSources.getOrDefault(id, List.of()))
+                    out = out.withSource(src);
+            return out;
+        });
     }
 
     /**
