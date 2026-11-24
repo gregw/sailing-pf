@@ -46,6 +46,9 @@ import org.mortbay.sailing.pf.importer.IdGenerator;
  *       {@code boatDesignOverrides} entry becomes the boat's design (re-keying its identities
  *       and results) and an alias saying its results of any design are this boat, as the
  *       override did. Dated overrides are reported (a design change makes a new boat).</li>
+ *   <li>{@code design.yaml}'s design flags (excluded, ignored, noSpinnaker, oneDesign) and
+ *       designYears go onto the design files (a flagged design not yet held is created), and
+ *       design.yaml is retired.</li>
  *   <li>{@code aliases.yaml} design aliases join the design files' aliases (a design named
  *       there but not yet held is created), and aliases.yaml is retired.</li>
  *   <li>The easily re-imported races are purged, to be re-imported under v2 matching: the
@@ -99,6 +102,7 @@ public final class V2Migration
         int modified;
         int designOverrides;
         int designAliases;
+        int designFlags;
         final List<String> notes = new ArrayList<>();
 
         @Override
@@ -115,6 +119,7 @@ public final class V2Migration
                 .append("  boats modified:           ").append(modified).append('\n')
                 .append("  design overrides applied: ").append(designOverrides).append('\n')
                 .append("  design aliases moved:     ").append(designAliases).append('\n')
+                .append("  design flags moved:       ").append(designFlags).append('\n')
                 .append("  races kept:               ").append(racesKept).append('\n')
                 .append("  races purged:             ").append(racesPurged).append('\n')
                 .append("  certificates purged:      ").append(certificatesPurged).append('\n');
@@ -228,6 +233,7 @@ public final class V2Migration
         applyClubOverrides(v1.resolve("config"), boats, report);
         applyDesignConfig(v1.resolve("config"), v2.resolve("designs"), boats, races, report);
         moveDesignAliases(v1.resolve("config"), v2.resolve("designs"), report);
+        moveDesignFlags(v1.resolve("config"), v2.resolve("designs"), report);
 
         // Write boats (named by current identity) and races
         Path boatsDir = Files.createDirectories(v2.resolve("boats"));
@@ -424,7 +430,7 @@ public final class V2Migration
     private static void stripBoatConfig(Path configDir) throws IOException
     {
         Files.deleteIfExists(configDir.resolve("aliases.yaml"));
-        strip(configDir.resolve("design.yaml"), List.of("modifiedBoats", "boatDesignOverrides"), null);
+        Files.deleteIfExists(configDir.resolve("design.yaml"));
         strip(configDir.resolve("clubs.yaml"), List.of("boatClubOverrides", "noclub"), "boats");
     }
 
@@ -505,6 +511,66 @@ public final class V2Migration
                 }
             }
         }
+    }
+
+    /** design.yaml's design flags and years onto the design files. */
+    private static void moveDesignFlags(Path configDir, Path designsDir, Report report) throws IOException
+    {
+        Path file = configDir.resolve("design.yaml");
+        if (!Files.exists(file))
+            return;
+        JsonNode root = YAML.readTree(file.toFile());
+        Map<String, Map<String, Object>> changes = new TreeMap<>();
+        Map<String, String> names = new HashMap<>();
+        for (String flag : List.of("excluded", "ignored", "noSpinnaker", "oneDesign"))
+        {
+            for (JsonNode n : root.path(flag))
+            {
+                String raw = n.asText();
+                if (raw.isBlank())
+                    continue;
+                String id = IdGenerator.normaliseDesignName(raw);
+                names.putIfAbsent(id, raw);
+                changes.computeIfAbsent(id, k -> new LinkedHashMap<>()).put(flag, true);
+            }
+        }
+        for (Map.Entry<String, JsonNode> e : (Iterable<Map.Entry<String, JsonNode>>) root.path("designYears")::fields)
+        {
+            if (!e.getValue().canConvertToInt())
+                continue;
+            String id = IdGenerator.normaliseDesignName(e.getKey());
+            names.putIfAbsent(id, e.getKey());
+            changes.computeIfAbsent(id, k -> new LinkedHashMap<>()).put("year", e.getValue().asInt());
+        }
+        for (Map.Entry<String, Map<String, Object>> c : changes.entrySet())
+        {
+            com.fasterxml.jackson.databind.node.ObjectNode design = designNode(designsDir, c.getKey(), names.get(c.getKey()), "design.yaml");
+            c.getValue().forEach((k, v) ->
+            {
+                if (v instanceof Boolean b)
+                    design.put(k, b);
+                else
+                    design.put(k, (Integer)v);
+                report.designFlags++;
+            });
+            JSON.writerWithDefaultPrettyPrinter().writeValue(designsDir.resolve(c.getKey() + ".json").toFile(), design);
+        }
+    }
+
+    /** A design file's JSON, or a new one named {@code name} if there is none. */
+    private static com.fasterxml.jackson.databind.node.ObjectNode designNode(Path designsDir, String id, String name, String source)
+        throws IOException
+    {
+        Path f = designsDir.resolve(id + ".json");
+        if (Files.exists(f))
+            return (com.fasterxml.jackson.databind.node.ObjectNode)JSON.readTree(f.toFile());
+        Files.createDirectories(designsDir);
+        com.fasterxml.jackson.databind.node.ObjectNode design = JSON.createObjectNode();
+        design.put("id", id);
+        design.put("canonicalName", name != null ? name : id);
+        design.putArray("aliases");
+        design.putArray("sources").add(source);
+        return design;
     }
 
     /** aliases.yaml's design entries into the design files' aliases. */

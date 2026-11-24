@@ -89,6 +89,10 @@ class V2MigrationTest
         write(v1.resolve("imported/boats/1088-corum-farrmumm36.json"), boat("1088-corum-farrmumm36", "1088", "Corum", "farrmumm36", ""));
         write(v1.resolve("imported/races/myc.org.au/s/r5.json"), race("r5", "2021-01-09", "SailSys", "1088-corum-farrmumm36"));
         write(v1.resolve("config/design.yaml"), """
+            excluded:
+            - "Optimist"
+            designYears:
+              cookson12: 1998
             modifiedBoats:
             - sailNumber: "1088"
               name: "Corum"
@@ -138,8 +142,9 @@ class V2MigrationTest
         assertTrue(Files.exists(v2.resolve("designs/mumm36.json")), "the override's design is created");
         assertEquals("1088-corum-mumm36",
             store.findOrCreateBoat("1088", "Corum", "Farr Mumm 36", LocalDate.of(2025, 1, 4), "test").id());
-        String designYaml = Files.readString(v2.resolve("config/design.yaml"));
-        assertFalse(designYaml.contains("boatDesignOverrides") || designYaml.contains("modifiedBoats"), designYaml);
+        assertFalse(Files.exists(v2.resolve("config/design.yaml")), "design.yaml is retired");
+        assertTrue(store.isDesignExcluded("optimist"), "a flagged design not held is created, flagged");
+        assertEquals(1998, store.designYearOverride("cookson12"));
         assertFalse(Files.exists(v2.resolve("config/aliases.yaml")), "aliases.yaml is retired");
 
         assertThrows(IllegalArgumentException.class, () -> V2Migration.convert(v1, v2), "will not overwrite");

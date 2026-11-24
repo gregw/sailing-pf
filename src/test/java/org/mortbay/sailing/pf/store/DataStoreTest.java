@@ -170,7 +170,7 @@ class DataStoreTest {
     }
 
     @Test
-    void oneDesignAndModifiedFlagsPersistToDesignYaml(@TempDir Path tempDir) throws IOException
+    void oneDesignAndModifiedFlagsPersistOnTheRecords(@TempDir Path tempDir) throws IOException
     {
         DataStore store = new DataStore(tempDir);
         store.start();
@@ -181,9 +181,8 @@ class DataStoreTest {
         store.setBoatModified("5656-mondo-sydney38", true);
         store.stop();
 
-        String yaml = Files.readString(tempDir.resolve("config/design.yaml"));
-        assertTrue(yaml.contains("oneDesign:"), yaml);
-        assertTrue(yaml.contains("modifiedBoats:"), yaml);
+        assertTrue(Files.readString(tempDir.resolve("designs/sydney38.json")).contains("\"oneDesign\""));
+        assertTrue(Files.readString(tempDir.resolve("boats/5656-mondo-sydney38.json")).contains("\"modified\""));
 
         DataStore store2 = new DataStore(tempDir);
         store2.start();
@@ -936,12 +935,14 @@ class DataStoreTest {
     // --- isDesignExcluded ---
 
     @Test
-    void isDesignExcludedReturnsTrueForKnownDinghy(@TempDir Path tempDir) throws Exception {
-        // test classpath design.yaml lists "Optimist" as excluded
+    void designFlagsCanNameADesignNotYetHeld(@TempDir Path tempDir) {
+        // Excluding a design no boat has yet creates its record, so a later import finds it flagged
         DataStore store = new DataStore(tempDir);
         store.start();
+        store.setDesignExcluded("optimist", true);
 
         assertTrue(store.isDesignExcluded("optimist"));
+        assertEquals("optimist", store.findOrCreateBoat("1", "Opti", "Optimist").designId());
     }
 
     @Test
@@ -953,12 +954,13 @@ class DataStoreTest {
     }
 
     @Test
-    void isDesignExcludedCaseInsensitive(@TempDir Path tempDir) {
-        // design.yaml lists "Optimist"; the normalised form of "OPTIMIST" should also match
+    void isDesignExcludedReadsTheDesignRecord(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();
+        store.putDesign(new Design("optimist", "Optimist", List.of(), List.of(), null, false, null).withExcluded(true));
 
         assertTrue(store.isDesignExcluded("optimist"));
+        assertFalse(store.isDesignExcluded("j24"));
     }
 
     // --- mergeDesigns ---
@@ -1159,18 +1161,10 @@ class DataStoreTest {
     @Test
     void findOrCreateBoatMatchesExistingDesignedBoatWhenIncomingDesignIsIgnored(@TempDir Path tempDir) throws Exception
     {
-        Path configDir = tempDir.resolve("config");
-        Files.createDirectories(configDir);
-        Files.writeString(configDir.resolve("design.yaml"),
-            """
-            excluded: []
-            ignored:
-              - "d1"
-            boatDesignOverrides: []
-            """);
-
         DataStore store = new DataStore(tempDir);
         store.start();
+        // "D1" (a TopYacht division marker) is an ignored design
+        store.putDesign(new Design("d1", "D1", List.of(), List.of(), null, false, null).withIgnored(true));
 
         // Simulate ORC having already created the properly-designed boat
         store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, false, null));
@@ -1361,43 +1355,26 @@ class DataStoreTest {
         reloaded.stop();
     }
 
-    /**
-     * setDesignNoSpinnaker persists the flag in design.yaml, re-stamps the in-memory
-     * Design record, and survives a store stop/start cycle.
-     */
     @Test
-    void setDesignNoSpinnakerPersistsAndRestamps(@TempDir Path tempDir)
+    void setDesignNoSpinnakerPersistsOnTheDesignRecord(@TempDir Path tempDir)
     {
         DataStore store = new DataStore(tempDir);
         store.start();
-
         store.putDesign(new Design("radford12", "Radford 12", List.of(), List.of(), null, false, null));
-        assertFalse(store.designs().get("radford12").noSpinnaker(),
-            "default state should be noSpinnaker=false");
         assertFalse(store.isDesignNoSpinnaker("radford12"));
 
         store.setDesignNoSpinnaker("radford12", true);
-
-        // 1. Catalogue accessor reports the new state.
         assertTrue(store.isDesignNoSpinnaker("radford12"));
-        // 2. In-memory Design record is re-stamped without a fresh putDesign.
-        assertTrue(store.designs().get("radford12").noSpinnaker(),
-            "in-memory Design should reflect the catalogue flag after toggle");
-
-        // 3. Persists across a stop/start cycle (i.e. survives in design.yaml).
+        assertTrue(store.designs().get("radford12").noSpinnaker());
         store.stop();
+
+        // Persisted in the design file
         DataStore reopened = new DataStore(tempDir);
         reopened.start();
-        reopened.putDesign(new Design("radford12", "Radford 12", List.of(), List.of(), null, false, null));
-        assertTrue(reopened.isDesignNoSpinnaker("radford12"),
-            "noSpinnaker flag should reload from design.yaml");
-        assertTrue(reopened.designs().get("radford12").noSpinnaker(),
-            "putDesign should re-stamp the catalogue flag on insertion");
-
-        // 4. Clearing the flag updates state in both runtime and on disk.
+        assertTrue(reopened.isDesignNoSpinnaker("radford12"));
         reopened.setDesignNoSpinnaker("radford12", false);
         assertFalse(reopened.isDesignNoSpinnaker("radford12"));
-        assertFalse(reopened.designs().get("radford12").noSpinnaker());
+        reopened.stop();
     }
 
     // --- Exclusion reason persistence ---

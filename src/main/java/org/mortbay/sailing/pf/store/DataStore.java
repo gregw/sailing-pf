@@ -105,7 +105,6 @@ public class DataStore
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
     private Map<String, String> designNameIndex; // design name/alias (normalised) -> design id; null when stale
-    private Designs.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
     private ClubLoader.ClubCatalogue clubCatalogue;  // lookup-only club overrides from clubs.yaml
     private List<Maker> makers;
     private boolean makersDirty;
@@ -969,14 +968,14 @@ public class DataStore
             design = new Design(canonicalId, seedName != null ? seedName : className.trim(),
                 List.of(), List.of(), null, false, null);
             putDesign(design);
-            if (designCatalogue.isExcluded(canonicalId))
+            if (isDesignExcluded(canonicalId))
                 LOG.info("Design {} is excluded (dinghy/OTB class)", canonicalId);
             return design;
         }
 
         design = new Design(designId, className.trim(), List.of(), List.of(), null, false, null);
         putDesign(design);
-        if (designCatalogue.isExcluded(designId))
+        if (isDesignExcluded(designId))
             LOG.info("Design {} is excluded (dinghy/OTB class)", designId);
         return design;
     }
@@ -1327,13 +1326,10 @@ public class DataStore
     {
         designNameIndex = null;
         requireStarted();
-        // Always reflect the catalogue's current noSpinnaker state on the in-memory record.
-        boolean catNoSpin = designCatalogue.isNoSpinnaker(design.id());
-        Design stamped = design.noSpinnaker() == catNoSpin ? design : design.withNoSpinnaker(catNoSpin);
-        designs.put(stamped.id(), stamped);
+        designs.put(design.id(), design);
         InvalidationListener l = invalidationListener;
         if (l != null)
-            l.onDesignChanged(stamped.id());
+            l.onDesignChanged(design.id());
     }
 
     public void putRace(Race imported)
@@ -1470,9 +1466,8 @@ public class DataStore
         for (Design md : toMerge)
             allLinks.add(md.links());
         List<Link> mergedLinks = Link.merge(allLinks);
-        putDesign(new Design(keepDesign.id(), keepDesign.canonicalName(),
-            List.copyOf(allAliases), List.copyOf(allSources), mergedLinks, Instant.now(),
-            keepDesign.noSpinnaker(), null));
+        putDesign(keepDesign.withAliases(List.copyOf(allAliases)).withSources(List.copyOf(allSources))
+            .withLinks(mergedLinks).withLastUpdated(Instant.now()).withLoadedAt(null));
 
         // Move all boats of a merged-away design to the kept one: their identity IDs change
         // (or they merge into a boat already recorded under the kept design), results follow
@@ -1527,7 +1522,8 @@ public class DataStore
     public boolean isDesignExcluded(String designId)
     {
         requireStarted();
-        return designCatalogue.isExcluded(designId);
+        Design d = designId == null ? null : designs.get(designId);
+        return d != null && d.excluded();
     }
 
     /**
@@ -1754,8 +1750,21 @@ public class DataStore
     public void setDesignExcluded(String id, boolean excluded)
     {
         requireStarted();
-        Designs.setFlag(configDir, id, Designs.Flag.EXCLUDED, excluded);
-        reloadDesignCatalogue();
+        updateDesign(id, d -> d.withExcluded(excluded));
+    }
+
+    /**
+     * Changes the design {@code id} (creating a record for it, named by its id, if there is
+     * none: a flag can name a design no boat has yet), marking it for saving.
+     */
+    private void updateDesign(String id, java.util.function.UnaryOperator<Design> change)
+    {
+        if (id == null || id.isBlank())
+            return;
+        Design d = designs.get(id);
+        if (d == null)
+            d = new Design(id, id, List.of(), List.of(), null, false, null);
+        putDesign(change.apply(d).withLastUpdated(Instant.now()).withLoadedAt(null));
     }
 
     /**
@@ -1774,19 +1783,14 @@ public class DataStore
 
     public boolean isDesignNoSpinnaker(String designId)
     {
-        if (designId == null || designId.isBlank())
-            return false;
-        return designCatalogue.isNoSpinnaker(designId);
+        Design d = designId == null || designId.isBlank() ? null : designs.get(designId);
+        return d != null && d.noSpinnaker();
     }
 
     public void setDesignNoSpinnaker(String id, boolean flag)
     {
         requireStarted();
-        Designs.setFlag(configDir, id, Designs.Flag.NO_SPINNAKER, flag);
-        reloadDesignCatalogue();
-        InvalidationListener l = invalidationListener;
-        if (l != null)
-            l.onDesignChanged(id);
+        updateDesign(id, d -> d.withNoSpinnaker(flag));
     }
 
     /**
@@ -1796,19 +1800,14 @@ public class DataStore
      */
     public boolean isDesignOneDesign(String designId)
     {
-        if (designId == null || designId.isBlank())
-            return false;
-        return designCatalogue.isOneDesign(designId);
+        Design d = designId == null || designId.isBlank() ? null : designs.get(designId);
+        return d != null && d.oneDesign();
     }
 
     public void setDesignOneDesign(String id, boolean flag)
     {
         requireStarted();
-        Designs.setFlag(configDir, id, Designs.Flag.ONE_DESIGN, flag);
-        reloadDesignCatalogue();
-        InvalidationListener l = invalidationListener;
-        if (l != null)
-            l.onDesignChanged(id);
+        updateDesign(id, d -> d.withOneDesign(flag));
     }
 
     /**
@@ -1817,20 +1816,15 @@ public class DataStore
      */
     public Integer designYearOverride(String designId)
     {
-        if (designId == null || designId.isBlank())
-            return null;
-        return designCatalogue.designYear(designId);
+        Design d = designId == null || designId.isBlank() ? null : designs.get(designId);
+        return d == null ? null : d.year();
     }
 
     /** Sets (or with {@code year} null, clears) the design's manual year. */
     public void setDesignYear(String id, Integer year)
     {
         requireStarted();
-        Designs.setDesignYear(configDir, id, year);
-        reloadDesignCatalogue();
-        InvalidationListener l = invalidationListener;
-        if (l != null)
-            l.onDesignChanged(id);
+        updateDesign(id, d -> d.withYear(year));
     }
 
     /** True if the boat with identity {@code boatId} is modified from its design. */
@@ -1856,8 +1850,8 @@ public class DataStore
      */
     public boolean isDesignIgnored(String designId)
     {
-        if (designId == null || designId.isBlank()) return false;
-        return designCatalogue.isIgnored(designId);
+        Design d = designId == null || designId.isBlank() ? null : designs.get(designId);
+        return d != null && d.ignored();
     }
 
     /**
@@ -1876,8 +1870,7 @@ public class DataStore
     {
         requireStarted();
         boolean wasIgnored = isDesignIgnored(id);
-        Designs.setFlag(configDir, id, Designs.Flag.IGNORED, ignored);
-        reloadDesignCatalogue();
+        updateDesign(id, d -> d.withIgnored(ignored));
         if (ignored && !wasIgnored)
             cascadeIgnoreDesign(id);
     }
@@ -2168,18 +2161,6 @@ public class DataStore
         {
             LOG.warn("Failed to save exclusions.yaml: {}", e.getMessage());
         }
-    }
-
-    /**
-     * Reloads the design catalogue from disk.
-     */
-    public void reloadDesignCatalogue()
-    {
-        requireStarted();
-        designCatalogue = Designs.load(configDir);
-        // Re-stamp catalogue-derived flags on every in-memory Design (e.g. noSpinnaker).
-        designs.replaceAll((id, d) -> d.noSpinnaker() == designCatalogue.isNoSpinnaker(id)
-            ? d : d.withNoSpinnaker(designCatalogue.isNoSpinnaker(id)));
     }
 
     /**
@@ -3294,11 +3275,6 @@ public class DataStore
         designNameIndex = null;
         clubSeed = ClubLoader.load(configDir);
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
-        designCatalogue = Designs.load(configDir);
-        // Stamp the catalogue-derived noSpinnaker flag onto every Design now that both the
-        // designs map and the catalogue are loaded. Subsequent toggles re-stamp via reloadDesignCatalogue().
-        designs.replaceAll((id, d) -> d.noSpinnaker() == designCatalogue.isNoSpinnaker(id)
-            ? d : d.withNoSpinnaker(designCatalogue.isNoSpinnaker(id)));
 
         loadExclusions();
         clubs = new LinkedHashMap<>();
@@ -3383,7 +3359,7 @@ public class DataStore
         // (and annotates sources with "Ignored:<id>"). This MUST run before the design
         // upgrade pass below, which keys off designId==null to find merge candidates.
         {
-            for (String ignoredId : designCatalogue.ignoredDesignIds())
+            for (String ignoredId : designs.values().stream().filter(Design::ignored).map(Design::id).toList())
             {
                 boolean hasAffected = boats.values().stream()
                     .anyMatch(b -> ignoredId.equals(b.designId()));
@@ -3501,7 +3477,6 @@ public class DataStore
         clubSeed = null;
         clubCatalogue = null;
         designNameIndex = null;
-        designCatalogue = null;
         makers = null;
         makersDirty = false;
         excludedBoats.clear();

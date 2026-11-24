@@ -2530,8 +2530,9 @@ public class AdminApiServlet extends HttpServlet
             {
                 // Pre-create the renamed design at the new id, then let mergeDesigns move
                 // all boats and delete the old design record.
-                Design renamed = new Design(newId, newName, aliases, old.sources(), links,
-                    java.time.Instant.now(), old.noSpinnaker(), null);
+                // The record moves with its flags, year and links
+                Design renamed = old.withId(newId).withCanonicalName(newName).withAliases(aliases)
+                    .withLinks(links).withLastUpdated(java.time.Instant.now()).withLoadedAt(null);
                 store.putDesign(renamed);
 
                 DataStore.DesignMergeResult r = store.mergeDesigns(newId, List.of(oldId));
@@ -2546,27 +2547,17 @@ public class AdminApiServlet extends HttpServlet
                 // and/or replace the links. Other edits (flags, year) leave the record alone.
                 boolean renamedName = !old.canonicalName().equals(newName);
                 if (renamedName || linksChanged)
-                    store.putDesign(new Design(oldId, newName, aliases, old.sources(), links,
-                        java.time.Instant.now(), old.noSpinnaker(), null));
-                if (renamedName)
-                {
-                }
+                    store.putDesign(old.withCanonicalName(newName).withAliases(aliases).withLinks(links)
+                        .withLastUpdated(java.time.Instant.now()).withLoadedAt(null));
             }
 
-            // noSpinnaker is YAML-managed; persist via the catalogue, then re-stamp the
-            // in-memory design records.
+            // Flags and year are the design record's (moved with it on a rename)
             if (noSpinChanged)
                 store.setDesignNoSpinnaker(newId, newNoSpinnaker);
-            // oneDesign is YAML-managed too; after a rename the flag moves to the new id.
-            boolean oneDesign = newOneDesign != null ? newOneDesign : store.isDesignOneDesign(oldId);
-            if (idChanged && store.isDesignOneDesign(oldId))
-                store.setDesignOneDesign(oldId, false);
+            boolean oneDesign = newOneDesign != null ? newOneDesign : store.isDesignOneDesign(newId);
             if (oneDesign != store.isDesignOneDesign(newId))
                 store.setDesignOneDesign(newId, oneDesign);
-            // The manual year too moves to the new id on a rename
-            Integer year = yearGiven ? newYear : store.designYearOverride(oldId);
-            if (idChanged && store.designYearOverride(oldId) != null)
-                store.setDesignYear(oldId, null);
+            Integer year = yearGiven ? newYear : store.designYearOverride(newId);
             if (!Objects.equals(year, store.designYearOverride(newId)))
                 store.setDesignYear(newId, year);
 
