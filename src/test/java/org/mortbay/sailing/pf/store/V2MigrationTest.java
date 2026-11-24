@@ -79,8 +79,16 @@ class V2MigrationTest
                 aliases:
                 - sailNumber: "100"
                   name: "alfa"
-            designs: {}
+            designs:
+              j24:
+                canonicalName: "J/24"
+                aliases:
+                - "J Boats J24"
             """);
+        write(v1.resolve("imported/designs/j24.json"), "{\"id\":\"j24\",\"canonicalName\":\"J/24\"}");
+        write(v1.resolve("imported/designs/jboatsj24.json"), "{\"id\":\"jboatsj24\",\"canonicalName\":\"J Boats J24\"}");
+        write(v1.resolve("imported/boats/4788-okavangodelta-jboatsj24.json"),
+            boat("4788-okavangodelta-jboatsj24", "4788", "Okavango Delta", "jboatsj24", ""));
         write(v1.resolve("config/clubs.yaml"), """
             clubs: {}
             noclub:
@@ -153,6 +161,10 @@ class V2MigrationTest
         assertTrue(store.isDesignExcluded("optimist"), "a flagged design not held is created, flagged");
         assertEquals(1998, store.designYearOverride("cookson12"));
         assertFalse(Files.exists(v2.resolve("config/aliases.yaml")), "aliases.yaml is retired");
+
+        assertEquals("j24", store.boat("4788-okavangodelta-j24").designId(), "a leftover aliased design merges into its design");
+        assertNull(store.designs().get("jboatsj24"));
+        assertTrue(store.designs().get("j24").aliases().contains("J Boats J24"));
 
         assertThrows(IllegalArgumentException.class, () -> V2Migration.convert(v1, v2), "will not overwrite");
     }

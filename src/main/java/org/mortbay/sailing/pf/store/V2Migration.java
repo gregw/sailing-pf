@@ -53,6 +53,9 @@ import org.mortbay.sailing.pf.importer.IdGenerator;
  *   <li>{@code clubs.yaml}'s club settings (long name, state, email, excluded, aliases, results
  *       feeds) and series types go into the club files (a club with no file gets one), and
  *       clubs.yaml is retired.</li>
+ *   <li>A design record that aliases.yaml lists as an alias of another design (left over from a
+ *       v1 merge) is merged into it: its boats move to that design (identities re-keyed, with
+ *       their results) and its names become that design's aliases.</li>
  *   <li>{@code aliases.yaml} design aliases join the design files' aliases (a design named
  *       there but not yet held is created), and aliases.yaml is retired.</li>
  *   <li>Races that can be re-imported are purged, to be re-imported under v2 matching, by
@@ -173,6 +176,7 @@ public final class V2Migration
         int designAliases;
         int designFlags;
         int clubsWritten;
+        int designsMerged;
         final List<String> notes = new ArrayList<>();
 
         @Override
@@ -191,6 +195,7 @@ public final class V2Migration
                 .append("  design aliases moved:     ").append(designAliases).append('\n')
                 .append("  design flags moved:       ").append(designFlags).append('\n')
                 .append("  clubs from clubs.yaml:    ").append(clubsWritten).append('\n')
+                .append("  leftover designs merged:  ").append(designsMerged).append('\n')
                 .append("  races kept:               ").append(racesKept).append('\n')
                 .append("  races purged:             ").append(racesPurged).append('\n')
                 .append("  certificates purged:      ").append(certificatesPurged).append('\n');
@@ -319,6 +324,7 @@ public final class V2Migration
         applyDesignConfig(v1.resolve("config"), v2.resolve("designs"), boats, races, report);
         moveDesignAliases(v1.resolve("config"), v2.resolve("designs"), report);
         moveDesignFlags(v1.resolve("config"), v2.resolve("designs"), report);
+        mergeAliasedDesigns(v1.resolve("config"), v2.resolve("designs"), boats, races, report);
         moveClubSettings(v1.resolve("config"), v2.resolve("clubs"), report);
 
         // Write boats (named by current identity) and races
@@ -727,6 +733,62 @@ public final class V2Migration
                 json != null ? json.series() : List.of(), clubTypes, null);
             JSON.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), merged);
             report.clubsWritten++;
+        }
+    }
+
+    /**
+     * Merges into its design each design record that aliases.yaml lists as an alias of another
+     * design: its boats move to that design and its names join that design's aliases.
+     */
+    private static void mergeAliasedDesigns(Path configDir, Path designsDir, Map<String, Boat> boats,
+                                            List<RaceFile> races, Report report) throws IOException
+    {
+        Path file = configDir.resolve("aliases.yaml");
+        if (!Files.exists(file))
+            return;
+        JsonNode entries = YAML.readTree(file.toFile()).path("designs");
+        Map<String, String> leftoverTo = new TreeMap<>();
+        for (Map.Entry<String, JsonNode> e : (Iterable<Map.Entry<String, JsonNode>>) entries::fields)
+        {
+            String target = e.getKey();
+            if (!Files.exists(designsDir.resolve(target + ".json")))
+                continue;
+            for (JsonNode a : e.getValue().path("aliases"))
+            {
+                String id = IdGenerator.normaliseDesignName(a.asText());
+                if (!id.isBlank() && !id.equals(target) && Files.exists(designsDir.resolve(id + ".json")))
+                    leftoverTo.putIfAbsent(id, target);
+            }
+        }
+        for (Map.Entry<String, String> m : leftoverTo.entrySet())
+        {
+            String leftover = m.getKey();
+            String target = m.getValue();
+            if (leftoverTo.containsKey(target))
+                continue;   // a chain: leave for a person
+            for (String key : new ArrayList<>(boats.keySet()))
+                if (boats.containsKey(key) && leftover.equals(boats.get(key).designId()))
+                    redesign(key, target, boats, races, report);
+            Path leftoverFile = designsDir.resolve(leftover + ".json");
+            JsonNode old = JSON.readTree(leftoverFile.toFile());
+            com.fasterxml.jackson.databind.node.ObjectNode design =
+                (com.fasterxml.jackson.databind.node.ObjectNode)JSON.readTree(designsDir.resolve(target + ".json").toFile());
+            com.fasterxml.jackson.databind.node.ArrayNode aliases = design.get("aliases") instanceof
+                com.fasterxml.jackson.databind.node.ArrayNode a ? a : design.putArray("aliases");
+            List<String> have = new ArrayList<>();
+            aliases.forEach(x -> have.add(x.asText().toLowerCase()));
+            List<String> names = new ArrayList<>();
+            names.add(old.path("canonicalName").asText(leftover));
+            old.path("aliases").forEach(x -> names.add(x.asText()));
+            for (String n : names)
+                if (!n.isBlank() && !n.equalsIgnoreCase(design.path("canonicalName").asText()) && !have.contains(n.toLowerCase()))
+                {
+                    aliases.add(n);
+                    have.add(n.toLowerCase());
+                }
+            JSON.writerWithDefaultPrettyPrinter().writeValue(designsDir.resolve(target + ".json").toFile(), design);
+            Files.delete(leftoverFile);
+            report.designsMerged++;
         }
     }
 
