@@ -391,10 +391,10 @@ public final class V2Migration
     /**
      * Shares out what v1 held for the whole boat, now that it has identities: each certificate
      * goes to the identity that raced most in its year (else the name in use that July, by the
-     * v1 rename dates); each identity's clubs are the clubs of the races it was entered in, most
-     * frequent first: the v1 clubs it raced at, and always its most frequent race club (the
-     * current identity keeps its v1 clubs if it has no races); a split-off identity's sources
-     * are its races' importers.
+     * v1 rename dates); the latest identity (the most recently raced) keeps the boat's v1 clubs
+     * (else the clubs of its races, most frequent first), and each earlier identity gets only
+     * the club it raced at most; a split-off identity's sources are its races' importers.
+     * (Clubs set by hand in clubs.yaml are applied afterwards.)
      */
     private static void distribute(String key, Map<String, Identity> identities, List<V1Alias> renames,
                                    Map<V1Alias, String> renameIds, List<RaceFile> races)
@@ -452,17 +452,21 @@ public final class V2Migration
             }
             certs.computeIfAbsent(to, k -> new ArrayList<>()).add(c);
         }
+        String latest = null;
+        for (String id : orderByLastRace(identities, races).keySet())
+            latest = id;
+        String current = latest;
         identities.replaceAll((id, i) ->
         {
             Map<String, Integer> counts = clubCounts.getOrDefault(id, Map.of());
             List<String> ranked = counts.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
                 .map(Map.Entry::getKey).toList();
-            List<String> clubs = new ArrayList<>(ranked.stream().filter(v1Clubs::contains).toList());
-            if (!ranked.isEmpty() && !clubs.contains(ranked.getFirst()))
-                clubs.addFirst(ranked.getFirst());
-            if (ranked.isEmpty() && id.equals(key))
-                clubs = new ArrayList<>(v1Clubs);
+            List<String> clubs;
+            if (id.equals(current))
+                clubs = v1Clubs.isEmpty() ? ranked : v1Clubs;
+            else
+                clubs = ranked.isEmpty() ? List.of() : List.of(ranked.getFirst());
             Identity out = i.withClubIds(clubs).withCertificates(certs.getOrDefault(id, List.of()));
             if (!id.equals(key))
                 for (String src : raceSources.getOrDefault(id, List.of()))
