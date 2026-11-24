@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Stream;
 
@@ -54,23 +55,88 @@ import org.mortbay.sailing.pf.importer.IdGenerator;
  *       clubs.yaml is retired.</li>
  *   <li>{@code aliases.yaml} design aliases join the design files' aliases (a design named
  *       there but not yet held is created), and aliases.yaml is retired.</li>
- *   <li>The easily re-imported races are purged, to be re-imported under v2 matching: the
- *       MYC archive and the BWPS importer's (BWPS, Sydney Hobart, Gold Coast), with the
- *       certificates those importers derived.</li>
+ *   <li>Races that can be re-imported are purged, to be re-imported under v2 matching, by
+ *       source ({@link Purge}): by default the MYC archive and the BWPS importer's (BWPS,
+ *       Sydney Hobart, Gold Coast, with the certificates it derived); optionally the SailSys
+ *       races whose cached results files are all good (replayable from the cache) and the
+ *       TopYacht races with a results URL. Each purged race is kept under {@code purged/races/}
+ *       (as converted), for {@link V2Restore} to put back the ones a re-import does not bring
+ *       back.</li>
  *   <li>Designs, clubs and races move up out of {@code imported/}; everything else (config,
  *       cache, logs, the MYC archive spreadsheets) is copied as is; {@code FORMAT} is 2.</li>
  * </ol>
- * Usage: {@code V2Migration [--no-purge] <v1-root> <v2-root>}; the v2 root must not exist or be
- * empty. {@code --no-purge} keeps every race and certificate, for checking that the analysis
- * of the converted database matches v1's.
+ * Usage: {@code V2Migration [--no-purge | --purge myc,bwps,sailsys,topyacht] <v1-root> <v2-root>};
+ * the v2 root must not exist or be empty. {@code --no-purge} keeps every race and certificate,
+ * for checking that the analysis of the converted database matches v1's.
  */
 public final class V2Migration
 {
-    /** Race sources purged for re-import: the MYC archive and the BWPS importer's. */
-    static boolean purgedRaceSource(String source)
+    /** The sources whose races can be purged for re-import. */
+    public enum Purge
     {
-        return source != null && (source.startsWith("MYC spreadsheet")
-            || source.equals("BWPS") || source.equals("RSHYR") || source.equals("GoldCoast"));
+        /** The MYC archive spreadsheets (in myc-archive/). */
+        MYC,
+        /** The BWPS importer: BWPS minor races, Sydney Hobart, Gold Coast (from CYCA's feeds). */
+        BWPS,
+        /** SailSys races whose cached results files (cache/sailsys/races) are all good. */
+        SAILSYS,
+        /** TopYacht races with a results URL (re-fetched from the results sites). */
+        TOPYACHT;
+
+        static final Set<Purge> DEFAULT = Set.of(MYC, BWPS);
+    }
+
+    /** Whether a race is purged, given the sources to purge and the good SailSys cache files. */
+    static boolean purged(Race r, Set<Purge> purge, Set<Integer> goodSailSysCache)
+    {
+        String source = r.source();
+        if (source == null)
+            return false;
+        if (source.startsWith("MYC spreadsheet"))
+            return purge.contains(Purge.MYC);
+        if (source.equals("BWPS") || source.equals("RSHYR") || source.equals("GoldCoast"))
+            return purge.contains(Purge.BWPS);
+        if (source.startsWith("SailSys"))
+        {
+            if (!purge.contains(Purge.SAILSYS))
+                return false;
+            List<Integer> ids = new ArrayList<>();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("SailSys-(\\d+)").matcher(source);
+            while (m.find())
+                ids.add(Integer.parseInt(m.group(1)));
+            return !ids.isEmpty() && goodSailSysCache.containsAll(ids);
+        }
+        if (source.startsWith("TopYacht"))
+            return purge.contains(Purge.TOPYACHT) && source.matches("(?s).*https?://.*");
+        return false;
+    }
+
+    /** The race numbers of the cached SailSys races files holding results ("result": "success"). */
+    static Set<Integer> goodSailSysCache(Path cacheDir) throws IOException
+    {
+        Set<Integer> good = new java.util.HashSet<>();
+        if (!Files.isDirectory(cacheDir))
+            return good;
+        try (Stream<Path> files = Files.list(cacheDir))
+        {
+            for (Path f : files.toList())
+            {
+                String name = f.getFileName().toString();
+                if (!name.matches("race-\\d+\\.json"))
+                    continue;
+                try
+                {
+                    JsonNode j = JSON.readTree(f.toFile());
+                    if ("success".equals(j.path("result").asText()) && j.hasNonNull("data"))
+                        good.add(Integer.parseInt(name.substring(5, name.length() - 5)));
+                }
+                catch (IOException e)
+                {
+                    // unreadable: not good
+                }
+            }
+        }
+        return good;
     }
 
     /** Certificates purged with those races: derived by the BWPS importer from its results. */
@@ -158,22 +224,40 @@ public final class V2Migration
 
     public static void main(String[] args) throws IOException
     {
-        boolean purge = !(args.length == 3 && args[0].equals("--no-purge"));
-        if (args.length != (purge ? 2 : 3))
+        Set<Purge> purge = Purge.DEFAULT;
+        int a = 0;
+        if (args.length == 3 && args[0].equals("--no-purge"))
         {
-            System.err.println("Usage: V2Migration [--no-purge] <v1-root> <v2-root>");
+            purge = Set.of();
+            a = 1;
+        }
+        else if (args.length == 4 && args[0].equals("--purge"))
+        {
+            purge = java.util.EnumSet.noneOf(Purge.class);
+            for (String p : args[1].split(","))
+                purge.add(Purge.valueOf(p.trim().toUpperCase()));
+            a = 2;
+        }
+        if (args.length != a + 2)
+        {
+            System.err.println("Usage: V2Migration [--no-purge | --purge myc,bwps,sailsys,topyacht] <v1-root> <v2-root>");
             System.exit(2);
         }
-        Report report = convert(Path.of(args[args.length - 2]), Path.of(args[args.length - 1]), purge);
+        Report report = convert(Path.of(args[a]), Path.of(args[a + 1]), purge);
         System.out.print(report);
     }
 
     public static Report convert(Path v1, Path v2) throws IOException
     {
-        return convert(v1, v2, true);
+        return convert(v1, v2, Purge.DEFAULT);
     }
 
     public static Report convert(Path v1, Path v2, boolean purge) throws IOException
+    {
+        return convert(v1, v2, purge ? Purge.DEFAULT : Set.of());
+    }
+
+    public static Report convert(Path v1, Path v2, Set<Purge> purge) throws IOException
     {
         if (!Files.isDirectory(v1.resolve("imported")))
             throw new IllegalArgumentException(v1 + " is not a v1 database (no imported/)");
@@ -209,14 +293,14 @@ public final class V2Migration
             {
                 Boat b = JSON.readValue(f.toFile(), Boat.class);
                 long before = b.certificates().size();
-                if (purge)
+                if (purge.contains(Purge.BWPS))
                     b = b.withCertificatesFiltered(c -> !purgedCertificate(c));
                 report.certificatesPurged += (int)(before - b.certificates().size());
                 boats.put(b.id(), b);
             }
         }
 
-        // Races, without the purged sources
+        // Races, all converted (so purged ones keep their identities), then split by purge
         List<RaceFile> races = new ArrayList<>();
         Path racesDir = v1.resolve("imported/races");
         if (Files.isDirectory(racesDir))
@@ -224,15 +308,11 @@ public final class V2Migration
             try (Stream<Path> files = Files.walk(racesDir))
             {
                 for (Path f : files.filter(p -> p.toString().endsWith(".json")).toList())
-                {
-                    Race r = JSON.readValue(f.toFile(), Race.class);
-                    if (purge && purgedRaceSource(r.source()))
-                        report.racesPurged++;
-                    else
-                        races.add(new RaceFile(racesDir.relativize(f), r));
-                }
+                    races.add(new RaceFile(racesDir.relativize(f), JSON.readValue(f.toFile(), Race.class)));
             }
         }
+        Set<Integer> goodCache = purge.contains(Purge.SAILSYS)
+            ? goodSailSysCache(v1.resolve("cache/sailsys/races")) : Set.of();
 
         applyAliases(v1.resolve("config"), boats, races, report);
         applyClubOverrides(v1.resolve("config"), boats, report);
@@ -248,11 +328,15 @@ public final class V2Migration
         report.boats = boats.size();
         for (RaceFile rf : races)
         {
-            Path out = v2.resolve("races").resolve(rf.relative());
+            boolean purged = purged(rf.race(), purge, goodCache);
+            Path out = v2.resolve(purged ? "purged/races" : "races").resolve(rf.relative());
             Files.createDirectories(out.getParent());
             JSON.writerWithDefaultPrettyPrinter().writeValue(out.toFile(), rf.race());
+            if (purged)
+                report.racesPurged++;
+            else
+                report.racesKept++;
         }
-        report.racesKept = races.size();
 
         stripBoatConfig(v2.resolve("config"));
         Files.writeString(v2.resolve(DataStore.FORMAT_FILE), DataStore.FORMAT + "\n");

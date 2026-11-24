@@ -157,6 +157,43 @@ class V2MigrationTest
         assertThrows(IllegalArgumentException.class, () -> V2Migration.convert(v1, v2), "will not overwrite");
     }
 
+    @Test
+    void purgedRacesAreKeptAsideAndRestoredUnlessReimported(@TempDir Path tempDir) throws Exception
+    {
+        Path v1 = tempDir.resolve("v1");
+        write(v1.resolve("imported/boats/100-alpha-j24.json"), boat("100-alpha-j24", "100", "Alpha", "j24", ""));
+        write(v1.resolve("imported/races/myc.org.au/s/a.json"), race("a", "2020-01-04", "SailSys-11", "100-alpha-j24"));
+        write(v1.resolve("imported/races/myc.org.au/s/b.json"), race("b", "2020-01-11", "SailSys-12", "100-alpha-j24"));
+        write(v1.resolve("imported/races/myc.org.au/s/c.json"), race("c", "2020-01-18", "TopYacht - https://x/r.htm", "100-alpha-j24"));
+        write(v1.resolve("imported/races/myc.org.au/s/d.json"), race("d", "2020-01-25", "TopYacht", "100-alpha-j24"));
+        // race 11's cached results are good; race 12's cache holds an error: it cannot be replayed
+        write(v1.resolve("cache/sailsys/races/race-000011.json"), "{\"result\":\"success\",\"data\":{\"id\":11}}");
+        write(v1.resolve("cache/sailsys/races/race-000012.json"), "{\"result\":\"error\"}");
+
+        Path v2 = tempDir.resolve("v2");
+        V2Migration.convert(v1, v2, java.util.EnumSet.of(V2Migration.Purge.SAILSYS, V2Migration.Purge.TOPYACHT));
+
+        DataStore store = new DataStore(v2);
+        store.start();
+        assertEquals(java.util.Set.of("b", "d"), store.races().keySet(),
+            "kept: SailSys with a bad cache file, TopYacht with no URL");
+        assertTrue(Files.exists(v2.resolve("purged/races/myc.org.au/s/a.json")));
+
+        // "a" comes back from the re-import; "c" does not, so it is restored
+        store.putRace(JSON_RACE(v2.resolve("purged/races/myc.org.au/s/a.json")));
+        V2Restore.Result result = V2Restore.restore(store, false);
+        assertEquals(java.util.Map.of("TopYacht", 1), result.restored());
+        assertEquals(java.util.Map.of("SailSys", 1), result.reimported());
+        assertEquals(java.util.Set.of("a", "b", "c", "d"), store.races().keySet());
+    }
+
+    private static Race JSON_RACE(Path f) throws Exception
+    {
+        return com.fasterxml.jackson.databind.json.JsonMapper.builder()
+            .addModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).build()
+            .readValue(f.toFile(), Race.class);
+    }
+
     private static String identityOf(DataStore store, String raceId)
     {
         Race r = store.races().get(raceId);
