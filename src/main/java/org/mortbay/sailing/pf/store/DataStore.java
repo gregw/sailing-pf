@@ -96,7 +96,8 @@ public class DataStore
 
     // In-memory maps -- null before start()
     private Map<String, Race> races;
-    private Map<String, Boat> boats;
+    private Map<String, Boat> boats;      // keyed by each boat's current identity ID
+    private Map<String, String> identityIndex; // every identity ID -> the key of its boat in boats
     private Map<String, Design> designs;
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
@@ -207,6 +208,76 @@ public class DataStore
     {
         requireStarted();
         return Collections.unmodifiableMap(boats);
+    }
+
+    /**
+     * The boat with identity {@code identityId}, seen through that identity (its sail number
+     * and name are that identity's); null if no boat has it. Any identity ID refers to its boat.
+     */
+    public Boat boat(String identityId)
+    {
+        requireStarted();
+        if (identityId == null)
+            return null;
+        Boat b = boats.get(identityIndex.getOrDefault(identityId, identityId));
+        return b == null ? null : b.withId(b.hasIdentity(identityId) ? identityId : b.id());
+    }
+
+    /**
+     * The canonical ID of the boat with identity {@code identityId} (its current identity's
+     * ID, the key in {@link #boats()}), or {@code identityId} itself if no boat has it.
+     */
+    public String canonicalBoatId(String identityId)
+    {
+        requireStarted();
+        return identityId == null ? null : identityIndex.getOrDefault(identityId, identityId);
+    }
+
+    private void indexIdentities(Boat b)
+    {
+        for (String identityId : b.identities().keySet())
+        {
+            String other = identityIndex.put(identityId, b.id());
+            if (other != null && !other.equals(b.id()))
+                LOG.warn("Identity {} is in two boats, {} and {}: keeping it in {}", identityId, other, b.id(), b.id());
+        }
+    }
+
+    /** The race with each finisher counted for its boat's canonical ID. */
+    private Race canonicalise(Race race)
+    {
+        if (race.divisions() == null)
+            return race;
+        boolean changed = false;
+        List<Division> divisions = new ArrayList<>(race.divisions().size());
+        for (Division div : race.divisions())
+        {
+            List<Finisher> finishers = new ArrayList<>(div.finishers().size());
+            for (Finisher f : div.finishers())
+            {
+                String key = identityIndex.getOrDefault(f.identityId(), f.identityId());
+                if (!key.equals(f.boatId()))
+                {
+                    f = f.withCanonicalBoatId(key);
+                    changed = true;
+                }
+                finishers.add(f);
+            }
+            divisions.add(new Division(div.name(), finishers));
+        }
+        return changed ? new Race(race.id(), race.clubId(), race.seriesIds(), race.date(), race.number(),
+            race.name(), divisions, race.source(), race.lastUpdated(), race.loadedAt()) : race;
+    }
+
+    /** Recounts, in memory, the finishers of these identities for their boats' canonical IDs. */
+    private void recanonicalise(java.util.Collection<String> identityIds)
+    {
+        if (identityIds.isEmpty() || races == null)
+            return;
+        Set<String> ids = new HashSet<>(identityIds);
+        races.replaceAll((id, race) -> race.divisions() != null && race.divisions().stream()
+            .anyMatch(d -> d.finishers().stream().anyMatch(f -> ids.contains(f.identityId())))
+            ? canonicalise(race) : race);
     }
 
     public Map<String, Club> clubs()
@@ -1241,12 +1312,62 @@ public class DataStore
 
     // --- Write mutators (require started; loadedAt = null → always written by save()) ---
 
+    /**
+     * Stores a boat, under its current identity's ID, whichever identity it is seen through.
+     * If its current identity changed, the record (and its file) moves to the new ID, and its
+     * finishers are recounted for it. Identities it no longer has stop referring to it.
+     */
     public void putBoat(Boat boat)
     {
         requireStarted();
-        boats.put(boat.id(), boat);
+        Boat stored = boat.current();
+        String key = stored.id();
+        String oldKey = null;
+        for (String identityId : boat.identities().keySet())
+        {
+            oldKey = identityIndex.get(identityId);
+            if (oldKey != null)
+                break;
+        }
+        Boat previous = oldKey == null ? boats.get(key) : boats.get(oldKey);
+        if (previous != null)
+            previous.identities().keySet().forEach(i -> identityIndex.remove(i));
+        if (oldKey != null && !oldKey.equals(key))
+        {
+            boats.remove(oldKey);
+            deleteBoatFile(oldKey);
+        }
+        boats.put(key, stored);
+        indexIdentities(stored);
+        boolean keyChanged = oldKey != null && !oldKey.equals(key);
+        boolean identitiesChanged = previous == null ? stored.identities().size() > 1
+            : !previous.identities().keySet().equals(stored.identities().keySet());
+        if (keyChanged || identitiesChanged)
+        {
+            Set<String> touched = new HashSet<>(stored.identities().keySet());
+            if (previous != null)
+                touched.addAll(previous.identities().keySet());
+            recanonicalise(touched);
+        }
         InvalidationListener l = invalidationListener;
-        if (l != null) l.onBoatChanged(boat.id());
+        if (l != null)
+        {
+            l.onBoatChanged(key);
+            if (oldKey != null && !oldKey.equals(key))
+                l.onBoatChanged(oldKey);
+        }
+    }
+
+    private void deleteBoatFile(String key)
+    {
+        try
+        {
+            Files.deleteIfExists(boatsDir.resolve(key + ".json"));
+        }
+        catch (IOException e)
+        {
+            LOG.warn("Could not delete boat file {}: {}", key, e.getMessage());
+        }
     }
 
     public void putClub(Club club)
@@ -1272,7 +1393,7 @@ public class DataStore
     public void putRace(Race imported)
     {
         requireStarted();
-        Race race = imported;
+        Race race = canonicalise(imported);
         boolean isNew = !races.containsKey(race.id());
         races.put(race.id(), race);
         if (autoSanityCheck && isNew && !excludedRaces.containsKey(race.id()))
@@ -1318,22 +1439,18 @@ public class DataStore
         return new DatedDataStore(this, cutoff);
     }
 
+    /** Removes the boat with identity {@code id} (any of its identities), and its file. */
     public void removeBoat(String id)
     {
         requireStarted();
-        Boat existing = boats.remove(id);
+        String key = identityIndex.getOrDefault(id, id);
+        Boat existing = boats.remove(key);
         if (existing != null)
         {
-            try
-            {
-                Files.deleteIfExists(boatsDir.resolve(id + ".json"));
-            }
-            catch (IOException e)
-            {
-                LOG.warn("Could not delete boat file {}: {}", id, e.getMessage());
-            }
+            existing.identities().keySet().forEach(i -> identityIndex.remove(i, key));
+            deleteBoatFile(key);
             InvalidationListener l = invalidationListener;
-            if (l != null) l.onBoatChanged(id);
+            if (l != null) l.onBoatChanged(key);
         }
     }
 
@@ -2690,7 +2807,7 @@ public class DataStore
                 List<Finisher> newFinishers = new ArrayList<>();
                 for (Finisher f : div.finishers())
                 {
-                    if (oldBoatId.equals(f.boatId()))
+                    if (oldBoatId.equals(f.identityId()))
                     {
                         newFinishers.add(f.withBoatId(newBoatId));
                         changed = true;
@@ -3330,9 +3447,11 @@ public class DataStore
         LOG.info("Start DataStore root={}", root.toAbsolutePath());
 
         boats = new LinkedHashMap<>();
+        identityIndex = new java.util.HashMap<>();
         loadDir(boatsDir, Boat.class).forEach(b ->
         {
             boats.put(b.id(), b);
+            indexIdentities(b);
             if (b.sources().isEmpty())
                 LOG.warn("Boat {} has no sources -- likely a stale entry, consider deleting {}", b.id(), b.id() + ".json");
         });
@@ -3372,7 +3491,7 @@ public class DataStore
         // populate those fields on the in-memory Club records from clubSeed.
         clubs.replaceAll((id, c) -> enrichWithSeed(c));
         races = new LinkedHashMap<>();
-        loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), r));
+        loadDirRecursive(racesDir, Race.class).forEach(r -> races.put(r.id(), canonicalise(r)));
 
         migrateTopYachtIds();
         migrateTopYachtDivisionMerge();

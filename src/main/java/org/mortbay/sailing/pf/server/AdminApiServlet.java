@@ -104,13 +104,13 @@ public class AdminApiServlet extends HttpServlet
             writeJson(resp, _taskService != null
                 ? Map.of("targetIrcYear", _taskService.targetIrcYear()) : Map.of());
         else if (path.matches("/boats/[^/]+/pf"))
-            handleBoatPf(path.replaceAll("^/boats/|/pf$", ""), resp);
+            handleBoatPf(boatKey(path.replaceAll("^/boats/|/pf$", "")), resp);
         else if (path.matches("/boats/[^/]+/profile"))
-            handleBoatProfile(path.replaceAll("^/boats/|/profile$", ""), resp);
+            handleBoatProfile(boatKey(path.replaceAll("^/boats/|/profile$", "")), resp);
         else if (path.matches("/boats/[^/]+/reference"))
-            handleBoatReference(path.replaceAll("^/boats/|/reference$", ""), resp);
+            handleBoatReference(boatKey(path.replaceAll("^/boats/|/reference$", "")), resp);
         else if (path.matches("/boats/[^/]+/aliases"))
-            handleBoatAliases(path.replaceAll("^/boats/|/aliases$", ""), resp);
+            handleBoatAliases(boatKey(path.replaceAll("^/boats/|/aliases$", "")), resp);
         else if ("/boats/merge-plan".equals(path))
             handleBoatMergePlan(req, resp);
         else if (path.startsWith("/boats"))
@@ -630,7 +630,7 @@ public class AdminApiServlet extends HttpServlet
         else
         {
             String id = sub.startsWith("/") ? sub.substring(1) : sub;
-            Boat boat = store.boats().get(id);
+            Boat boat = store.boats().get(boatKey(id));
             if (boat == null)
             {
                 resp.sendError(404);
@@ -638,6 +638,15 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJsonFull(resp, boat);
         }
+    }
+
+    /**
+     * The key of the boat with identity {@code id} in the store and analysis (its current
+     * identity's ID): any identity ID, e.g. in an old link, refers to its boat.
+     */
+    private String boatKey(String id)
+    {
+        return id == null ? null : store.canonicalBoatId(id);
     }
 
     /** A boat list row: the boat, or one of its renames (a dated alias) when alias is set. */
@@ -889,7 +898,7 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleBoatReference(String id, HttpServletResponse resp) throws IOException
     {
-        if (store.boats().get(id) == null)
+        if (store.boats().get(boatKey(id)) == null)
         {
             resp.sendError(404);
             return;
@@ -922,7 +931,7 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleBoatPf(String id, HttpServletResponse resp) throws IOException
     {
-        Boat boat = store.boats().get(id);
+        Boat boat = store.boats().get(boatKey(id));
         if (boat == null)
         {
             resp.sendError(404);
@@ -1016,7 +1025,7 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleBoatProfile(String id, HttpServletResponse resp) throws IOException
     {
-        Boat boat = store.boats().get(id);
+        Boat boat = store.boats().get(boatKey(id));
         if (boat == null)
         {
             resp.sendError(404);
@@ -1040,7 +1049,7 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleBoatAliases(String id, HttpServletResponse resp) throws IOException
     {
-        Boat boat = store.boats().get(id);
+        Boat boat = store.boats().get(boatKey(id));
         if (boat == null)
         {
             resp.sendError(404);
@@ -1134,7 +1143,7 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleBoatMergePlan(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
-        Boat keep = store.boats().get(String.valueOf(req.getParameter("keep")));
+        Boat keep = store.boats().get(boatKey(String.valueOf(req.getParameter("keep"))));
         String merge = req.getParameter("merge");
         if (keep == null || merge == null || merge.isBlank())
         {
@@ -1157,7 +1166,7 @@ public class AdminApiServlet extends HttpServlet
         List<Boat> merged = new ArrayList<>();
         for (String id : merge.split(","))
         {
-            Boat mb = store.boats().get(id.trim());
+            Boat mb = store.boats().get(boatKey(id.trim()));
             if (mb != null && !mb.id().equals(keep.id()))
                 merged.add(mb);
         }
@@ -1252,7 +1261,7 @@ public class AdminApiServlet extends HttpServlet
         try
         {
             Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
-            Boat boat = store.boats().get(String.valueOf(body.get("boatId")));
+            Boat boat = store.boats().get(boatKey(String.valueOf(body.get("boatId"))));
             if (boat == null)
             {
                 resp.setStatus(404);
@@ -1287,7 +1296,7 @@ public class AdminApiServlet extends HttpServlet
         try
         {
             Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
-            Boat boat = store.boats().get(String.valueOf(body.get("boatId")));
+            Boat boat = store.boats().get(boatKey(String.valueOf(body.get("boatId"))));
             if (boat == null)
             {
                 resp.setStatus(404);
@@ -2218,7 +2227,7 @@ public class AdminApiServlet extends HttpServlet
             }
 
             // Build alias specs before merging (while we still have all boat records)
-            Boat keepBoat = store.boats().get(keepId);
+            Boat keepBoat = store.boats().get(boatKey(keepId));
             if (keepBoat == null)
             {
                 resp.setStatus(404);
@@ -2230,7 +2239,7 @@ public class AdminApiServlet extends HttpServlet
             List<Aliases.SailNumberName> newAliases = new ArrayList<>();
             for (String mergeId : mergeIds)
             {
-                Boat mb = store.boats().get(mergeId);
+                Boat mb = store.boats().get(boatKey(mergeId));
                 if (mb == null)
                 {
                     resp.setStatus(404);
@@ -2406,7 +2415,7 @@ public class AdminApiServlet extends HttpServlet
                 writeJson(resp, Map.of("error", "boatId is required"));
                 return;
             }
-            Boat boat = store.boats().get(boatId);
+            Boat boat = store.boats().get(boatKey(boatId));
             if (boat == null)
             {
                 resp.setStatus(404);
@@ -3953,7 +3962,7 @@ public class AdminApiServlet extends HttpServlet
                 continue;
             for (var f : div.finishers())
             {
-                Boat b = store.boats().get(f.boatId());
+                Boat b = store.boats().get(boatKey(f.boatId()));
                 if (b == null || b.designId() == null || !store.isDesignExcluded(b.designId()))
                     return false;
             }

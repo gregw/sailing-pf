@@ -49,8 +49,8 @@ final class DatedDataStore extends DataStore
         Map<String, Boat> bs = new LinkedHashMap<>();
         for (Boat boat : store.boats().values())
         {
-            List<Certificate> known = boat.certificates().stream().filter(c -> c.year() <= year).toList();
-            bs.put(boat.id(), known.size() == boat.certificates().size() ? boat : boat.withCertificates(known));
+            boolean allKnown = boat.certificates().stream().allMatch(c -> c.year() <= year);
+            bs.put(boat.id(), allKnown ? boat : boat.withCertificatesFiltered(c -> c.year() <= year));
         }
         boats = Collections.unmodifiableMap(bs);
     }
