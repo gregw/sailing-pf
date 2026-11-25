@@ -191,6 +191,35 @@ class BoatIdentityApiTest
     }
 
     @Test
+    void caseOnlyRenamesAreSaved() throws Exception
+    {
+        ContentResponse edited = post("/api/boats/identities", """
+            {"boatId":"7709-kanreki","identities":[{"id":"7709-kanreki","name":"KANREKI"}]}""");
+        assertEquals(200, edited.getStatus(), edited.getContentAsString());
+        assertEquals("KANREKI", store.boat("7709-kanreki").name());
+        edited = post("/api/boats/edit", "{\"boatId\":\"7709-abouttime\",\"name\":\"ABOUT TIME\"}");
+        assertEquals(200, edited.getStatus(), edited.getContentAsString());
+        assertEquals("ABOUT TIME", store.boat("7709-abouttime").name());
+
+        store.stop();
+        store = new DataStore(tempDir);
+        store.start();
+        assertEquals("KANREKI", store.boat("7709-kanreki").name(), "persisted");
+        assertEquals("ABOUT TIME", store.boat("7709-abouttime").name(), "persisted");
+    }
+
+    @Test
+    void caseOnlyDesignRenameIsSaved() throws Exception
+    {
+        store.putDesign(new org.mortbay.sailing.pf.data.Design("ilc40", "Ilc 40", List.of(), List.of(), null, false, null));
+        ContentResponse edited = post("/api/designs/edit", "{\"designId\":\"ilc40\",\"canonicalName\":\"ILC 40\"}");
+        assertEquals(200, edited.getStatus(), edited.getContentAsString());
+        assertFalse(edited.getContentAsString().contains("\"noop\""), edited.getContentAsString());
+        assertEquals("ILC 40", store.designs().get("ilc40").canonicalName());
+        assertTrue(store.designs().get("ilc40").aliases().isEmpty(), "the old casing is not an alias");
+    }
+
+    @Test
     void editingAFormerIdentityRenamesOnlyIt() throws Exception
     {
         post("/api/boats/merge", "{\"keepId\":\"7709-kanreki\",\"mergeIds\":[\"7709-abouttime\"],\"link\":true}");

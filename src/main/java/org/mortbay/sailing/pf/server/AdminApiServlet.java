@@ -2530,7 +2530,8 @@ public class AdminApiServlet extends HttpServlet
             }
 
             boolean idChanged   = !newId.equalsIgnoreCase(oldId);
-            boolean nameChanged = !newName.equalsIgnoreCase(old.canonicalName());
+            // Case counts: fixing "Ilc" to "ILC" is an edit (the old spelling is not kept as an alias)
+            boolean nameChanged = !newName.equals(old.canonicalName());
             boolean noSpinChanged = newNoSpinnaker != null && newNoSpinnaker != old.noSpinnaker();
             boolean oneDesignChanged = newOneDesign != null && newOneDesign != store.isDesignOneDesign(oldId);
             boolean yearChanged = yearGiven && !Objects.equals(newYear, store.designYearOverride(oldId));
