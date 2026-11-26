@@ -1073,28 +1073,41 @@ function renderBoatPf(data) {
     else
         html += `<div id="pf-design-profile"></div>` + renderLinks(data.links);
 
-    if (data.pfHistory && data.pfHistory.length > 0) {
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">PF history ${infoBtn('chart-pf-history','This boat\'s PF as it stood on 1 July of each past season: the same analysis rerun on only the races and certificates known by then. The last point is the current PF. A flat line means the boat has performed consistently; a step shows a change (crew, sails, modifications). Larger, darker markers carry more weight.')}</div>`;
-        html += '<div id="pf-history-chart"></div>';
-        setTimeout(() => renderPfHistoryChart(data), 0);
-    }
-
-    if (data.residuals && data.residuals.length > 0) {
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
+    const certs = data.certificates || [];
+    const hasHistory = (data.pfHistory && data.pfHistory.length > 0) || certs.some(c => c.irc);
+    const hasResiduals = data.residuals && data.residuals.length > 0;
+    if (hasHistory || hasResiduals) {
+        // One period selector for both charts, which share their horizontal axis
         const sel = window._residualMonths != null ? window._residualMonths : 0;
-        html += `<label style="font-size:0.85rem;font-weight:normal;">Show: <select id="residual-months" onchange="window._residualMonths=parseInt(this.value,10)||0; renderResidualChart(window._lastResiduals)">
+        html += `<div style="margin-top:0.75rem;"><label style="font-size:0.85rem;font-weight:normal;">Show: <select id="residual-months" onchange="window._residualMonths=parseInt(this.value,10)||0; renderBoatCharts()">
             <option value="0"${sel === 0 ? ' selected' : ''}>All time</option>
             <option value="6"${sel === 6 ? ' selected' : ''}>Last 6 months</option>
             <option value="12"${sel === 12 ? ' selected' : ''}>Last 12 months</option>
             <option value="18"${sel === 18 ? ' selected' : ''}>Last 18 months</option>
             <option value="24"${sel === 24 ? ' selected' : ''}>Last 24 months</option>
             <option value="60"${sel === 60 ? ' selected' : ''}>Last 60 months</option>
-        </select></label>`;
+        </select></label></div>`;
+    }
+
+    if (hasHistory) {
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">PF history ${infoBtn('chart-pf-history','This boat\'s PF as it stood on 1 July of each past season: the same analysis rerun on only the races and certificates known by then. The last point is the current PF. A flat line means the boat has performed consistently; a step shows a change (crew, sails, modifications). Larger, darker markers carry more weight. Unjoined markers are the boat\'s certificates as the IRC TCC of their own year and variant (ORC and AMS converted through the conversion graph), plotted at 1 July of the certificate year: square IRC, triangle ORC, cross AMS.')}</div>`;
+        html += '<div id="pf-history-chart"></div>';
+    }
+
+    if (hasResiduals) {
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
         html += '<div id="pf-residual-chart"></div>';
+    }
+
+    if (certs.length > 0)
+        html += renderCertificateHistory(certs, (data.identities || []).length > 1);
+
+    if (hasHistory || hasResiduals) {
         setTimeout(() => {
-            window._lastResiduals = data.residuals;
+            window._lastBoatPf = data;
+            window._lastResiduals = data.residuals || [];
             window._lastResidualIdentities = data.identities;
-            renderResidualChart(data.residuals);
+            renderBoatCharts();
         }, 0);
     }
     return html;
@@ -1122,9 +1135,97 @@ function renameSplits(identities, fromDate) {
     };
 }
 
+/** The start date of the period selected for the boat charts, or null for all time. */
+function boatChartCutoff() {
+    const months = window._residualMonths || 0;
+    if (months <= 0) return null;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    return cutoff.toISOString().slice(0, 10);
+}
+
+/** Where a certificate is plotted: 1 July of its year. */
+function certDate(c) {
+    return c.year + '-07-01';
+}
+
+/**
+ * The x range shared by the PF history and residual charts, so they line up vertically:
+ * from the selected cutoff (else the earliest point of either chart) to today, padded a month.
+ */
+function boatChartRange(data, cutoff) {
+    const today = new Date().toISOString().slice(0, 10);
+    const dates = [today];
+    (data.residuals || []).forEach(r => r.date && dates.push(r.date));
+    (data.pfHistory || []).forEach(h => h.cutoff && dates.push(h.cutoff));
+    (data.certificates || []).filter(c => c.irc).forEach(c => dates.push(certDate(c)));
+    const shown = cutoff ? dates.filter(d => d >= cutoff) : dates;
+    const pad = (d, months) => {
+        const x = new Date(d + 'T00:00:00Z');
+        x.setUTCMonth(x.getUTCMonth() + months);
+        return x.toISOString().slice(0, 10);
+    };
+    const start = cutoff || shown.reduce((a, b) => a < b ? a : b);
+    return [pad(start, -1), pad(today, 1)];
+}
+
+/** Layout shared by the boat charts: x range, margins and legend, so their plot areas match. */
+function boatChartLayout(range) {
+    return {
+        xaxis: { range: range, type: 'date' },
+        margin: { t: 40, b: 50, l: 60, r: 20 },
+        legend: { orientation: 'h', x: 0, xanchor: 'left', y: -0.15, yanchor: 'top' },
+        showlegend: true
+    };
+}
+
+/** Draws the PF history and residual charts of the last loaded boat, over the same period. */
+function renderBoatCharts() {
+    const data = window._lastBoatPf;
+    if (!data) return;
+    const cutoff = boatChartCutoff();
+    const range = boatChartRange(data, cutoff);
+    renderPfHistoryChart(data, range, cutoff);
+    renderResidualChart(window._lastResiduals || [], range, cutoff);
+}
+
+/** The variant of a certificate, as a PF history key. */
+function certVariant(c) {
+    return c.twoHanded ? 'twoHanded' : c.nonSpinnaker ? 'nonSpin' : 'spin';
+}
+
+/** A boat's certificates, newest first, each with its IRC equivalent for its year and variant. */
+function renderCertificateHistory(certs, showName) {
+    const variantName = { spin: 'Spin', nonSpin: 'Non-spin', twoHanded: 'Two-handed' };
+    const rows = certs.map(c => {
+        const flags = [c.club ? 'club' : null, c.windwardLeeward ? 'WL' : null].filter(f => f).join(', ');
+        const irc = c.irc ? c.irc.value.toFixed(4) : '—';
+        const wt = c.irc ? c.irc.weight.toFixed(3) : '—';
+        return `<tr>
+          <td>${c.year}</td>
+          <td>${esc(c.system)}</td>
+          <td>${variantName[certVariant(c)]}</td>
+          <td>${esc(flags)}</td>
+          <td>${c.value.toFixed(4)}</td>
+          <td>${irc}</td>
+          <td>${wt}</td>
+          <td>${esc(c.certificateNumber || '')}</td>
+          <td>${esc(c.expiryDate || '')}</td>
+          ${showName ? `<td>${esc(c.name || '')}${c.sailNumber ? ' (' + esc(c.sailNumber) + ')' : ''}</td>` : ''}
+        </tr>`;
+    }).join('');
+    return `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Certificates ${infoBtn('cert-history','Every certificate held for this boat, newest first. IRC equiv is the certificate as the IRC TCC of its own year and variant: an IRC certificate as is, ORC and AMS converted through the conversion graph. Wt is the confidence of that conversion. Only certificates of the last 5 years count toward the RF.')}</div>
+      <table style="width:auto;margin-top:0.4rem;">
+        <thead><tr>
+          <th>Year</th><th>System</th><th>Variant</th><th>Flags</th><th>Value</th><th>IRC equiv</th><th>Wt</th><th>Number</th><th>Expires</th>${showName ? '<th>Name</th>' : ''}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+}
+
 // A boat's PF at each season's 1 July cutoff (data.pfHistory), with the current PF as the
-// last point, one line per variant it has raced.
-function renderPfHistoryChart(data) {
+// last point, one line per variant it has raced; and its certificates as IRC equivalents.
+function renderPfHistoryChart(data, range, cutoff) {
     const container = document.getElementById('pf-history-chart');
     if (!container || typeof Plotly === 'undefined') return;
     const today = new Date().toISOString().slice(0, 10);
@@ -1135,12 +1236,14 @@ function renderPfHistoryChart(data) {
     ];
     const traces = [];
     for (const [key, name, color] of variants) {
-        const pts = data.pfHistory.filter(h => h.pf && h.pf[key])
+        let pts = (data.pfHistory || []).filter(h => h.pf && h.pf[key])
             .map(h => ({ date: h.cutoff, value: h.pf[key].value, weight: h.pf[key].weight, races: h.pf[key].races, current: false }));
         if (pts.length === 0) continue;
         const cur = data[key];
         if (cur && cur.value != null && cur.raceCount > 0)
             pts.push({ date: today, value: cur.value, weight: cur.weight, races: cur.raceCount, current: true });
+        if (cutoff) pts = pts.filter(p => p.date >= cutoff);
+        if (pts.length === 0) continue;
         traces.push({
             x: pts.map(p => p.date),
             y: pts.map(p => p.value),
@@ -1157,12 +1260,40 @@ function renderPfHistoryChart(data) {
             hoverinfo: 'text'
         });
     }
-    const splits = renameSplits(data.identities);
+    // Certificates as IRC equivalents: one trace per system, coloured by variant
+    const variantColor = Object.fromEntries(variants.map(([key, , color]) => [key, color]));
+    const variantName = Object.fromEntries(variants.map(([key, name]) => [key, name]));
+    const symbols = { IRC: 'square', ORC: 'triangle-up', AMS: 'x' };
+    for (const system of ['IRC', 'ORC', 'AMS']) {
+        const certs = (data.certificates || []).filter(c => c.system === system && c.irc
+            && (!cutoff || certDate(c) >= cutoff));
+        if (certs.length === 0) continue;
+        traces.push({
+            x: certs.map(certDate),
+            y: certs.map(c => c.irc.value),
+            mode: 'markers',
+            type: 'scatter',
+            name: system + ' certificates',
+            marker: {
+                color: certs.map(c => variantColor[certVariant(c)].replace(/[\d.]+\)$/,
+                    Math.max(0.35, Math.min(1, c.irc.weight)).toFixed(2) + ')')),
+                size: 9,
+                symbol: symbols[system] || 'circle',
+                line: { width: 1, color: '#333' }
+            },
+            text: certs.map(c => `${system} ${c.year} ${variantName[certVariant(c)]}`
+                + `${c.club ? ' club' : ''}${c.windwardLeeward ? ' WL' : ''}`
+                + `<br>value ${c.value.toFixed(4)}`
+                + (system === 'IRC' ? '' : `<br>IRC equiv ${c.irc.value.toFixed(4)}  wt ${c.irc.weight.toFixed(3)}`)
+                + (c.name ? `<br>${esc(c.name)}` : '')),
+            hoverinfo: 'text'
+        });
+    }
+    const splits = renameSplits(data.identities, cutoff);
     const layout = {
-        xaxis: { title: 'As at' },
-        yaxis: { title: 'PF', tickformat: '.3f' },
-        height: 300,
-        margin: { t: 20, b: 50, l: 60, r: 20 },
+        ...boatChartLayout(range),
+        yaxis: { title: 'PF / IRC equiv', tickformat: '.3f' },
+        height: 340,
         shapes: splits.shapes,
         annotations: splits.annotations
     };
@@ -1170,18 +1301,12 @@ function renderPfHistoryChart(data) {
         .then(() => Plotly.Plots.resize(container));
 }
 
-function renderResidualChart(residuals) {
+function renderResidualChart(residuals, range, cutoffStr) {
     const container = document.getElementById('pf-residual-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
-    const months = window._residualMonths || 0;
-    let cutoffStr = null;
-    if (months > 0) {
-        const cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - months);
-        cutoffStr = cutoff.toISOString().slice(0, 10);
+    if (cutoffStr)
         residuals = residuals.filter(r => r.date >= cutoffStr);
-    }
     const splits = renameSplits(window._lastResidualIdentities, cutoffStr);
 
     const spin = residuals.filter(r => !r.nonSpinnaker);
@@ -1228,8 +1353,8 @@ function renderResidualChart(residuals) {
     const overflow = maxAbs > 0.2;
 
     const layout = {
+        ...boatChartLayout(range),
         title: 'Per-race residuals — faster above zero',
-        xaxis: { title: 'Race date' },
         yaxis: {
             title: 'Performance (+ = faster)',
             zeroline: true,
@@ -1238,8 +1363,7 @@ function renderResidualChart(residuals) {
         shapes: [{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 0, y1: 0, line: { color: '#888', width: 1, dash: 'dash' } },
             ...splits.shapes],
         annotations: splits.annotations,
-        height: overflow ? 600 : 300,
-        margin: { t: 40, b: 50, l: 60, r: 20 }
+        height: overflow ? 600 : 340
     };
 
     Plotly.newPlot(container, traces, layout, { responsive: true })

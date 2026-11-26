@@ -27,6 +27,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.mortbay.sailing.pf.analysis.BoatDerived;
+import org.mortbay.sailing.pf.analysis.ConversionGraph;
 import org.mortbay.sailing.pf.analysis.BoatPf;
 import org.mortbay.sailing.pf.analysis.DesignDerived;
 import org.mortbay.sailing.pf.analysis.DesignProfile;
@@ -37,6 +38,7 @@ import org.mortbay.sailing.pf.analysis.EntryResidual;
 import org.mortbay.sailing.pf.analysis.PerformanceProfile;
 import org.mortbay.sailing.pf.analysis.PfQuality;
 import org.mortbay.sailing.pf.analysis.ReferenceFactors;
+import org.mortbay.sailing.pf.analysis.ReferenceNetworkBuilder;
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.BoatAlias;
 import org.mortbay.sailing.pf.data.Certificate;
@@ -1110,8 +1112,43 @@ public class AdminApiServlet extends HttpServlet
         // Renames (dated aliases), marked on the PF history
         // The boat's identities (names it raced under), marked on the PF history
         result.put("identities", boat.identities().size() > 1 ? identitiesJson(boat, identitySpans()) : List.of());
+        result.put("certificates", certificateHistory(boat));
 
         writeJson(resp, result);
+    }
+
+    /**
+     * All the certificates of a boat's identities, newest first, each with its IRC equivalent
+     * for its own year and variant ({@link ReferenceNetworkBuilder#ircEquivalent}).
+     */
+    private List<Map<String, Object>> certificateHistory(Boat boat)
+    {
+        ConversionGraph graph = cache.conversionGraph();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Identity identity : boat.identities().values())
+        {
+            for (Certificate c : identity.certificates())
+            {
+                Map<String, Object> cm = new LinkedHashMap<>();
+                cm.put("system",          c.system());
+                cm.put("year",            c.year());
+                cm.put("value",           c.value());
+                cm.put("nonSpinnaker",    c.nonSpinnaker());
+                cm.put("twoHanded",       c.twoHanded());
+                cm.put("club",            c.club());
+                cm.put("windwardLeeward", c.windwardLeeward());
+                cm.put("certificateNumber", c.certificateNumber());
+                cm.put("expiryDate",      c.expiryDate() != null ? c.expiryDate().toString() : null);
+                cm.put("name",            identity.name());
+                cm.put("sailNumber",      identity.sailNumber());
+                Factor irc = ReferenceNetworkBuilder.ircEquivalent(c, graph);
+                cm.put("irc", irc != null ? Map.of("value", irc.value(), "weight", irc.weight()) : null);
+                list.add(cm);
+            }
+        }
+        list.sort(Comparator.comparing((Map<String, Object> m) -> (Integer) m.get("year")).reversed()
+            .thenComparing(m -> (String) m.get("system")));
+        return list;
     }
 
     /**

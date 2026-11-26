@@ -396,6 +396,12 @@ public class AnalysisCache implements DataStore.InvalidationListener
         return comparisons;
     }
 
+    /** The conversion graph of the cached comparisons, with the settings they were analysed with. */
+    public ConversionGraph conversionGraph()
+    {
+        return ConversionGraph.from(comparisons, minAnalysisR2, minAnalysisPairs);
+    }
+
     public Map<String, BoatDerived> boatDerived()
     {
         return boatDerived;

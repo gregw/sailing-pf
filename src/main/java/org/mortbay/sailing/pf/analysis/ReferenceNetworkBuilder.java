@@ -1118,6 +1118,32 @@ public class ReferenceNetworkBuilder
     }
 
     /**
+     * A certificate as the IRC TCC of its own year and variant: the value itself for an IRC
+     * certificate, else aggregated over all conversion paths to that IRC node — same-variant
+     * edges first, then cross-variant ones when those find none. The weight is the path
+     * confidence only (no club or windward/leeward penalty).
+     *
+     * @return the IRC equivalent, or null if no path reaches the IRC node
+     */
+    public static Factor ircEquivalent(Certificate cert, ConversionGraph graph)
+    {
+        if ("IRC".equals(cert.system()))
+            return new Factor(cert.value(), 1.0);
+        if (graph == null)
+            return null;
+        ConversionNode start = new ConversionNode(cert.system(), cert.year(), cert.nonSpinnaker(), cert.twoHanded());
+        ConversionNode target = new ConversionNode("IRC", cert.year(), cert.nonSpinnaker(), cert.twoHanded());
+        for (boolean crossVariant : new boolean[]{false, true})
+        {
+            List<Factor> paths = new ArrayList<>();
+            dfsAllPaths(start, cert.value(), 1.0, target, graph, crossVariant, new HashSet<>(), 0, paths);
+            if (!paths.isEmpty())
+                return Factor.aggregate(paths.toArray(new Factor[0]));
+        }
+        return null;
+    }
+
+    /**
      * Computes the aggregated reference factor for one variant by finding all conversion
      * paths from the boat's certificates to the target IRC node for the given variant.
      *
